@@ -42,8 +42,7 @@ def test_immersed_node_follows_host_interpolation():
 
     # Dirichlet pinning all eight corners to the linear field.
     corner_mesh = pyrucast.mesh.poi1_from_nodes(corners)
-    corner_mult = pyrucast.mesh.barycenter(corner_mesh)
-    dirichlet = pyrucast.model.dirichlet(base, "T", corner_mesh, corner_mult)
+    dirichlet = pyrucast.model.dirichlet(base, "T", corner_mesh)
 
     # Immersed node inside the cube, tied to the host.
     p = c.add_node([0.3, 0.6, 0.2])
@@ -56,12 +55,14 @@ def test_immersed_node_follows_host_interpolation():
     # RHS: field value at each Dirichlet multiplier, 0 (tie) at the embedded one.
     rhs_mesh = pyrucast.Mesh(c, "POI1")
     for i in range(len(corners)):
-        rhs_mesh.unit().add_cell([corner_mult.node(0, i, 0)])
+        rhs_mesh.unit().add_cell([dirichlet.multiplier_mesh().node(0, i, 0)])
     rhs_mesh.unit().add_cell([emb_mult])
-    rhs = pyrucast.NodeField(rhs_mesh, ["imposed_T"])
+    rhs = pyrucast.NodeField(rhs_mesh, ["imposed"])
     for i, x in enumerate(CORNERS):
-        rhs[0].set_value(corner_mult.node(0, i, 0), "imposed_T", _field(x))
-    rhs[0].set_value(emb_mult, "imposed_T", 0.0)
+        rhs[0].set_value(
+            dirichlet.multiplier_mesh().node(0, i, 0), "imposed", _field(x)
+        )
+    rhs[0].set_value(emb_mult, "imposed", 0.0)
 
     solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
 

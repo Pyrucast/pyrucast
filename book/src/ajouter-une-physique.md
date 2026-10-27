@@ -499,9 +499,8 @@ cisaillement à intégrer.
 ### Une contrainte : les relations, forme neutre
 
 `Constraint::relations()` rend une `Relation` par nœud multiplicateur : son
-`multiplier_node`, la composante duale `imposed_value` où l'utilisateur écrira le
-second membre `g`, la liste des termes `(node, variable, target_dual,
-coefficient)`, et un `sense` (`RelationSense::Equality` par défaut,
+`multiplier_node` (créé par la contrainte, un par relation), la liste des termes
+`(node, variable, target_dual, coefficient)`, et un `sense` (`RelationSense::Equality` par défaut,
 `GreaterEqual` / `LessEqual` pour l'unilatéral, cf.
 [Contact](contraintes/contact.md)).
 

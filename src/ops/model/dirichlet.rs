@@ -7,10 +7,11 @@ use crate::error::Result;
 use crate::models::RelationSense;
 
 /// Dirichlet `Model` (a single sub-model) constraining `variable`, a primal of
-/// `target`, on the nodes of `imposed_mesh` via Lagrange multipliers carried by
-/// `multiplier_mesh`. Parent-level operator — see
-/// [`SubModel::dirichlet`] for the semantics of the four variable names
-/// and the two meshes.
+/// `target`, on the nodes of `imposed_mesh` via Lagrange multipliers, one per
+/// node on a node of its own. Parent-level operator — see
+/// [`SubModel::dirichlet`] and
+/// [`Dirichlet::new`](crate::models::dirichlet::Dirichlet::new) for the
+/// variable names and the errors.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -34,28 +35,18 @@ use crate::models::RelationSense;
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-/// // Le modèle complet d'un problème thermique : la physique, puis l'appui.
+/// // The whole model of a thermal problem: the physics, then the support.
 /// let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?.union(
-///     &model::dirichlet(&cible, "T", &impose, &mult,
-///                       RelationSense::Equality)?)?;
+///     &model::dirichlet(&cible, "T", &impose, RelationSense::Equality)?)?;
 /// assert_eq!(m.len(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-#[allow(clippy::too_many_arguments)]
 pub fn dirichlet(
     target: &Model,
     variable: &str,
     imposed_mesh: &Mesh,
-    multiplier_mesh: &Mesh,
     sense: RelationSense,
 ) -> Result<Model> {
-    single(SubModel::dirichlet(
-        target,
-        variable,
-        imposed_mesh,
-        multiplier_mesh,
-        sense,
-    )?)
+    single(SubModel::dirichlet(target, variable, imposed_mesh, sense)?)
 }

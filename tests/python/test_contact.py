@@ -38,8 +38,7 @@ def _block(c, mesh, y0):
 
 def _clamp(target, nodes, var):
     imposed = pyrucast.mesh.poi1_from_nodes(nodes)
-    mult = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.model.dirichlet(target, var, imposed, mult)
+    return pyrucast.model.dirichlet(target, var, imposed)
 
 
 def _two_blocks():
@@ -99,7 +98,7 @@ def test_patch_test_uniform_pressure_through_contact():
     # Contact reactions −λᵢ ≥ 0 sum to the applied resultant S.
     mult_mesh = contact.multiplier_mesh()
     mults = [mult_mesh.node(0, r, 0) for r in range(N + 1)]
-    lambdas = [solution.value(m, "lambda_contact") for m in mults]
+    lambdas = [solution.value(m, "lambda") for m in mults]
     assert all(lam <= TOL for lam in lambdas)
     assert abs(sum(-lam for lam in lambdas) - S) < TOL
 
@@ -126,7 +125,7 @@ def test_separation_releases_every_pair():
     mult_mesh = contact.multiplier_mesh()
     for r in range(N + 1):
         m = mult_mesh.node(0, r, 0)
-        assert abs(solution.value(m, "lambda_contact")) < TOL
+        assert abs(solution.value(m, "lambda")) < TOL
 
 
 def test_contact_gaps_requires_a_contact():

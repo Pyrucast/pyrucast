@@ -22,8 +22,7 @@ def _seg2_heat_model(length=1.0, k=1.0, dirichlet_left=False):
     model = pyrucast.model.heat_conduction(fes)
     if dirichlet_left:
         imposed = pyrucast.mesh.poi1_from_nodes([a])
-        multiplier = pyrucast.mesh.barycenter(imposed)
-        model = model | pyrucast.model.dirichlet(model, "T", imposed, multiplier)
+        model = model | pyrucast.model.dirichlet(model, "T", imposed)
     return c, mesh, fes, sub, materials, model, a, b
 
 
@@ -46,9 +45,9 @@ def test_heat_conduction_alone_primal_dual():
 
 def test_with_dirichlet_includes_lagrange_names():
     _, _, _, _, _, model, *_ = _seg2_heat_model(dirichlet_left=True)
-    assert model.primal_vars() == ["T", "lambda_T"]
-    # The Dirichlet dual is "imposed_T" — distinct from the primal "T".
-    assert model.dual_vars() == ["q", "imposed_T"]
+    assert model.primal_vars() == ["T", "lambda"]
+    # The Dirichlet dual is "imposed" — distinct from the primal "T".
+    assert model.dual_vars() == ["q", "imposed"]
 
 
 # ─── Stiffness assembly ─────────────────────────────────────────────────────
@@ -113,24 +112,24 @@ def test_dirichlet_creates_multiplier_node_and_writes_both_blocks():
     assert K.n_rows() == 3
     assert K.n_cols() == 3
 
-    # Locate the multiplier node: the row labelled "imposed_T" sits on the
+    # Locate the multiplier node: the row labelled "imposed" sits on the
     # one new node id.
     rows = K.row_dofs()
-    mult_id = next(nid for (nid, name) in rows if name == "imposed_T")
+    mult_id = next(nid for (nid, name) in rows if name == "imposed")
     assert mult_id != a.id  # new node
     mult = c.acquire(mult_id)
 
-    # C entry (mult, "imposed_T") × (a, "T")
-    assert K.get(mult, "imposed_T", a, "T") == 1.0
-    # Cᵀ entry (a, "q") × (mult, "lambda_T")
-    assert K.get(a, "q", mult, "lambda_T") == 1.0
+    # C entry (mult, "imposed") × (a, "T")
+    assert K.get(mult, "imposed", a, "T") == 1.0
+    # Cᵀ entry (a, "q") × (mult, "lambda")
+    assert K.get(a, "q", mult, "lambda") == 1.0
 
 
 def test_dirichlet_empty_constraint_mesh_rejected():
     c = pyrucast.Coords(1)
     empty = pyrucast.Mesh(c, "POI1")  # one POI1 submesh, zero cells
     try:
-        pyrucast.model.dirichlet(_cible_1d(c, c.add_node([0.0])), "T", empty, empty)
+        pyrucast.model.dirichlet(_cible_1d(c, c.add_node([0.0])), "T", empty)
     except (RuntimeError, ValueError):
         pass
     else:
@@ -245,9 +244,7 @@ def test_fespace_errors_without_domain_submodel():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     imposed = pyrucast.mesh.poi1_from_nodes([a])
-    only_constraint = pyrucast.model.dirichlet(
-        _cible_1d(c, a), "T", imposed, pyrucast.mesh.barycenter(imposed)
-    )
+    only_constraint = pyrucast.model.dirichlet(_cible_1d(c, a), "T", imposed)
     try:
         only_constraint.fespace()
     except RuntimeError:

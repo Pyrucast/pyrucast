@@ -22,7 +22,6 @@ use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::matrix::stiffness;
-use pyrucast::ops::mesh::barycenter;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -74,8 +73,7 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
         corner_sm.add_cell(&[n.id()])?;
     }
     let corner_mesh = Mesh::from_submesh(corner_sm);
-    let corner_mult = barycenter(&corner_mesh)?;
-    let dir = SubModel::dirichlet(&model, "T", &corner_mesh, &corner_mult, Default::default())?;
+    let dir = SubModel::dirichlet(&model, "T", &corner_mesh, Default::default())?;
     let dir_mult_nodes = dir.multiplier_nodes(); // paired corner-for-corner
     model.add_sub(Handle::new(dir))?;
 
@@ -92,19 +90,19 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
     let emb_mult = emb.multiplier_nodes()[0];
     model.add_sub(Handle::new(emb))?;
 
-    // RHS: imposed_T = field(corner) at each Dirichlet multiplier, 0 (tie) at the
-    // embedded multiplier — all under the shared component name "imposed_T".
+    // RHS: imposed = field(corner) at each Dirichlet multiplier, 0 (tie) at the
+    // embedded multiplier — all under the shared component name "imposed".
     let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
     for &m in &dir_mult_nodes {
         rhs_sm.add_cell(&[m])?;
     }
     rhs_sm.add_cell(&[emb_mult])?;
     let rhs_sm = Handle::new(rhs_sm);
-    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed_T".into()])?;
+    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed".into()])?;
     for (m, c) in dir_mult_nodes.iter().zip(corner_coords.iter()) {
-        rhs.set_value(*m, "imposed_T", field(c))?;
+        rhs.set_value(*m, "imposed", field(c))?;
     }
-    rhs.set_value(emb_mult, "imposed_T", 0.0)?;
+    rhs.set_value(emb_mult, "imposed", 0.0)?;
     let rhs = NodeField::from_sub(rhs);
 
     let k = stiffness(&model, &materials)?;
@@ -162,8 +160,7 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
     let clamp = |target: &Model, ids: &[usize], var: &str| -> Result<Model> {
         let picked: Vec<Node> = ids.iter().map(|&i| nodes[i].clone()).collect();
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&picked)?);
-        let mult = barycenter(&imposed)?;
-        model::dirichlet(target, var, &imposed, &mult, Default::default())
+        model::dirichlet(target, var, &imposed, Default::default())
     };
     let mut model = model::elasticity(
         &fes,
@@ -247,8 +244,7 @@ fn embedded_per_component_offset() -> Result<()> {
     let clamp = |target: &Model, ids: &[usize], var: &str| -> Result<Model> {
         let picked: Vec<Node> = ids.iter().map(|&i| nodes[i].clone()).collect();
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&picked)?);
-        let mult = barycenter(&imposed)?;
-        model::dirichlet(target, var, &imposed, &mult, Default::default())
+        model::dirichlet(target, var, &imposed, Default::default())
     };
     let mut model = model::elasticity(
         &fes,

@@ -2,39 +2,35 @@
 //!
 //! A Dirichlet sub-model imposes `u = u_d` on a set of constrained nodes. It
 //! is a *constraint*, not a volumetric physics: it carries no material and no
-//! constitutive law. It is built from **two meshes supplied by the user** — it
-//! creates no node and never mutates the
-//! [`Coords`](crate::coords::Coords):
+//! constitutive law. It is built from **one mesh supplied by the user**,
+//! `imposed_mesh` — POI1 (for now): the constrained nodes (shared with the
+//! target physics), one node per cell, one relation per cell.
 //!
-//! - `imposed_mesh`  — POI1 (for now): the constrained nodes (shared with the
-//!   target physics), one node per cell;
-//! - `multiplier_mesh` — POI1: the support of the Lagrange multipliers, paired
-//!   element-for-element with `imposed_mesh` (same submesh structure, same
-//!   per-submesh cell count). Typically built from `imposed_mesh` with the
-//!   generic [`barycenter`](crate::ops::mesh::barycenter()) mesher (colocated fresh nodes),
-//!   but the user is free to colocate, offset, or even reuse the constrained
-//!   nodes themselves.
+//! Each relation gets a multiplier node of its own, minted at construction by
+//! the [`barycenter`](crate::ops::mesh::barycenter()) mesher — colocated with
+//! its constrained node, in the same submesh structure. The user reaches them
+//! through [`Constraint::multiplier_mesh`], or never touches them at all:
+//! [`SubModel::constraint_rhs`](crate::containers::model::SubModel::constraint_rhs)
+//! writes `u_d` keyed by the constrained node.
 //!
 //! # Variables
 //!
 //! A Dirichlet sub-model imposes the **primal of another model** yet owns its
-//! own pair of variables; the names keep the two apart:
+//! own pair of variables:
 //!
 //! - `imposed_variable` (e.g. `"T"`) — the constrained primal of the **target**
 //!   physics (a *column* of the target's stiffness);
 //! - `target_dual` (e.g. `"q"`) — the **target's** dual variable; the row into
 //!   which the constraint reaction `Cᵀ` is added (it cannot be derived from
 //!   `imposed_variable` — the `T → q` map is target-specific);
-//! - `multiplier` (default `lambda_<imposed_variable>`) — this sub-model's own
-//!   **primal**: the Lagrange multiplier, an unknown of the augmented system,
-//!   whose solved value is the **reaction**;
-//! - `imposed_value` (default `imposed_<imposed_variable>`) — this sub-model's
-//!   own **dual**: the constraint-equation row, and the **slot** at which the
-//!   user writes the imposed value `u_d` in the load `SubNodeField` (on the
-//!   multiplier node).
+//! - [`MULTIPLIER`] — this sub-model's own **primal**: the Lagrange
+//!   multiplier, an unknown of the augmented system, whose solved value is the
+//!   **reaction**;
+//! - [`IMPOSED`] — this sub-model's own **dual**: the constraint-equation row,
+//!   and the **slot** at which the imposed value `u_d` is written in the load
+//!   `SubNodeField` (on the multiplier node).
 //!
-//! `multiplier` and `imposed_value` are derived from `imposed_variable` but can
-//! be overridden by hand.
+//! The last two are the names of every constraint relation.
 
 use crate::aggregate::Aggregate;
 use crate::atoms::ElementType;
@@ -45,84 +41,17 @@ use crate::error::{PyrucastError, Result};
 use crate::models::transfer::{constrained_physics, constraint_physics};
 use crate::models::{
     constraint_block_pair, Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation,
-    RelationSense, SubModelKind,
+    RelationSense, SubModelKind, IMPOSED, MULTIPLIER,
 };
+use crate::ops::mesh::barycenter;
 use serde::{Deserialize, Serialize};
-
-/// Default multiplier (primal) name for a constrained variable: `lambda_<v>`.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
-/// # use pyrucast::ops::mesh;
-/// # let coords = Handle::new(Coords::new(2).unwrap());
-/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let maillage = Mesh::from_submesh(sm);
-/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let zone = fes.get(0).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # use pyrucast::models::dirichlet;
-/// // Derived rather than tabulated: `multiplier` and `imposed_value` left at
-/// // `None` take these values.
-/// assert_eq!(
-///     (dirichlet::default_multiplier("T").as_str(),
-///      dirichlet::default_imposed_value("T").as_str()),
-///     ("lambda_T", "imposed_T"));
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn default_multiplier(imposed_variable: &str) -> String {
-    format!("lambda_{imposed_variable}")
-}
-
-/// Default imposed-value (dual) name for a constrained variable: `imposed_<v>`.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
-/// # use pyrucast::ops::mesh;
-/// # let coords = Handle::new(Coords::new(2).unwrap());
-/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let maillage = Mesh::from_submesh(sm);
-/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let zone = fes.get(0).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # use pyrucast::models::dirichlet;
-/// // Derived rather than tabulated: `multiplier` and `imposed_value` left at
-/// // `None` take these values.
-/// assert_eq!(
-///     (dirichlet::default_multiplier("T").as_str(),
-///      dirichlet::default_imposed_value("T").as_str()),
-///     ("lambda_T", "imposed_T"));
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn default_imposed_value(imposed_variable: &str) -> String {
-    format!("imposed_{imposed_variable}")
-}
 
 /// Dirichlet constraint imposed via Lagrange multipliers.
 ///
-/// See the module documentation for the meaning of the four variable names and
-/// the two meshes. The imposed value `u_d` is **not** stored here: the user
+/// See the module documentation for the meaning of the variable names and the
+/// two meshes. The imposed value `u_d` is **not** stored here: the user
 /// supplies it through the load `SubNodeField` at the multiplier node's
-/// `imposed_value` component.
+/// [`IMPOSED`] component.
 ///
 /// ```
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -132,7 +61,7 @@ pub fn default_imposed_value(imposed_variable: &str) -> String {
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+/// # use pyrucast::models::{Constraint, RelationSense, SubModelKind};
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -141,17 +70,12 @@ pub fn default_imposed_value(imposed_variable: &str) -> String {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # use pyrucast::models::dirichlet::{self, Dirichlet};
+/// # use pyrucast::models::dirichlet::Dirichlet;
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// // A support: `u = u_d` at the imposed nodes, through a Lagrange multiplier.
-/// let d = Dirichlet::new(&cible, "T", &impose, &mult,
-///                        RelationSense::Equality)?;
-/// // With no names given, the defaults derive from the imposed variable.
+/// let d = Dirichlet::new(&cible, "T", &impose, RelationSense::Equality)?;
 /// assert_eq!(d.relations()?.len(), 1);
-/// assert_eq!(d.relations()?[0].imposed_value, dirichlet::default_imposed_value("T"));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Serialize, Deserialize)]
@@ -160,15 +84,12 @@ pub struct Dirichlet {
     pub(crate) imposed_variable: String,
     /// Target physics's dual; row where the reaction `Cᵀ` lands (e.g. `"q"`).
     pub(crate) target_dual: String,
-    /// This sub-model's primal — the Lagrange multiplier (e.g. `"lambda_T"`).
-    pub(crate) multiplier: String,
-    /// This sub-model's dual — constraint row + imposed-value slot (e.g. `"imposed_T"`).
-    pub(crate) imposed_value: String,
     /// POI1 mesh of the constrained nodes (one node per cell), as given by the
     /// user. Shares the submeshes (refcounts keep the nodes alive).
     pub(crate) imposed_mesh: Mesh,
-    /// POI1 mesh of the multiplier nodes, paired element-for-element with
-    /// `imposed_mesh` (same submesh structure, same per-submesh cell count).
+    /// POI1 mesh of the multiplier nodes, minted at construction and paired
+    /// element-for-element with `imposed_mesh` (same submesh structure, same
+    /// per-submesh cell count).
     pub(crate) multiplier_mesh: Mesh,
     /// Equality (default) or unilateral inequality (`u ≥ u_d` / `u ≤ u_d`),
     /// solved by the active-set operator.
@@ -181,19 +102,19 @@ pub struct Dirichlet {
 
 impl Dirichlet {
     /// Build a Dirichlet constraint imposing `variable = u_d` on the nodes of
-    /// `imposed_mesh`, with multipliers living on `multiplier_mesh`.
+    /// `imposed_mesh`, one relation per node, each with a multiplier node of
+    /// its own minted beside it.
     ///
     /// `variable` is a primal of `target`, whose dual row (e.g. `"q"`) is read
-    /// from it. The multiplier and imposed-value names are derived,
-    /// `lambda_<variable>` / `imposed_<variable>`. Both meshes must be POI1 (for
-    /// now), share one [`Coords`](crate::coords::Coords),
-    /// and pair element-for-element (same number of submeshes, same cell count
-    /// per submesh).
+    /// from it. `imposed_mesh` must be POI1 (for now).
     ///
     /// `sense` turns the constraint unilateral: `GreaterEqual` imposes
     /// `u ≥ u_d` (`LessEqual`: `u ≤ u_d`), enforced only while in contact — such
     /// a model is solved by the active-set operator
     /// [`unilateral`](crate::ops::solver::unilateral).
+    ///
+    /// Errors when `variable` is not a primal of `target`, when `imposed_mesh`
+    /// holds no node, or when one of its submeshes is not POI1.
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -203,7 +124,7 @@ impl Dirichlet {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+    /// # use pyrucast::models::{Constraint, RelationSense, SubModelKind};
     /// # use pyrucast::ops::mesh;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -212,24 +133,24 @@ impl Dirichlet {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # use pyrucast::models::dirichlet::{self, Dirichlet};
+    /// # use pyrucast::models::dirichlet::Dirichlet;
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-    /// // A support: `u = u_d` at the imposed nodes, through a Lagrange multiplier.
-    /// let d = Dirichlet::new(&cible, "T", &impose, &mult,
-    ///                        RelationSense::Equality)?;
-    /// // With no names given, the defaults derive from the imposed variable.
-    /// assert_eq!(d.relations()?.len(), 1);
-    /// assert_eq!(d.relations()?[0].imposed_value, dirichlet::default_imposed_value("T"));
+    /// let d = Dirichlet::new(&cible, "T", &impose, RelationSense::Equality)?;
+    /// // The multiplier node is the constraint's own, minted beside the
+    /// // imposed node.
+    /// let m = d.multiplier_mesh();
+    /// assert_eq!(m.cell_count(), 1);
+    /// assert_ne!(m.node(0, 0, 0)?.id(), n[0].id());
+    /// assert_eq!(m.node(0, 0, 0)?.position()?, vec![0.0, 0.0]);
+    /// // A variable the target does not assemble is refused.
+    /// assert!(Dirichlet::new(&cible, "u_x", &impose, RelationSense::Equality).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(
         target: &crate::containers::model::Model,
         variable: &str,
         imposed_mesh: &Mesh,
-        multiplier_mesh: &Mesh,
         sense: RelationSense,
     ) -> Result<Self> {
         // The target's own names, read from the target rather than retyped: the
@@ -249,63 +170,23 @@ impl Dirichlet {
                 "Dirichlet: imposed_mesh must constrain at least one node".into(),
             ));
         }
-        let n_sub = imposed_mesh.len();
-        if multiplier_mesh.len() != n_sub {
-            return Err(PyrucastError::Message(format!(
-                "Dirichlet: imposed_mesh has {} submesh(es) but multiplier_mesh has {}",
-                n_sub,
-                multiplier_mesh.len()
-            )));
-        }
-        // NodeIds are Coords-relative: both meshes must share it.
-        let coords_i = imposed_mesh.coords()?;
-        let coords_m = multiplier_mesh.coords()?;
-        if !coords_i.same_object(&coords_m) {
-            return Err(PyrucastError::Message(
-                "Dirichlet: imposed_mesh and multiplier_mesh must share a Coords".into(),
-            ));
-        }
-        // POI1 (for now) + element-for-element pairing (equal cell counts).
-        for i in 0..n_sub {
-            let imp = imposed_mesh.get(i)?;
-            let mult = multiplier_mesh.get(i)?;
-            let (iet, icount) = {
-                let s = imp.read();
-                (s.element_type(), s.cell_count())
-            };
-            let (met, mcount) = {
-                let s = mult.read();
-                (s.element_type(), s.cell_count())
-            };
+        for (i, imp) in imposed_mesh.into_iter().enumerate() {
+            let iet = imp.read().element_type();
             if iet != ElementType::POI1 {
                 return Err(PyrucastError::Message(format!(
                     "Dirichlet: imposed_mesh submesh {i} must be POI1, got {iet}"
                 )));
             }
-            if met != ElementType::POI1 {
-                return Err(PyrucastError::Message(format!(
-                    "Dirichlet: multiplier_mesh submesh {i} must be POI1, got {met}"
-                )));
-            }
-            if icount != mcount {
-                return Err(PyrucastError::Message(format!(
-                    "Dirichlet: submesh {i} has {icount} constrained node(s) but \
-                     {mcount} multiplier(s)"
-                )));
-            }
         }
-
-        let multiplier = default_multiplier(&imposed_variable);
-        let imposed_value = default_imposed_value(&imposed_variable);
+        // One fresh node per relation, beside its constrained node.
+        let multiplier_mesh = barycenter(imposed_mesh)?;
         let target_physics = constrained_physics(target, [imposed_variable.as_str()]);
 
         Ok(Self {
             imposed_variable,
             target_dual,
-            multiplier,
-            imposed_value,
             imposed_mesh: share(imposed_mesh)?,
-            multiplier_mesh: share(multiplier_mesh)?,
+            multiplier_mesh,
             sense,
             target_physics,
         })
@@ -314,11 +195,11 @@ impl Dirichlet {
 
 impl SubModelKind for Dirichlet {
     fn primal_vars(&self) -> Vec<String> {
-        vec![self.multiplier.clone()]
+        vec![MULTIPLIER.to_string()]
     }
 
     fn dual_vars(&self) -> Vec<String> {
-        vec![self.imposed_value.clone()]
+        vec![IMPOSED.to_string()]
     }
 
     /// Its relations, applied to the solution: the reaction `Cᵀ λ` on the
@@ -348,9 +229,9 @@ impl SubModelKind for Dirichlet {
         if kind != MatrixKind::Stiffness {
             return Ok(Vec::new());
         }
-        // One C / Cᵀ pair per submesh pair — the user's submeshes are used
-        // directly as row/col supports (no flattening), so the submesh structure
-        // carried through `barycenter` is preserved. Dirichlet is the single-term
+        // One C / Cᵀ pair per submesh pair — the submeshes are used directly as
+        // row/col supports (no flattening), so the submesh structure carried
+        // through `barycenter` is preserved. Dirichlet is the single-term
         // relation with coefficient 1, so it defers to the shared block builder.
         let mut blocks = Vec::with_capacity(self.imposed_mesh.len() * 2);
         for i in 0..self.imposed_mesh.len() {
@@ -361,8 +242,6 @@ impl SubModelKind for Dirichlet {
                 &imp_sm,
                 &self.imposed_variable,
                 &self.target_dual,
-                &self.multiplier,
-                &self.imposed_value,
                 1.0,
             )?;
             blocks.push(c_block);
@@ -396,13 +275,11 @@ impl SubModelKind for Dirichlet {
         let nc = self.imposed_mesh.cell_count();
         let nm = self.multiplier_mesh.cell_count();
         format!(
-            "SubModel<Dirichlet({imposed_variable})>\n  primal var(s): {multiplier} \
-             (multiplier)\n  dual var(s):   {imposed_value} (imposed value)\n  \
+            "SubModel<Dirichlet({imposed_variable})>\n  primal var(s): {MULTIPLIER} \
+             (multiplier)\n  dual var(s):   {IMPOSED} (imposed value)\n  \
              targets primary dual: {target_dual}\n  sense: {sense}\n  \
              constrained: {nc} node(s)\n  multipliers: {nm} node(s)",
             imposed_variable = self.imposed_variable,
-            multiplier = self.multiplier,
-            imposed_value = self.imposed_value,
             target_dual = self.target_dual,
             sense = self.sense,
         )
@@ -430,7 +307,6 @@ impl Constraint for Dirichlet {
             {
                 relations.push(Relation {
                     multiplier_node: *mult,
-                    imposed_value: self.imposed_value.clone(),
                     terms: vec![ConstraintTerm {
                         node: *imp,
                         variable: self.imposed_variable.clone(),

@@ -282,12 +282,10 @@ fn constraints_enter_the_tangent() -> Result<()> {
     let (fes, n) = unit_quad()?;
     let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     let imposed = mesh::poi1_from_nodes(&n[..1])?;
-    let multiplier = mesh::barycenter(&imposed)?;
     let constrained = conduction.union(&model::dirichlet(
         &conduction,
         "T",
         &imposed,
-        &multiplier,
         RelationSense::Equality,
     )?)?;
     let materials = material_field(&constrained, &[("k", 1.0)])?;

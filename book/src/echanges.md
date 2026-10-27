@@ -196,14 +196,14 @@ Un `interface_transfer` est la **régularisation par pénalité** de ce qu'un
 [MPC](contraintes/mpc.md) impose exactement :
 
 ```text
-mpc([(T, maillage₁, +1), (T, maillage₂, −1)]) = 0   ⟺  T₁ = T₂, exactement
+mpc(cible, [(maillage₁, T, +1), (maillage₂, T, −1)]) = 0  ⟺  T₁ = T₂, exactement
 interface_transfer(maillage₁, maillage₂), h → ∞      ⟶  T₁ = T₂, à 1/h près
 ```
 
 | | `mpc` | `interface_transfer` |
 |---|---|---|
 | `h` | n'existe pas — un multiplicateur n'est pas un matériau | une **constante physique** |
-| inconnues | ajoute `lambda_mpc` | aucune |
+| inconnues | ajoute `lambda` | aucune |
 | système | point-selle, indéfini | reste défini positif |
 | conditionnement | insensible | se dégrade quand `h` monte |
 

@@ -37,9 +37,9 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::shell::ShellModel;
 use pyrucast::ops::element_field::{behavior, material_field, strain, StrainMeasure};
+use pyrucast::ops::model;
 use pyrucast::ops::node_field::internal_forces;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::ops::{mesh, model};
 use pyrucast::Result;
 
 /// A chain of `SEG2` cells through `points`, and its FE space under
@@ -65,8 +65,7 @@ fn clamp(model: &Model, node: &Node) -> Result<Model> {
     let mut out = model.subset(0..model.len())?;
     for var in model.primal_vars() {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
-        let multiplier = mesh::barycenter(&imposed)?;
-        let bc = model::dirichlet(model, &var, &imposed, &multiplier, Default::default())?;
+        let bc = model::dirichlet(model, &var, &imposed, Default::default())?;
         out = out.union(&bc)?;
     }
     Ok(out)

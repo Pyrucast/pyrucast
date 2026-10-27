@@ -36,7 +36,6 @@ use crate::handle::Handle;
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// let meca = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
 /// // The **required** components must all be there; the **optional** ones —
 /// // `alpha`, the expansion — are kept only if given, and after them. The
@@ -51,7 +50,7 @@ use crate::handle::Handle;
 ///     &meca.get(0)?.read(), &[("E", 210e3)]).is_err());
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// // A constraint has no matter to receive.
-/// let appui = model::dirichlet(&cible, "T", &impose, &mult,
+/// let appui = model::dirichlet(&cible, "T", &impose,
 ///                              RelationSense::Equality)?;
 /// assert!(element_field::sub_material_field(
 ///     &appui.get(0)?.read(), &[]).is_err());
@@ -127,12 +126,11 @@ pub fn sub_material_field(
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// // The same values for **every** sub-model that asks for matter; those that
 /// // want none are skipped without an error.
 /// let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?.union(
-///     &model::dirichlet(&cible, "T", &impose, &mult,
+///     &model::dirichlet(&cible, "T", &impose,
 ///                       RelationSense::Equality)?)?;
 /// assert_eq!(modele.len(), 2);
 /// let mat = element_field::material_field(&modele, &[("k", 1.0)])?;
@@ -188,7 +186,6 @@ pub fn material_field(
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// // One list **per sub-model**, when two physics live together and do not
 /// // expect the same constants.
 /// let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?
@@ -263,11 +260,9 @@ mod tests {
         if dirichlet_at_left {
             let imposed =
                 Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
-            let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
             model
                 .add_sub(Handle::new(
-                    SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
-                        .unwrap(),
+                    SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
                 ))
                 .unwrap();
         }
@@ -305,7 +300,6 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
-        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         // The target the support constrains: it reads its dual there and checks its
         // variable.
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
@@ -316,8 +310,7 @@ mod tests {
         )
         .unwrap();
         let cible = crate::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-        let dir =
-            SubModel::dirichlet(&cible, "T", &imposed, &multiplier, Default::default()).unwrap();
+        let dir = SubModel::dirichlet(&cible, "T", &imposed, Default::default()).unwrap();
         assert!(sub_material_field(&dir, &[("k", 1.0)]).is_err());
     }
 
@@ -460,11 +453,9 @@ mod tests {
             .unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
-        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         model
             .add_sub(Handle::new(
-                SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
-                    .unwrap(),
+                SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
             ))
             .unwrap();
         model

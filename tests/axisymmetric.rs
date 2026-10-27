@@ -74,8 +74,7 @@ fn annulus(
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
 fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-    let multiplier = mesh::barycenter(&imposed)?;
-    model::dirichlet(target, var, &imposed, &multiplier, Default::default())
+    model::dirichlet(target, var, &imposed, Default::default())
 }
 
 // ─── The measure: 2πr, with no mechanics involved ────────────────────────────
@@ -498,7 +497,7 @@ fn heat_conduction_through_a_hollow_cylinder_is_logarithmic() -> Result<()> {
     let idx = |i: usize, j: usize| j * (NR + 1) + i;
 
     // Imposed temperature on a face: the Dirichlet sub-model plus the value
-    // written at its multiplier nodes' `imposed_T` slot.
+    // written at its multiplier nodes' `imposed` slot.
     let mut model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     let mut mult_nodes: Vec<(Node, f64)> = Vec::new();
     for (nodes, value) in [
@@ -514,17 +513,12 @@ fn heat_conduction_through_a_hollow_cylinder_is_logarithmic() -> Result<()> {
         ),
     ] {
         let m = Mesh::from_submesh(SubMesh::poi1_from_nodes(&nodes)?);
-        let multiplier = mesh::barycenter(&m)?;
+        let dirichlet = model::dirichlet(&model, "T", &m, Default::default())?;
+        let multiplier = dirichlet.multiplier_mesh()?;
         for k in 0..nodes.len() {
             mult_nodes.push((multiplier.node(0, k, 0)?, value));
         }
-        model = model.union(&model::dirichlet(
-            &model,
-            "T",
-            &m,
-            &multiplier,
-            Default::default(),
-        )?)?;
+        model = model.union(&dirichlet)?;
     }
     let materials = pyrucast::ops::element_field::material_field(&model, &[("k", 1.0)])?;
 
@@ -536,10 +530,10 @@ fn heat_conduction_through_a_hollow_cylinder_is_logarithmic() -> Result<()> {
     )?);
     let mut rhs = pyrucast::containers::node_field::SubNodeField::from_poi1(
         &mult_sm,
-        vec!["imposed_T".to_string()],
+        vec!["imposed".to_string()],
     )?;
     for (n, v) in &mult_nodes {
-        rhs.set_value(n.id(), "imposed_T", *v)?;
+        rhs.set_value(n.id(), "imposed", *v)?;
     }
     let rhs = NodeField::from_sub(rhs);
 

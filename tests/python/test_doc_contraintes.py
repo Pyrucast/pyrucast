@@ -27,22 +27,16 @@ def _barre_elastique(n=2, dim=2):
     return c, mesh, fes, noeuds
 
 
-def _support_et_multiplicateur(noeud):
-    imposed = pyrucast.mesh.poi1_from_nodes([noeud])
-    mult = pyrucast.mesh.barycenter(imposed)
-    return imposed, mult
-
-
 # ── A constraint's sense: the unilateral stop ───────────────────────────────
 
 
 # ── butee ──────────────────────────────────────────────────
 
 _, _, fes, noeuds = _barre_elastique()
-imposed, mult = _support_et_multiplicateur(noeuds[-1])
+imposed = pyrucast.mesh.poi1_from_nodes([noeuds[-1]])
 # ANCHOR: butee
 barre = pyrucast.model.truss(fes)
-butee = pyrucast.model.dirichlet(barre, "u_x", imposed, mult, sense=">=")
+butee = pyrucast.model.dirichlet(barre, "u_x", imposed, sense=">=")
 # ANCHOR_END: butee
 assert len(butee) == 1
 
@@ -51,11 +45,11 @@ assert len(butee) == 1
 _, _, fes, noeuds = _barre_elastique(dim=1)
 # Bar clamped on the left (equality) and stopped on the right (u_x ≥ 0): both
 # are needed, a model held by its stop alone does not converge.
-gauche, mult_g = _support_et_multiplicateur(noeuds[0])
-droite, mult_d = _support_et_multiplicateur(noeuds[-1])
+gauche = pyrucast.mesh.poi1_from_nodes([noeuds[0]])
+droite = pyrucast.mesh.poi1_from_nodes([noeuds[-1]])
 barre = pyrucast.model.truss(fes)
-encastrement = pyrucast.model.dirichlet(barre, "u_x", gauche, mult_g)
-butee = pyrucast.model.dirichlet(barre, "u_x", droite, mult_d, sense=">=")
+encastrement = pyrucast.model.dirichlet(barre, "u_x", gauche)
+butee = pyrucast.model.dirichlet(barre, "u_x", droite, sense=">=")
 model = barre | encastrement | butee
 materials = pyrucast.element_field.material_field(
     model, [("E", 210_000.0), ("A", 1e-2)]
@@ -79,15 +73,14 @@ assert solution.node_count() > 0
 # ── constraint rhs ─────────────────────────────────────────
 
 _, _, fes, noeuds = _barre_elastique()
-imposed, mult = _support_et_multiplicateur(noeuds[0])
+imposed = pyrucast.mesh.poi1_from_nodes([noeuds[0]])
 conduction = pyrucast.model.heat_conduction(fes)
 dual = conduction.dual_of("T")
-dirichlet = pyrucast.model.dirichlet(conduction, "T", imposed, mult)
+dirichlet = pyrucast.model.dirichlet(conduction, "T", imposed)
 autre = pyrucast.mesh.poi1_from_nodes([noeuds[-1]])
 mpc = pyrucast.model.mpc(
     conduction,
     [(autre, "T", 1.0), (imposed, "T", -1.0)],
-    pyrucast.mesh.barycenter(autre),
 )
 noeud_contraint, u_d = noeuds[0], 1.0
 noeud_terme, g = noeuds[-1], 0.5
@@ -100,13 +93,12 @@ assert rhs.node_count() > 0
 # ── constraint rhs by index ────────────────────────────────
 
 _, _, fes, noeuds = _barre_elastique()
-imposed, _ = _support_et_multiplicateur(noeuds[0])
+imposed = pyrucast.mesh.poi1_from_nodes([noeuds[0]])
 autre = pyrucast.mesh.poi1_from_nodes([noeuds[-1]])
 dual = pyrucast.model.heat_conduction(fes).dual_of("T")
 mpc = pyrucast.model.mpc(
     conduction,
     [(autre, "T", 1.0), (imposed, "T", -1.0)],
-    pyrucast.mesh.barycenter(autre),
 )
 index_relation, g = 0, 1.0
 # ANCHOR: constraint_rhs_by_index
@@ -150,9 +142,7 @@ def _deux_blocs(N=2):
 
 def _bloquer(target, noeuds, var):
     imposed = pyrucast.mesh.poi1_from_nodes(noeuds)
-    return pyrucast.model.dirichlet(
-        target, var, imposed, pyrucast.mesh.barycenter(imposed)
-    )
+    return pyrucast.model.dirichlet(target, var, imposed)
 
 
 # ── contact ────────────────────────────────────────────────
@@ -218,23 +208,21 @@ for i in range(4):
     mesh.unit().add_cell([nodes[i], nodes[i + 1]])
 fes = pyrucast.FiniteElementSpace(mesh)
 
-# 2) Multiplier supports: barycenter co-locates fresh nodes.
+# 2) Both constraints; each mints its multiplier node beside its imposed node.
 imposed_left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
 imposed_right = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
-mult_mesh_left = pyrucast.mesh.barycenter(imposed_left)
-mult_mesh_right = pyrucast.mesh.barycenter(imposed_right)
 conduction = pyrucast.model.heat_conduction(fes)
-left = pyrucast.model.dirichlet(conduction, "T", imposed_left, mult_mesh_left)
-right = pyrucast.model.dirichlet(conduction, "T", imposed_right, mult_mesh_right)
-mult_left = mult_mesh_left.node(0, 0, 0)
-mult_right = mult_mesh_right.node(0, 0, 0)
+left = pyrucast.model.dirichlet(conduction, "T", imposed_left)
+right = pyrucast.model.dirichlet(conduction, "T", imposed_right)
+mult_left = left.multiplier_mesh().node(0, 0, 0)
+mult_right = right.multiplier_mesh().node(0, 0, 0)
 
 # 3) Whole model: conduction + both Dirichlet.
 model = conduction | left | right
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 
 # 4) Loading: the `constraint_rhs` helper designates each constraint by its
-#    constrained node and writes u_d at the multiplier node's imposed_T slot.
+#    constrained node and writes u_d at the multiplier node's `imposed` slot.
 #    Both are merged with `|`.
 rhs = left.constraint_rhs([(nodes[0], 0.0)]) | right.constraint_rhs([(nodes[-1], 1.0)])
 
@@ -242,7 +230,7 @@ rhs = left.constraint_rhs([(nodes[0], 0.0)]) | right.constraint_rhs([(nodes[-1],
 K = pyrucast.matrix.stiffness(model, materials)
 solution = pyrucast.solver.solve(K, rhs)
 assert abs(solution.value(nodes[2], "T") - 0.5) < 1e-10  # T in the middle
-assert abs(solution.value(mult_left, "lambda_T") - 1.0) < 1e-10  # flux on the left
+assert abs(solution.value(mult_left, "lambda") - 1.0) < 1e-10  # flux on the left
 # ANCHOR_END: dirichlet_complet
 
 
@@ -263,17 +251,14 @@ dual = base.dual_of("T")  # "q"
 
 # Dirichlet T(0) = 0.
 imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-mult0 = pyrucast.mesh.barycenter(imposed0)
-dirichlet = pyrucast.model.dirichlet(base, "T", imposed0, mult0)
+dirichlet = pyrucast.model.dirichlet(base, "T", imposed0)
 
 # MPC 1·T(dernier) − 1·T(0) = 1.
 mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
 mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-mult_mpc = pyrucast.mesh.barycenter(mesh_last)
 mpc = pyrucast.model.mpc(
-    conduction,
+    base,
     [(mesh_last, "T", 1.0), (mesh_first, "T", -1.0)],
-    mult_mpc,
 )
 
 model = base | dirichlet | mpc
@@ -282,7 +267,7 @@ materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 # Chargement : valeur imposée de Dirichlet + second membre g de la MPC. Le
 # `constraint_rhs` helper designates each relation by a node (the constrained
 # node for Dirichlet, the term node for the MPC) and finds the multiplier node
-# and component on its own (`imposed_T`, `mpc_rhs`). Both are merged with `|`.
+# on its own; the component is `imposed` for both. Both are merged with `|`.
 rhs = dirichlet.constraint_rhs([(nodes[0], 0.0)]) | mpc.constraint_rhs(
     [(nodes[-1], 1.0)]
 )
@@ -319,8 +304,7 @@ base = pyrucast.model.heat_conduction(fes)
 
 # Corners fixed to the linear field (Dirichlet).
 corner_mesh = pyrucast.mesh.poi1_from_nodes(corner_nodes)
-corner_mult = pyrucast.mesh.barycenter(corner_mesh)
-dirichlet = pyrucast.model.dirichlet(base, "T", corner_mesh, corner_mult)
+dirichlet = pyrucast.model.dirichlet(base, "T", corner_mesh)
 
 # Immersed node, tied to the host.
 p = c.add_node([0.3, 0.6, 0.2])

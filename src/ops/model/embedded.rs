@@ -35,7 +35,6 @@ use crate::error::Result;
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let mut barre = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # let p: Vec<_> = [[0.25, 0.25], [0.5, 0.25]].iter()
 /// #     .map(|q| Node::create_in(coords.clone(), q).unwrap()).collect();

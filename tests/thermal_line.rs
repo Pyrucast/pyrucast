@@ -20,7 +20,6 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
-use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -46,31 +45,30 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
     // ── Modèle : conduction + Dirichlet T = 20 en x = 1 ────────────────────
-    // The multipliers' support is built from the imposed node by the
-    // `barycenter` mesher (a fresh co-located node). The model creates nothing.
+    // The constraint mints its multiplier beside the imposed node (a fresh
+    // co-located node); its value is written there.
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(
         nodes.last().unwrap(),
     ))?);
-    let multiplier = mesh::barycenter(&imposed)?;
-    let mult = multiplier.node(0, 0, 0)?.id();
 
     let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    let dirichlet = model::dirichlet(&conduction, "T", &imposed, &multiplier, Default::default())?;
+    let dirichlet = model::dirichlet(&conduction, "T", &imposed, Default::default())?;
+    let mult = dirichlet.multiplier_mesh()?.node(0, 0, 0)?.id();
     let model = conduction.union(&dirichlet)?;
 
     // ── Material: uniform k (Dirichlet is skipped automatically) ───────────
     let materials = pyrucast::ops::element_field::material_field(&model, &[("k", K)])?;
 
     // ── Chargement : source Q en x = 0 (composante duale "q"), valeur imposée
-    //    T = 20 at the multiplier node ("imposed_T" slot) ──────────────────
+    //    T = 20 at the multiplier node ("imposed" slot) ──────────────────
     let node0 = nodes[0].id();
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[node0])?;
     load_sm.add_cell(&[mult])?;
     let load_sm = Handle::new(load_sm);
-    let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["imposed_T".into(), "q".into()])?;
+    let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["imposed".into(), "q".into()])?;
     rhs.set_value(node0, "q", Q)?;
-    rhs.set_value(mult, "imposed_T", T_IMPOSED)?;
+    rhs.set_value(mult, "imposed", T_IMPOSED)?;
     let rhs = NodeField::from_sub(rhs);
 
     // ── Assemblage + résolution ────────────────────────────────────────────
@@ -89,7 +87,7 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
         );
     }
     // La réaction (multiplicateur de Lagrange) équilibre le flux injecté : λ = Q.
-    let reaction = solution.value(mult, "lambda_T")?;
+    let reaction = solution.value(mult, "lambda")?;
     assert!(
         (reaction - Q).abs() < tol,
         "réaction λ : obtenue {reaction}, attendue {Q}"

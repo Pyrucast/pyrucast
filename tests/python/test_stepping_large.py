@@ -37,12 +37,11 @@ def _grid(nx, ny, length, height):
     return c, mesh, pc.FiniteElementSpace(mesh), node, position
 
 
-def _fix(target, nodes, variable, dim=2):
+def _fix(target, nodes, variable):
     """``variable`` held on ``nodes``; returns the constraint and the support
     its imposed value goes on."""
-    imposed = pc.mesh.poi1_from_nodes(nodes)
-    multipliers = pc.mesh.translate(imposed, [0.0] * dim)
-    return pc.model.dirichlet(target, variable, imposed, multipliers), multipliers
+    constraint = pc.model.dirichlet(target, variable, pc.mesh.poi1_from_nodes(nodes))
+    return constraint, constraint.multiplier_mesh()
 
 
 def _on(support, component, value):
@@ -73,7 +72,7 @@ def _turned_edge(measure):
                 value = math.cos(theta) * x - math.sin(theta) * y - x
             else:
                 value = math.sin(theta) * x + math.cos(theta) * y - y
-            field = _on(support, "imposed_" + variable, value)
+            field = _on(support, "imposed", value)
             loads = field if loads is None else loads | field
         return loads
 
@@ -207,8 +206,8 @@ def test_a_perfectly_plastic_bar_in_hencky_strain_pulls_with_sigma_y_over_lambda
 
     model = bar
     for axis, variable in enumerate(("u_x", "u_y", "u_z")):
-        model = model | _fix(bar, face(axis, 0.0), variable, dim=3)[0]
-    pull, pull_support = _fix(bar, face(0, 1.0), "u_x", dim=3)
+        model = model | _fix(bar, face(axis, 0.0), variable)[0]
+    pull, pull_support = _fix(bar, face(0, 1.0), "u_x")
     model = model | pull
     data = {
         "model": model,
@@ -218,8 +217,8 @@ def test_a_perfectly_plastic_bar_in_hencky_strain_pulls_with_sigma_y_over_lambda
         ),
         "loads": pc.Evolution(
             [
-                (0.0, _on(pull_support, "imposed_u_x", 0.0)),
-                (1.0, _on(pull_support, "imposed_u_x", 0.5)),
+                (0.0, _on(pull_support, "imposed", 0.0)),
+                (1.0, _on(pull_support, "imposed", 0.5)),
             ]
         ),
     }
@@ -262,9 +261,9 @@ def test_a_stretched_bar_conducts_as_the_longer_bar_it_is():
         "materials": pc.element_field.material_field(
             model, [("k", k), ("E", 100.0), ("nu", 0.0)]
         ),
-        "loads": _on(cold_support, "imposed_T", 0.0)
-        | _on(hot_support, "imposed_T", 100.0)
-        | _on(pull_support, "imposed_u_x", (stretch - 1.0) * length),
+        "loads": _on(cold_support, "imposed", 0.0)
+        | _on(hot_support, "imposed", 100.0)
+        | _on(pull_support, "imposed", (stretch - 1.0) * length),
         "hooks": {
             "after_heat": lambda _data, _state, heat: fluxes.append(heat.behaviour)
         },
@@ -301,7 +300,7 @@ def _turned_with_heat(axis_angle):
             ("V1Y", math.sin(axis_angle)),
         ],
     )
-    held = _on(cold_support, "imposed_T", 0.0) | _on(hot_support, "imposed_T", 100.0)
+    held = _on(cold_support, "imposed", 0.0) | _on(hot_support, "imposed", 100.0)
     data["loads"] = pc.Evolution(
         [(t, data["loads"].interpolate(t) | held) for t in data["times"]]
     )
@@ -361,13 +360,13 @@ def _cooled_strip(scheme, stretch_x, stretch_y, materials, held=None, start=None
         | along
         | across
     )
-    loads = _on(along_support, "imposed_u_x", (stretch_x - 1.0) * length) | _on(
-        across_support, "imposed_u_y", (stretch_y - 1.0) * height
+    loads = _on(along_support, "imposed", (stretch_x - 1.0) * length) | _on(
+        across_support, "imposed", (stretch_y - 1.0) * height
     )
     if held is not None:
         hold, hold_support = _fix(conduction, [node(0, j) for j in range(3)], "T")
         model = model | hold
-        loads = loads | _on(hold_support, "imposed_T", held)
+        loads = loads | _on(hold_support, "imposed", held)
     temperatures = []
     data = {
         "model": model,
@@ -536,7 +535,7 @@ def test_a_taut_string_carries_a_weight_through_its_geometric_stiffness(geometri
     stretch[0].set_value(right, "u_x", delta)
     own = pc.element_field.material_field(string, [("E", young), ("A", area)])
     tension = string.integrate_behavior(string.strain(stretch, own), own)
-    pulled = _on(at_left, "imposed_u_x", -delta) | _on(at_right, "imposed_u_x", delta)
+    pulled = _on(at_left, "imposed", -delta) | _on(at_right, "imposed", delta)
     hung = pc.NodeField(pc.mesh.poi1_from_nodes([middle]), ["f_y"])
     hung[0].set_value(middle, "f_y", -weight)
     data = {

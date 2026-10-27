@@ -58,21 +58,20 @@ def profil_stationnaire() -> None:
     # ── Modèle : diffusion + concentration imposée en x = 1 ──────────────────
     imposed = pyrucast.Mesh(c, "POI1")
     imposed.unit().add_cell([nodes[-1]])
-    multiplier = pyrucast.mesh.barycenter(imposed)
-    mult = multiplier.node(0, 0, 0)
-
     cible = pyrucast.model.fick(fes, SPECIES)
+    held = pyrucast.model.dirichlet(cible, f"c_{SPECIES}", imposed)
+    mult = held.multiplier_mesh().node(0, 0, 0)
 
-    model = cible | pyrucast.model.dirichlet(cible, f"c_{SPECIES}", imposed, multiplier)
+    model = cible | held
     materials = pyrucast.element_field.material_field(model, [(f"D_{SPECIES}", D)])
 
     # ── Loading: flux J at x = 0, imposed value at the multiplier ────────────
     load = pyrucast.Mesh(c, "POI1")
     load.unit().add_cell([nodes[0]])
     load.unit().add_cell([mult])
-    rhs = pyrucast.NodeField(load, [f"imposed_c_{SPECIES}", f"j_{SPECIES}"])
+    rhs = pyrucast.NodeField(load, ["imposed", f"j_{SPECIES}"])
     rhs[0].set_value(nodes[0], f"j_{SPECIES}", J)
-    rhs[0].set_value(mult, f"imposed_c_{SPECIES}", C_IMPOSED)
+    rhs[0].set_value(mult, "imposed", C_IMPOSED)
 
     # ── Assemblage + résolution ─────────────────────────────────────────────
     stiffness = pyrucast.matrix.stiffness(model, materials)
@@ -90,7 +89,7 @@ def profil_stationnaire() -> None:
         print(f"  {x:5.3f}   {obtenu:10.6f}   {attendu:12.6f}")
         assert abs(obtenu - attendu) < 1e-10
 
-    reaction = solution.value(mult, f"lambda_c_{SPECIES}")
+    reaction = solution.value(mult, "lambda")
     print()
     print(f"  Bilan de matière : réaction = {reaction:.6f}, flux injecté = {J}")
     assert abs(reaction - J) < 1e-10

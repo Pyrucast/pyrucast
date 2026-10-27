@@ -19,7 +19,6 @@ use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::StrainMeasure;
-use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::unilateral;
 use pyrucast::Result;
@@ -60,8 +59,7 @@ fn block(coords: &Handle<Coords>, y0: f64) -> Result<(Vec<Node>, SubMesh)> {
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
 fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-    let multiplier = mesh::barycenter(&imposed)?;
-    model::dirichlet(target, var, &imposed, &multiplier, Default::default())
+    model::dirichlet(target, var, &imposed, Default::default())
 }
 
 /// The full two-block setup. Returns the two node grids, the assembled model
@@ -195,7 +193,7 @@ fn patch_test_uniform_pressure_through_contact() -> Result<()> {
     };
     let mut total = 0.0;
     for (r, m) in mults.iter().enumerate() {
-        let lambda = solution.value(*m, "lambda_contact")?;
+        let lambda = solution.value(*m, "lambda")?;
         assert!(
             lambda <= TOL,
             "active ≥ relation {r} must carry λ ≤ 0, got {lambda}"
@@ -253,7 +251,7 @@ fn separation_releases_every_pair() -> Result<()> {
         v
     };
     for m in &mults {
-        let lambda = solution.value(*m, "lambda_contact")?;
+        let lambda = solution.value(*m, "lambda")?;
         assert!(lambda.abs() < TOL, "released pair must carry λ = 0");
     }
     // And the slave nodes moved away from the master (gap opened).
@@ -369,7 +367,7 @@ fn contact_3d_two_cubes() -> Result<()> {
     };
     let total: f64 = mults
         .iter()
-        .map(|m| -solution.value(*m, "lambda_contact").unwrap())
+        .map(|m| -solution.value(*m, "lambda").unwrap())
         .sum();
     assert!((total - S).abs() < TOL);
     Ok(())

@@ -56,8 +56,7 @@ def bloc(coords: pc.Coords, y0: float):
 
 def clamp(target, nodes, var):
     imposed = pc.mesh.poi1_from_nodes(nodes)
-    multiplier = pc.mesh.barycenter(imposed)
-    return pc.model.dirichlet(target, var, imposed, multiplier)
+    return pc.model.dirichlet(target, var, imposed)
 
 
 def bord_horizontal(mesh: pc.Mesh, y: float) -> pc.Mesh:
@@ -126,16 +125,13 @@ def main() -> None:
     # Réactions de contact : Σ(−λᵢ) doit reconstituer l'effort appliqué S.
     maillage_mult = contact.multiplier_mesh()
     lambdas = [
-        solution.value(maillage_mult.node(0, r, 0), "lambda_contact")
-        for r in range(N + 1)
+        solution.value(maillage_mult.node(0, r, 0), "lambda") for r in range(N + 1)
     ]
     print(f"\nΣ(−λ) = {sum(-lam for lam in lambdas):.6f}  (attendu {S})")
 
     out = os.environ.get("PYRUCAST_FORMATION_IMG_DIR", tempfile.gettempdir())
     chemin = os.path.join(out, "contact.svg")
-    maillage_mult.plot(
-        save=chemin, field=solution, component="lambda_contact", cmap="viridis"
-    )
+    maillage_mult.plot(save=chemin, field=solution, component="lambda", cmap="viridis")
     print(f"Contact reaction (λ) written to {chemin}")
 
 

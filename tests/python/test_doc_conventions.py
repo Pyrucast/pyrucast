@@ -30,13 +30,14 @@ champ = pyrucast.NodeField(_support, ["v"])
 a = pyrucast.NodeField(_support, ["v"])
 b = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(_n[:2]), ["w"])
 _imposed = pyrucast.mesh.poi1_from_nodes([_n[0]])
-_mult = pyrucast.mesh.barycenter(_imposed)
 cible = pyrucast.model.heat_conduction(fes)
+_appui = pyrucast.model.dirichlet(cible, "T", _imposed)
+_mult = _appui.multiplier_mesh()
 
-model = cible | pyrucast.model.dirichlet(cible, "T", _imposed, _mult)
+model = cible | _appui
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
-rhs = pyrucast.NodeField(_mult, ["imposed_T"])
-rhs[0].set_value(_mult.node(0, 0, 0), "imposed_T", 1.0)
+rhs = pyrucast.NodeField(_mult, ["imposed"])
+rhs[0].set_value(_mult.node(0, 0, 0), "imposed", 1.0)
 
 
 # ── Le verbe exposé aussi en méthode ────────────────────────────────────────

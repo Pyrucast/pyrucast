@@ -37,11 +37,10 @@ def _strip(nx=NX, ny=NY, length=L, height=H):
 def _fix(target, nodes, variable, sense="="):
     """``variable`` held on ``nodes``, one multiplier per node; returns the
     constraint and its multiplier support (where an imposed value goes)."""
-    imposed = pc.mesh.poi1_from_nodes(nodes)
-    multipliers = pc.mesh.translate(imposed, [0.0, 0.0])
-    return pc.model.dirichlet(
-        target, variable, imposed, multipliers, sense
-    ), multipliers
+    constraint = pc.model.dirichlet(
+        target, variable, pc.mesh.poi1_from_nodes(nodes), sense
+    )
+    return constraint, constraint.multiplier_mesh()
 
 
 def _on(support, component, value):
@@ -87,7 +86,7 @@ def test_free_thermal_expansion_is_stress_free():
         "model": model,
         "times": [0.0, 1.0],
         "materials": materials,
-        "loads": _on(hot_support, "imposed_T", 120.0),
+        "loads": _on(hot_support, "imposed", 120.0),
         "t_ref": T_REF,
     }
     pc.stepping.step_by_step(data)
@@ -215,8 +214,8 @@ def test_heating_then_pulling_equals_pulling_then_heating():
             model, [("E", E), ("nu", NU), ("alpha", ALPHA)]
         )
         cold, hot = _uniform(mesh, "T", T_REF), _uniform(mesh, "T", 220.0)
-        rest = _on(support, "imposed_u_x", 0.0)
-        pulled = _on(support, "imposed_u_x", 3e-3 * L)
+        rest = _on(support, "imposed", 0.0)
+        pulled = _on(support, "imposed", 3e-3 * L)
         if heat_first:
             temperature = pc.Evolution([(0.0, cold), (1.0, hot), (2.0, hot)])
             loads = pc.Evolution([(0.0, rest), (1.0, rest), (2.0, pulled)])
@@ -252,8 +251,8 @@ def test_an_elastoplastic_bar_pulled_by_its_end_yields_at_sigma_y():
     )
     stretch = pc.Evolution(
         [
-            (0.0, _on(pull_support, "imposed_u_x", 0.0)),
-            (1.0, _on(pull_support, "imposed_u_x", 4e-3 * L)),
+            (0.0, _on(pull_support, "imposed", 0.0)),
+            (1.0, _on(pull_support, "imposed", 4e-3 * L)),
         ]
     )
     data = {

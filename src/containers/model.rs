@@ -48,13 +48,18 @@
 //! **multiplier nodes** supplied by the user (`multiplier_mesh`; the sub-model
 //! creates no node):
 //!
-//! - the **primal** of the constraint sub-model is `multiplier` (default
-//!   `lambda_<imposed_variable>`) at the multiplier nodes — the Lagrange
-//!   multiplier itself, an unknown of the augmented system whose solved value
-//!   is the reaction;
-//! - the **dual** of the constraint sub-model is `imposed_value` (default
-//!   `imposed_<imposed_variable>`) at the multiplier nodes — the constraint
-//!   equation row, and the slot at which the user writes the imposed value.
+//! - the **primal** of the constraint sub-model is `lambda`
+//!   ([`MULTIPLIER`](crate::models::MULTIPLIER)) at the multiplier nodes — the
+//!   Lagrange multiplier itself, an unknown of the augmented system whose
+//!   solved value is the reaction;
+//! - the **dual** of the constraint sub-model is `imposed`
+//!   ([`IMPOSED`](crate::models::IMPOSED)) at the multiplier nodes — the
+//!   constraint equation row, and the slot at which the user writes the
+//!   imposed value.
+//!
+//! Both names are shared by every constraint: a relation is a relation once in
+//! the matrix, and two relations never meet on a DOF since each owns its
+//! multiplier node.
 //!
 //! Distinct `(NodeId, field_name)` pairs keep these multiplier DOFs apart from
 //! the primary DOFs. The blocks `C` (constraint) and `Cᵀ` (its transpose — the
@@ -78,7 +83,6 @@
 //! use pyrucast::containers::model::{Model, SubModel};
 //! use pyrucast::atoms::Node;
 //! use pyrucast::ops::matrix;
-//! use pyrucast::ops::mesh;
 //! use pyrucast::handle::Handle;
 //!
 //! // 1-D Coords with two nodes spanning [0, 1].
@@ -101,13 +105,12 @@
 //! model
 //!     .add_sub(Handle::new(SubModel::heat_conduction(sub, MaterialSymmetry::Isotropic).unwrap()))
 //!     .unwrap();
-//! // Dirichlet on node `a`: the imposed POI1 mesh + a colocated multiplier
-//! // support minted by the `barycenter` mesher.
+//! // Dirichlet on node `a`: the imposed POI1 mesh; the constraint mints its
+//! // multiplier node beside it.
 //! let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
-//! let multiplier = mesh::barycenter(&imposed).unwrap();
 //! model
 //!     .add_sub(Handle::new(
-//!         SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
+//!         SubModel::dirichlet(&model, "T", &imposed, Default::default())
 //!             .unwrap(),
 //!     ))
 //!     .unwrap();
@@ -143,18 +146,17 @@ use std::sync::{Arc, OnceLock};
 /// erroring when two entries hit the **same** relation with different values.
 /// `caller` names the method for the message.
 fn insert_relation_value(
-    values: &mut std::collections::HashMap<(NodeId, String), f64>,
+    values: &mut std::collections::HashMap<NodeId, f64>,
     multiplier_node: NodeId,
-    slot: &str,
     g: f64,
     caller: &str,
 ) -> Result<()> {
-    if let Some(prev) = values.insert((multiplier_node, slot.to_string()), g)
+    if let Some(prev) = values.insert(multiplier_node, g)
         && prev != g
     {
         return Err(PyrucastError::Message(format!(
             "{caller}: conflicting values ({prev} and {g}) for the same relation \
-                 (multiplier node {multiplier_node}, slot {slot})"
+                 (multiplier node {multiplier_node})"
         )));
     }
     Ok(())
@@ -196,7 +198,6 @@ fn insert_relation_value(
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// // One variant per physics; all the rest of the code goes through
 /// // `as_kind()` rather than redoing the `match`.
 /// let m = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic)?;
@@ -288,7 +289,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// // The model layer's only per-variant `match`: everything else
     /// // — variable names, material contract, assembly — goes through it.
     /// let m = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic)?;
@@ -383,7 +383,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// let m = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic)?;
     /// // The material does not enter here: the model stays immutable and matterless.
     /// assert_eq!(m.material_components(), Some(vec!["k".to_string()]));
@@ -437,7 +436,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let mut bord = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # bord.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let fes_bord = FiniteElementSpace::lagrange1(&Mesh::from_submesh(bord))?;
@@ -486,7 +484,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let mut b = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # b.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let barres = FiniteElementSpace::lagrange1(&Mesh::from_submesh(b))?;
@@ -529,7 +526,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// let m = SubModel::elasticity(
     ///     zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Isotropic,
     ///     StrainMeasure::Linear)?;
@@ -582,7 +578,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// // The species names the variables: one diffusion per transported species.
     /// let m = SubModel::fick(zone.clone(), "H2", MaterialSymmetry::Isotropic)?;
     /// assert_eq!(m.primal_vars(), vec!["c_H2".to_string()]);
@@ -628,7 +623,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// // Same DOFs as conduction: radiation couples straight into it.
     /// let m = SubModel::radiation(zone.clone(), &cible)?;
     /// assert_eq!(m.primal_vars(), vec!["T".to_string()]);
@@ -666,7 +660,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let mut b = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # b.add_cell(&[n[0].id(), n[1].id()])?;
     /// # use pyrucast::atoms::Interpolation;
@@ -736,7 +729,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let mut bord = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # bord.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let fes_bord = FiniteElementSpace::lagrange1(&Mesh::from_submesh(bord))?;
@@ -787,7 +779,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::models::plasticity::law::PlasticLaw;
     /// // The hardening law **declares by itself** the material it requires.
     /// # use pyrucast::ops::element_field::StrainMeasure;
@@ -834,7 +825,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::models::damage::law::DamageLaw;
     /// # use pyrucast::ops::element_field::StrainMeasure;
     /// let m = SubModel::damage(
@@ -881,7 +871,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let mut b = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # b.add_cell(&[n[0].id(), n[1].id()])?;
     /// # use pyrucast::atoms::Interpolation;
@@ -898,14 +887,12 @@ impl SubModel {
     }
 
     /// Dirichlet sub-model: enforce `variable = u_d` on the nodes of
-    /// `imposed_mesh`, with multipliers living on `multiplier_mesh` and `u_d`
-    /// supplied later by the user through the load `SubNodeField`.
+    /// `imposed_mesh`, one relation per node with a multiplier node of its own,
+    /// and `u_d` supplied later by the user through the load `SubNodeField`.
     ///
     /// `variable` is a primal of `target`, the model being constrained; the dual
     /// row its reaction lands in is read from it (e.g. `"q"` for heat
-    /// conduction, `"f_x"` for elasticity in `x`). The multiplier and
-    /// imposed-value names are derived, `lambda_<variable>` /
-    /// `imposed_<variable>`.
+    /// conduction, `"f_x"` for elasticity in `x`).
     /// `sense` (default equality) turns the constraint unilateral (`u ≥ u_d` /
     /// `u ≤ u_d`), solved by the active-set operator
     /// [`unilateral`](crate::ops::solver::unilateral).
@@ -932,12 +919,11 @@ impl SubModel {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// // `u_d` is not here: it is written later, at the multiplier node, in
-    /// // the `imposed_T` component.
+    /// // the `imposed` component.
     /// let m = SubModel::dirichlet(
-    ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
+    ///     &cible, "T", &impose, RelationSense::Equality)?;
     /// assert_eq!(m.multiplier_nodes().len(), 1);
     /// // A constraint, and a thermal one: the nature of what it pins.
     /// assert_eq!(m.physics(), &[Physics::Constraint, Physics::Thermal]);
@@ -947,14 +933,12 @@ impl SubModel {
         target: &Model,
         variable: &str,
         imposed_mesh: &Mesh,
-        multiplier_mesh: &Mesh,
         sense: RelationSense,
     ) -> Result<Self> {
         Ok(SubModel::Dirichlet(dirichlet::Dirichlet::new(
             target,
             variable,
             imposed_mesh,
-            multiplier_mesh,
             sense,
         )?))
     }
@@ -962,12 +946,11 @@ impl SubModel {
     /// Multi-point constraint sub-model: impose a linear relation
     /// `Σₖ aₖ·u(nodeₖ, varₖ) = g` per relation, via Lagrange multipliers.
     ///
-    /// `terms` are the `(mesh, variable, target_dual, coefficient)` terms
-    /// (build them with [`mpc::MpcTerm::new`]); `multiplier_mesh` carries one
-    /// `λ` node per relation. The multiplier and right-hand-side names are
-    /// derived, `lambda_mpc` / `mpc_rhs`. The right-hand side `g` is written by
-    /// the user in the load field at the multiplier node's `mpc_rhs` component
-    /// (default `0`). `sense` (default equality) turns the relations unilateral
+    /// `terms` are the `(mesh, variable, coefficient)` terms, every variable a
+    /// primal of `target`; each relation gets a multiplier node of its own. The
+    /// right-hand side `g` is written by the user in the load field at the
+    /// multiplier node's `imposed` component (default `0`). `sense` (default
+    /// equality) turns the relations unilateral
     /// (`Σ aₖ·uₖ ≥ g` / `≤ g`), solved by the active-set operator
     /// [`unilateral`](crate::ops::solver::unilateral). See [`mpc::Mpc::new`].
     ///
@@ -993,25 +976,16 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # use pyrucast::models::mpc::MpcTerm;
     /// # let a = mesh::poi1_from_nodes(&n[..1])?;
     /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
     /// // A "both nodes have the same temperature" relation: the weighted sum
     /// // of the terms equals `g`, written later at the multiplier.
-    /// let m = SubModel::mpc(
-    ///     vec![MpcTerm::new(&cible, &a, "T", 1.0)?,
-    ///          MpcTerm::new(&cible, &b, "T", -1.0)?],
-    ///     &mult, RelationSense::Equality)?;
+    /// let m = SubModel::mpc(&cible, &[(&a, "T", 1.0), (&b, "T", -1.0)], RelationSense::Equality)?;
     /// assert_eq!(m.multiplier_nodes().len(), 1); // one λ per relation
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn mpc(
-        terms: Vec<mpc::MpcTerm>,
-        multiplier_mesh: &Mesh,
-        sense: RelationSense,
-    ) -> Result<Self> {
-        Ok(SubModel::Mpc(mpc::Mpc::new(terms, multiplier_mesh, sense)?))
+    pub fn mpc(target: &Model, terms: &[(&Mesh, &str, f64)], sense: RelationSense) -> Result<Self> {
+        Ok(SubModel::Mpc(mpc::Mpc::new(target, terms, sense)?))
     }
 
     /// Embedded (immersed) constraint sub-model: tie each node of `immersed` to
@@ -1019,9 +993,9 @@ impl SubModel {
     /// `variables` (e.g. `["u_x", "u_y", "u_z"]`) — a bar embedded in a volume.
     ///
     /// The coupling weights are the host shape functions at each immersed node,
-    /// computed once at build by locating the node in the host. The multiplier
-    /// and imposed-value names are derived per variable, `lambda_<variable>` /
-    /// `imposed_<variable>`; `tol` is the location tolerance
+    /// computed once at build by locating the node in the host; each relation —
+    /// one per immersed node and variable — gets a multiplier node of its own.
+    /// `tol` is the location tolerance
     /// ([`embedded::DEFAULT_TOL`] is `1e-6`). The right-hand side `g`
     /// defaults to `0` (a rigid tie). See [`embedded::Embedded::new`].
     ///
@@ -1049,7 +1023,6 @@ impl SubModel {
     ///     .unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let mut barre = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # let p: Vec<_> = [[0.25, 0.25], [0.5, 0.25]].iter()
     /// #     .map(|q| Node::create_in(coords.clone(), q).unwrap()).collect();
@@ -1081,10 +1054,9 @@ impl SubModel {
     /// relation (`≥`) per slave node, paired at build with its closest master
     /// facet ([`crate::ops::geom::project_points`]).
     ///
-    /// `components` couples the displacement components through the facet
-    /// normal: one `(variable, target_dual)` pair per space dimension, in
-    /// ambient order (e.g. `[("u_x","f_x"), ("u_y","f_y")]`). `multiplier` /
-    /// `imposed_value` default to `lambda_contact` / `contact_gap`. Solve with
+    /// `variables` are the displacement primals of `target`, coupled through the
+    /// facet normal: one per space dimension, in ambient order (e.g.
+    /// `["u_x", "u_y"]`), each dual row read from `target`. Solve with
     /// [`unilateral`](crate::ops::solver::unilateral); build the `−g₀`
     /// right-hand side with [`Model::contact_gaps`]. See
     /// [`contact::Contact::new`].
@@ -1113,7 +1085,6 @@ impl SubModel {
     ///     .unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let mut maitre = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let master = Mesh::from_submesh(maitre);
@@ -1165,7 +1136,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// let m = SubModel::elasticity(zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
     /// // The pairing is **positional**: primal_vars[i] ↔ dual_vars[i].
     /// assert_eq!(m.dual_of("u_x"), Some("f_x".into()));
@@ -1178,12 +1148,11 @@ impl SubModel {
         kind.dual_vars().get(position).cloned()
     }
 
-    /// Multiplier node ids introduced by this sub-model. Non-empty only
-    /// for Lagrange variants (`Dirichlet`, future `MultipointConstraint`,
-    /// …); empty for the other physics.
+    /// Multiplier node ids introduced by this sub-model — one per relation.
+    /// Non-empty only for the constraints; empty for the other physics.
     ///
     /// Useful for the user who needs to write the imposed value `u_d` at
-    /// the multiplier node's `imposed_value` component of the load
+    /// the multiplier node's `imposed` component of the load
     /// `SubNodeField`.
     ///
     /// ```
@@ -1207,10 +1176,9 @@ impl SubModel {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// let d = SubModel::dirichlet(
-    ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
+    ///     &cible, "T", &impose, RelationSense::Equality)?;
     /// assert_eq!(d.multiplier_nodes().len(), 1);
     /// // Empty for a volumetric physics: it introduces no multiplier.
     /// assert!(SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic)?.multiplier_nodes().is_empty());
@@ -1254,10 +1222,9 @@ impl SubModel {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// let d = SubModel::dirichlet(
-    ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
+    ///     &cible, "T", &impose, RelationSense::Equality)?;
     /// // The **shared** POI1 mesh — not a copy: it is the handle on which to
     /// // build the load field.
     /// assert!(d.multiplier_mesh()?.node(0, 0, 0).is_ok());
@@ -1279,9 +1246,9 @@ impl SubModel {
     /// imposed-value component name by hand.
     ///
     /// Returns a fresh [`NodeField`] over **this constraint's multiplier nodes**,
-    /// carrying the single component the constraint uses as its imposed-value
-    /// slot — its dual variable, e.g. `imposed_T` for a `Dirichlet` on `T` or
-    /// `mpc_rhs` for an `Mpc`. Every multiplier node is present; each cited
+    /// carrying the single component every constraint uses as its
+    /// imposed-value slot, [`IMPOSED`](crate::models::IMPOSED). Every
+    /// multiplier node is present; each cited
     /// relation gets its `g`, the others default to `0`. Union it into the global
     /// load with `|` (`load | constraint_rhs`).
     ///
@@ -1319,20 +1286,18 @@ impl SubModel {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::containers::field::SubField;
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// let d = SubModel::dirichlet(
-    ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
+    ///     &cible, "T", &impose, RelationSense::Equality)?;
     /// // One names the **constrained** node; the method finds its multiplier
     /// // and writes the value there, under the right component name.
     /// let rhs = d.constraint_rhs(&[(n[0].id(), 100.0)])?;
-    /// assert_eq!(rhs.get(0)?.read().components(), &["imposed_T".to_string()]);
+    /// assert_eq!(rhs.get(0)?.read().components(), &["imposed".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn constraint_rhs(&self, imposed: &[(NodeId, f64)]) -> Result<NodeField> {
-        let (constraint, components) = self.constraint_components()?;
-        let relations = constraint.relations()?;
+        let relations = self.constraint()?.relations()?;
 
         // Map each constrained term node → the index of its relation, marking
         // `None` as soon as a node keys two *distinct* relations (a
@@ -1353,9 +1318,8 @@ impl SubModel {
             }
         }
 
-        // Resolve the requested (node, g) → (multiplier node, slot, g).
-        let mut values: std::collections::HashMap<(NodeId, String), f64> =
-            std::collections::HashMap::new();
+        // Resolve the requested (node, g) → (multiplier node, g).
+        let mut values: std::collections::HashMap<NodeId, f64> = std::collections::HashMap::new();
         for &(node, g) in imposed {
             let idx = match node_to_rel.get(&node) {
                 None => {
@@ -1373,17 +1337,15 @@ impl SubModel {
                 }
                 Some(Some(i)) => *i,
             };
-            let rel = &relations[idx];
             insert_relation_value(
                 &mut values,
-                rel.multiplier_node,
-                &rel.imposed_value,
+                relations[idx].multiplier_node,
                 g,
                 "constraint_rhs",
             )?;
         }
 
-        self.multiplier_load(&components, &values)
+        self.multiplier_load(&values)
     }
 
     /// Like [`constraint_rhs`](Self::constraint_rhs) but each relation is keyed
@@ -1417,10 +1379,9 @@ impl SubModel {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// let d = SubModel::dirichlet(
-    ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
+    ///     &cible, "T", &impose, RelationSense::Equality)?;
     /// // By **relation index**: the way when one node keys several of them.
     /// let rhs = d.constraint_rhs_by_index(&[(0, 100.0)])?;
     /// assert_eq!(rhs.node_count()?, 1);
@@ -1428,11 +1389,9 @@ impl SubModel {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn constraint_rhs_by_index(&self, imposed: &[(usize, f64)]) -> Result<NodeField> {
-        let (constraint, components) = self.constraint_components()?;
-        let relations = constraint.relations()?;
+        let relations = self.constraint()?.relations()?;
 
-        let mut values: std::collections::HashMap<(NodeId, String), f64> =
-            std::collections::HashMap::new();
+        let mut values: std::collections::HashMap<NodeId, f64> = std::collections::HashMap::new();
         for &(idx, g) in imposed {
             let rel = relations.get(idx).ok_or_else(|| {
                 PyrucastError::Message(format!(
@@ -1444,67 +1403,52 @@ impl SubModel {
             insert_relation_value(
                 &mut values,
                 rel.multiplier_node,
-                &rel.imposed_value,
                 g,
                 "constraint_rhs_by_index",
             )?;
         }
 
-        self.multiplier_load(&components, &values)
+        self.multiplier_load(&values)
     }
 
-    /// Borrow this sub-model as a [`Constraint`](crate::models::Constraint) and
-    /// return its imposed-value components (its duals — one for a single-dual
-    /// constraint, several for a multi-component `Embedded`). Shared entry check
-    /// of the `constraint_rhs*` helpers.
-    fn constraint_components(&self) -> Result<(&dyn Constraint, Vec<String>)> {
+    /// Borrow this sub-model as a [`Constraint`](crate::models::Constraint) —
+    /// the shared entry check of the `constraint_rhs*` helpers.
+    fn constraint(&self) -> Result<&dyn Constraint> {
         let kind = self.as_kind();
-        let constraint = kind.as_constraint().ok_or_else(|| {
+        kind.as_constraint().ok_or_else(|| {
             PyrucastError::Message(format!(
                 "constraint_rhs: sub-model {} is not a constraint (it has no multipliers)",
                 kind.label()
             ))
-        })?;
-        let components = kind.dual_vars();
-        if components.is_empty() {
-            return Err(PyrucastError::Message(
-                "constraint_rhs: the constraint owns no dual (imposed-value) variable".into(),
-            ));
-        }
-        Ok((constraint, components))
+        })
     }
 
     /// Build the constraint load over **every** multiplier node: one
-    /// zero-initialised zone per multiplier submesh (carrying **all** the
-    /// constraint's imposed-value `components`, sharing the supports and
+    /// zero-initialised zone per multiplier submesh, carrying the
+    /// [`IMPOSED`](crate::models::IMPOSED) component (sharing the supports and
     /// preserving the structure carried through `barycenter`), then drop each
-    /// resolved `(multiplier node, slot) → g` in at its component. Shared tail of
-    /// the `constraint_rhs*` helpers.
+    /// resolved `multiplier node → g` in. Shared tail of the `constraint_rhs*`
+    /// helpers.
     fn multiplier_load(
         &self,
-        components: &[String],
-        values: &std::collections::HashMap<(NodeId, String), f64>,
+        values: &std::collections::HashMap<NodeId, f64>,
     ) -> Result<NodeField> {
         use crate::containers::field::SubField;
         let mut field = NodeField::default();
-        let ncomp = components.len();
         for sm in &self.multiplier_mesh()? {
             // `from_poi1` seals, which writes — so it runs before the guard.
-            let mut sub = SubNodeField::from_poi1(sm, components.to_vec())?;
+            let mut sub = SubNodeField::from_poi1(sm, vec![crate::models::IMPOSED.to_string()])?;
             // One pass over the supplied values rather than one over the nodes:
-            // it visits only what was actually given, and no `(node, name)` key
-            // has to be rebuilt — the loop allocates nothing. The zone's node
-            // order is the support's own, so the write is positional.
+            // it visits only what was actually given. The zone's node order is
+            // the support's own, so the write is positional.
             let support = sm.read();
             let index = support.node_index();
             let vals = sub.values_mut();
-            for ((nid, comp), &g) in values {
-                let (Some(&ni), Some(ci)) =
-                    (index.get(nid), components.iter().position(|c| c == comp))
-                else {
-                    continue; // another zone's node, or a component this field does not carry
+            for (nid, &g) in values {
+                let Some(&ni) = index.get(nid) else {
+                    continue; // another zone's node
                 };
-                vals[ni * ncomp + ci] = g;
+                vals[ni] = g;
             }
             drop(support);
             field.add_sub(Handle::new(sub))?;
@@ -1536,12 +1480,11 @@ impl SubModel {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// assert!(SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic)?.material_fespace().is_some());
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// // A constraint has no matter.
     /// let d = SubModel::dirichlet(
-    ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
+    ///     &cible, "T", &impose, RelationSense::Equality)?;
     /// assert!(d.material_fespace().is_none());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1576,7 +1519,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// let m = SubModel::elasticity(zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
     /// assert_eq!(m.material_components(), Some(vec!["E".to_string(), "nu".to_string()]));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1612,7 +1554,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// // Thermal expansion is **optional**: without `alpha`, the model
     /// // assembles without it.
     /// let m = SubModel::elasticity(zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
@@ -1650,7 +1591,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// assert_eq!(SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic)?.primal_vars(),
     ///            vec!["T".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1683,7 +1623,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// assert_eq!(SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic)?.dual_vars(),
     ///            vec!["q".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1720,12 +1659,42 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// assert_eq!(SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic)?.physics(), &[Physics::Thermal]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn physics(&self) -> &'static [Physics] {
         self.as_kind().physics()
+    }
+
+    /// The kind of this sub-model, named — `"Dirichlet"`, `"Contact"`,
+    /// `"Elasticity"`… The question its natures cannot answer: a contact and a
+    /// Dirichlet on displacements are both constraint and mechanical.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::SubModel;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::models::RelationSense;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
+    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// let d = SubModel::dirichlet(&cible, "T", &impose, RelationSense::Equality)?;
+    /// assert_eq!(d.label(), "Dirichlet");
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn label(&self) -> &'static str {
+        self.as_kind().label()
     }
 
     /// Whether this sub-model carries a constitutive behaviour that can be
@@ -1754,11 +1723,10 @@ impl SubModel {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// assert!(SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic)?.has_behavior());
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// let d = SubModel::dirichlet(
-    ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
+    ///     &cible, "T", &impose, RelationSense::Equality)?;
     /// assert!(!d.has_behavior()); // a constraint has no constitutive law
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1793,7 +1761,6 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::handle::Handle as H;
     /// let m = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic)?;
     /// assert!(H::same_object(&m.behavior_fespace().unwrap(), &zone));
@@ -1915,13 +1882,12 @@ impl crate::dump::Dump for SubModel {
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// // A model is **composed**: the physics, then the supports. Each sub-model
 /// // keeps its nature, which is what lets them be found again later — the
 /// // support is thermal too, being what pins the temperature.
 /// let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?.union(
-///     &model::dirichlet(&cible, "T", &impose, &mult,
+///     &model::dirichlet(&cible, "T", &impose,
 ///                       RelationSense::Equality)?)?;
 /// assert_eq!(m.len(), 2);
 /// assert_eq!(m.filter(Physics::Thermal).len(), 2);
@@ -1974,7 +1940,7 @@ impl Model {
 
 impl Model {
     /// The contact right-hand side `−g₀`: a [`NodeField`] carrying, at each
-    /// contact multiplier node's `imposed_value` slot, minus the initial signed
+    /// contact multiplier node's `imposed` slot, minus the initial signed
     /// gap of its relation — the load a contact model needs so that
     /// non-penetration reads `g₀ + C·u ≥ 0`. Merge it into the global load with
     /// `|`. The model must hold **exactly one** [`SubModel::Contact`]; pairs
@@ -2006,7 +1972,6 @@ impl Model {
     ///     .unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let mut maitre = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let master = Mesh::from_submesh(maitre);
@@ -2077,10 +2042,9 @@ impl Model {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?.union(
-    ///     &model::dirichlet(&cible, "T", &impose, &mult,
+    ///     &model::dirichlet(&cible, "T", &impose,
     ///                       RelationSense::Equality)?)?;
     /// // The multipliers of **all** the model's constraints, shared.
     /// assert!(m.multiplier_mesh()?.node(0, 0, 0).is_ok());
@@ -2100,8 +2064,8 @@ impl Model {
 
     /// The dual (residual) variable conjugate to a primal `variable`, searched
     /// across all sub-models (first match), or `None` if no sub-model declares
-    /// it. A helper for the MPC mise-en-donnée: `model.dual_of("ux")` returns the
-    /// dual to pass in an [`mpc::MpcTerm`].
+    /// it — the row a constraint on `variable` sends its reaction to, which is
+    /// how every constraint reads it from its target.
     ///
     /// ```
     /// # use pyrucast::ops::element_field::StrainMeasure;
@@ -2127,7 +2091,6 @@ impl Model {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// let m = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
     /// // The conjugate dual, looked up across all the sub-models.
     /// assert_eq!(m.dual_of("u_y"), Some("f_y".into()));
@@ -2171,16 +2134,15 @@ impl Model {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::containers::field::SubField;
     /// # use pyrucast::ops::model;
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?.union(
-    ///     &model::dirichlet(&cible, "T", &impose, &mult,
+    ///     &model::dirichlet(&cible, "T", &impose,
     ///                       RelationSense::Equality)?)?;
     /// // The whole model's constraint load, to be unioned into the load.
     /// let rhs = m.constraint_rhs(&[(n[0].id(), 100.0)])?;
-    /// assert_eq!(rhs.get(0)?.read().components(), &["imposed_T".to_string()]);
+    /// assert_eq!(rhs.get(0)?.read().components(), &["imposed".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn constraint_rhs(&self, imposed: &[(NodeId, f64)]) -> Result<NodeField> {
@@ -2214,9 +2176,8 @@ impl Model {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-    /// let m = model::dirichlet(&cible, "T", &impose, &mult,
+    /// let m = model::dirichlet(&cible, "T", &impose,
     ///                          RelationSense::Equality)?;
     /// // The indices run over the relations, constraint by constraint.
     /// assert!(m.constraint_rhs_by_index(&[(0, 100.0)]).is_ok());
@@ -2277,7 +2238,6 @@ impl Model {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// // The union of every sub-model's primals, deduplicated.
     /// let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?
     ///     .union(&model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?)?;
@@ -2321,7 +2281,6 @@ impl Model {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?
     ///     .union(&model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?)?;
     /// assert_eq!(m.dual_vars(),
@@ -2371,7 +2330,6 @@ impl Model {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// // The FE space is **deduced** from the model: that is what lets the
     /// // assembly operators receive nothing but the model.
     /// let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
@@ -2426,7 +2384,6 @@ impl Model {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?
     ///     .union(&model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?)?;
     /// // Extracting one physics from the multi-physics model — the sub-models
@@ -2468,9 +2425,8 @@ impl Model {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let appui = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&appui).unwrap();
     /// let solide = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
-    /// let bloque = solide.union(&model::dirichlet(&solide, "u_x", &appui, &mult, RelationSense::Equality)?)?;
+    /// let bloque = solide.union(&model::dirichlet(&solide, "u_x", &appui, RelationSense::Equality)?)?;
     /// // The support is mechanical too: it comes with the mechanics…
     /// assert_eq!(bloque.filter(Physics::Mechanical).len(), 2);
     /// // …and leaves it when constraints are excluded.
@@ -2550,7 +2506,7 @@ mod tests {
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
     use crate::handle::Handle;
-    use crate::models::owned_components;
+    use crate::models::{owned_components, IMPOSED};
     use crate::ops::model;
 
     /// Returns `(coords, a_id, b_id, model, materials)`.
@@ -2581,11 +2537,9 @@ mod tests {
         if dirichlet_at_left {
             let imposed =
                 Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
-            let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
             model
                 .add_sub(Handle::new(
-                    SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
-                        .unwrap(),
+                    SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
                 ))
                 .unwrap();
         }
@@ -2604,13 +2558,13 @@ mod tests {
         let (_cfg, _, _, model, _mat) = build_seg2_heat_model(1.0, 1.0, true);
         assert_eq!(
             model.primal_vars(),
-            vec!["T".to_string(), "lambda_T".to_string()]
+            vec!["T".to_string(), "lambda".to_string()]
         );
-        // Dual side: "q" from heat conduction + "imposed_T" (the Dirichlet
+        // Dual side: "q" from heat conduction + "imposed" (the Dirichlet
         // dual — a distinct name, no longer colliding with the primal "T").
         assert_eq!(
             model.dual_vars(),
-            vec!["q".to_string(), "imposed_T".to_string()]
+            vec!["q".to_string(), "imposed".to_string()]
         );
     }
 
@@ -2760,28 +2714,28 @@ mod tests {
 
         let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
         // 2 real "q" rows + 1 multiplier "T" row = 3 rows.
-        // 2 real "T" cols + 1 multiplier "lambda_T" col = 3 cols.
+        // 2 real "T" cols + 1 multiplier "lambda" col = 3 cols.
         assert_eq!(k.n_rows().unwrap(), 3);
         assert_eq!(k.n_cols().unwrap(), 3);
 
         // Find the multiplier node id: the only NodeId that appears in
-        // a row labelled "imposed_T" of K.
+        // a row labelled "imposed" of K.
         let row_dofs = k.row_dofs().unwrap();
         let mult = row_dofs
             .iter()
-            .find(|(_, name)| name == "imposed_T")
+            .find(|(_, name)| name == "imposed")
             .expect("multiplier row missing")
             .0;
 
-        // C entry: (mult, "imposed_T") × (a_id, "T") = 1
-        assert_eq!(k.get(mult, "imposed_T", a_id, "T").unwrap(), 1.0);
-        // Cᵀ entry: (a_id, "q") × (mult, "lambda_T") = 1
-        assert_eq!(k.get(a_id, "q", mult, "lambda_T").unwrap(), 1.0);
-        // Ensure lambda_T appears as a column.
+        // C entry: (mult, "imposed") × (a_id, "T") = 1
+        assert_eq!(k.get(mult, "imposed", a_id, "T").unwrap(), 1.0);
+        // Cᵀ entry: (a_id, "q") × (mult, "lambda") = 1
+        assert_eq!(k.get(a_id, "q", mult, "lambda").unwrap(), 1.0);
+        // Ensure the multiplier appears as a column.
         let col_dofs = k.col_dofs().unwrap();
         let lambda_col_present = col_dofs
             .iter()
-            .any(|(n, name)| name == "lambda_T" && *n == mult);
+            .any(|(n, name)| name == "lambda" && *n == mult);
         assert!(lambda_col_present);
     }
 
@@ -2796,24 +2750,15 @@ mod tests {
 
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
-        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         let cible = target_conduction(&coords, &a);
-        // The multiplier node is owned by the multiplier submesh (refcount 1;
-        // the transient Node below is dropped at the end of the statement).
-        let mult_id = multiplier.node(0, 0, 0).unwrap().id();
-        assert_eq!(coords.read().refcount(mult_id), 1);
-        let sub =
-            SubModel::dirichlet(&cible, "T", &imposed, &multiplier, Default::default()).unwrap();
-        // Sharing the submesh handles does not touch node refcounts.
-        assert_eq!(coords.read().refcount(mult_id), 1);
-        assert_eq!(sub.multiplier_nodes(), vec![mult_id]);
-
-        // Drop the user's multiplier mesh: the sub-model still holds the
-        // submesh, so the node lives on.
-        drop(multiplier);
+        let sub = SubModel::dirichlet(&cible, "T", &imposed, Default::default()).unwrap();
+        // The multiplier node is minted by the sub-model, beside the imposed
+        // node, and owned by its multiplier submesh alone.
+        let mult_id = sub.multiplier_nodes()[0];
+        assert_ne!(mult_id, a.id());
         assert_eq!(coords.read().refcount(mult_id), 1);
 
-        // Drop the sub-model too: the last holder of the multiplier submesh is
+        // Drop the sub-model: the last holder of the multiplier submesh is
         // gone ⇒ the node is released and collectable.
         drop(sub);
         assert_eq!(coords.read().refcount(mult_id), 0);
@@ -2826,7 +2771,7 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let cible = target_conduction(&coords, &a);
         let empty = Mesh::empty();
-        assert!(SubModel::dirichlet(&cible, "T", &empty, &empty, Default::default()).is_err());
+        assert!(SubModel::dirichlet(&cible, "T", &empty, Default::default()).is_err());
     }
 
     #[test]
@@ -2895,14 +2840,13 @@ mod tests {
 
         // Compose with a Dirichlet model via `union` (Python `|`).
         let imp = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
-        let mlt = crate::ops::mesh::barycenter(&imp).unwrap();
-        let dir = model::dirichlet(&hc, "T", &imp, &mlt, Default::default()).unwrap();
+        let dir = model::dirichlet(&hc, "T", &imp, Default::default()).unwrap();
         assert_eq!(dir.len(), 1);
         let full = hc.union(&dir).unwrap();
         assert_eq!(full.len(), 3);
         assert_eq!(
             full.primal_vars(),
-            vec!["T".to_string(), "lambda_T".to_string()]
+            vec!["T".to_string(), "lambda".to_string()]
         );
     }
 
@@ -3014,10 +2958,8 @@ mod tests {
 
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
-        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         let cible = target_conduction(&coords, &a);
-        let dir =
-            SubModel::dirichlet(&cible, "T", &imposed, &multiplier, Default::default()).unwrap();
+        let dir = SubModel::dirichlet(&cible, "T", &imposed, Default::default()).unwrap();
         assert!(dir.material_components().is_none());
     }
 
@@ -3048,7 +2990,7 @@ mod tests {
     // ── constraint_rhs (mise-en-donnée helper) ──────────────────────────────
 
     /// Dirichlet: keying by the constrained node writes `g` at the multiplier
-    /// node, on the constraint's dual component (`imposed_T`), and the field
+    /// node, on the constraint's dual component (`imposed`), and the field
     /// lives on the multiplier — not the constrained — node.
     #[test]
     fn constraint_rhs_dirichlet_writes_g_at_multiplier() {
@@ -3056,16 +2998,19 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
-        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         let cible = target_conduction(&coords, &a);
-        let dirichlet =
-            model::dirichlet(&cible, "T", &imposed, &multiplier, Default::default()).unwrap();
+        let dirichlet = model::dirichlet(&cible, "T", &imposed, Default::default()).unwrap();
 
         let rhs = dirichlet.constraint_rhs(&[(a.id(), 3.0)]).unwrap();
-        let mult_id = multiplier.node(0, 0, 0).unwrap().id();
-        assert_eq!(rhs.value(mult_id, "imposed_T").unwrap(), 3.0);
+        let mult_id = dirichlet
+            .multiplier_mesh()
+            .unwrap()
+            .node(0, 0, 0)
+            .unwrap()
+            .id();
+        assert_eq!(rhs.value(mult_id, "imposed").unwrap(), 3.0);
         // Written on the multiplier node, not the constrained one.
-        assert!(rhs.value(a.id(), "imposed_T").is_err());
+        assert!(rhs.value(a.id(), "imposed").is_err());
     }
 
     /// MPC: a relation is keyed by *any* of its term nodes, both resolving to
@@ -3079,20 +3024,20 @@ mod tests {
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let mesh_b =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&b)).unwrap());
-        let mult = crate::ops::mesh::barycenter(&mesh_b).unwrap();
         let cible = target_conduction(&a.coords(), &a);
-        let terms = vec![
-            crate::models::mpc::MpcTerm::new(&cible, &mesh_b, "T", 1.0).unwrap(),
-            crate::models::mpc::MpcTerm::new(&cible, &mesh_a, "T", -1.0).unwrap(),
-        ];
-        let model = model::mpc(terms, &mult, Default::default()).unwrap();
-        let mult_id = mult.node(0, 0, 0).unwrap().id();
+        let model = model::mpc(
+            &cible,
+            &[(&mesh_b, "T", 1.0), (&mesh_a, "T", -1.0)],
+            Default::default(),
+        )
+        .unwrap();
+        let mult_id = model.multiplier_mesh().unwrap().node(0, 0, 0).unwrap().id();
 
         let rhs = model.constraint_rhs(&[(b.id(), 2.5)]).unwrap();
-        assert_eq!(rhs.value(mult_id, "mpc_rhs").unwrap(), 2.5);
+        assert_eq!(rhs.value(mult_id, IMPOSED).unwrap(), 2.5);
         // The other term node keys the same relation → same field.
         let rhs2 = model.constraint_rhs(&[(a.id(), 2.5)]).unwrap();
-        assert_eq!(rhs2.value(mult_id, "mpc_rhs").unwrap(), 2.5);
+        assert_eq!(rhs2.value(mult_id, IMPOSED).unwrap(), 2.5);
     }
 
     /// A model without any constraint sub-model rejects the call.
@@ -3110,41 +3055,44 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[2.0]).unwrap();
-        let m0 = Node::create_in(coords.clone(), &[0.5]).unwrap();
-        let m1 = Node::create_in(coords.clone(), &[1.5]).unwrap();
 
         // Term 1 uses `a` in *both* relations; term 2 uses `b` then `c`.
         let mut t1 = SubMesh::new(coords.clone(), ElementType::POI1);
         t1.add_cell(&[a.id()]).unwrap();
         t1.add_cell(&[a.id()]).unwrap();
         let t1_mesh = Mesh::from_submesh(t1);
-        let mut t2 = SubMesh::new(coords.clone(), ElementType::POI1);
+        let mut t2 = SubMesh::new(coords, ElementType::POI1);
         t2.add_cell(&[b.id()]).unwrap();
         t2.add_cell(&[c.id()]).unwrap();
         let t2_mesh = Mesh::from_submesh(t2);
-        let mut mm = SubMesh::new(coords, ElementType::POI1);
-        mm.add_cell(&[m0.id()]).unwrap();
-        mm.add_cell(&[m1.id()]).unwrap();
-        let mult = Mesh::from_submesh(mm);
 
         let cible = target_conduction(&a.coords(), &a);
-        let terms = vec![
-            crate::models::mpc::MpcTerm::new(&cible, &t1_mesh, "T", 1.0).unwrap(),
-            crate::models::mpc::MpcTerm::new(&cible, &t2_mesh, "T", -1.0).unwrap(),
-        ];
-        let model = model::mpc(terms, &mult, Default::default()).unwrap();
+        let model = model::mpc(
+            &cible,
+            &[(&t1_mesh, "T", 1.0), (&t2_mesh, "T", -1.0)],
+            Default::default(),
+        )
+        .unwrap();
+        // One multiplier node per relation, though `a` is the first term's node
+        // in both: they are minted one per cell.
+        let mults = model.multiplier_mesh().unwrap();
+        let (m0, m1) = (
+            mults.node(0, 0, 0).unwrap().id(),
+            mults.node(0, 1, 0).unwrap().id(),
+        );
+        assert_ne!(m0, m1);
 
         // `a` keys both relations → ambiguous.
         assert!(model.constraint_rhs(&[(a.id(), 1.0)]).is_err());
         // `b` keys only the first relation → resolves to m0.
         let rhs = model.constraint_rhs(&[(b.id(), 1.0)]).unwrap();
-        assert_eq!(rhs.value(m0.id(), "mpc_rhs").unwrap(), 1.0);
-        assert_eq!(rhs.value(m1.id(), "mpc_rhs").unwrap(), 0.0);
+        assert_eq!(rhs.value(m0, IMPOSED).unwrap(), 1.0);
+        assert_eq!(rhs.value(m1, IMPOSED).unwrap(), 0.0);
 
         // Keying by *index* sidesteps the ambiguity: relation 1 → m1.
         let by_idx = model.constraint_rhs_by_index(&[(1, 4.0)]).unwrap();
-        assert_eq!(by_idx.value(m1.id(), "mpc_rhs").unwrap(), 4.0);
-        assert_eq!(by_idx.value(m0.id(), "mpc_rhs").unwrap(), 0.0);
+        assert_eq!(by_idx.value(m1, IMPOSED).unwrap(), 4.0);
+        assert_eq!(by_idx.value(m0, IMPOSED).unwrap(), 0.0);
     }
 
     /// `constraint_rhs_by_index` writes `g` at the relation's multiplier node and
@@ -3155,14 +3103,17 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
-        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         let cible = target_conduction(&coords, &a);
-        let dirichlet =
-            model::dirichlet(&cible, "T", &imposed, &multiplier, Default::default()).unwrap();
+        let dirichlet = model::dirichlet(&cible, "T", &imposed, Default::default()).unwrap();
 
-        let mult_id = multiplier.node(0, 0, 0).unwrap().id();
+        let mult_id = dirichlet
+            .multiplier_mesh()
+            .unwrap()
+            .node(0, 0, 0)
+            .unwrap()
+            .id();
         let rhs = dirichlet.constraint_rhs_by_index(&[(0, 2.0)]).unwrap();
-        assert_eq!(rhs.value(mult_id, "imposed_T").unwrap(), 2.0);
+        assert_eq!(rhs.value(mult_id, "imposed").unwrap(), 2.0);
         // Only one relation (index 0) → index 1 is out of range.
         assert!(dirichlet.constraint_rhs_by_index(&[(1, 2.0)]).is_err());
     }

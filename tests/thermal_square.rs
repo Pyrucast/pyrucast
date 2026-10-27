@@ -27,7 +27,6 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
-use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -69,13 +68,12 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     // ── Dirichlet T = 20 on the right edge (x = 1) ──────────────────────────
     let right_nodes: Vec<Node> = (0..=N).map(|j| grid[idx(N, j)].clone()).collect();
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&right_nodes)?);
-    let multiplier = mesh::barycenter(&imposed)?;
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
+    let dirichlet = model::dirichlet(&conduction, "T", &imposed, Default::default())?;
+    let multiplier = dirichlet.multiplier_mesh()?;
     let mults: Vec<Node> = (0..=N)
         .map(|j| multiplier.node(0, j, 0))
         .collect::<Result<_>>()?;
-
-    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    let dirichlet = model::dirichlet(&conduction, "T", &imposed, &multiplier, Default::default())?;
     let model = conduction.union(&dirichlet)?;
     // ── Chargement ─────────────────────────────────────────────────────────
     // Source: uniform flux (density Q) on the left edge, turned into
@@ -93,15 +91,15 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
         pyrucast::ops::element_field::material_field(&model, &[("k", K), ("phi_q", Q)])?;
     let source = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
-    // Imposed value T = 20 at the multiplier nodes' "imposed_T" slot.
+    // Imposed value T = 20 at the multiplier nodes' "imposed" slot.
     let mut imposed_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     for m in &mults {
         imposed_sm.add_cell(&[m.id()])?;
     }
     let imposed_sm = Handle::new(imposed_sm);
-    let mut imposed_load = SubNodeField::from_poi1(&imposed_sm, vec!["imposed_T".into()])?;
+    let mut imposed_load = SubNodeField::from_poi1(&imposed_sm, vec!["imposed".into()])?;
     for m in &mults {
-        imposed_load.set_value(m.id(), "imposed_T", T_IMPOSED)?;
+        imposed_load.set_value(m.id(), "imposed", T_IMPOSED)?;
     }
 
     // Loading = the edge's flux + the imposed values (union of the zones).
@@ -128,7 +126,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     // The total reaction on the imposed edge balances the injected flux: Σλ = Q.
     let total_reaction: f64 = mults
         .iter()
-        .map(|m| solution.value(m.id(), "lambda_T"))
+        .map(|m| solution.value(m.id(), "lambda"))
         .sum::<Result<f64>>()?;
     assert!(
         (total_reaction - Q).abs() < tol,

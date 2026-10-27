@@ -789,11 +789,9 @@ mod tests {
             .unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
-        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         model
             .add_sub(Handle::new(
-                SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
-                    .unwrap(),
+                SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
             ))
             .unwrap();
         model
@@ -834,11 +832,9 @@ mod tests {
             .unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
-        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         model
             .add_sub(Handle::new(
-                SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
-                    .unwrap(),
+                SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
             ))
             .unwrap();
 
@@ -912,9 +908,9 @@ mod tests {
         assert!(!sliced.symmetric(), "and the declaration follows");
     }
 
-    /// The same constraint declared twice: four blocks, one identity, two of
-    /// each member. The matrix is symmetric, and the count of members — rather
-    /// than of blocks — is what lets the aggregate see it.
+    /// The same constraint declared twice: four blocks, and since each
+    /// declaration mints its own multiplier nodes, two identities, each with
+    /// both its members. The matrix is symmetric, and the aggregate sees it.
     #[test]
     fn a_constraint_declared_twice_still_pairs_up() {
         let coords = Handle::new(Coords::new(1).unwrap());
@@ -935,14 +931,12 @@ mod tests {
             .unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
-        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
-        // Twice, on the same supports and the same variable: the two pairs hash
-        // alike, so all four blocks share one identity.
+        // Twice, on the same imposed node and the same variable: each pair on
+        // multiplier nodes of its own.
         for _ in 0..2 {
             model
                 .add_sub(Handle::new(
-                    SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
-                        .unwrap(),
+                    SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
                 ))
                 .unwrap();
         }
@@ -957,7 +951,16 @@ mod tests {
             })
             .collect();
         assert_eq!(ids.len(), 4, "four halves");
-        assert!(ids.windows(2).all(|w| w[0] == w[1]), "one identity");
+        let mut distinct = ids.clone();
+        distinct.sort_unstable();
+        distinct.dedup();
+        assert_eq!(distinct.len(), 2, "one identity per declaration");
+        assert!(
+            distinct
+                .iter()
+                .all(|d| ids.iter().filter(|i| *i == d).count() == 2),
+            "each with both its members"
+        );
 
         assert!(csr_is_symmetric(&k));
         assert!(k.symmetric(), "two of each member is a complete pairing");

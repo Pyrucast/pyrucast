@@ -68,20 +68,21 @@ def main():
 
     def clamp(target, nodes, var):
         imposed = pc.mesh.poi1_from_nodes(nodes)
-        return pc.model.dirichlet(target, var, imposed, pc.mesh.barycenter(imposed))
+        return pc.model.dirichlet(target, var, imposed)
 
     # ── Modèle : conduction + élasticité (contraintes planes) + Dirichlet ────
     # Thermics: imposed temperature on the left/right edges (one multiplier per
     # node ⇒ a uniform field). Mechanics: simple supports (u_x=0 on the left,
     # u_y=0 at the bottom) ⇒ free expansion, without stress.
     th_imposed = pc.mesh.poi1_from_nodes(left + right)
-    th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
     thermal = pc.model.heat_conduction(fes)
     mecanique = pc.model.elasticity(fes, "plane_stress")
+    held_t = pc.model.dirichlet(thermal, "T", th_imposed)
+    th_mult = held_t.multiplier_mesh()
     model = (
         thermal
         | mecanique
-        | pc.model.dirichlet(thermal, "T", th_imposed, th_mult)
+        | held_t
         | clamp(mecanique, left, "u_x")
         | clamp(mecanique, bottom, "u_y")
     )
@@ -90,10 +91,10 @@ def main():
     )
 
     # ── Temperature history: an Evolution with a FIELD value (t ∈ [0, 1]) ────
-    cold = pc.NodeField(th_mult, ["imposed_T"])
-    cold[0].add_to_component("imposed_T", T_REF)
-    hot = pc.NodeField(th_mult, ["imposed_T"])
-    hot[0].add_to_component("imposed_T", T_HOT)
+    cold = pc.NodeField(th_mult, ["imposed"])
+    cold[0].add_to_component("imposed", T_REF)
+    hot = pc.NodeField(th_mult, ["imposed"])
+    hot[0].add_to_component("imposed", T_HOT)
     loads = pc.Evolution([(0.0, cold), (1.0, hot)], out_of_range="clamp")
 
     # ── Setup: a single dictionary (fespace + mesh deduced from the

@@ -32,13 +32,13 @@
 //!
 //! # Variables
 //!
-//! One relation per slave node, all sharing this sub-model's variable pair:
+//! One relation per slave node, each on a multiplier node of its own, with the
+//! variable pair of every constraint relation:
 //!
-//! - `multiplier` (default `lambda_contact`) — the primal on the multiplier
-//!   node: the contact reaction intensity (`≤ 0` while touching, `0` when
-//!   separated);
-//! - `imposed_value` (default `contact_gap`) — the dual: the constraint row and
-//!   the slot for the right-hand side `−g₀`.
+//! - [`MULTIPLIER`] — the primal on the multiplier node: the contact reaction
+//!   intensity (`≤ 0` while touching, `0` when separated);
+//! - [`IMPOSED`] — the dual: the constraint row and the slot for the
+//!   right-hand side `−g₀`.
 //!
 //! `components` names the displacement components and their duals in ambient
 //! order (e.g. `[("u_x","f_x"), ("u_y","f_y")]` in 2-D) — exactly one pair per
@@ -56,80 +56,12 @@ use crate::handle::Handle;
 use crate::models::transfer::{constrained_physics, constraint_physics};
 use crate::models::{
     Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation, RelationSense,
-    SubModelKind,
+    SubModelKind, IMPOSED, MULTIPLIER,
 };
 use crate::ops::geom::project_points;
 use crate::ops::mesh::barycenter;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-
-/// Default multiplier (primal) name — the contact reaction intensity.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
-/// # use pyrucast::ops::mesh;
-/// # let coords = Handle::new(Coords::new(2).unwrap());
-/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let maillage = Mesh::from_submesh(sm);
-/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let zone = fes.get(0).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # use pyrucast::models::contact;
-/// // Derived rather than tabulated: every contact names its reaction and its
-/// // constraint row so.
-/// assert_eq!(
-///     (contact::default_multiplier().as_str(),
-///      contact::default_imposed_value().as_str()),
-///     ("lambda_contact", "contact_gap"));
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn default_multiplier() -> String {
-    "lambda_contact".to_string()
-}
-
-/// Default imposed-value (dual) name — the constraint row and `−g₀` slot.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
-/// # use pyrucast::ops::mesh;
-/// # let coords = Handle::new(Coords::new(2).unwrap());
-/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let maillage = Mesh::from_submesh(sm);
-/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let zone = fes.get(0).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # use pyrucast::models::contact;
-/// // Derived rather than tabulated: every contact names its reaction and its
-/// // constraint row so.
-/// assert_eq!(
-///     (contact::default_multiplier().as_str(),
-///      contact::default_imposed_value().as_str()),
-///     ("lambda_contact", "contact_gap"));
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn default_imposed_value() -> String {
-    "contact_gap".to_string()
-}
 
 /// The master binding of one slave node: the closest facet's nodes, the
 /// projection weights `Nᵢ(ξ)`, the unit facet normal and the initial gap.
@@ -172,8 +104,7 @@ struct Component {
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # use pyrucast::models::contact::{self, Contact};
+/// # use pyrucast::models::contact::Contact;
 /// # let mut maitre = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
 /// # let master = Mesh::from_submesh(maitre);
@@ -187,7 +118,6 @@ struct Component {
 ///     vec!["u_x".into(), "u_y".into()])?;
 /// assert_eq!(c.relations()?.len(), 1);
 /// assert_eq!(c.gaps().len(), 1);
-/// assert_eq!(c.relations()?[0].imposed_value, contact::default_imposed_value());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Serialize, Deserialize)]
@@ -205,10 +135,6 @@ pub struct Contact {
     pairings: Vec<Pairing>,
     /// Displacement components in ambient order (one per space dimension).
     components: Vec<Component>,
-    /// This sub-model's primal — the contact reaction (e.g. `lambda_contact`).
-    multiplier: String,
-    /// This sub-model's dual — constraint row + `−g₀` slot (e.g. `contact_gap`).
-    imposed_value: String,
     /// Nature of the physics it constrains, read from the target at
     /// construction.
     target_physics: Option<Physics>,
@@ -221,9 +147,8 @@ impl Contact {
     /// order; the dual row each reaction lands in is read from `target`
     /// ([`Model::dual_of`](crate::containers::model::Model::dual_of)).
     ///
-    /// The multiplier and imposed-value names are derived:
-    /// [`default_multiplier`] (`lambda_contact`) and
-    /// [`default_imposed_value`] (`contact_gap`).
+    /// Each relation — one per slave node — gets a multiplier node of its own,
+    /// minted beside its slave node.
     ///
     /// # Errors
     ///
@@ -251,8 +176,7 @@ impl Contact {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # use pyrucast::models::contact::{self, Contact};
+    /// # use pyrucast::models::contact::Contact;
     /// # let mut maitre = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let master = Mesh::from_submesh(maitre);
@@ -266,7 +190,6 @@ impl Contact {
     ///     vec!["u_x".into(), "u_y".into()])?;
     /// assert_eq!(c.relations()?.len(), 1);
     /// assert_eq!(c.gaps().len(), 1);
-    /// assert_eq!(c.relations()?[0].imposed_value, contact::default_imposed_value());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(
@@ -366,8 +289,6 @@ impl Contact {
             support_mesh,
             pairings,
             components,
-            multiplier: default_multiplier(),
-            imposed_value: default_imposed_value(),
             target_physics,
         })
     }
@@ -395,8 +316,7 @@ impl Contact {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # use pyrucast::models::contact::{self, Contact};
+    /// # use pyrucast::models::contact::Contact;
     /// # let mut maitre = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let master = Mesh::from_submesh(maitre);
@@ -410,7 +330,6 @@ impl Contact {
     ///     vec!["u_x".into(), "u_y".into()])?;
     /// assert_eq!(c.relations()?.len(), 1);
     /// assert_eq!(c.gaps().len(), 1);
-    /// assert_eq!(c.relations()?[0].imposed_value, contact::default_imposed_value());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn gaps(&self) -> Vec<f64> {
@@ -440,11 +359,11 @@ impl Contact {
 
 impl SubModelKind for Contact {
     fn primal_vars(&self) -> Vec<String> {
-        vec![self.multiplier.clone()]
+        vec![MULTIPLIER.to_string()]
     }
 
     fn dual_vars(&self) -> Vec<String> {
-        vec![self.imposed_value.clone()]
+        vec![IMPOSED.to_string()]
     }
 
     /// Its relations, applied to the solution: the reaction `Cᵀ λ` on the
@@ -483,36 +402,34 @@ impl SubModelKind for Contact {
             .collect();
 
         // Neither block is symmetric alone; the pair is. The identity folds in
-        // both supports, this sub-model's two names, and every component's pair
-        // of names — which is what tells one contact from another.
+        // both supports and every component's pair of names — which is what
+        // tells one contact from another.
         let (id_c, id_ct) = {
             let (mult_g, sup_g) = (mult_sm.read(), support_sm.read());
             let mut h = FNV_SEED;
             h = hash_nodes(h, mult_g.connectivity());
             h = hash_nodes(h, sup_g.connectivity());
-            h = hash_name(h, &self.multiplier);
-            h = hash_name(h, &self.imposed_value);
             for comp in &self.components {
                 h = hash_name(h, &comp.variable);
                 h = hash_name(h, &comp.target_dual);
             }
             mint_pair(h)
         };
-        // C: rows (multiplier, imposed_value), cols (support, every variable).
+        // C: rows (multiplier, IMPOSED), cols (support, every variable).
         let mut c = SubMatrix::new(
             mult_sm.clone(),
             support_sm.clone(),
-            vec![self.imposed_value.clone()],
+            vec![IMPOSED.to_string()],
             variables,
             DofOrdering::NodesThenVars,
             Symmetry::Half(id_c),
         );
-        // Cᵀ: rows (support, every dual), cols (multiplier, multiplier).
+        // Cᵀ: rows (support, every dual), cols (multiplier, MULTIPLIER).
         let mut ct = SubMatrix::new(
             support_sm,
             mult_sm,
             duals,
-            vec![self.multiplier.clone()],
+            vec![MULTIPLIER.to_string()],
             DofOrdering::NodesThenVars,
             Symmetry::Half(id_ct),
         );
@@ -521,12 +438,12 @@ impl SubModelKind for Contact {
             let s = self.slave_node(r)?;
             for (comp, &n_c) in self.components.iter().zip(&p.normal) {
                 // +n_c on the slave node.
-                c.add_entry(m, &self.imposed_value, s, &comp.variable, n_c)?;
-                ct.add_entry(s, &comp.target_dual, m, &self.multiplier, n_c)?;
+                c.add_entry(m, IMPOSED, s, &comp.variable, n_c)?;
+                ct.add_entry(s, &comp.target_dual, m, MULTIPLIER, n_c)?;
                 // −Nᵢ·n_c on each master node.
                 for (node, w) in p.nodes.iter().zip(p.weights.iter()) {
-                    c.add_entry(m, &self.imposed_value, *node, &comp.variable, -w * n_c)?;
-                    ct.add_entry(*node, &comp.target_dual, m, &self.multiplier, -w * n_c)?;
+                    c.add_entry(m, IMPOSED, *node, &comp.variable, -w * n_c)?;
+                    ct.add_entry(*node, &comp.target_dual, m, MULTIPLIER, -w * n_c)?;
                 }
             }
         }
@@ -556,10 +473,8 @@ impl SubModelKind for Contact {
 
     fn render(&self, _opts: &DumpOptions) -> String {
         let mut out = format!(
-            "SubModel<Contact>\n  primal var(s): {} (multiplier)\n  dual var(s):   {} \
-             (imposed value / −g₀)\n  slave nodes: {}\n  components:",
-            self.multiplier,
-            self.imposed_value,
+            "SubModel<Contact>\n  primal var(s): {MULTIPLIER} (multiplier)\n  dual var(s):   \
+             {IMPOSED} (imposed value / −g₀)\n  slave nodes: {}\n  components:",
             self.pairings.len()
         );
         for c in &self.components {
@@ -601,7 +516,6 @@ impl Constraint for Contact {
             }
             relations.push(Relation {
                 multiplier_node: m,
-                imposed_value: self.imposed_value.clone(),
                 terms,
                 sense: RelationSense::GreaterEqual,
             });

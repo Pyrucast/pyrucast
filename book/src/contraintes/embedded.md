@@ -14,7 +14,7 @@ C'est l'archétype d'une **barre baignée dans un volume** : les nœuds de la ba
 suivent le champ de déplacement volumique, **sans** que les deux maillages
 partagent de nœud. Comme [Dirichlet](dirichlet.md) et [MPC](mpc.md), c'est une
 [contrainte](../contraintes.md) par **multiplicateurs de Lagrange** : ni
-matériau, ni loi de comportement ; elle ne mute jamais le `Coords`.
+matériau, ni loi de comportement.
 
 C'est aussi la réponse au cas laissé ouvert par la MPC : des **coefficients qui
 varient par nœud** (ici les `Nᵢ(ξ_p)`, différents à chaque nœud immergé), qu'une
@@ -32,26 +32,27 @@ Un nœud immergé qui **ne tombe dans aucune maille hôte** est une **erreur** :
 maillage immergé doit être contenu dans l'hôte. Les deux maillages doivent
 partager un même `Coords` (les identifiants de nœuds y sont relatifs).
 
-Les **nœuds-multiplicateurs** sont mintés en interne (un par nœud immergé,
-colocalisé), contrairement à Dirichlet/MPC où l'utilisateur fournit le
-`multiplier_mesh`. On y accède après coup avec **`Model.multiplier_mesh()`**.
+Comme toute contrainte, elle crée ses **nœuds-multiplicateurs**, un par
+relation, par [`barycenter`](../operateurs/maillage.md) sur le maillage
+immergé. On y accède après coup avec **`Model.multiplier_mesh()`**, qui porte
+un sous-maillage POI1 par composante.
 
 ## Une relation par (nœud immergé × composante)
 
-Toutes les composantes partagent **un** nœud-multiplicateur par nœud immergé,
-chacune portant sa propre paire de variables (toutes **surchargeables**) :
+Chaque composante a **ses** nœuds-multiplicateurs, colocalisés avec les nœuds
+immergés :
 
-| rôle | nom | défaut |
+| rôle | nom | fourniture |
 |---|---|---|
-| primale contrainte (colonne partagée immergé ↔ hôte) | `variable` | — (fournie) |
-| duale cible où atterrit la réaction | `target_dual` | — (fournie, cf. `dual_of`) |
-| primale propre = multiplicateur `λ` | `multiplier` | `lambda_<variable>` |
-| duale propre = ligne de contrainte + slot de `g` | `imposed_value` | `imposed_<variable>` |
+| primale contrainte (colonne partagée immergé ↔ hôte) | `variable` | requis |
+| duale cible où atterrit la réaction | lue dans `target` | déduit |
+| primale propre = multiplicateur `λ` | `lambda` | commun à toute relation |
+| duale propre = ligne de contrainte + slot de `g` | `imposed` | commun à toute relation |
 
 Signature complète :
 
 ```text
-model.embedded(target, immersed, host, variables, tol=None)
+model.embedded(target, immersed, host, variables, tol=1e-6)
 # variables : les primales à lier, p.ex. ["u_x", "u_y", "u_z"]
 ```
 
@@ -66,16 +67,17 @@ jamais les couples `(primale, duale)`.
 nœud immergé porte le coefficient `+1`, chaque nœud hôte son poids `−Nᵢ`, si bien
 que chaque relation lit `u_c(p) − Σᵢ Nᵢ·u_c(hôteᵢ) = g_c` :
 
-- **bloc C** : `(multiplier_node, imposed_value) × (nœud, variable)` = `+1` sur le
+- **bloc C** : `(multiplier_node, imposed) × (nœud, variable)` = `+1` sur le
   nœud immergé, `−Nᵢ` sur chaque nœud hôte ;
-- **bloc Cᵀ** : `(nœud, target_dual) × (multiplier_node, multiplier)`, mêmes
+- **bloc Cᵀ** : `(nœud, target_dual) × (multiplier_node, lambda)`, mêmes
   coefficients (réaction réinjectée dans la physique).
 
 ## Second membre et réaction
 
 - Le second membre `g` (défaut `0`, la liaison rigide) s'écrit dans le
-  `NodeField` de chargement, au slot `imposed_<variable>` du nœud-multiplicateur.
-- Le multiplicateur `lambda_<variable>` au nœud-multiplicateur **est** la force de
+  `NodeField` de chargement, au slot `imposed` du nœud-multiplicateur de la
+  composante.
+- Le multiplicateur `lambda` au nœud-multiplicateur **est** la force de
   liaison.
 
 ## Exemple : barre baignée dans un HEX8

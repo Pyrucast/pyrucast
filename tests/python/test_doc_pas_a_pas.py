@@ -29,11 +29,8 @@ def _plaque():
     fes = pc.FiniteElementSpace(maillage)
 
     def bloquer(cible, noeuds, variable):
-        impose = pc.mesh.poi1_from_nodes(noeuds)
-        multiplicateurs = pc.mesh.translate(impose, [0.0, 0.0])
-        return pc.model.dirichlet(
-            cible, variable, impose, multiplicateurs
-        ), multiplicateurs
+        blocage = pc.model.dirichlet(cible, variable, pc.mesh.poi1_from_nodes(noeuds))
+        return blocage, blocage.multiplier_mesh()
 
     gauche = [noeud(0, j) for j in range(3)]
     bas = [noeud(i, 0) for i in range(5)]
@@ -54,8 +51,8 @@ maillage, noeud, modele, support_chauffe = _plaque()
 
 
 def _temperature_imposee(valeur):
-    champ = pc.NodeField(support_chauffe, ["imposed_T"])
-    champ[0].add_to_component("imposed_T", valeur)
+    champ = pc.NodeField(support_chauffe, ["imposed"])
+    champ[0].add_to_component("imposed", valeur)
     return champ
 
 

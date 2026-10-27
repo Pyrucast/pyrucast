@@ -30,7 +30,6 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -53,12 +52,10 @@ fn a_cantilever_under_a_tip_load_matches_its_closed_form() -> Result<()> {
     let mut model = model::bernoulli(&fes)?;
     for var in ["w", "theta"] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
-        let multiplier = mesh::barycenter(&imposed)?;
         model = model.union(&model::dirichlet(
             &model,
             var,
             &imposed,
-            &multiplier,
             Default::default(),
         )?)?;
     }
@@ -130,12 +127,10 @@ fn a_plane_frame_carries_axial_and_bending_independently() -> Result<()> {
     let mut model = model::bernoulli(&fes)?;
     for var in ["u_x", "u_y", "r_z"] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
-        let multiplier = mesh::barycenter(&imposed)?;
         model = model.union(&model::dirichlet(
             &model,
             var,
             &imposed,
-            &multiplier,
             Default::default(),
         )?)?;
     }
@@ -175,12 +170,10 @@ fn a_space_frame_twists_by_its_closed_form() -> Result<()> {
     let mut model = model::bernoulli(&fes)?;
     for var in ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
-        let multiplier = mesh::barycenter(&imposed)?;
         model = model.union(&model::dirichlet(
             &model,
             var,
             &imposed,
-            &multiplier,
             Default::default(),
         )?)?;
     }
@@ -244,8 +237,7 @@ fn bernoulli_and_timoshenko_differ_only_for_a_stocky_beam() -> Result<()> {
             for var in ["w", "theta"] {
                 let imposed =
                     Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
-                let multiplier = mesh::barycenter(&imposed)?;
-                let bc = model::dirichlet(&m, var, &imposed, &multiplier, Default::default())?;
+                let bc = model::dirichlet(&m, var, &imposed, Default::default())?;
                 m = m.union(&bc)?;
             }
             Ok(m)
@@ -307,12 +299,10 @@ fn clamped_1d(a: &Node, fes: &FiniteElementSpace) -> Result<Model> {
     let mut model = model::bernoulli(fes)?;
     for var in ["w", "theta"] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(a))?);
-        let multiplier = mesh::barycenter(&imposed)?;
         model = model.union(&model::dirichlet(
             &model,
             var,
             &imposed,
-            &multiplier,
             Default::default(),
         )?)?;
     }

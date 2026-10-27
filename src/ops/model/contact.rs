@@ -35,7 +35,6 @@ use crate::error::Result;
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let mut maitre = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
 /// # let master = Mesh::from_submesh(maitre);

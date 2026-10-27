@@ -113,16 +113,15 @@ et `solve_eliminate` le **refuse** avec une erreur explicite. Un modèle sans
 inégalité retombe sur le `solve` ordinaire.
 
 Le second membre `g` (la borne) suit le mécanisme habituel : au slot
-`imposed_value` du nœud-multiplicateur, donc `constraint_rhs` fonctionne tel
+`imposed` du nœud-multiplicateur, donc `constraint_rhs` fonctionne tel
 quel.
 
 ## Second membre : le helper `constraint_rhs`
 
 Le second membre `u_d` / `g` n'est **pas** stocké dans la contrainte :
-l'utilisateur l'écrit dans le `NodeField` de chargement, à la composante duale
-propre de la contrainte (`imposed_<v>` pour Dirichlet, `mpc_rhs` pour la MPC),
-**au nœud-multiplicateur** de la relation. Retrouver ce nœud et cette composante
-à la main est fastidieux ; le helper le fait :
+l'utilisateur l'écrit dans le `NodeField` de chargement, à la composante
+`imposed` (la duale propre de toute contrainte), **au nœud-multiplicateur** de
+la relation. Retrouver ce nœud à la main est fastidieux ; le helper le fait :
 
 ```python
 {{#include ../../tests/python/test_doc_contraintes.py:constraint_rhs}}

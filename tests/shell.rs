@@ -36,7 +36,6 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::shell::ShellModel;
-use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -434,8 +433,7 @@ fn plate(
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
 fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-    let multiplier = mesh::barycenter(&imposed)?;
-    model::dirichlet(target, var, &imposed, &multiplier, Default::default())
+    model::dirichlet(target, var, &imposed, Default::default())
 }
 
 /// The central deflection of a clamped square plate under a uniform pressure,

@@ -79,11 +79,10 @@ def main() -> None:
 
     # ANCHOR: modele_plastique
     encastrement = pc.mesh.to_poi1(bord_gauche)
-    multiplicateur = pc.mesh.translate(encastrement, [0.0, 0.0])
 
     modele = pc.model.plasticity_perfect(fes, "plane_stress")
-    modele = modele | pc.model.dirichlet(modele, "u_x", encastrement, multiplicateur)
-    modele = modele | pc.model.dirichlet(modele, "u_y", encastrement, multiplicateur)
+    modele = modele | pc.model.dirichlet(modele, "u_x", encastrement)
+    modele = modele | pc.model.dirichlet(modele, "u_y", encastrement)
     # ANCHOR_END: modele_plastique
 
     # ANCHOR: chargement_evolution

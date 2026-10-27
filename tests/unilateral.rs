@@ -21,11 +21,9 @@ use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::models::mpc::MpcTerm;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::RelationSense;
 use pyrucast::ops::matrix::stiffness;
-use pyrucast::ops::mesh::barycenter;
 use pyrucast::ops::solver::{eliminate, lu, unilateral};
 use pyrucast::Result;
 
@@ -85,15 +83,13 @@ fn bounded_bar(q: f64, bound: f64, sense: RelationSense) -> Result<Setup> {
 
     // Equality Dirichlet T(0) = 0.
     let imposed0 = poi1(&nodes[0])?;
-    let mult0 = barycenter(&imposed0)?;
-    let dir = SubModel::dirichlet(&model, "T", &imposed0, &mult0, Default::default())?;
+    let dir = SubModel::dirichlet(&model, "T", &imposed0, Default::default())?;
     let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
     // Unilateral bound T(1) ⋈ bound.
     let imposed1 = poi1(&nodes[N_ELEMS])?;
-    let mult1 = barycenter(&imposed1)?;
-    let uni = SubModel::dirichlet(&model, "T", &imposed1, &mult1, sense)?;
+    let uni = SubModel::dirichlet(&model, "T", &imposed1, sense)?;
     let uni_mult = uni.multiplier_nodes()[0];
     model.add_sub(Handle::new(uni))?;
 
@@ -103,10 +99,10 @@ fn bounded_bar(q: f64, bound: f64, sense: RelationSense) -> Result<Setup> {
     rhs_sm.add_cell(&[dir_mult])?;
     rhs_sm.add_cell(&[uni_mult])?;
     let rhs_sm = Handle::new(rhs_sm);
-    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["q".into(), "imposed_T".into()])?;
+    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["q".into(), "imposed".into()])?;
     rhs.set_value(nodes[N_ELEMS].id(), "q", q)?;
-    rhs.set_value(dir_mult, "imposed_T", 0.0)?;
-    rhs.set_value(uni_mult, "imposed_T", bound)?;
+    rhs.set_value(dir_mult, "imposed", 0.0)?;
+    rhs.set_value(uni_mult, "imposed", bound)?;
     let rhs = NodeField::from_sub(rhs);
 
     Ok(Setup {
@@ -128,7 +124,7 @@ fn check(setup: &Setup, solution: &NodeField, slope: f64, lambda: f64) -> Result
             "T at node {i}: got {got}, expected {expected}"
         );
     }
-    let got = solution.value(setup.uni_mult, "lambda_T")?;
+    let got = solution.value(setup.uni_mult, "lambda")?;
     assert!(
         (got - lambda).abs() < TOL,
         "lambda: got {got}, expected {lambda}"
@@ -205,19 +201,17 @@ fn unilateral_mpc_difference_relation() -> Result<()> {
         let (nodes, coords, mut model, materials) = heat_bar()?;
 
         let imposed0 = poi1(&nodes[0])?;
-        let mult0 = barycenter(&imposed0)?;
-        let dir = SubModel::dirichlet(&model, "T", &imposed0, &mult0, Default::default())?;
+        let dir = SubModel::dirichlet(&model, "T", &imposed0, Default::default())?;
         let dir_mult = dir.multiplier_nodes()[0];
         model.add_sub(Handle::new(dir))?;
 
         let mesh_last = poi1(&nodes[N_ELEMS])?;
         let mesh_first = poi1(&nodes[0])?;
-        let mult_mpc_mesh = barycenter(&mesh_last)?;
-        let terms = vec![
-            MpcTerm::new(&model, &mesh_last, "T", 1.0)?,
-            MpcTerm::new(&model, &mesh_first, "T", -1.0)?,
-        ];
-        let mpc = SubModel::mpc(terms, &mult_mpc_mesh, RelationSense::GreaterEqual)?;
+        let mpc = SubModel::mpc(
+            &model,
+            &[(&mesh_last, "T", 1.0), (&mesh_first, "T", -1.0)],
+            RelationSense::GreaterEqual,
+        )?;
         let mpc_mult = mpc.multiplier_nodes()[0];
         model.add_sub(Handle::new(mpc))?;
 
@@ -225,9 +219,9 @@ fn unilateral_mpc_difference_relation() -> Result<()> {
         rhs_sm.add_cell(&[dir_mult])?;
         rhs_sm.add_cell(&[mpc_mult])?;
         let rhs_sm = Handle::new(rhs_sm);
-        let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed_T".into(), "mpc_rhs".into()])?;
-        rhs.set_value(dir_mult, "imposed_T", 0.0)?;
-        rhs.set_value(mpc_mult, "mpc_rhs", g)?;
+        let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed".into()])?;
+        rhs.set_value(dir_mult, "imposed", 0.0)?;
+        rhs.set_value(mpc_mult, "imposed", g)?;
         let rhs = NodeField::from_sub(rhs);
 
         let k = stiffness(&model, &materials)?;
@@ -241,7 +235,7 @@ fn unilateral_mpc_difference_relation() -> Result<()> {
             );
         }
         // Complementarity on the multiplier.
-        let lambda = solution.value(mpc_mult, "lambda_mpc")?;
+        let lambda = solution.value(mpc_mult, "lambda")?;
         if slope == 0.0 {
             assert!(lambda.abs() < TOL, "released relation must carry λ = 0");
         } else {
@@ -292,8 +286,8 @@ fn schur_and_refactorize_agree() -> Result<()> {
             let b = refac.value(node.id(), "T")?;
             assert!((a - b).abs() < TOL, "T mismatch q={q} sense={sense:?}");
         }
-        let la = schur.value(setup.uni_mult, "lambda_T")?;
-        let lb = refac.value(setup.uni_mult, "lambda_T")?;
+        let la = schur.value(setup.uni_mult, "lambda")?;
+        let lb = refac.value(setup.uni_mult, "lambda")?;
         assert!((la - lb).abs() < TOL, "λ mismatch q={q} sense={sense:?}");
     }
     Ok(())
@@ -310,8 +304,7 @@ fn schur_falls_back_when_base_is_singular() -> Result<()> {
     let (nodes, coords, mut model, materials) = heat_bar()?;
     // A single `T(1) ≤ 2` bound, no other constraint.
     let imp = poi1(&nodes[N_ELEMS])?;
-    let mult = barycenter(&imp)?;
-    let uni = SubModel::dirichlet(&model, "T", &imp, &mult, RelationSense::LessEqual)?;
+    let uni = SubModel::dirichlet(&model, "T", &imp, RelationSense::LessEqual)?;
     let uni_mult = uni.multiplier_nodes()[0];
     model.add_sub(Handle::new(uni))?;
 
@@ -321,9 +314,9 @@ fn schur_falls_back_when_base_is_singular() -> Result<()> {
     rhs_sm.add_cell(&[nodes[N_ELEMS].id()])?;
     rhs_sm.add_cell(&[uni_mult])?;
     let rhs_sm = Handle::new(rhs_sm);
-    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["q".into(), "imposed_T".into()])?;
+    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["q".into(), "imposed".into()])?;
     rhs.set_value(nodes[N_ELEMS].id(), "q", 5.0)?;
-    rhs.set_value(uni_mult, "imposed_T", 2.0)?;
+    rhs.set_value(uni_mult, "imposed", 2.0)?;
     let rhs = NodeField::from_sub(rhs);
 
     let k = stiffness(&model, &materials)?;

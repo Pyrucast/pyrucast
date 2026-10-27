@@ -141,10 +141,10 @@ def main() -> None:
     fes = pc.FiniteElementSpace(volume)
     modele = pc.model.heat_conduction(fes)
 
-    # FR — Dirichlet : le support bloqué, et un jumeau pour les multiplicateurs.
-    # EN — Dirichlet: the constrained support, and a twin for the multipliers.
-    multiplicateur_T = pc.mesh.translate(alesage, [0.0, 0.0, 0.0])
-    modele = modele | pc.model.dirichlet(modele, "T", alesage, multiplicateur_T)
+    # FR — Dirichlet : le support bloqué ; la contrainte crée ses multiplicateurs.
+    # EN — Dirichlet: the constrained support; the constraint mints its multipliers.
+    blocage_T = pc.model.dirichlet(modele, "T", alesage)
+    modele = modele | blocage_T
 
     # FR — Le flux imposé sur la face gauche est un terme du modèle.
     # EN — The imposed flux on the left face is a term of the model.
@@ -163,8 +163,8 @@ def main() -> None:
 
     # FR — Température imposée, posée sur le maillage des multiplicateurs.
     # EN — Imposed temperature, set on the multipliers' mesh.
-    temperature_imposee = pc.NodeField(multiplicateur_T, ["imposed_T"])
-    temperature_imposee[0].add_to_component("imposed_T", T_IMPOSEE)
+    temperature_imposee = pc.NodeField(blocage_T.multiplier_mesh(), ["imposed"])
+    temperature_imposee[0].add_to_component("imposed", T_IMPOSEE)
     # ANCHOR_END: charges_conduction
 
     # ANCHOR: resolution_conduction
@@ -219,7 +219,7 @@ def main() -> None:
     modele = conduction | pc.model.boundary_transfer(
         basse_fes, conduction, [("T", "q")]
     )
-    modele = modele | pc.model.dirichlet(modele, "T", alesage, multiplicateur_T)
+    modele = modele | pc.model.dirichlet(modele, "T", alesage)
 
     # FR — Un seul champ matériau : « k » pour la conduction, « h » et son
     #      ambiant pour le film.

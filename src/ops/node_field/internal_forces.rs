@@ -34,7 +34,7 @@ use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::kernel;
-use crate::models::ResidualContribution;
+use crate::models::{ResidualContribution, IMPOSED, MULTIPLIER};
 
 /// Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`
 /// (Cast3m `BSIG` for a continuum).
@@ -191,28 +191,14 @@ fn reaction(kind: &dyn crate::models::SubModelKind, solution: &NodeField) -> Res
     })?;
     let view = solution.view()?;
     let relations = constraint.relations()?;
-    let primals = kind.primal_vars();
-    let duals = kind.dual_vars();
     let mut values: std::collections::HashMap<(NodeId, String), f64> =
         std::collections::HashMap::new();
     let mut nodes: Vec<NodeId> = Vec::new();
     for rel in &relations {
         // The multiplier is an unknown of the augmented system, so it is read
         // where every other unknown is: in the solution.
-        // The multiplier's own name: a constraint's primal, at the index of
-        // the dual this relation writes into.
-        let slot = duals
-            .iter()
-            .position(|d| *d == rel.imposed_value)
-            .ok_or_else(|| {
-                PyrucastError::Message(format!(
-                    "{}: relation writes `{}`, which is not one of its duals",
-                    kind.label(),
-                    rel.imposed_value
-                ))
-            })?;
         let lambda = view
-            .value_opt(rel.multiplier_node, &primals[slot])
+            .value_opt(rel.multiplier_node, MULTIPLIER)
             .unwrap_or(0.0);
         // `C·u` on the constraint's own row: its half of `C·u = g`, whose
         // other half is the imposed value, on the external side.
@@ -225,7 +211,7 @@ fn reaction(kind: &dyn crate::models::SubModelKind, solution: &NodeField) -> Res
             *values.entry(slot).or_insert(0.0) += term.coefficient * lambda;
             cu += term.coefficient * view.value_opt(term.node, &term.variable).unwrap_or(0.0);
         }
-        let row = (rel.multiplier_node, rel.imposed_value.clone());
+        let row = (rel.multiplier_node, IMPOSED.to_string());
         if !values.contains_key(&row) {
             nodes.push(rel.multiplier_node);
         }

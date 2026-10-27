@@ -35,7 +35,6 @@ use crate::ops::element_field::StrainMeasure;
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::plasticity::law::PlasticLaw;
 /// # use pyrucast::ops::element_field::StrainMeasure;
 /// // J2 read on the Hencky strain: large plastic strains.

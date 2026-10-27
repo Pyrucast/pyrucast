@@ -132,12 +132,11 @@ def main() -> None:
 
     right_nodes = unique_nodes(right)
     imposed = pyrucast.mesh.poi1_from_nodes(right_nodes)
-    multiplier = pyrucast.mesh.barycenter(imposed)
-    mults = [multiplier.node(0, j, 0) for j in range(len(right_nodes))]
-
     cible = pyrucast.model.heat_conduction(fes)
+    held = pyrucast.model.dirichlet(cible, "T", imposed)
+    mults = [held.multiplier_mesh().node(0, j, 0) for j in range(len(right_nodes))]
 
-    model = cible | pyrucast.model.dirichlet(cible, "T", imposed, multiplier)
+    model = cible | held
 
     # ── 3. Loading: flux distributed on the left edge + imposed T ────────────
     left_fes = pyrucast.FiniteElementSpace(left)
@@ -148,9 +147,9 @@ def main() -> None:
     imposed_mesh = pyrucast.Mesh(coords, "POI1")
     for m in mults:
         imposed_mesh.unit().add_cell([m])
-    imposed_load = pyrucast.NodeField(imposed_mesh, ["imposed_T"])
+    imposed_load = pyrucast.NodeField(imposed_mesh, ["imposed"])
     for m in mults:
-        imposed_load[0].set_value(m, "imposed_T", T_IMPOSED)
+        imposed_load[0].set_value(m, "imposed", T_IMPOSED)
 
     rhs = source | imposed_load
 
@@ -170,7 +169,7 @@ def main() -> None:
 
     print(f"\nmax error over the plate = {max_err:.2e}")
 
-    reaction = sum(solution.value(m, "lambda_T") for m in mults)
+    reaction = sum(solution.value(m, "lambda") for m in mults)
     print(f"réaction totale Σλ = {reaction:.6f}  (attendu {Q})")
     assert abs(reaction - Q) < tol
 

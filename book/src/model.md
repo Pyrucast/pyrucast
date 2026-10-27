@@ -68,7 +68,7 @@ Elles sont presque toujours **différentes** :
 | `HeatConduction`   | `T` (température)  | `q` (flux de chaleur) |
 | `BoundaryTransfer` (film) | `T` (partagée avec `HeatConduction`) | `q` (partagée) |
 | `Truss` / `LinearElasticity` | `u_x`, `u_y`, …   | `f_x`, `f_y`, …    |
-| `Dirichlet { imposed_variable: "T" }` | `lambda_T`         | `imposed_T`         |
+| `Dirichlet { imposed_variable: "T" }` | `lambda`           | `imposed`           |
 
 Les DOFs de la `Matrix` sont identifiés par le couple `(NodeID, nom_de_champ)` (voir [`Matrix`](matrix.md)) : deux SubModels qui utilisent le même nom (`"T"`) sur des nœuds différents ne se collisionnent pas, et la jonction se fait automatiquement quand ils partagent un même `(NodeID, nom)`.
 
@@ -89,8 +89,8 @@ Pour la part **contrainte** du second membre (les valeurs imposées aux
 nœuds-multiplicateurs), le helper `model.constraint_rhs([(nœud, g), …])`
 construit ce `NodeField` tout seul : on désigne chaque relation par un nœud
 contraint (Dirichlet) ou un nœud-terme (MPC) et sa valeur `g`, et le helper
-retrouve le nœud-multiplicateur et la composante à renseigner
-(`imposed_<v>`, `mpc_rhs`). Voir [Contraintes](contraintes.md).
+retrouve le nœud-multiplicateur et y renseigne la composante `imposed`. Voir
+[Contraintes](contraintes.md).
 
 ## Les physiques disponibles
 
@@ -114,10 +114,10 @@ opérateurs qui les déclarent et leurs variables, vus du `Model` :
 | `bernoulli(fes)` | selon la configuration | idem | `E, I` (+ `A`, `I_y…`) | [Euler-Bernoulli](mecanique/bernoulli.md) |
 | `timoshenko(fes)` | selon la configuration lue sur le maillage : `w, theta` (1-D), `u_x, u_y, r_z` (plan), `u_x…r_z` (6, espace) | `f_w, m_theta` ; `f_x, f_y, m_z` ; `f_x…m_z` | 1-D : `E, I, G, A_s` ; plan : `E, A, I, G, A_s` ; espace : `E, A, I_y, I_z, J, G, A_sy, A_sz` | [Timoshenko](mecanique/timoshenko.md) |
 | `shell(fes, model)`<br>`thick`, `kirchhoff` | `u_x…r_z` (6) | `f_x…m_z` (6) | `E, nu, h` | [Coques](mecanique/coques.md) |
-| `dirichlet(…)` | `lambda_<v>` | `imposed_<v>` | — | [Dirichlet](contraintes/dirichlet.md) |
-| `mpc(…)` | `lambda_mpc` | `mpc_rhs` | — | [Multi-points](contraintes/mpc.md) |
-| `embedded(…)` | `lambda_<v>` | `imposed_<v>` | — | [Baignage](contraintes/embedded.md) |
-| `contact(…)` | `lambda_contact` | `contact_gap` | — | [Contact](contraintes/contact.md) |
+| `dirichlet(cible, variable, maillage, sens)` | `lambda` | `imposed` | — | [Dirichlet](contraintes/dirichlet.md) |
+| `mpc(cible, termes, sens)` | `lambda` | `imposed` | — | [Multi-points](contraintes/mpc.md) |
+| `embedded(cible, immergé, hôte, variables, tol)` | `lambda` | `imposed` | — | [Baignage](contraintes/embedded.md) |
+| `contact(cible, esclave, maître, variables)` | `lambda` | `imposed` | — | [Contact](contraintes/contact.md) |
 
 Toutes balaient **tous** les sous-espaces du `fes` (une zone par sous-espace),
 sauf `dirichlet`, `mpc`, `embedded` et `contact` qui sont des
@@ -197,6 +197,11 @@ ses appuis — un sous-problème solvable tel quel — et
 matrice, `k.filter(...)` rend une `Matrix` non assemblée — relancer
 `Matrix::assemble` avant de résoudre.
 
+Les natures disent ce qu'un sous-modèle fige, pas ce qu'il est : un contact et
+un Dirichlet sur les déplacements portent tous deux `[Constraint, Mechanical]`.
+`label()` nomme la physique (`"Dirichlet"`, `"Contact"`, …) ; c'est par lui que
+le [pas à pas](pas-a-pas.md) reconnaît le contact.
+
 `k.physics()` renvoie l'ensemble des natures **présentes** dans la matrice
 (dédupliqué) : une matrice agrégeant plusieurs physiques y expose plusieurs tags
 (par ex. `[Thermal, Constraint]` pour une conduction et son Dirichlet). Un bloc à l'ensemble vide n'est jamais
@@ -243,7 +248,7 @@ lecture des inconnues et des réactions) sont déroulés dans
 
 - **Physiques disponibles** : `HeatConduction` et `BoundaryTransfer` (échange de
   surface / film) ([thermique](thermique.md)) ; `Truss`, `Elasticity`,
-  `Plasticity`, `Mazars`, `Timoshenko`, `Frame`, `Frame3d`
+  `Plasticity`, `Damage`, `Bernoulli`, `Timoshenko`, `Shell`
   ([mécanique](mecanique.md)) ; et les contraintes `Dirichlet`, `Mpc`,
   `Embedded`, `Contact` ([contraintes](contraintes.md)). Toute nouvelle physique
   est une struct implémentant `SubModelKind` (une variante de l'énum `SubModel`

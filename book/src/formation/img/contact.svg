@@ -6,7 +6,7 @@
 <rect x="270" y="10" width="259" height="25" fill="#F5F5F5" stroke="none"/>
 <rect x="270" y="10" width="259" height="25" fill="none" stroke="#6E6E6E"/>
 <text x="280" y="15" dy="0.76em" text-anchor="start" font-family="sans-serif" font-size="10.483870967741936" fill="#141414">
-[lambda_contact]  min=-2.500  max=-1.250
+[lambda]  min=-2.500  max=-1.250
 </text>
 <rect x="726" y="48" width="15" height="8" fill="#F8E625" stroke="none"/>
 <rect x="726" y="56" width="15" height="8" fill="#EEE525" stroke="none"/>

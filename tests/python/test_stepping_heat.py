@@ -25,9 +25,8 @@ def _rod(n_cells=2, length=2.0):
 
 
 def _held(target, nodes, variable):
-    imposed = pc.mesh.poi1_from_nodes(nodes)
-    multipliers = pc.mesh.translate(imposed, [0.0])
-    return pc.model.dirichlet(target, variable, imposed, multipliers), multipliers
+    held = pc.model.dirichlet(target, variable, pc.mesh.poi1_from_nodes(nodes))
+    return held, held.multiplier_mesh()
 
 
 def _entry(matrix, mesh, node):
@@ -132,14 +131,13 @@ def test_steady_conduction_between_two_temperatures_is_linear():
 
 
 def _held2(target, nodes):
-    imposed = pc.mesh.poi1_from_nodes(nodes)
-    multipliers = pc.mesh.translate(imposed, [0.0, 0.0])
-    return pc.model.dirichlet(target, "T", imposed, multipliers), multipliers
+    held = pc.model.dirichlet(target, "T", pc.mesh.poi1_from_nodes(nodes))
+    return held, held.multiplier_mesh()
 
 
 def _value(support, value):
-    field = pc.NodeField(support, ["imposed_T"])
-    field[0].add_to_component("imposed_T", value)
+    field = pc.NodeField(support, ["imposed"])
+    field[0].add_to_component("imposed", value)
     return field
 
 

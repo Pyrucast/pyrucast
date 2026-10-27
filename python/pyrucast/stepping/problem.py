@@ -84,7 +84,7 @@ def _sub_models(model):
 
 def _refuse_in_large_displacements(mechanics):
     """What large displacements do not offer yet, refused with the reason."""
-    if any("contact_gap" in sub[0].dual_vars() for sub in _sub_models(mechanics)):
+    if any(sub[0].label() == "Contact" for sub in _sub_models(mechanics)):
         raise ValueError(
             "step_by_step: contact is not available in large displacements — its "
             "relations would have to follow the sliding of the projected point"

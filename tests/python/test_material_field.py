@@ -23,10 +23,9 @@ def _two_zone_model():
     fes = pyrucast.FiniteElementSpace(mesh)
 
     imposed = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-    multiplier = pyrucast.mesh.barycenter(imposed)
     cible = pyrucast.model.heat_conduction(fes)
 
-    model = cible | pyrucast.model.dirichlet(cible, "T", imposed, multiplier)
+    model = cible | pyrucast.model.dirichlet(cible, "T", imposed)
     return c, nodes, fes, model
 
 
@@ -60,9 +59,8 @@ def test_sub_model_build_material_field_errors_on_dirichlet():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     imposed = pyrucast.mesh.poi1_from_nodes([a])
-    multiplier = pyrucast.mesh.barycenter(imposed)
     conduction = _cible_1d(c, a)
-    dir_sub = pyrucast.model.dirichlet(conduction, "T", imposed, multiplier)[0]
+    dir_sub = pyrucast.model.dirichlet(conduction, "T", imposed)[0]
     with pytest.raises(RuntimeError):
         pyrucast.element_field.sub_material_field(dir_sub, [("k", 1.0)])
 
@@ -147,9 +145,8 @@ def test_sub_model_material_components_lists_required_components():
     assert hc.material_components() == ["k"]
 
     imposed = pyrucast.mesh.poi1_from_nodes([a])
-    multiplier = pyrucast.mesh.barycenter(imposed)
     dir_sub = pyrucast.model.dirichlet(
-        pyrucast.model.heat_conduction(fes), "T", imposed, multiplier
+        pyrucast.model.heat_conduction(fes), "T", imposed
     )[0]
     assert dir_sub.material_components() is None
 

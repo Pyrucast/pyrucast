@@ -39,8 +39,7 @@ def main():
 
     # Corners fixed to the linear field (Dirichlet).
     corner_mesh = pyrucast.mesh.poi1_from_nodes(corner_nodes)
-    corner_mult = pyrucast.mesh.barycenter(corner_mesh)
-    dirichlet = pyrucast.model.dirichlet(base, "T", corner_mesh, corner_mult)
+    dirichlet = pyrucast.model.dirichlet(base, "T", corner_mesh)
 
     # Node immersed at the cube's core, tied to the host.
     p = c.add_node([0.3, 0.6, 0.2])

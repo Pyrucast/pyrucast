@@ -22,7 +22,6 @@ use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::StrainMeasure;
-use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -65,8 +64,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     // contraints s'y vérifient.
     let roller = |target: &Model, nodes: &[Node], var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-        let multiplier = mesh::barycenter(&imposed)?;
-        model::dirichlet(target, var, &imposed, &multiplier, Default::default())
+        model::dirichlet(target, var, &imposed, Default::default())
     };
     let left: Vec<Node> = (0..=N).map(|j| grid[idx(0, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=N).map(|i| grid[idx(i, 0)].clone()).collect();
@@ -117,8 +115,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
 fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-    let multiplier = mesh::barycenter(&imposed)?;
-    model::dirichlet(target, var, &imposed, &multiplier, Default::default())
+    model::dirichlet(target, var, &imposed, Default::default())
 }
 
 /// 3-D solid: uniaxial tension of a unit HEX8 cube. Symmetry rollers on the

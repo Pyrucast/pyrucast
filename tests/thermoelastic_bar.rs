@@ -27,7 +27,6 @@ use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::{deformation, interp_to_gauss, thermal_strain, StrainMeasure};
-use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::node_field::internal_forces;
 use pyrucast::ops::solver::lu::solve;
@@ -74,8 +73,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     // ── Modèle : élasticité + deux bords en x encastrés + appui u_y en bas ──
     let clamp = |target: &Model, nodes: &[Node], var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-        let multiplier = mesh::barycenter(&imposed)?;
-        model::dirichlet(target, var, &imposed, &multiplier, Default::default())
+        model::dirichlet(target, var, &imposed, Default::default())
     };
     let left: Vec<Node> = (0..=NY).map(|j| grid[idx(0, j)].clone()).collect();
     let right: Vec<Node> = (0..=NY).map(|j| grid[idx(NX, j)].clone()).collect();

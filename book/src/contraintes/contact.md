@@ -37,31 +37,31 @@ la tangente tournée de −90° (`n = (t_y, −t_x)`), en 3D celle d'un `TRI3`/`
 suit la règle de la main droite sur l'ordre des nœuds. Le jeu `g₀` est alors
 positif quand c'est décollé, négatif quand ça pénètre.
 
-Les **nœuds-multiplicateurs** sont mintés en interne (un par nœud esclave,
-colocalisé), accessibles après coup avec `Model.multiplier_mesh()`.
+Comme toute contrainte, il crée ses **nœuds-multiplicateurs**, un par
+relation (donc par nœud esclave), par [`barycenter`](../operateurs/maillage.md)
+sur le maillage esclave ; on les retrouve avec `Model.multiplier_mesh()`.
 
 ## Une relation par nœud esclave
 
-Toutes les relations partagent la paire de variables du sous-modèle
-(surchargeables) :
+Les noms sont ceux de **toute** relation de contrainte :
 
-| rôle | nom | défaut |
-|---|---|---|
-| primale propre = réaction de contact `λ` | `multiplier` | `lambda_contact` |
-| duale propre = ligne de contrainte + slot de `−g₀` | `imposed_value` | `contact_gap` |
+| rôle | nom |
+|---|---|
+| primale propre = réaction de contact `λ` | `lambda` |
+| duale propre = ligne de contrainte + slot de `−g₀` | `imposed` |
 
 Signature complète :
 
 ```text
 model.contact(target, slave, master, variables)
-# components : une paire (variable, target_dual) PAR dimension d'espace,
-#              dans l'ordre ambiant, p.ex. [("u_x","f_x"), ("u_y","f_y")]
+# variables : les primales de déplacement de la cible, une PAR dimension
+#             d'espace, dans l'ordre ambiant, p.ex. ["u_x", "u_y"]
 ```
 
 Contrairement au baignage (une relation *par composante*), le contact écrit
 **une seule relation scalaire** par nœud esclave : la normale couple les
 composantes entre elles (coefficients `+n_c` sur l'esclave, `−Nᵢ·n_c` sur
-chaque nœud maître). `components` doit donc en donner exactement une par
+chaque nœud maître). `variables` doit donc en donner exactement une par
 dimension.
 
 ## Second membre : le helper `contact_gaps`

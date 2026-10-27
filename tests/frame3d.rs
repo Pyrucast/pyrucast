@@ -24,7 +24,6 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -60,8 +59,7 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
     // ── Model: 3-D frame + full clamping (6 DOFs) at the base ──────────────
     let clamp = |target: &Model, node: &Node, var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
-        let multiplier = mesh::barycenter(&imposed)?;
-        model::dirichlet(target, var, &imposed, &multiplier, Default::default())
+        model::dirichlet(target, var, &imposed, Default::default())
     };
     let mut model = model::timoshenko(&fes)?;
     for var in ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"] {

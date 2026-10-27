@@ -2821,7 +2821,7 @@ impl DofSeen {
     }
 }
 
-/// Spell a packed key for an error message — `"node 9 · imposed_T"`.
+/// Spell a packed key for an error message — `"node 9 · imposed"`.
 fn dof_text(key: DofKey, vars: &[String]) -> String {
     format!("node {} · {}", dof_node(key).0, vars[dof_var(key) as usize])
 }
@@ -3884,8 +3884,8 @@ impl Matrix {
                 let b = g.read();
                 // Only the **supports** cross. The variable names do not: the
                 // transpose swaps the dual and primal *roles*, and a constraint
-                // gives those roles different names on each side (`imposed_T`
-                // against `lambda_T` at the multiplier). There is nothing to
+                // gives those roles different names on each side (`imposed`
+                // against `lambda` at the multiplier). There is nothing to
                 // compare there.
                 Handle::same_object(a.row_support(), b.col_support())
                     && Handle::same_object(a.col_support(), b.row_support())
@@ -4812,9 +4812,8 @@ impl Matrix {
     /// # maillage.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let appui = mesh::poi1_from_nodes(&[a.clone()]).unwrap();
-    /// # let mult = mesh::barycenter(&appui).unwrap();
     /// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    /// let m = conduction.union(&model::dirichlet(&conduction, "T", &appui, &mult, RelationSense::Equality)?)?;
+    /// let m = conduction.union(&model::dirichlet(&conduction, "T", &appui, RelationSense::Equality)?)?;
     /// let materiaux = element_field::material_field(&m, &[("k", 1.0)])?;
     /// let k = matrix::stiffness(&m, &materiaux)?;
     /// // The conduction block plus the Dirichlet's C / Cᵀ pair, all thermal…
@@ -5732,7 +5731,7 @@ mod tests {
         let c = SubMatrix::new(
             sup_m.clone(),
             sup_a.clone(),
-            vec!["imposed_T".into()],
+            vec!["imposed".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Half(id_c),
@@ -5741,7 +5740,7 @@ mod tests {
             sup_a,
             sup_m,
             vec!["T".into()],
-            vec!["imposed_T".into()],
+            vec!["imposed".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Half(id_ct),
         );
@@ -6835,22 +6834,22 @@ mod tests {
         let mut c = SubMatrix::new(
             mult.clone(),
             phys.clone(),
-            vec!["imposed_T".into()],
+            vec!["imposed".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
         );
-        c.add_entry(mult_node.id(), "imposed_T", phys_nodes[0].id(), "T", 1.0)
+        c.add_entry(mult_node.id(), "imposed", phys_nodes[0].id(), "T", 1.0)
             .unwrap();
         let mut ct = SubMatrix::new(
             phys.clone(),
             mult.clone(),
             vec!["q".into()],
-            vec!["lambda_T".into()],
+            vec!["lambda".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
         );
-        ct.add_entry(phys_nodes[0].id(), "q", mult_node.id(), "lambda_T", 1.0)
+        ct.add_entry(phys_nodes[0].id(), "q", mult_node.id(), "lambda", 1.0)
             .unwrap();
 
         let mut m = Matrix::empty();
@@ -6968,13 +6967,12 @@ mod tests {
         let mut c = SubMatrix::new(
             mult.clone(),
             phys.clone(),
-            vec!["imposed_T".into()],
+            vec!["imposed".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
         );
-        c.add_entry(nm.id(), "imposed_T", n0.id(), "T", 1.0)
-            .unwrap();
+        c.add_entry(nm.id(), "imposed", n0.id(), "T", 1.0).unwrap();
         let mut m = Matrix::empty();
         m.add_sub(Handle::new(k)).unwrap();
         m.add_sub(Handle::new(c)).unwrap();
@@ -7024,21 +7022,21 @@ mod tests {
         }
 
         // Zone-aligned residual: q combines (not passthrough) on phys.
-        // K·x: q = 2 at n0 and n1; C·x contributes imposed_T = 1 at nm.
+        // K·x: q = 2 at n0 and n1; C·x contributes imposed = 1 at nm.
         let r = (&f_ext_r - &f_int).unwrap();
         assert_eq!(r.value(n0.id(), "q").unwrap(), 3.0); // 5 − 2 ⇒ aligned
         assert_eq!(r.value(n1.id(), "q").unwrap(), 3.0);
-        // `imposed_T` exists on the f_int side only (restrict carries the
+        // `imposed` exists on the f_int side only (restrict carries the
         // source field's components) ⇒ union semantics pass it through RAW
         // (+1, not −1) — the documented `merge_components` behaviour.
-        assert_eq!(r.value(nm.id(), "imposed_T").unwrap(), 1.0);
+        assert_eq!(r.value(nm.id(), "imposed").unwrap(), 1.0);
 
         // Strict residual (every component subtracted, missing read as 0):
         // reproject onto f_int's exact supports AND components.
         let f_ext_like = crate::ops::node_field::restrict_like(&f_ext, &f_int).unwrap();
         let r2 = (&f_ext_like - &f_int).unwrap();
         assert_eq!(r2.value(n0.id(), "q").unwrap(), 3.0);
-        assert_eq!(r2.value(nm.id(), "imposed_T").unwrap(), -1.0); // 0 − 1
+        assert_eq!(r2.value(nm.id(), "imposed").unwrap(), -1.0); // 0 − 1
     }
 
     /// Row-side twin: zones on the blocks' row supports, dual variables.

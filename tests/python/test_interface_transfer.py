@@ -160,7 +160,6 @@ def test_the_field_jumps_by_q_over_h():
     imposed = pyrucast.Mesh(c, "POI1")
     imposed.unit().add_cell([right[1]])
     imposed.unit().add_cell([right[2]])
-    multiplier = pyrucast.mesh.barycenter(imposed)
 
     modele_fick = pyrucast.model.fick(square(left), "H2") | pyrucast.model.fick(
         square(right), "H2"
@@ -173,7 +172,7 @@ def test_the_field_jumps_by_q_over_h():
             modele_fick,
             [("c_H2", "j_H2")],
         )
-        | pyrucast.model.dirichlet(modele_fick, "c_H2", imposed, multiplier)
+        | pyrucast.model.dirichlet(modele_fick, "c_H2", imposed)
     )
     # Uniform flux density on the far-left edge, as consistent nodal loads.
     inlet = pyrucast.Mesh(c, "SEG2")
@@ -192,9 +191,9 @@ def test_the_field_jumps_by_q_over_h():
     load = pyrucast.Mesh(c, "POI1")
     for m in mults:
         load.unit().add_cell([m])
-    imposed_field = pyrucast.NodeField(load, ["imposed_c_H2"])
+    imposed_field = pyrucast.NodeField(load, ["imposed"])
     for m in mults:
-        imposed_field[0].set_value(m, "imposed_c_H2", c_right)
+        imposed_field[0].set_value(m, "imposed", c_right)
 
     solution = pyrucast.solver.solve(
         pyrucast.matrix.stiffness(model, materials), rhs | imposed_field

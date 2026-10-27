@@ -212,11 +212,9 @@ mod tests {
         if dirichlet {
             let imposed =
                 Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
-            let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
             model
                 .add_sub(Handle::new(
-                    SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
-                        .unwrap(),
+                    SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
                 ))
                 .unwrap();
         }

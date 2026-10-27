@@ -85,11 +85,10 @@ Le pipeline est toujours le même :
 6. **Conditions limites :**
    - **Dirichlet** (`T` imposée) : un sous-modèle `model::dirichlet` qui impose
      la valeur via multiplicateurs de Lagrange. L'utilisateur fournit le
-     maillage des nœuds imposés et le maillage support des multiplicateurs —
-     typiquement fabriqué depuis le premier avec le mesher générique
-     [`barycenter`](operateurs/maillage.md) (nœuds neufs colocalisés). La valeur imposée
-     \\(u_d\\) s'écrit dans le chargement au slot **`imposed_T`** du
-     nœud-multiplicateur (cf. [Modèle physique](model.md)).
+     maillage des nœuds imposés ; la contrainte crée elle-même ses
+     nœuds-multiplicateurs, un par relation. La valeur imposée \\(u_d\\)
+     s'écrit dans le chargement au slot **`imposed`** du nœud-multiplicateur
+     (cf. [Dirichlet](contraintes/dirichlet.md)).
    - **Neumann / source** : une charge **ponctuelle** est une valeur du
      **chargement** sur la composante duale **`"q"`** au nœud concerné ; un
      **flux réparti** sur un bord (ou un volume) se transforme en charges

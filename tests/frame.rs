@@ -20,7 +20,6 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -58,8 +57,7 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     // ── Model: frame + full clamping at the base ───────────────────────────
     let clamp = |target: &Model, node: &Node, var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
-        let multiplier = mesh::barycenter(&imposed)?;
-        model::dirichlet(target, var, &imposed, &multiplier, Default::default())
+        model::dirichlet(target, var, &imposed, Default::default())
     };
     let mut model = model::timoshenko(&fes)?;
     model = model.union(&clamp(&model, &nodes[0], "u_x")?)?;

@@ -31,8 +31,7 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::fick::{dual_var, primal_var};
 use pyrucast::models::symmetry::MaterialSymmetry;
-use pyrucast::models::Physics;
-use pyrucast::ops::mesh;
+use pyrucast::models::{Physics, IMPOSED, MULTIPLIER};
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -63,17 +62,14 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(
         nodes.last().unwrap(),
     ))?);
-    let multiplier = mesh::barycenter(&imposed)?;
-    let mult = multiplier.node(0, 0, 0)?.id();
-
     let diffusion = model::fick(&fes, SPECIES, MaterialSymmetry::Isotropic)?;
     let dirichlet = model::dirichlet(
         &diffusion,
         &primal_var(SPECIES),
         &imposed,
-        &multiplier,
         Default::default(),
     )?;
+    let mult = dirichlet.multiplier_mesh()?.node(0, 0, 0)?.id();
     let model = diffusion.union(&dirichlet)?;
 
     // ── Matériau : diffusivité uniforme ────────────────────────────────────
@@ -86,15 +82,9 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
     load_sm.add_cell(&[node0])?;
     load_sm.add_cell(&[mult])?;
     let load_sm = Handle::new(load_sm);
-    let mut rhs = SubNodeField::from_poi1(
-        &load_sm,
-        vec![
-            format!("imposed_{}", primal_var(SPECIES)),
-            dual_var(SPECIES),
-        ],
-    )?;
+    let mut rhs = SubNodeField::from_poi1(&load_sm, vec![IMPOSED.to_string(), dual_var(SPECIES)])?;
     rhs.set_value(node0, &dual_var(SPECIES), J)?;
-    rhs.set_value(mult, &format!("imposed_{}", primal_var(SPECIES)), C_IMPOSED)?;
+    rhs.set_value(mult, IMPOSED, C_IMPOSED)?;
     let rhs = NodeField::from_sub(rhs);
 
     // ── Assemblage + résolution ────────────────────────────────────────────
@@ -113,7 +103,7 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
         );
     }
     // Mass balance: the reaction at the imposed edge balances the injected flux.
-    let reaction = solution.value(mult, &format!("lambda_{}", primal_var(SPECIES)))?;
+    let reaction = solution.value(mult, MULTIPLIER)?;
     assert!((reaction - J).abs() < tol, "réaction λ : {reaction} ≠ {J}");
     Ok(())
 }

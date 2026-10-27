@@ -164,7 +164,7 @@ mod tests {
     /// `c_h = 2x + 3y`, with a stray multiplier that no law reads.
     fn solution(n: &[Node]) -> NodeField {
         let support = mesh::poi1_from_nodes(n).unwrap();
-        let names = ["u_x", "u_y", "T", "c_h", "lambda_u_x"]
+        let names = ["u_x", "u_y", "T", "c_h", "lambda"]
             .map(String::from)
             .to_vec();
         let sol = NodeField::from_submesh(&support.get(0).unwrap(), names).unwrap();
@@ -181,7 +181,7 @@ mod tests {
                 z.set_value(node.id(), "u_y", -0.2 * py).unwrap();
                 z.set_value(node.id(), "T", 4.0 * px - py).unwrap();
                 z.set_value(node.id(), "c_h", 2.0 * px + 3.0 * py).unwrap();
-                z.set_value(node.id(), "lambda_u_x", 99.0).unwrap();
+                z.set_value(node.id(), "lambda", 99.0).unwrap();
             }
         }
         sol
@@ -329,8 +329,7 @@ mod tests {
         )
         .unwrap();
         let clamp = mesh::poi1_from_nodes(&n[..1]).unwrap();
-        let mult = mesh::barycenter(&clamp).unwrap();
-        let support = model::dirichlet(&solid, "u_x", &clamp, &mult, RelationSense::Equality);
+        let support = model::dirichlet(&solid, "u_x", &clamp, RelationSense::Equality);
         let blocked = solid.union(&support.unwrap()).unwrap();
         let got = strain(&blocked, &sol, &unit_material(&fes)).unwrap();
         assert_eq!(got.len(), 1);

@@ -45,6 +45,7 @@ use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
+use crate::models::IMPOSED;
 use nalgebra::DVector;
 use nalgebra_sparse::{CooMatrix, CsrMatrix};
 use std::collections::{HashMap, HashSet};
@@ -63,10 +64,8 @@ struct SlaveInfo {
     target_dual: String,
     /// The slave coefficient `aₛ`.
     a_s: f64,
-    /// Multiplier node whose load slot holds this relation's `g`.
+    /// Multiplier node whose `IMPOSED` load slot holds this relation's `g`.
     multiplier_node: NodeId,
-    /// Component name of `g` in the load field (the constraint's dual variable).
-    imposed_value_slot: String,
 }
 
 /// The condensation of a model's constraints against an assembled matrix — the
@@ -94,16 +93,15 @@ struct SlaveInfo {
 /// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// #     .union(&model::dirichlet(&cible, "T", &impose,
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
+/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
+/// #                                      vec!["imposed".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
 /// // The elimination's costly artefact, cached on the matrix just like the LU
 /// // factorization — and cleared as soon as the matrix changes.
 /// # use pyrucast::ops::solver::eliminate::Condensation;
@@ -172,16 +170,15 @@ impl Condensation {
 /// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// #     .union(&model::dirichlet(&cible, "T", &impose,
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
+/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
+/// #                                      vec!["imposed".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
 /// // The **alternative** path to Lagrange: the slaves are eliminated instead
 /// // of enlarging the system. Same solution, smaller system.
 /// let par_elimination = solver::eliminate::solve(&k, &modele, &charge)?;
@@ -218,16 +215,15 @@ pub fn solve(matrix: &Matrix, model: &Model, rhs: &NodeField) -> Result<NodeFiel
 /// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// #     .union(&model::dirichlet(&cible, "T", &impose,
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
+/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
+/// #                                      vec!["imposed".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
 /// # use pyrucast::ops::solver::lu::SolveOptions;
 /// # use pyrucast::ops::model;
 /// // `method` picks the **reduced** system's direct engine; `cache`
@@ -272,16 +268,15 @@ pub fn solve_with_options(
 /// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// #     .union(&model::dirichlet(&cible, "T", &impose,
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
+/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
+/// #                                      vec!["imposed".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
 /// # use std::sync::atomic::{AtomicBool, Ordering};
 /// # use pyrucast::ops::model;
 /// let stop = AtomicBool::new(false);
@@ -323,16 +318,15 @@ pub fn solve_cancellable(
 /// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// #     .union(&model::dirichlet(&cible, "T", &impose,
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
+/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
+/// #                                      vec!["imposed".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
 /// # use pyrucast::ops::solver::lu::SolveOptions;
 /// # use std::sync::atomic::AtomicBool;
 /// # use pyrucast::ops::model;
@@ -386,7 +380,7 @@ fn solve_inner(
     let g_dofs: Vec<(NodeId, String)> = cond
         .slaves
         .iter()
-        .map(|s| (s.multiplier_node, s.imposed_value_slot.clone()))
+        .map(|s| (s.multiplier_node, IMPOSED.to_string()))
         .collect();
     let gs = rhs.gather(&g_dofs)?;
     let mut u0 = DVector::<f64>::zeros(n_phys);
@@ -458,10 +452,8 @@ fn build_condensation(
     matrix: &Matrix,
     options: &SolveOptions,
 ) -> Result<Condensation> {
-    // ── Collect (relation, imposed_value_slot) from every constraint ────
-    // The slot is carried **per relation** (`Relation::imposed_value`), so a
-    // multi-component constraint (`Embedded`) reads each component's own g slot.
-    let mut relations: Vec<(crate::models::Relation, String)> = Vec::new();
+    // ── Collect the relations of every constraint ──────────────────────
+    let mut relations: Vec<crate::models::Relation> = Vec::new();
     for h in model {
         let sub = h.read();
         if let Some(constraint) = sub.as_kind().as_constraint() {
@@ -475,14 +467,13 @@ fn build_condensation(
                         rel.multiplier_node, rel.sense
                     )));
                 }
-                let slot = rel.imposed_value.clone();
-                relations.push((rel, slot));
+                relations.push(rel);
             }
         }
     }
 
     // ── Partition the matrix DOFs: multiplier nodes vs physics ─────────
-    let mult_nodes: HashSet<NodeId> = relations.iter().map(|(r, _)| r.multiplier_node).collect();
+    let mult_nodes: HashSet<NodeId> = relations.iter().map(|r| r.multiplier_node).collect();
     let vars = matrix.dof_vars();
     let slot_of: HashMap<&str, u32> = vars
         .iter()
@@ -565,12 +556,11 @@ fn build_condensation(
         slave_node: NodeId,
         target_dual: String,
         multiplier_node: NodeId,
-        imposed_value_slot: String,
     }
     let mut records: Vec<SlaveRecord> = Vec::with_capacity(relations.len());
     let mut slave_set: HashSet<usize> = HashSet::new();
     let mut master_set: HashSet<usize> = HashSet::new();
-    for (rel, slot) in &relations {
+    for rel in &relations {
         // Resolve every term to a physics index.
         let mut resolved: Vec<(usize, &crate::models::ConstraintTerm)> =
             Vec::with_capacity(rel.terms.len());
@@ -641,7 +631,6 @@ fn build_condensation(
             slave_node: slave_term.node,
             target_dual: slave_term.target_dual.clone(),
             multiplier_node: rel.multiplier_node,
-            imposed_value_slot: slot.clone(),
         });
     }
 
@@ -702,7 +691,6 @@ fn build_condensation(
             target_dual: r.target_dual,
             a_s: r.a_s,
             multiplier_node: r.multiplier_node,
-            imposed_value_slot: r.imposed_value_slot,
         })
         .collect();
 
@@ -769,10 +757,9 @@ mod tests {
             .unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
-        let mult = crate::ops::mesh::barycenter(&imposed).unwrap();
         model
             .add_sub(Handle::new(
-                SubModel::dirichlet(&model, "T", &imposed, &mult, Default::default()).unwrap(),
+                SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
             ))
             .unwrap();
         let m = crate::ops::matrix::stiffness(&model, &materials).unwrap();

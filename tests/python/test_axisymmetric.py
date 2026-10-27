@@ -38,8 +38,7 @@ def _annulus(r0, r1, h, nr, nz):
 
 def _clamp(target, nodes, var):
     imposed = pyrucast.mesh.poi1_from_nodes(nodes)
-    multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.model.dirichlet(target, var, imposed, multiplier)
+    return pyrucast.model.dirichlet(target, var, imposed)
 
 
 def test_coords_declare_the_revolution_frame():

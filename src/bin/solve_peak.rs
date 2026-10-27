@@ -301,14 +301,10 @@ fn thermal(n: usize, eliminate: bool) {
         }
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let bottom = mesh::poi1_from_nodes(&nodes[..side * side]).unwrap();
-        let mult = mesh::barycenter(&bottom).unwrap();
         let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-        let m = conduction
-            .union(
-                &model::dirichlet(&conduction, "T", &bottom, &mult, RelationSense::Equality)
-                    .unwrap(),
-            )
-            .unwrap();
+        let clamp = model::dirichlet(&conduction, "T", &bottom, RelationSense::Equality).unwrap();
+        let mult = clamp.multiplier_mesh().unwrap();
+        let m = conduction.union(&clamp).unwrap();
         let materials = material_field(&m, &[("k", 1.0)]).unwrap();
         (m, materials, nodes, mult)
     });
@@ -321,14 +317,14 @@ fn thermal(n: usize, eliminate: bool) {
         bytes(nnz * 16 + (ndof + 1) * 8),
         nnz as f64 / ndof as f64
     );
-    let rhs = NodeField::from_submesh(&mult.get(0).unwrap(), vec!["imposed_T".into()]).unwrap();
+    let rhs = NodeField::from_submesh(&mult.get(0).unwrap(), vec!["imposed".into()]).unwrap();
     {
         let zone = rhs.get(0).unwrap();
         let mut guard = zone.write();
         let sm = mult.get(0).unwrap();
         let ids: Vec<NodeId> = sm.read().node_index().keys().copied().collect();
         for id in ids {
-            guard.set_value(id, "imposed_T", 1.0).unwrap();
+            guard.set_value(id, "imposed", 1.0).unwrap();
         }
     }
     let options = SolveOptions {
@@ -402,22 +398,19 @@ fn solve_fingerprint(n: usize) -> (usize, u64) {
     let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap();
-    let mult = mesh::barycenter(&imposed).unwrap();
-    let mult_node = mult.node(0, 0, 0).unwrap();
     let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-    let m = conduction
-        .union(
-            &model::dirichlet(&conduction, "T", &imposed, &mult, RelationSense::Equality).unwrap(),
-        )
-        .unwrap();
+    let clamp = model::dirichlet(&conduction, "T", &imposed, RelationSense::Equality).unwrap();
+    let mult = clamp.multiplier_mesh().unwrap();
+    let mult_node = mult.node(0, 0, 0).unwrap();
+    let m = conduction.union(&clamp).unwrap();
     let materials = material_field(&m, &[("k", 1.0)]).unwrap();
     let k = matrix::stiffness(&m, &materials).unwrap();
 
-    let rhs = NodeField::from_submesh(&mult.get(0).unwrap(), vec!["imposed_T".into()]).unwrap();
+    let rhs = NodeField::from_submesh(&mult.get(0).unwrap(), vec!["imposed".into()]).unwrap();
     rhs.get(0)
         .unwrap()
         .write()
-        .set_value(mult_node.id(), "imposed_T", 1.0)
+        .set_value(mult_node.id(), "imposed", 1.0)
         .unwrap();
 
     let u = solver::lu::solve(&k, &rhs).unwrap();

@@ -22,22 +22,20 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
 
     imposed_left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     imposed_right = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
-    mult_mesh_left = pyrucast.mesh.barycenter(imposed_left)
-    mult_mesh_right = pyrucast.mesh.barycenter(imposed_right)
     conduction = pyrucast.model.heat_conduction(fes)
-    left = pyrucast.model.dirichlet(conduction, "T", imposed_left, mult_mesh_left)
-    right = pyrucast.model.dirichlet(conduction, "T", imposed_right, mult_mesh_right)
-    mult_left = mult_mesh_left.node(0, 0, 0)
-    mult_right = mult_mesh_right.node(0, 0, 0)
+    left = pyrucast.model.dirichlet(conduction, "T", imposed_left)
+    right = pyrucast.model.dirichlet(conduction, "T", imposed_right)
+    mult_left = left.multiplier_mesh().node(0, 0, 0)
+    mult_right = right.multiplier_mesh().node(0, 0, 0)
     model = pyrucast.model.heat_conduction(fes) | left | right
 
-    # Load: imposed values at the multiplier nodes (slot "imposed_T").
+    # Load: imposed values at the multiplier nodes (slot "imposed").
     rhs_mesh = pyrucast.Mesh(c, "POI1")
     rhs_mesh.unit().add_cell([mult_left])
     rhs_mesh.unit().add_cell([mult_right])
-    rhs = pyrucast.NodeField(rhs_mesh, ["imposed_T"])
-    rhs[0].set_value(mult_left, "imposed_T", 0.0)
-    rhs[0].set_value(mult_right, "imposed_T", 1.0)
+    rhs = pyrucast.NodeField(rhs_mesh, ["imposed"])
+    rhs[0].set_value(mult_left, "imposed", 0.0)
+    rhs[0].set_value(mult_right, "imposed", 1.0)
 
     K = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(K, rhs)
@@ -49,8 +47,8 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
         got = solution.value(node, "T")
         assert abs(got - expected) < tol, f"node {i}: got {got}, expected {expected}"
     # Boundary fluxes (Lagrange multipliers).
-    assert abs(solution.value(mult_left, "lambda_T") - 1.0) < tol
-    assert abs(solution.value(mult_right, "lambda_T") + 1.0) < tol
+    assert abs(solution.value(mult_left, "lambda") - 1.0) < tol
+    assert abs(solution.value(mult_right, "lambda") + 1.0) < tol
 
 
 def test_solver_singular_matrix_errors():
@@ -96,20 +94,19 @@ def test_solver_with_nonzero_neumann():
     materials[0].set_uniform("k", 2.0)
 
     imposed_left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-    mult_mesh_left = pyrucast.mesh.barycenter(imposed_left)
     conduction = pyrucast.model.heat_conduction(fes)
-    left = pyrucast.model.dirichlet(conduction, "T", imposed_left, mult_mesh_left)
-    mult_left = mult_mesh_left.node(0, 0, 0)
+    left = pyrucast.model.dirichlet(conduction, "T", imposed_left)
+    mult_left = left.multiplier_mesh().node(0, 0, 0)
     model = pyrucast.model.heat_conduction(fes) | left
 
     # Build a load NodeField with both components:
-    #   "imposed_T" at mult_left → 5.0 (imposed value)
+    #   "imposed" at mult_left → 5.0 (imposed value)
     #   "q"         at nodes[-1] → 1.0 (Neumann source on the boundary row)
     load_mesh = pyrucast.Mesh(c, "POI1")
     load_mesh.unit().add_cell([nodes[-1]])
     load_mesh.unit().add_cell([mult_left])
-    rhs = pyrucast.NodeField(load_mesh, ["imposed_T", "q"])
-    rhs[0].set_value(mult_left, "imposed_T", 5.0)
+    rhs = pyrucast.NodeField(load_mesh, ["imposed", "q"])
+    rhs[0].set_value(mult_left, "imposed", 5.0)
     rhs[0].set_value(nodes[-1], "q", 1.0)
 
     K = pyrucast.matrix.stiffness(model, materials)

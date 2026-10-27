@@ -40,22 +40,17 @@ fn barre() -> Result<(
     let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
 
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&n[0]))?;
-    let mult = mesh::barycenter(&imposed)?;
-    let mult_node = mult.node(0, 0, 0)?;
     let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    let model = conduction.union(&model::dirichlet(
-        &conduction,
-        "T",
-        &imposed,
-        &mult,
-        RelationSense::Equality,
-    )?)?;
+    let appui = model::dirichlet(&conduction, "T", &imposed, RelationSense::Equality)?;
+    let mult = appui.multiplier_mesh()?;
+    let mult_node = mult.node(0, 0, 0)?;
+    let model = conduction.union(&appui)?;
     let materials = element_field::material_field(&model, &[("k", 1.0)])?;
 
-    let rhs = NodeField::from_submesh(&mult.get(0)?, vec!["imposed_T".into()])?;
+    let rhs = NodeField::from_submesh(&mult.get(0)?, vec!["imposed".into()])?;
     rhs.get(0)?
         .write()
-        .set_value(mult_node.id(), "imposed_T", 1.0)?;
+        .set_value(mult_node.id(), "imposed", 1.0)?;
     Ok((model, materials, mult_node, rhs))
 }
 

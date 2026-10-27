@@ -28,11 +28,11 @@ def _modele_thermique():
     fes = pyrucast.FiniteElementSpace(mesh)
 
     imposed = pyrucast.mesh.poi1_from_nodes([noeuds[0]])
-    multiplier = pyrucast.mesh.barycenter(imposed)
     cible = pyrucast.model.heat_conduction(fes)
+    appui = pyrucast.model.dirichlet(cible, "T", imposed)
 
-    model = cible | pyrucast.model.dirichlet(cible, "T", imposed, multiplier)
-    return model, fes, multiplier, noeuds
+    model = cible | appui
+    return model, fes, appui.multiplier_mesh(), noeuds
 
 
 def _modele_mecanique():
@@ -110,8 +110,8 @@ k = pyrucast.matrix.stiffness(model, materials)
 m = pyrucast.matrix.stiffness(model, materials)
 dt = 0.1
 # Loading: the imposed temperature, carried by the multiplier node.
-rhs = pyrucast.NodeField(multiplier, ["imposed_T"])
-rhs[0].set_value(multiplier.node(0, 0, 0), "imposed_T", 1.0)
+rhs = pyrucast.NodeField(multiplier, ["imposed"])
+rhs[0].set_value(multiplier.node(0, 0, 0), "imposed", 1.0)
 # ANCHOR: somme
 sys = m / dt + k  # assemblée : se résout telle quelle
 u = pyrucast.solver.solve(sys, rhs)

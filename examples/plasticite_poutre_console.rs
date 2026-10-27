@@ -73,7 +73,7 @@ use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::element_field::{deformation, StrainMeasure};
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::select_nodes;
-use pyrucast::ops::mesh::{line, sweep, to_poi1, translate};
+use pyrucast::ops::mesh::{line, sweep, to_poi1};
 use pyrucast::ops::model;
 use pyrucast::ops::node_field::{external_forces, internal_forces};
 use pyrucast::ops::node_field::{positions, restrict, restrict_like};
@@ -138,7 +138,6 @@ fn main() -> Result<()> {
         None,
     )?;
     let imposed_mesh = to_poi1(&left_edge)?;
-    let multiplier = translate(&imposed_mesh, &[0., 0.])?;
 
     // ── Model: plasticity (plane stress) + clamped end (Dirichlet) ──────────
     println!("▸ Model: J2 plasticity (plane stress) + clamped end…");
@@ -149,14 +148,12 @@ fn main() -> Result<()> {
         &model,
         "u_x",
         &imposed_mesh,
-        &multiplier,
         Default::default(),
     )?)?;
     model = model.union(&model::dirichlet(
         &model,
         "u_y",
         &imposed_mesh,
-        &multiplier,
         Default::default(),
     )?)?;
 

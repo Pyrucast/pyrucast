@@ -36,15 +36,13 @@ def _bounded_bar(q, bound, sense):
     c, nodes, fes, materials = _heat_bar()
 
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-    mult0 = pyrucast.mesh.barycenter(imposed0)
     conduction = pyrucast.model.heat_conduction(fes)
-    dirichlet = pyrucast.model.dirichlet(conduction, "T", imposed0, mult0)
-    dir_mult = mult0.node(0, 0, 0)
+    dirichlet = pyrucast.model.dirichlet(conduction, "T", imposed0)
+    dir_mult = dirichlet.multiplier_mesh().node(0, 0, 0)
 
     imposed1 = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
-    mult1 = pyrucast.mesh.barycenter(imposed1)
-    unilateral = pyrucast.model.dirichlet(conduction, "T", imposed1, mult1, sense=sense)
-    uni_mult = mult1.node(0, 0, 0)
+    unilateral = pyrucast.model.dirichlet(conduction, "T", imposed1, sense=sense)
+    uni_mult = unilateral.multiplier_mesh().node(0, 0, 0)
 
     model = pyrucast.model.heat_conduction(fes) | dirichlet | unilateral
 
@@ -52,10 +50,10 @@ def _bounded_bar(q, bound, sense):
     rhs_mesh.unit().add_cell([nodes[-1]])
     rhs_mesh.unit().add_cell([dir_mult])
     rhs_mesh.unit().add_cell([uni_mult])
-    rhs = pyrucast.NodeField(rhs_mesh, ["q", "imposed_T"])
+    rhs = pyrucast.NodeField(rhs_mesh, ["q", "imposed"])
     rhs[0].set_value(nodes[-1], "q", q)
-    rhs[0].set_value(dir_mult, "imposed_T", 0.0)
-    rhs[0].set_value(uni_mult, "imposed_T", bound)
+    rhs[0].set_value(dir_mult, "imposed", 0.0)
+    rhs[0].set_value(uni_mult, "imposed", bound)
 
     return nodes, model, materials, rhs, uni_mult
 
@@ -63,7 +61,7 @@ def _bounded_bar(q, bound, sense):
 def _check(nodes, solution, uni_mult, slope, lam):
     for i, node in enumerate(nodes):
         assert abs(solution.value(node, "T") - slope * i * H) < TOL
-    assert abs(solution.value(uni_mult, "lambda_T") - lam) < TOL
+    assert abs(solution.value(uni_mult, "lambda") - lam) < TOL
 
 
 @pytest.mark.parametrize(
@@ -105,37 +103,34 @@ def test_unilateral_mpc_difference_relation():
         c, nodes, fes, materials = _heat_bar()
 
         imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-        mult0 = pyrucast.mesh.barycenter(imposed0)
         conduction = pyrucast.model.heat_conduction(fes)
-        dirichlet = pyrucast.model.dirichlet(conduction, "T", imposed0, mult0)
-        dir_mult = mult0.node(0, 0, 0)
+        dirichlet = pyrucast.model.dirichlet(conduction, "T", imposed0)
+        dir_mult = dirichlet.multiplier_mesh().node(0, 0, 0)
 
         base = pyrucast.model.heat_conduction(fes)
         mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
         mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-        mult_mpc = pyrucast.mesh.barycenter(mesh_last)
         mpc = pyrucast.model.mpc(
             base,
             [(mesh_last, "T", 1.0), (mesh_first, "T", -1.0)],
-            mult_mpc,
             sense=">=",
         )
-        mpc_mult = mult_mpc.node(0, 0, 0)
+        mpc_mult = mpc.multiplier_mesh().node(0, 0, 0)
 
         model = base | dirichlet | mpc
         rhs_mesh = pyrucast.Mesh(c, "POI1")
         rhs_mesh.unit().add_cell([dir_mult])
         rhs_mesh.unit().add_cell([mpc_mult])
-        rhs = pyrucast.NodeField(rhs_mesh, ["imposed_T", "mpc_rhs"])
-        rhs[0].set_value(dir_mult, "imposed_T", 0.0)
-        rhs[0].set_value(mpc_mult, "mpc_rhs", g)
+        rhs = pyrucast.NodeField(rhs_mesh, ["imposed"])
+        rhs[0].set_value(dir_mult, "imposed", 0.0)
+        rhs[0].set_value(mpc_mult, "imposed", g)
 
         solution = pyrucast.solver.solve_unilateral(
             pyrucast.matrix.stiffness(model, materials), model, rhs
         )
         for i, node in enumerate(nodes):
             assert abs(solution.value(node, "T") - slope * i * H) < TOL
-        lam = solution.value(mpc_mult, "lambda_mpc")
+        lam = solution.value(mpc_mult, "lambda")
         if slope == 0.0:
             assert abs(lam) < TOL
         else:
@@ -165,7 +160,6 @@ def test_unknown_sense_rejected():
     accepted, raised at model build."""
     _, nodes, fes, _ = _heat_bar()
     imposed = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-    mult = pyrucast.mesh.barycenter(imposed)
     conduction = pyrucast.model.heat_conduction(fes)
     with pytest.raises(ValueError, match="relation sense '~'"):
-        pyrucast.model.dirichlet(conduction, "T", imposed, mult, sense="~")
+        pyrucast.model.dirichlet(conduction, "T", imposed, sense="~")

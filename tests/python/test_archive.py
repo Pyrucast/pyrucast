@@ -174,18 +174,19 @@ def test_une_etude_complete(tmp_path):
 
     impose = pyrucast.Mesh(c, "POI1")
     impose.unit().add_cell([nodes[-1]])
-    mult = pyrucast.mesh.barycenter(impose)
     cible = pyrucast.model.heat_conduction(fes)
+    appui = pyrucast.model.dirichlet(cible, "T", impose)
+    mult = appui.multiplier_mesh()
 
-    modele = cible | pyrucast.model.dirichlet(cible, "T", impose, mult)
+    modele = cible | appui
     materiaux = pyrucast.element_field.material_field(modele, [("k", 1.0)])
 
     charge = pyrucast.Mesh(c, "POI1")
     charge.unit().add_cell([nodes[0]])
     charge.unit().add_cell([mult[0][0][0]])
-    rhs = pyrucast.NodeField(charge, ["imposed_T", "q"])
+    rhs = pyrucast.NodeField(charge, ["imposed", "q"])
     rhs[0].set_value(nodes[0], "q", 10.0)
-    rhs[0].set_value(mult[0][0][0], "imposed_T", 20.0)
+    rhs[0].set_value(mult[0][0][0], "imposed", 20.0)
 
     k = pyrucast.matrix.stiffness(modele, materiaux)
     avant = pyrucast.solver.solve(k, rhs)

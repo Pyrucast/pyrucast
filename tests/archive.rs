@@ -381,16 +381,10 @@ fn a_whole_study_makes_the_round_trip() -> Result<()> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(
         nodes.last().unwrap(),
     ))?);
-    let multiplier = pyrucast::ops::mesh::barycenter(&imposed)?;
-    let mult = multiplier.node(0, 0, 0)?.id();
     let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    let model = conduction.union(&model::dirichlet(
-        &conduction,
-        "T",
-        &imposed,
-        &multiplier,
-        Default::default(),
-    )?)?;
+    let dirichlet = model::dirichlet(&conduction, "T", &imposed, Default::default())?;
+    let mult = dirichlet.multiplier_mesh()?.node(0, 0, 0)?.id();
+    let model = conduction.union(&dirichlet)?;
     let materials = pyrucast::ops::element_field::material_field(&model, &[("k", K)])?;
 
     let node0 = nodes[0].id();
@@ -398,9 +392,9 @@ fn a_whole_study_makes_the_round_trip() -> Result<()> {
     load_sm.add_cell(&[node0])?;
     load_sm.add_cell(&[mult])?;
     let load_sm = Handle::new(load_sm);
-    let mut r = SubNodeField::from_poi1(&load_sm, vec!["imposed_T".into(), "q".into()])?;
+    let mut r = SubNodeField::from_poi1(&load_sm, vec!["imposed".into(), "q".into()])?;
     r.set_value(node0, "q", Q)?;
-    r.set_value(mult, "imposed_T", T_IMPOSED)?;
+    r.set_value(mult, "imposed", T_IMPOSED)?;
     let rhs = NodeField::from_sub(r);
 
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
@@ -446,10 +440,7 @@ fn a_whole_study_makes_the_round_trip() -> Result<()> {
             before.value(node.id(), "T")?
         );
     }
-    assert_eq!(
-        after.value(mult, "lambda_T")?,
-        before.value(mult, "lambda_T")?
-    );
+    assert_eq!(after.value(mult, "lambda")?, before.value(mult, "lambda")?);
     Ok(())
 }
 

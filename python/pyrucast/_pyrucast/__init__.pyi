@@ -2113,7 +2113,7 @@ class Model:
     def contact_gaps(self) -> NodeField:
         r"""
         `Model.contact_gaps()` — the contact right-hand side `−g₀`: a
-        `NodeField` carrying, at each contact multiplier node's `imposed_value`
+        `NodeField` carrying, at each contact multiplier node's `imposed`
         slot, minus the initial signed gap of its relation, so that
         non-penetration reads `g₀ + C·u ≥ 0`. Merge it into the global load
         with `|`. The model must hold exactly one contact sub-model; omitting
@@ -2164,10 +2164,9 @@ class Model:
     def multiplier_mesh(self) -> Mesh:
         r"""
         `Model.multiplier_mesh()` — POI1 `Mesh` of the constraint multiplier
-        nodes across the model (empty for a model with no constraint). The handle
-        to the multiplier nodes of an `embedded` / `dirichlet` / `mpc` model whose
-        multipliers it minted itself: read them via `mesh.node(0, i, 0)` or build
-        a load `SubNodeField` on `mesh[0]`.
+        nodes across the model (empty for a model with no constraint). Each
+        constraint mints its own, one per relation: read them via
+        `mesh.node(0, i, 0)` or build a load `SubNodeField` on `mesh[0]`.
         """
     def constraint_rhs(self, imposed: typing.Sequence[tuple[Node, builtins.float]]) -> NodeField:
         r"""
@@ -2178,8 +2177,7 @@ class Model:
         belongs to** (for `dirichlet` the constrained node itself, for `mpc` any
         of the relation's term nodes), and `value` is the right-hand side `g`.
         Returns a fresh `NodeField` over the multiplier nodes, carrying the
-        constraint's imposed-value component (its dual, e.g. `imposed_T` /
-        `mpc_rhs`), with `g` at each cited relation and `0` elsewhere. Union it
+        `imposed` component, with `g` at each cited relation and `0` elsewhere. Union it
         into the global load with `|`, e.g. `load | model.constraint_rhs([...])`.
         
         The model must hold exactly one constraint sub-model (the `dirichlet` /
@@ -3600,6 +3598,12 @@ class SubModel:
         `"thermal"`, `"constraint"`, `"other"`). Determined entirely by the physics
         kind — one tag for a plain physics, several for a coupled one.
         """
+    def label(self) -> builtins.str:
+        r"""
+        The kind of this sub-model, named — `"Dirichlet"`, `"Contact"`,
+        `"Elasticity"`… The question its natures cannot answer: a contact and a
+        Dirichlet on displacements are both constraint and mechanical.
+        """
     def multiplier_mesh(self) -> Mesh:
         r"""
         POI1 `Mesh` of the multiplier nodes (Lagrange physics only — empty
@@ -4175,8 +4179,8 @@ def contact(target: Model, slave: Mesh, master: Mesh, variables: typing.Sequence
     be consistently oriented with its normal pointing toward the slave
     body. `target` is the model being constrained; `variables` lists its
     displacement primals, one per space dimension in ambient order (e.g.
-    `["u_x", "u_y"]`), each dual row read from it. The multiplier and gap names
-    are derived, `lambda_contact` / `contact_gap`.
+    `["u_x", "u_y"]`), each dual row read from it. Each relation gets a
+    multiplier node of its own, minted beside its slave node.
     
     Solve with `solve_unilateral`; build the initial-gap right-hand side
     with `Model.contact_gaps()`. See the contact chapter of the book.
@@ -4324,26 +4328,24 @@ def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str
     (`H_θθ = u_r / r`).
     """
 
-def dirichlet(target: Model, variable: builtins.str, imposed_mesh: Mesh, multiplier_mesh: Mesh, sense: builtins.str = '=') -> Model:
+def dirichlet(target: Model, variable: builtins.str, imposed_mesh: Mesh, sense: builtins.str = '=') -> Model:
     r"""
-    `model.dirichlet(target, variable, imposed_mesh, multiplier_mesh, sense="=")`
-    — Dirichlet constraint (a single sub-model) holding `variable` on the nodes
-    of `imposed_mesh`, via Lagrange multipliers.
+    `model.dirichlet(target, variable, imposed_mesh, sense="=")` — Dirichlet
+    constraint (a single sub-model) holding `variable` on the nodes of
+    `imposed_mesh`, via Lagrange multipliers.
     
     `target` is the model being constrained: `variable` must be one of its
     primals, and its dual row is read from it — the `T → q` map is the target's
     business, not something to retype. `imposed_mesh` is the POI1 mesh of
-    constrained nodes; `multiplier_mesh` is the POI1 support of the multipliers
-    (same per-submesh cell count) — usually built from `imposed_mesh` with the
-    `barycenter` mesher. The multiplier and imposed-value names are derived,
-    `lambda_<variable>` / `imposed_<variable>`; the imposed value `u_d` is
-    written by the user in the load field at the multiplier node's
-    `imposed_<variable>` component.
+    constrained nodes, one relation per node. Each relation gets a multiplier
+    node of its own, minted beside its constrained node (`Model.multiplier_mesh()`
+    gives them back); its names are those of every constraint relation, `lambda`
+    and `imposed`. The imposed value `u_d` is written in the load field at the
+    multiplier node's `imposed` component — `Model.constraint_rhs` does it from
+    the constrained node.
     
     **One variable, and one only** — compose for a clamp:
-    `dirichlet(m, "u_x", …) | dirichlet(m, "u_y", …)`, the two sharing their
-    multiplier mesh, since `lambda_u_x` and `lambda_u_y` on one node are distinct
-    DOFs.
+    `dirichlet(m, "u_x", …) | dirichlet(m, "u_y", …)`.
     
     `sense` (`"="`, the default, `">="` or `"<="`) turns the constraint
     unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a model is solved with
@@ -4487,9 +4489,9 @@ def embedded(target: Model, immersed: Mesh, host: Mesh, variables: typing.Sequen
     read from it. The coupling weights are the host shape functions at each
     immersed node, computed once at build by locating the node in the host (an
     immersed node outside the host is an error); `tol` is the location
-    tolerance. The multiplier and imposed-value names are derived per variable,
-    `lambda_<variable>` / `imposed_<variable>`; the right-hand side defaults to
-    `0` (a rigid tie). See the constraints chapter of the book.
+    tolerance. Each relation — one per immersed node and variable — gets a
+    multiplier node of its own; the right-hand side defaults to `0` (a rigid
+    tie). See the constraints chapter of the book.
     """
 
 def exp(field: typing.Any) -> typing.Any:
@@ -5016,21 +5018,21 @@ def merge_triangles(mesh: Mesh) -> Mesh:
     Remove the triangles from a quadrangle-dominant mesh, in pairs.
     """
 
-def mpc(target: Model, terms: typing.Sequence[tuple[Mesh, builtins.str, builtins.float]], multiplier_mesh: Mesh, sense: builtins.str = '=') -> Model:
+def mpc(target: Model, terms: typing.Sequence[tuple[Mesh, builtins.str, builtins.float]], sense: builtins.str = '=') -> Model:
     r"""
-    `model.mpc(target, terms, multiplier_mesh, sense="=")` — multi-point
-    constraint (a single sub-model) imposing, per relation,
-    `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange multipliers.
+    `model.mpc(target, terms, sense="=")` — multi-point constraint (a single
+    sub-model) imposing, per relation, `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange
+    multipliers.
     
-    `target` is the model being constrained. `terms` is a list of
-    `(mesh, variable, coefficient)` tuples: each `mesh` is a POI1 mesh (one node
-    per relation), paired element-for-element with the others and with
-    `multiplier_mesh` (relation `r` = cell `r` of every mesh); each `variable`
-    is a primal of `target`, whose dual row is read from it. The multiplier and
-    right-hand-side names are derived, `lambda_mpc` / `mpc_rhs`; `g` is written
-    by the user in the load field at the multiplier node's `mpc_rhs` component
-    (default `0`). `sense` (`"="`, the default, `">="` or `"<="`) turns the
-    relations unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`) — such a model is solved with
+    `target` is the model being constrained — the union of two models to tie
+    two bodies. `terms` is a list of `(mesh, variable, coefficient)` tuples: each
+    `mesh` is a POI1 mesh (one node per relation), paired element-for-element
+    with the others (relation `r` = cell `r` of every mesh); each `variable` is
+    a primal of `target`, whose dual row is read from it. Each relation gets a
+    multiplier node of its own, minted beside the node of the first term; `g`
+    is written in the load field at its `imposed` component (default `0`).
+    `sense` (`"="`, the default, `">="` or `"<="`) turns the relations
+    unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`) — such a model is solved with
     `solve_unilateral`. See the constraints chapter of the book.
     """
 

@@ -33,16 +33,17 @@ def _barre_thermique(n_elements=2, dim=1):
 def _modele_dirichlet(fes, noeud):
     """Conduction + one imposed temperature, and the multiplier node."""
     imposed = pyrucast.mesh.poi1_from_nodes([noeud])
-    mult = pyrucast.mesh.barycenter(imposed)
     cible = pyrucast.model.heat_conduction(fes)
+    appui = pyrucast.model.dirichlet(cible, "T", imposed)
+    mult = appui.multiplier_mesh()
 
-    model = cible | pyrucast.model.dirichlet(cible, "T", imposed, mult)
+    model = cible | appui
     return model, mult, mult.node(0, 0, 0)
 
 
 def _chargement(mult_mesh, mult_node, valeur=1.0):
-    rhs = pyrucast.NodeField(mult_mesh, ["imposed_T"])
-    rhs[0].set_value(mult_node, "imposed_T", valeur)
+    rhs = pyrucast.NodeField(mult_mesh, ["imposed"])
+    rhs[0].set_value(mult_node, "imposed", valeur)
     return rhs
 
 
@@ -108,17 +109,18 @@ assert abs(lagrange.value(noeuds[0], "T") - condense.value(noeuds[0], "T")) < 1e
 
 _, _, fes, noeuds = _barre_thermique()
 imposed = pyrucast.mesh.poi1_from_nodes([noeuds[0]])
-mult = pyrucast.mesh.barycenter(imposed)
-mult_node = mult.node(0, 0, 0)
 cible = pyrucast.model.heat_conduction(fes)
+butee = pyrucast.model.dirichlet(cible, "T", imposed, sense=">=")
+mult = butee.multiplier_mesh()
+mult_node = mult.node(0, 0, 0)
 
-model = cible | pyrucast.model.dirichlet(cible, "T", imposed, mult, sense=">=")
+model = cible | butee
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 rhs = _chargement(mult, mult_node, 1.0)
 # ANCHOR: unilateral
 K = pyrucast.matrix.stiffness(model, materials)  # model with sense=">="
 solution = pyrucast.solver.solve_unilateral(K, model, rhs)  # "schur" by default
-reaction = solution.value(mult_node, "lambda_T")  # 0 if the stop is released
+reaction = solution.value(mult_node, "lambda")  # 0 if the stop is released
 
 # Forcing the old method (refactorization at every step):
 sol2 = pyrucast.solver.solve_unilateral(K, model, rhs, active_set="refactorize")

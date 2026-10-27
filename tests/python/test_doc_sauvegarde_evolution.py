@@ -99,13 +99,14 @@ assert pyrucast.load("m.pyr")["maillage"].cell_count() == mesh.cell_count()
 # ── What is not saved: the derived states ───────────────────────────────────
 
 _imposed = pyrucast.mesh.poi1_from_nodes([_n[0]])
-_mult = pyrucast.mesh.barycenter(_imposed)
 cible = pyrucast.model.heat_conduction(fes)
+_appui = pyrucast.model.dirichlet(cible, "T", _imposed)
+_mult = _appui.multiplier_mesh()
 
-modele = cible | pyrucast.model.dirichlet(cible, "T", _imposed, _mult)
+modele = cible | _appui
 materiaux = pyrucast.element_field.material_field(modele, [("k", 1.0)])
-chargement = pyrucast.NodeField(_mult, ["imposed_T"])
-chargement[0].set_value(_mult.node(0, 0, 0), "imposed_T", 1.0)
+chargement = pyrucast.NodeField(_mult, ["imposed"])
+chargement[0].set_value(_mult.node(0, 0, 0), "imposed", 1.0)
 pyrucast.save(
     "etude.pyr",
     {"modele": modele, "materiaux": materiaux, "chargement": chargement},

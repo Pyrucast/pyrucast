@@ -137,7 +137,7 @@ sur le bloc du haut) :
 ![Réaction de contact (λ)](img/contact.svg)
 
 `model.contact_gaps()` fournit le second membre associé au contact — jeu
-initial à combler avant que les multiplicateurs `lambda_contact` ne portent
+initial à combler avant que les multiplicateurs `lambda` ne portent
 une réaction non nulle. Voir
 [Contact (nœud-surface)](../contraintes/contact.md) pour le détail
 mathématique (formulation active-set, jeux, multiplicateurs).

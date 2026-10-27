@@ -33,8 +33,7 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::interface_transfer::DEFAULT_TOL;
 use pyrucast::models::symmetry::MaterialSymmetry;
-use pyrucast::models::Physics;
-use pyrucast::ops::mesh;
+use pyrucast::models::{Physics, IMPOSED};
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -373,7 +372,6 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
         right[1].clone(),
         right[2].clone(),
     ])?);
-    let multiplier = mesh::barycenter(&imposed)?;
 
     // The two squares' diffusion: that is what the support constrains.
     let fick_pair = model::fick(&square(&left)?, SPECIES, MaterialSymmetry::Isotropic)?.union(
@@ -391,7 +389,6 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
             &fick_pair,
             &format!("c_{SPECIES}"),
             &imposed,
-            &multiplier,
             Default::default(),
         )?)?;
 
@@ -437,9 +434,9 @@ fn solve_two_squares(h: f64) -> Result<(Geometry, NodeField)> {
         }
     }
     let imposed_sm = Handle::new(imposed_sm);
-    let mut imposed = SubNodeField::from_poi1(&imposed_sm, vec![format!("imposed_c_{SPECIES}")])?;
+    let mut imposed = SubNodeField::from_poi1(&imposed_sm, vec![IMPOSED.to_string()])?;
     for id in &mults {
-        imposed.set_value(*id, &format!("imposed_c_{SPECIES}"), C_RIGHT)?;
+        imposed.set_value(*id, IMPOSED, C_RIGHT)?;
     }
 
     let rhs = influx.union(&NodeField::from_sub(imposed))?;

@@ -4,7 +4,6 @@
 //! Each one spans the **whole** support it is given (one zone per subspace);
 //! heterogeneous physics compose with `|`.
 
-use crate::models::mpc::MpcTerm;
 use crate::models::RelationSense;
 use crate::ops::model;
 use crate::py::finite_element_space::PyFiniteElementSpace;
@@ -46,83 +45,71 @@ pub fn interface_transfer(
     Ok(PyModel { inner })
 }
 
-/// `model.dirichlet(target, variable, imposed_mesh, multiplier_mesh, sense="=")`
-/// — Dirichlet constraint (a single sub-model) holding `variable` on the nodes
-/// of `imposed_mesh`, via Lagrange multipliers.
+/// `model.dirichlet(target, variable, imposed_mesh, sense="=")` — Dirichlet
+/// constraint (a single sub-model) holding `variable` on the nodes of
+/// `imposed_mesh`, via Lagrange multipliers.
 ///
 /// `target` is the model being constrained: `variable` must be one of its
 /// primals, and its dual row is read from it — the `T → q` map is the target's
 /// business, not something to retype. `imposed_mesh` is the POI1 mesh of
-/// constrained nodes; `multiplier_mesh` is the POI1 support of the multipliers
-/// (same per-submesh cell count) — usually built from `imposed_mesh` with the
-/// `barycenter` mesher. The multiplier and imposed-value names are derived,
-/// `lambda_<variable>` / `imposed_<variable>`; the imposed value `u_d` is
-/// written by the user in the load field at the multiplier node's
-/// `imposed_<variable>` component.
+/// constrained nodes, one relation per node. Each relation gets a multiplier
+/// node of its own, minted beside its constrained node (`Model.multiplier_mesh()`
+/// gives them back); its names are those of every constraint relation, `lambda`
+/// and `imposed`. The imposed value `u_d` is written in the load field at the
+/// multiplier node's `imposed` component — `Model.constraint_rhs` does it from
+/// the constrained node.
 ///
 /// **One variable, and one only** — compose for a clamp:
-/// `dirichlet(m, "u_x", …) | dirichlet(m, "u_y", …)`, the two sharing their
-/// multiplier mesh, since `lambda_u_x` and `lambda_u_y` on one node are distinct
-/// DOFs.
+/// `dirichlet(m, "u_x", …) | dirichlet(m, "u_y", …)`.
 ///
 /// `sense` (`"="`, the default, `">="` or `"<="`) turns the constraint
 /// unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a model is solved with
 /// `solve_unilateral`. See the model chapter of the book for the full semantics.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (target, variable, imposed_mesh, multiplier_mesh, sense = RelationSense::Equality))]
+#[pyo3(signature = (target, variable, imposed_mesh, sense = RelationSense::Equality))]
 pub fn dirichlet(
     target: PyRef<'_, PyModel>,
     variable: &str,
     imposed_mesh: PyRef<'_, PyMesh>,
-    multiplier_mesh: PyRef<'_, PyMesh>,
     sense: RelationSense,
 ) -> PyResult<PyModel> {
-    let inner = model::dirichlet(
-        &target.inner,
-        variable,
-        &imposed_mesh.inner,
-        &multiplier_mesh.inner,
-        sense,
-    )?;
+    let inner = model::dirichlet(&target.inner, variable, &imposed_mesh.inner, sense)?;
     Ok(PyModel { inner })
 }
 
-/// `model.mpc(target, terms, multiplier_mesh, sense="=")` — multi-point
-/// constraint (a single sub-model) imposing, per relation,
-/// `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange multipliers.
+/// `model.mpc(target, terms, sense="=")` — multi-point constraint (a single
+/// sub-model) imposing, per relation, `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange
+/// multipliers.
 ///
-/// `target` is the model being constrained. `terms` is a list of
-/// `(mesh, variable, coefficient)` tuples: each `mesh` is a POI1 mesh (one node
-/// per relation), paired element-for-element with the others and with
-/// `multiplier_mesh` (relation `r` = cell `r` of every mesh); each `variable`
-/// is a primal of `target`, whose dual row is read from it. The multiplier and
-/// right-hand-side names are derived, `lambda_mpc` / `mpc_rhs`; `g` is written
-/// by the user in the load field at the multiplier node's `mpc_rhs` component
-/// (default `0`). `sense` (`"="`, the default, `">="` or `"<="`) turns the
-/// relations unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`) — such a model is solved with
+/// `target` is the model being constrained — the union of two models to tie
+/// two bodies. `terms` is a list of `(mesh, variable, coefficient)` tuples: each
+/// `mesh` is a POI1 mesh (one node per relation), paired element-for-element
+/// with the others (relation `r` = cell `r` of every mesh); each `variable` is
+/// a primal of `target`, whose dual row is read from it. Each relation gets a
+/// multiplier node of its own, minted beside the node of the first term; `g`
+/// is written in the load field at its `imposed` component (default `0`).
+/// `sense` (`"="`, the default, `">="` or `"<="`) turns the relations
+/// unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`) — such a model is solved with
 /// `solve_unilateral`. See the constraints chapter of the book.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (target, terms, multiplier_mesh, sense = RelationSense::Equality))]
+#[pyo3(signature = (target, terms, sense = RelationSense::Equality))]
 pub fn mpc(
     py: Python<'_>,
     target: PyRef<'_, PyModel>,
     terms: Vec<(Py<PyMesh>, String, f64)>,
-    multiplier_mesh: PyRef<'_, PyMesh>,
     sense: RelationSense,
 ) -> PyResult<PyModel> {
-    let mut rust_terms = Vec::with_capacity(terms.len());
-    for (mesh, variable, coefficient) in &terms {
-        let mesh = mesh.borrow(py);
-        rust_terms.push(MpcTerm::new(
-            &target.inner,
-            &mesh.inner,
-            variable,
-            *coefficient,
-        )?);
-    }
-    let inner = model::mpc(rust_terms, &multiplier_mesh.inner, sense)?;
+    // The borrows first, then the views on them: the tuples the operator reads
+    // hold references into the borrowed meshes.
+    let meshes: Vec<PyRef<'_, PyMesh>> = terms.iter().map(|(m, _, _)| m.borrow(py)).collect();
+    let rust_terms: Vec<_> = meshes
+        .iter()
+        .zip(&terms)
+        .map(|(mesh, (_, variable, coefficient))| (&mesh.inner, variable.as_str(), *coefficient))
+        .collect();
+    let inner = model::mpc(&target.inner, &rust_terms, sense)?;
     Ok(PyModel { inner })
 }
 
@@ -136,9 +123,9 @@ pub fn mpc(
 /// read from it. The coupling weights are the host shape functions at each
 /// immersed node, computed once at build by locating the node in the host (an
 /// immersed node outside the host is an error); `tol` is the location
-/// tolerance. The multiplier and imposed-value names are derived per variable,
-/// `lambda_<variable>` / `imposed_<variable>`; the right-hand side defaults to
-/// `0` (a rigid tie). See the constraints chapter of the book.
+/// tolerance. Each relation — one per immersed node and variable — gets a
+/// multiplier node of its own; the right-hand side defaults to `0` (a rigid
+/// tie). See the constraints chapter of the book.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (target, immersed, host, variables, tol = crate::models::embedded::DEFAULT_TOL))]
@@ -164,8 +151,8 @@ pub fn embedded(
 /// be consistently oriented with its normal pointing toward the slave
 /// body. `target` is the model being constrained; `variables` lists its
 /// displacement primals, one per space dimension in ambient order (e.g.
-/// `["u_x", "u_y"]`), each dual row read from it. The multiplier and gap names
-/// are derived, `lambda_contact` / `contact_gap`.
+/// `["u_x", "u_y"]`), each dual row read from it. Each relation gets a
+/// multiplier node of its own, minted beside its slave node.
 ///
 /// Solve with `solve_unilateral`; build the initial-gap right-hand side
 /// with `Model.contact_gaps()`. See the contact chapter of the book.

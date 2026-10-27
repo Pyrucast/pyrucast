@@ -47,7 +47,7 @@ use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
-use crate::models::RelationSense;
+use crate::models::{RelationSense, IMPOSED, MULTIPLIER};
 use nalgebra::{DMatrix, DVector};
 use parking_lot::Mutex;
 use std::collections::HashMap;
@@ -86,16 +86,15 @@ type NamedDof = (NodeId, String);
 /// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// #     .union(&model::dirichlet(&cible, "T", &impose,
 /// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
+/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
+/// #                                      vec!["imposed".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
 /// # use pyrucast::ops::solver::unilateral::{ActiveSetMethod, UnilateralOptions};
 /// # use pyrucast::ops::model;
 /// // Both variants walk the **same** status trajectory and converge to the
@@ -153,16 +152,15 @@ pub enum ActiveSetMethod {
 /// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// #     .union(&model::dirichlet(&cible, "T", &impose,
 /// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
+/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
+/// #                                      vec!["imposed".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
 /// # use pyrucast::ops::solver::unilateral::UnilateralOptions;
 /// # use pyrucast::ops::model;
 /// // By default: Schur complement, cache on, and a complementarity tolerance
@@ -209,7 +207,7 @@ impl Default for UnilateralOptions {
 
 /// One inequality relation, resolved against the matrix DOF layout.
 struct Inequality {
-    /// Row index of the constraint equation `(multiplier_node, imposed_value)`.
+    /// Row index of the constraint equation `(multiplier_node, imposed)`.
     row: usize,
     /// Column index of the multiplier DOF `(multiplier_node, multiplier_var)`.
     lambda_col: usize,
@@ -288,16 +286,15 @@ struct ActiveSetState {
 /// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// #     .union(&model::dirichlet(&cible, "T", &impose,
 /// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
+/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
+/// #                                      vec!["imposed".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
 /// // A `≥` constraint: the active-set loop decides, relation by relation,
 /// // which one is saturated. Here the support at 100 °C is active, and the
 /// // barre entière s'y met.
@@ -333,16 +330,15 @@ pub fn solve(matrix: &Matrix, model: &Model, rhs: &NodeField) -> Result<NodeFiel
 /// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// #     .union(&model::dirichlet(&cible, "T", &impose,
 /// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
+/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
+/// #                                      vec!["imposed".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
 /// # use pyrucast::ops::solver::unilateral::UnilateralOptions;
 /// # use pyrucast::ops::model;
 /// let u = solver::unilateral::solve_with_options(
@@ -385,16 +381,15 @@ pub fn solve_with_options(
 /// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// #     .union(&model::dirichlet(&cible, "T", &impose,
 /// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
+/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
+/// #                                      vec!["imposed".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
 /// # use std::sync::atomic::{AtomicBool, Ordering};
 /// # use pyrucast::ops::model;
 /// let stop = AtomicBool::new(false);
@@ -436,16 +431,15 @@ pub fn solve_cancellable(
 /// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// #     .union(&model::dirichlet(&cible, "T", &impose,
 /// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
+/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
+/// #                                      vec!["imposed".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
 /// # use pyrucast::ops::solver::unilateral::UnilateralOptions;
 /// # use std::sync::atomic::AtomicBool;
 /// # use pyrucast::ops::model;
@@ -874,41 +868,26 @@ fn build_state(model: &Model, matrix: &Matrix) -> Result<ActiveSetState> {
         let Some(constraint) = kind.as_constraint() else {
             continue;
         };
-        // The multiplier (primal) conjugate to each imposed-value (dual) slot,
-        // by the positional pairing every constraint declares (cf. `dual_of`).
-        let primals = kind.primal_vars();
-        let duals = kind.dual_vars();
         for rel in constraint.relations()? {
             if rel.sense == RelationSense::Equality {
                 continue;
             }
             let row = *row_of
-                .get(&(rel.multiplier_node, rel.imposed_value.clone()))
+                .get(&(rel.multiplier_node, IMPOSED.to_string()))
                 .ok_or_else(|| {
                     PyrucastError::Message(format!(
-                        "solve_unilateral: constraint row ({:?}, '{}') is not a row of \
-                         the matrix — was it assembled from this model?",
-                        rel.multiplier_node, rel.imposed_value
-                    ))
-                })?;
-            let multiplier_var = duals
-                .iter()
-                .position(|d| d == &rel.imposed_value)
-                .map(|i| primals[i].clone())
-                .ok_or_else(|| {
-                    PyrucastError::Message(format!(
-                        "solve_unilateral: '{}' is not a dual variable of {}",
-                        rel.imposed_value,
-                        kind.label()
+                        "solve_unilateral: constraint row ({:?}, '{IMPOSED}') is not a row \
+                         of the matrix — was it assembled from this model?",
+                        rel.multiplier_node
                     ))
                 })?;
             let lambda_col = *col_of
-                .get(&(rel.multiplier_node, multiplier_var.clone()))
+                .get(&(rel.multiplier_node, MULTIPLIER.to_string()))
                 .ok_or_else(|| {
                     PyrucastError::Message(format!(
-                        "solve_unilateral: multiplier DOF ({:?}, '{}') is not a column \
-                         of the matrix",
-                        rel.multiplier_node, multiplier_var
+                        "solve_unilateral: multiplier DOF ({:?}, '{MULTIPLIER}') is not a \
+                         column of the matrix",
+                        rel.multiplier_node
                     ))
                 })?;
             let mut term_cols = Vec::with_capacity(rel.terms.len());
@@ -1052,7 +1031,7 @@ mod tests {
     use crate::handle::Handle;
     use crate::models::symmetry::MaterialSymmetry;
     use crate::ops::matrix::stiffness;
-    use crate::ops::mesh::barycenter;
+
     use std::sync::atomic::Ordering;
 
     /// A 2-element heat bar on `[0, 1]` (`k = 1`) with `T(0) = 0` (equality) and
@@ -1089,8 +1068,7 @@ mod tests {
 
         // Equality T(0) = 0.
         let imp0 = poi1(&nodes[0]);
-        let m0 = barycenter(&imp0).unwrap();
-        let dir = SubModel::dirichlet(&model, "T", &imp0, &m0, Default::default()).unwrap();
+        let dir = SubModel::dirichlet(&model, "T", &imp0, Default::default()).unwrap();
         let dir_mult = dir.multiplier_nodes()[0];
         model.add_sub(Handle::new(dir)).unwrap();
 
@@ -1098,9 +1076,7 @@ mod tests {
         let mut bound_mults = Vec::new();
         for node in [&nodes[1], &nodes[2]] {
             let imp = poi1(node);
-            let mm = barycenter(&imp).unwrap();
-            let b =
-                SubModel::dirichlet(&model, "T", &imp, &mm, RelationSense::GreaterEqual).unwrap();
+            let b = SubModel::dirichlet(&model, "T", &imp, RelationSense::GreaterEqual).unwrap();
             bound_mults.push(b.multiplier_nodes()[0]);
             model.add_sub(Handle::new(b)).unwrap();
         }
@@ -1112,12 +1088,11 @@ mod tests {
         rhs_sm.add_cell(&[bound_mults[0]]).unwrap();
         rhs_sm.add_cell(&[bound_mults[1]]).unwrap();
         let rhs_sm = Handle::new(rhs_sm);
-        let mut rhs =
-            SubNodeField::from_poi1(&rhs_sm, vec!["q".into(), "imposed_T".into()]).unwrap();
+        let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["q".into(), "imposed".into()]).unwrap();
         rhs.set_value(nodes[2].id(), "q", q).unwrap();
-        rhs.set_value(dir_mult, "imposed_T", 0.0).unwrap();
-        rhs.set_value(bound_mults[0], "imposed_T", -10.0).unwrap();
-        rhs.set_value(bound_mults[1], "imposed_T", -20.0).unwrap();
+        rhs.set_value(dir_mult, "imposed", 0.0).unwrap();
+        rhs.set_value(bound_mults[0], "imposed", -10.0).unwrap();
+        rhs.set_value(bound_mults[1], "imposed", -20.0).unwrap();
         let rhs = NodeField::from_sub(rhs);
 
         let k = stiffness(&model, &materials).unwrap();

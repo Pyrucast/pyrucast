@@ -29,11 +29,10 @@ def _strip():
 
 
 def _fix(target, nodes, variable, sense="="):
-    imposed = pc.mesh.poi1_from_nodes(nodes)
-    multipliers = pc.mesh.translate(imposed, [0.0, 0.0])
-    return pc.model.dirichlet(
-        target, variable, imposed, multipliers, sense
-    ), multipliers
+    constraint = pc.model.dirichlet(
+        target, variable, pc.mesh.poi1_from_nodes(nodes), sense
+    )
+    return constraint, constraint.multiplier_mesh()
 
 
 def _edge_traction(nodes, component, total):
@@ -76,7 +75,7 @@ def test_contact_stops_the_strip_on_the_floor():
     floor, floor_support = _fix(solid, bottom, "u_y", ">=")
     model = model | floor
     pull = _edge_traction(bottom, "f_y", -1.0 * L)
-    floor_at = _value(floor_support, "imposed_u_y", -gap)
+    floor_at = _value(floor_support, "imposed", -gap)
     data = {
         "model": model,
         "times": [0.0, 0.25, 0.5, 0.75, 1.0],
@@ -183,8 +182,8 @@ def test_adaptive_steps_reach_the_targets_of_a_plastic_pull():
         "materials": materials,
         "loads": pc.Evolution(
             [
-                (0.0, _value(support, "imposed_u_x", 0.0)),
-                (2.0, _value(support, "imposed_u_x", 8e-3 * L)),
+                (0.0, _value(support, "imposed", 0.0)),
+                (2.0, _value(support, "imposed", 8e-3 * L)),
             ]
         ),
         "adaptive_step": True,
@@ -244,7 +243,7 @@ def test_coupling_passes_settle_on_the_one_pass_answer():
             "model": model,
             "times": [0.0, 1.0],
             "materials": materials,
-            "loads": _value(hot_support, "imposed_T", 50.0),
+            "loads": _value(hot_support, "imposed", 50.0),
             "coherence": coherence,
         }
         pc.stepping.step_by_step(data)

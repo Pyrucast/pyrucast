@@ -42,8 +42,7 @@ def main():
     def clamp(target, ids, var):
         picked = [nodes[i] for i in ids]
         imposed = pyrucast.mesh.poi1_from_nodes(picked)
-        mult = pyrucast.mesh.barycenter(imposed)
-        return pyrucast.model.dirichlet(target, var, imposed, mult)
+        return pyrucast.model.dirichlet(target, var, imposed)
 
     model = model | clamp(model, [0, 3, 4, 7], "u_x")  # face x = 0
     model = model | clamp(model, [0, 1, 4, 5], "u_y")  # face y = 0

@@ -236,13 +236,11 @@ fn ajouter_un_bloc_invalide_l_assemblage() -> Result<()> {
     m.add_cell(&[a.id(), b.id()])?;
     let fes = FiniteElementSpace::lagrange1(&m)?;
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&a))?;
-    let mult = mesh::barycenter(&imposed)?;
     let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     let model = conduction.union(&model::dirichlet(
         &conduction,
         "T",
         &imposed,
-        &mult,
         Default::default(),
     )?)?;
     let materials = element_field::material_field(&model, &[("k", 1.0)])?;

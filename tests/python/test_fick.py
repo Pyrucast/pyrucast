@@ -30,20 +30,19 @@ def test_fick_recovers_the_linear_profile():
 
     imposed = pyrucast.Mesh(c, "POI1")
     imposed.unit().add_cell([nodes[-1]])
-    multiplier = pyrucast.mesh.barycenter(imposed)
-    mult = multiplier.node(0, 0, 0)
-
     cible = pyrucast.model.fick(fes, "H2")
+    held = pyrucast.model.dirichlet(cible, "c_H2", imposed)
+    mult = held.multiplier_mesh().node(0, 0, 0)
 
-    model = cible | pyrucast.model.dirichlet(cible, "c_H2", imposed, multiplier)
+    model = cible | held
     materials = pyrucast.element_field.material_field(model, [("D_H2", d)])
 
     load = pyrucast.Mesh(c, "POI1")
     load.unit().add_cell([nodes[0]])
     load.unit().add_cell([mult])
-    rhs = pyrucast.NodeField(load, ["imposed_c_H2", "j_H2"])
+    rhs = pyrucast.NodeField(load, ["imposed", "j_H2"])
     rhs[0].set_value(nodes[0], "j_H2", flux)
-    rhs[0].set_value(mult, "imposed_c_H2", c_imposed)
+    rhs[0].set_value(mult, "imposed", c_imposed)
 
     stiffness = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(stiffness, rhs)
@@ -53,7 +52,7 @@ def test_fick_recovers_the_linear_profile():
         expected = c_imposed + (flux / d) * (1.0 - x)
         assert abs(solution.value(node, "c_H2") - expected) < 1e-10
     # Mass balance: the reaction at the imposed end equals the injected flux.
-    assert abs(solution.value(mult, "lambda_c_H2") - flux) < 1e-10
+    assert abs(solution.value(mult, "lambda") - flux) < 1e-10
 
 
 def test_orthotropic_fick_declares_its_axes():

@@ -195,14 +195,9 @@ fn a_slab_settles_at_the_imposed_temperature() -> Result<()> {
     // Radiation alone would be non-linear; here the imposed temperature fixes
     // every DOF of the boundary, so the linearised operator suffices to solve.
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&fixture.edge)?);
-    let multiplier = pyrucast::ops::mesh::barycenter(&imposed)?;
-    let model = fixture.radiation.union(&model::dirichlet(
-        &fixture.radiation,
-        "T",
-        &imposed,
-        &multiplier,
-        Default::default(),
-    )?)?;
+    let dirichlet = model::dirichlet(&fixture.radiation, "T", &imposed, Default::default())?;
+    let multiplier = dirichlet.multiplier_mesh()?;
+    let model = fixture.radiation.union(&dirichlet)?;
     let materials = element_field::material_field(&model, &[("emis", EMIS), ("T_inf", T_INF)])?;
 
     let mut rhs_sm = SubMesh::new(fixture.coords.clone(), ElementType::POI1);
@@ -216,9 +211,9 @@ fn a_slab_settles_at_the_imposed_temperature() -> Result<()> {
         }
     }
     let rhs_sm = Handle::new(rhs_sm);
-    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed_T".into()])?;
+    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed".into()])?;
     for id in &mults {
-        rhs.set_value(*id, "imposed_T", T_WALL)?;
+        rhs.set_value(*id, "imposed", T_WALL)?;
     }
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
