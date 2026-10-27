@@ -120,10 +120,11 @@ fn echoes_sigma_zz(space_dim: usize, kinematics: Kinematics) -> bool {
     space_dim == 2 && !kinematics.is_axisymmetric()
 }
 
-/// Perfect von Mises plasticity on an FE subspace.
+/// Elastoplasticity on an FE subspace, under one yield law ([`PlasticLaw`]).
 ///
 /// Holds the same supports as [`crate::models::elasticity::Elasticity`];
-/// material (`E`, `nu`, `sigma_y`) is supplied at assembly / integration time.
+/// material (`E`, `nu` and what the law demands) is supplied at assembly /
+/// integration time.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -143,9 +144,11 @@ fn echoes_sigma_zz(space_dim: usize, kinematics: Kinematics) -> bool {
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::plasticity::Plasticity;
 /// # use pyrucast::models::plasticity::law::PlasticLaw;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// // A zone's elastoplastic physics: its law decides the material it
 /// // demands and the state it carries.
-/// let p = Plasticity::new(zone.clone(), Kinematics::PlaneStrain)?;
+/// let p = Plasticity::new(
+///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Perfect, StrainMeasure::Linear)?;
 /// assert!(p.material_components().contains(&"sigma_y".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -156,8 +159,11 @@ pub struct Plasticity {
 }
 
 impl Plasticity {
-    /// **Perfect** (non-hardening) von Mises plasticity on an FE subspace — the
-    /// default law, and the one this physics shipped with.
+    /// Elastoplasticity under the yield law `law`, on an FE subspace with the
+    /// given 2-D/3-D kinematics, the law reading the strain `measure`. Errors
+    /// if `kinematics` is inconsistent with the space dimension (same rule as
+    /// [`crate::models::elasticity::Elasticity::new`]), or if `measure` is not
+    /// a law input.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -168,43 +174,7 @@ impl Plasticity {
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::Domain;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # use pyrucast::models::plasticity::Plasticity;
-    /// // **Perfect** von Mises: the default law, the one this physics was born
-    /// // with.
-    /// let p = Plasticity::new(zone.clone(), Kinematics::PlaneStrain)?;
-    /// assert_eq!(p.material_components().len(), 3); // E, nu, sigma_y
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn new(fespace: Handle<SubFiniteElementSpace>, kinematics: Kinematics) -> Result<Self> {
-        Self::with_law(
-            fespace,
-            kinematics,
-            PlasticLaw::Perfect,
-            StrainMeasure::Linear,
-        )
-    }
-
-    /// Elastoplasticity with an explicit yield law, on an FE subspace with the
-    /// given 2-D/3-D kinematics. Errors if `kinematics` is inconsistent with the space
-    /// dimension (same rule as
-    /// [`crate::models::elasticity::Elasticity::new`]).
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::tensor::Kinematics;
-    /// # use pyrucast::models::Domain;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -214,18 +184,20 @@ impl Plasticity {
     /// # let zone = fes.get(0).unwrap();
     /// # use pyrucast::models::plasticity::Plasticity;
     /// # use pyrucast::models::plasticity::law::PlasticLaw;
-    /// // The explicit law, and the coherence check between the kinematics and
-    /// // the space dimension.
-    /// # use pyrucast::ops::element_field::StrainMeasure;
-    /// let p = Plasticity::with_law(
+    /// // Perfect von Mises: `sigma_y` on top of elasticity.
+    /// let p = Plasticity::new(
+    ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Perfect, StrainMeasure::Linear)?;
+    /// assert_eq!(p.material_components().len(), 3); // E, nu, sigma_y
+    /// // The law declares the material it demands: isotropic hardening adds `H`.
+    /// let h = Plasticity::new(
     ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Isotropic, StrainMeasure::Linear)?;
-    /// assert!(p.material_components().contains(&"H".to_string()));
+    /// assert!(h.material_components().contains(&"H".to_string()));
     /// // A solid model on a 2-D zone is refused.
-    /// assert!(Plasticity::with_law(
+    /// assert!(Plasticity::new(
     ///     zone.clone(), Kinematics::Full3D, PlasticLaw::Perfect, StrainMeasure::Linear).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn with_law(
+    pub fn new(
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         law: PlasticLaw,
@@ -739,7 +711,13 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
         mesh.add_cell(&[a.id(), b.id(), c.id(), dd.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        Plasticity::new(fes.get(0).unwrap(), kinematics).unwrap()
+        Plasticity::new(
+            fes.get(0).unwrap(),
+            kinematics,
+            PlasticLaw::Perfect,
+            StrainMeasure::Linear,
+        )
+        .unwrap()
     }
 
     fn unit_hex() -> Plasticity {
@@ -759,7 +737,13 @@ mod tests {
         mesh.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())
             .unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        Plasticity::new(fes.get(0).unwrap(), Kinematics::Full3D).unwrap()
+        Plasticity::new(
+            fes.get(0).unwrap(),
+            Kinematics::Full3D,
+            PlasticLaw::Perfect,
+            StrainMeasure::Linear,
+        )
+        .unwrap()
     }
 
     fn material(pl: &Plasticity, e: f64, nu: f64, sy: f64) -> Handle<SubElementField> {

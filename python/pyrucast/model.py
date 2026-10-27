@@ -1,8 +1,8 @@
-"""Opérateurs produisant un modèle — miroir de ``ops::model`` (Rust).
+"""Operators producing a model — mirror of ``ops::model`` (Rust).
 
 The **physics declarations**: conduction, diffusion, radiation,
-transferts, élasticité, plasticité, endommagement, éléments structuraux
-(barre, poutre, coque) et contraintes (Dirichlet, MPC, baignage, contact).
+transfers, elasticity, plasticity, damage, structural elements
+(bar, beam, shell) and constraints (Dirichlet, MPC, embedding, contact).
 
 Every operator consumes the **parent support** — a ``FiniteElementSpace``, or
 the meshes a constraint relates — and returns a ``Model`` covering it in full:

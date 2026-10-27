@@ -2320,7 +2320,7 @@ macro_rules! physics_operator {
     // Flow and damage laws are **attributes** of one single physics (cf.
     // `models::plasticity::law`), not extra physics. They nonetheless read better
     // named at the call site — `drucker_prager(fes, k, measure)` rather than
-    // `plasticity_with_law(fes, k, PlasticLaw::DruckerPrager, measure)`. The facade
+    // `plasticity(fes, k, PlasticLaw::DruckerPrager, measure)`. The facade
     // duplicates nothing: it forwards to the generic operator.
     //
     // Every such facade is a continuum law, and every continuum law reads a

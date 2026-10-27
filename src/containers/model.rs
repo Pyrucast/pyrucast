@@ -227,11 +227,12 @@ pub enum SubModel {
     Truss(truss::Truss),
     /// Linear elasticity (2-D plane / 3-D solid) — see [`elasticity::Elasticity`].
     Elasticity(elasticity::Elasticity),
-    /// Perfect von Mises elastoplasticity — see [`plasticity::Plasticity`].
+    /// Elastoplasticity, under one of the yield laws of
+    /// [`plasticity::law::PlasticLaw`] — see [`plasticity::Plasticity`].
     Plasticity(plasticity::Plasticity),
     /// Damage — Mazars, tension/compression, or orthotropic SiC/SiC; see
     /// [`damage::Damage`].
-    Mazars(damage::Damage),
+    Damage(damage::Damage),
     /// Timoshenko beam — shear-deformable, in a 1-D, plane or space
     /// configuration read from the mesh. See [`timoshenko::Timoshenko`].
     ///
@@ -305,7 +306,7 @@ impl SubModel {
             SubModel::Truss(p) => p,
             SubModel::Elasticity(p) => p,
             SubModel::Plasticity(p) => p,
-            SubModel::Mazars(p) => p,
+            SubModel::Damage(p) => p,
             SubModel::Timoshenko(p) => p,
             SubModel::Fick(p) => p,
             SubModel::InterfaceTransfer(p) => p,
@@ -461,7 +462,7 @@ impl SubModel {
     /// Truss / bar sub-model on a `SEG2` FE subspace, its law reading the
     /// strain `measure` (`linear`, or `green_lagrange` in large displacements).
     /// Material data (`E`, `A`) is supplied at assembly time. See
-    /// [`truss::Truss::new`] and [`truss::Truss::with_measure`].
+    /// [`truss::Truss::new`].
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -495,9 +496,7 @@ impl SubModel {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn truss(fespace: Handle<SubFiniteElementSpace>, measure: StrainMeasure) -> Result<Self> {
-        Ok(SubModel::Truss(
-            truss::Truss::new(fespace)?.with_measure(measure)?,
-        ))
+        Ok(SubModel::Truss(truss::Truss::new(fespace, measure)?))
     }
 
     /// Linear-elasticity sub-model on an FE subspace, with the given 2-D/3-D
@@ -761,7 +760,8 @@ impl SubModel {
         ))
     }
 
-    /// Elastoplasticity with an explicit yield law — the general form.
+    /// Elastoplasticity under the yield law `law` — see
+    /// [`plasticity::Plasticity::new`].
     /// The material each law needs is declared by
     /// [`PlasticLaw::material_components`](plasticity::law::PlasticLaw::material_components).
     ///
@@ -791,26 +791,26 @@ impl SubModel {
     /// # use pyrucast::models::plasticity::law::PlasticLaw;
     /// // The hardening law **declares by itself** the material it requires.
     /// # use pyrucast::ops::element_field::StrainMeasure;
-    /// let m = SubModel::plasticity_with_law(
+    /// let m = SubModel::plasticity(
     ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Perfect, StrainMeasure::Linear)?;
     /// assert!(m.has_behavior());
     /// // Von Mises without hardening: `sigma_y` on top of elasticity.
     /// assert!(m.material_components().unwrap().contains(&"sigma_y".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn plasticity_with_law(
+    pub fn plasticity(
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         law: plasticity::law::PlasticLaw,
         measure: StrainMeasure,
     ) -> Result<Self> {
-        Ok(SubModel::Plasticity(plasticity::Plasticity::with_law(
+        Ok(SubModel::Plasticity(plasticity::Plasticity::new(
             fespace, kinematics, law, measure,
         )?))
     }
 
-    /// Damage with an explicit law — Mazars, the tension/compression pair, or the
-    /// orthotropic SiC/SiC. See [`damage::Damage::with_law`].
+    /// Damage under the law `law` — Mazars, the tension/compression pair, or the
+    /// orthotropic SiC/SiC. See [`damage::Damage::new`].
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -837,20 +837,20 @@ impl SubModel {
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::models::damage::law::DamageLaw;
     /// # use pyrucast::ops::element_field::StrainMeasure;
-    /// let m = SubModel::damage_with_law(
+    /// let m = SubModel::damage(
     ///     zone.clone(), Kinematics::PlaneStress, DamageLaw::Mazars, StrainMeasure::Linear)?;
     /// assert_eq!(m.physics(), &[Physics::Mechanical]);
     /// // Mazars reads its damage threshold on top of elasticity.
     /// assert!(m.material_components().unwrap().contains(&"eps_d0".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn damage_with_law(
+    pub fn damage(
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         law: damage::law::DamageLaw,
         measure: StrainMeasure,
     ) -> Result<Self> {
-        Ok(SubModel::Mazars(damage::Damage::with_law(
+        Ok(SubModel::Damage(damage::Damage::new(
             fespace, kinematics, law, measure,
         )?))
     }

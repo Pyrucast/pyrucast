@@ -10,8 +10,8 @@
 //!
 //! - *field physics* — [`heat_conduction()`], [`fick()`], [`radiation()`],
 //!   [`boundary_transfer()`], [`interface_transfer()`];
-//! - *solid mechanics* — [`elasticity()`], [`plasticity_with_law()`],
-//!   [`damage_with_law()`] and their named shorthands;
+//! - *solid mechanics* — [`elasticity()`], [`plasticity()`], [`damage()`]
+//!   and their named shorthands;
 //! - *structural elements* — [`truss()`], [`bernoulli()`], [`timoshenko()`],
 //!   [`shell()`];
 //! - *constraints* — [`dirichlet()`], [`mpc()`], [`embedded()`], [`contact()`].
@@ -29,7 +29,7 @@ use crate::handle::Handle;
 /// Build a `Model` covering **every** subspace of `fes`, one sub-model per
 /// subspace — the shape of every operator on a finite-element space: those
 /// [`physics_operator!`](crate::physics_operator) generates and the two generic
-/// laws, [`plasticity_with_law`] and [`damage_with_law`].
+/// laws, [`plasticity()`] and [`damage()`].
 ///
 /// Deliberately a function and not a macro: the closure is type-checked at its
 /// definition, and go-to-definition still lands on real code.
@@ -89,9 +89,9 @@ pub use crate::models::shell::shell;
 pub use crate::models::timoshenko::timoshenko;
 pub use crate::models::truss::truss;
 pub use contact::contact;
-pub use damage::damage_with_law;
+pub use damage::damage;
 pub use dirichlet::dirichlet;
 pub use embedded::embedded;
 pub use interface_transfer::interface_transfer;
 pub use mpc::mpc;
-pub use plasticity::plasticity_with_law;
+pub use plasticity::plasticity;

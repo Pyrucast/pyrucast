@@ -205,7 +205,7 @@ fn tangent_matches_fd_solid_hex() -> Result<()> {
 
 fn plasticity_model(fes: &FiniteElementSpace, model: Kinematics) -> Result<Model> {
     let mut m = Model::empty();
-    m.add_sub(Handle::new(SubModel::plasticity_with_law(
+    m.add_sub(Handle::new(SubModel::plasticity(
         fes.get(0)?,
         model,
         PlasticLaw::Perfect,
@@ -307,7 +307,7 @@ fn a_nonlinear_physics_without_tangent_errors() -> Result<()> {
     use pyrucast::models::damage::law::DamageLaw;
     use pyrucast::ops::model;
     let (fes, n) = unit_quad()?;
-    let damage = model::damage_with_law(
+    let damage = model::damage(
         &fes,
         Kinematics::PlaneStress,
         DamageLaw::DamageTc,

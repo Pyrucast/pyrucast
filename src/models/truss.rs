@@ -93,8 +93,9 @@ fn strain_names(prefix: &str, space_dim: usize) -> Vec<String> {
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::truss::Truss;
-/// // La barre : deux constantes, aucune flexion.
-/// let t = Truss::new(zone.clone())?;
+/// # use pyrucast::ops::element_field::StrainMeasure;
+/// // The bar: two constants, no bending.
+/// let t = Truss::new(zone.clone(), StrainMeasure::Linear)?;
 /// assert_eq!(t.material_components(), vec!["E".to_string(), "A".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -107,15 +108,27 @@ pub struct Truss {
     /// Spatial dimension (number of displacement components per node).
     pub(crate) space_dim: usize,
     /// The strain measure the law reads — `linear`, or `green_lagrange` in
-    /// large displacements ([`with_measure`](Self::with_measure)). Archives
+    /// large displacements ([`new`](Self::new)). Archives
     /// written before it existed read back as `linear`.
     #[serde(default)]
     pub(crate) measure: StrainMeasure,
 }
 
 impl Truss {
-    /// Truss physics on a `SEG2` FE subspace. Builds the stable POI1
-    /// [`SubMesh`] over the subspace's unique nodes.
+    /// Truss physics on a `SEG2` FE subspace, its law reading the strain
+    /// `measure`: `linear`, or `green_lagrange` for large displacements — the
+    /// law then reads `E_*` and writes the second Piola–Kirchhoff axial force
+    /// `S_n`. Builds the stable POI1 [`SubMesh`] over the subspace's unique
+    /// nodes.
+    ///
+    /// Errors:
+    /// - an axisymmetric geometry: a segment in a meridian plane sweeps a cone
+    ///   of revolution, not a bar;
+    /// - Hencky: along the reference direction, `t₀·½ ln C·t₀` is the stretch
+    ///   `ln λ` only while `t₀` is an eigenvector of `C`, which a bar that
+    ///   turns no longer is;
+    /// - a measure that is not a law's input (`gradient`, Cauchy–Green,
+    ///   Euler–Almansi).
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -134,12 +147,38 @@ impl Truss {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # use pyrucast::models::truss::Truss;
-    /// // La barre : deux constantes, aucune flexion.
-    /// let t = Truss::new(zone.clone())?;
-    /// assert_eq!(t.material_components(), vec!["E".to_string(), "A".to_string()]);
+    /// # use pyrucast::models::Behavior;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
+    /// let bar = Truss::new(zone.clone(), StrainMeasure::Linear)?;
+    /// assert_eq!(bar.material_components(), vec!["E".to_string(), "A".to_string()]);
+    /// let cable = Truss::new(zone.clone(), StrainMeasure::GreenLagrange)?;
+    /// // The law reads E and writes the second Piola–Kirchhoff axial force …
+    /// assert_eq!(cable.deformation_reads(), ["E_xx", "E_xy", "E_yy"]);
+    /// assert_eq!(cable.behavior_output_components(), ["S_n"]);
+    /// // … the internal forces read the nominal force vector.
+    /// assert_eq!(cable.internal_force_reads(), ["P_x", "P_y"]);
+    /// assert!(Truss::new(zone.clone(), StrainMeasure::Hencky).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
+    pub fn new(fespace: Handle<SubFiniteElementSpace>, measure: StrainMeasure) -> Result<Self> {
+        match measure {
+            StrainMeasure::Linear | StrainMeasure::GreenLagrange => {}
+            StrainMeasure::Hencky => {
+                return Err(PyrucastError::Message(
+                    "Truss: a bar has no Hencky measure — along its reference direction t₀, \
+                     t₀·½ ln C·t₀ is ln λ only while t₀ is an eigenvector of C, which a bar \
+                     that turns no longer is; use green_lagrange"
+                        .into(),
+                ))
+            }
+            other => {
+                return Err(PyrucastError::Message(format!(
+                    "Truss: `{}` is not a strain a law reads — a bar reads `linear` or \
+                     `green_lagrange`",
+                    crate::named::Named::name(other)
+                )))
+            }
+        }
         let (submesh, space_dim, axisymmetric) = {
             let s = fespace.read();
             (s.submesh(), s.space_dim(), s.is_axisymmetric())
@@ -158,62 +197,8 @@ impl Truss {
             fespace,
             support,
             space_dim,
-            measure: StrainMeasure::Linear,
+            measure,
         })
-    }
-
-    /// The same bar, its law reading the strain `measure`: `linear`, or
-    /// `green_lagrange` for large displacements — the law then reads `E_*` and
-    /// writes the second Piola–Kirchhoff axial force `S_n`.
-    ///
-    /// Errors:
-    /// - Hencky: along the reference direction, `t₀·½ ln C·t₀` is the stretch
-    ///   `ln λ` only while `t₀` is an eigenvector of `C`, which a bar that
-    ///   turns no longer is;
-    /// - a measure that is not a law's input (`gradient`, Cauchy–Green,
-    ///   Euler–Almansi).
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::{Behavior, SubModelKind};
-    /// # use pyrucast::models::truss::Truss;
-    /// # use pyrucast::ops::element_field::StrainMeasure;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-    /// # sm.add_cell(&[n[0].id(), n[1].id()])?;
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
-    /// let cable = Truss::new(fes.get(0)?)?.with_measure(StrainMeasure::GreenLagrange)?;
-    /// // The law reads E and writes the second Piola–Kirchhoff axial force …
-    /// assert_eq!(cable.deformation_reads(), ["E_xx", "E_xy", "E_yy"]);
-    /// assert_eq!(cable.behavior_output_components(), ["S_n"]);
-    /// // … the internal forces read the nominal force vector.
-    /// assert_eq!(cable.internal_force_reads(), ["P_x", "P_y"]);
-    /// let bar = Truss::new(fes.get(0)?)?;
-    /// assert!(bar.with_measure(StrainMeasure::Hencky).is_err());
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn with_measure(self, measure: StrainMeasure) -> Result<Self> {
-        match measure {
-            StrainMeasure::Linear | StrainMeasure::GreenLagrange => Ok(Self { measure, ..self }),
-            StrainMeasure::Hencky => Err(PyrucastError::Message(
-                "Truss: a bar has no Hencky measure — along its reference direction t₀, \
-                 t₀·½ ln C·t₀ is ln λ only while t₀ is an eigenvector of C, which a bar \
-                 that turns no longer is; use green_lagrange"
-                    .into(),
-            )),
-            other => Err(PyrucastError::Message(format!(
-                "Truss: `{}` is not a strain a law reads — a bar reads `linear` or \
-                 `green_lagrange`",
-                crate::named::Named::name(other)
-            ))),
-        }
     }
 
     /// Whether the law reads Green–Lagrange (the bar in large displacements).
@@ -723,7 +708,7 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let truss = Truss::new(fes.get(0).unwrap()).unwrap();
+        let truss = Truss::new(fes.get(0).unwrap(), StrainMeasure::Linear).unwrap();
         let len = (dx * dx + dy * dy).sqrt();
         let _ = (e, area);
         (truss, a.id(), b.id(), len, [dx / len, dy / len])

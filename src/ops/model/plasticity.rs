@@ -39,18 +39,18 @@ use crate::ops::element_field::StrainMeasure;
 /// # use pyrucast::models::plasticity::law::PlasticLaw;
 /// # use pyrucast::ops::element_field::StrainMeasure;
 /// // J2 read on the Hencky strain: large plastic strains.
-/// let m = model::plasticity_with_law(
+/// let m = model::plasticity(
 ///     &fes, Kinematics::PlaneStrain, PlasticLaw::Perfect, StrainMeasure::Hencky)?;
 /// assert_eq!(m.len(), fes.len());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn plasticity_with_law(
+pub fn plasticity(
     fes: &FiniteElementSpace,
     kinematics: Kinematics,
     law: PlasticLaw,
     measure: StrainMeasure,
 ) -> Result<Model> {
     spanning(fes, |zone| {
-        SubModel::plasticity_with_law(zone, kinematics, law, measure)
+        SubModel::plasticity(zone, kinematics, law, measure)
     })
 }

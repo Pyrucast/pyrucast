@@ -257,9 +257,9 @@ un sujet qu'on transforme.
 | `truss(fes: &FiniteElementSpace, strain_measure: StrainMeasure) -> Model` | `truss(fespace, strain_measure="linear") -> Model` |
 | `elasticity(fes, kinematics: Kinematics, symmetry: MaterialSymmetry, strain_measure: StrainMeasure) -> Model` | `elasticity(fespace, kinematics, symmetry="isotropic", strain_measure="linear") -> Model` |
 | `plasticity_perfect(fes, kinematics: Kinematics, strain_measure: StrainMeasure) -> Model` | `plasticity_perfect(fespace, kinematics, strain_measure="linear") -> Model` |
-| `plasticity_with_law(fes, kinematics, law: PlasticLaw, measure: StrainMeasure) -> Model` | une fonction par loi : `plasticity_isotropic`, `drucker_prager`, `ottosen`, `creep_norton`, `creep_blackburn`, `creep_lemaitre`, `viscoplasticity_chaboche`, `viscoplasticity_lemaitre_chaboche`, `gurson` — toutes `(fespace, kinematics, strain_measure="linear") -> Model`, qui existent aussi en Rust, `(fes, kinematics, strain_measure)` |
+| `plasticity(fes, kinematics, law: PlasticLaw, measure: StrainMeasure) -> Model` | une fonction par loi : `plasticity_isotropic`, `drucker_prager`, `ottosen`, `creep_norton`, `creep_blackburn`, `creep_lemaitre`, `viscoplasticity_chaboche`, `viscoplasticity_lemaitre_chaboche`, `gurson` — toutes `(fespace, kinematics, strain_measure="linear") -> Model`, qui existent aussi en Rust, `(fes, kinematics, strain_measure)` |
 | `mazars(fes, kinematics: Kinematics, strain_measure: StrainMeasure) -> Model` | `mazars(fespace, kinematics, strain_measure="linear") -> Model` |
-| `damage_with_law(fes, kinematics, law: DamageLaw, measure: StrainMeasure) -> Model` | une fonction par loi : `damage_tc`, `damage_sic_sic` — `(fespace, kinematics, strain_measure="linear") -> Model`, qui existent aussi en Rust, `(fes, kinematics, strain_measure)` |
+| `damage(fes, kinematics, law: DamageLaw, measure: StrainMeasure) -> Model` | une fonction par loi : `damage_tc`, `damage_sic_sic` — `(fespace, kinematics, strain_measure="linear") -> Model`, qui existent aussi en Rust, `(fes, kinematics, strain_measure)` |
 | `bernoulli(fes: &FiniteElementSpace) -> Model` | `bernoulli(fespace) -> Model` |
 | `timoshenko(fes: &FiniteElementSpace) -> Model` | `timoshenko(fespace) -> Model` |
 | `shell(fes, model: ShellModel) -> Model` | `shell(fespace, model) -> Model` |
@@ -275,7 +275,7 @@ Rust n'a pas d'argument par défaut. Même nom, même ordre ; c'est
 `physics_operator!` qui écrit les deux faces.
 
 **Le pli des lois.** Rust nomme la loi par une **enum** (`PlasticLaw`,
-`DamageLaw`) dans `plasticity_with_law` et `damage_with_law` ; Python déplie
+`DamageLaw`) dans `plasticity` et `damage` ; Python déplie
 les lois en une fonction chacune, que Rust offre aussi. Les dérogations
 correspondantes sont enregistrées, avec leur raison, dans
 `tests/python/test_mirror_completeness.py`.

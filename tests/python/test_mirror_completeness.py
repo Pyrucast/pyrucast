@@ -64,11 +64,11 @@ RUST_ONLY = {
     "vtk_mesh_string": '"to a string" variant, not exposed',
     "vtk_node_field_string": '"to a string" variant, not exposed',
     "vtk_element_field_string": '"to a string" variant, not exposed',
-    # The `*_with_law` operators of `ops::model`: Rust passes the law as an enum
+    # The generic law operators of `ops::model`: Rust passes the law as an enum
     # (`PlasticLaw`, `DamageLaw`), Python unfolds it into one function per law
     # (see PYTHON_ONLY) — no operation is missing.
-    "plasticity_with_law": "unfolded into one Python function per law (`drucker_prager`, `creep_norton`…)",
-    "damage_with_law": "unfolded into one Python function per law (`damage_tc`, `gurson`…)",
+    "plasticity": "unfolded into one Python function per law (`drucker_prager`, `creep_norton`…)",
+    "damage": "unfolded into one Python function per law (`mazars`, `damage_tc`…)",
     "select_cells": "dispatched by type inside `mesh.select`",
     "select_nodes": "dispatched by type inside `mesh.select`",
     "integral_element": "dispatched by type inside `measure.integral`",

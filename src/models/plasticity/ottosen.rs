@@ -269,6 +269,6 @@ crate::physics_operator! {
     /// assert_eq!(m.primal_vars(), vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn ottosen(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::Ottosen;
+    pub fn ottosen(fes, kinematics: Kinematics) = crate::ops::model::plasticity, PlasticLaw::Ottosen;
     python: "`model.ottosen(fespace, kinematics)` — Ottosen's four-parameter criterion for\nconcrete, whose strength depends on the pressure **and** on the Lode\nangle (so tension and compression differ). Material `E`, `nu`, `a`, `b`,\n`k_1`, `k_2`, `sigma_c`.\n\nIntegrated by a cutting-plane return with a numerically differentiated\nnormal: the criterion is exact, and the gradient — long enough that a\nhand-derived one could not be checked — is a central difference."
 }

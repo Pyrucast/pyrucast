@@ -37,18 +37,16 @@ use crate::ops::element_field::StrainMeasure;
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::damage::law::DamageLaw;
 /// # use pyrucast::ops::element_field::StrainMeasure;
-/// let m = model::damage_with_law(
+/// let m = model::damage(
 ///     &fes, Kinematics::PlaneStress, DamageLaw::Mazars, StrainMeasure::Linear)?;
 /// assert_eq!(m.len(), fes.len());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn damage_with_law(
+pub fn damage(
     fes: &FiniteElementSpace,
     kinematics: Kinematics,
     law: DamageLaw,
     measure: StrainMeasure,
 ) -> Result<Model> {
-    spanning(fes, |zone| {
-        SubModel::damage_with_law(zone, kinematics, law, measure)
-    })
+    spanning(fes, |zone| SubModel::damage(zone, kinematics, law, measure))
 }
