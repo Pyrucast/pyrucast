@@ -192,7 +192,7 @@ Kinematics (`gradient`, `deformation`, `beam_deformation`,
 `frame_deformation`), behaviour (`behavior`), materials (`material_field`,
 `interp_to_gauss`), positions, `restrict`, `flux`, `divergence`,
 `internal_forces`, field masks and arithmetic, reductions (`integral`, `xtx`,
-`xty`), geometric queries (`locate_points`, `project_points`, `contact_gaps`),
+`xty`), geometric queries (`locate_points`, `project_points`),
 `Evolution` (tabulated interpolated value). 168 free functions in `ops/`.
 
 ## Parallelism

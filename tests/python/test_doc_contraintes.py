@@ -175,7 +175,8 @@ materials = pyrucast.element_field.material_field(
     model, [("E", 210.0), ("nu", 0.0), ("phi_f_y", -S)]
 )
 
-rhs = pyrucast.node_field.external_forces(model, materials) | model.contact_gaps()
+# The pressure, and the gap the contact carries.
+rhs = pyrucast.node_field.external_forces(model, materials)
 solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
 # ANCHOR_END: contact
 assert solution.node_count() > 0
@@ -183,13 +184,14 @@ assert solution.node_count() > 0
 
 # ── The contact's geometric right-hand side ─────────────────────────────────
 
-traction = pyrucast.node_field.external_forces(model, materials)
-
-# ANCHOR: contact_gaps
-rhs = traction | model.contact_gaps()
-# ANCHOR_END: contact_gaps
-
-assert rhs.node_count() > 0
+# ANCHOR: contact_rhs
+# The gap is a load the contact carries: on its own, `external_forces` gives
+# back -g0 at each of its multiplier nodes — here 0, the blocks touching.
+gaps = pyrucast.node_field.external_forces(contact, materials)
+mult_mesh = contact.multiplier_mesh()
+for r in range(N + 1):
+    assert gaps.value(mult_mesh.node(0, r, 0), "imposed") == 0.0
+# ANCHOR_END: contact_rhs
 
 
 # ── Dirichlet : l'exemple complet ───────────────────────────────────────────

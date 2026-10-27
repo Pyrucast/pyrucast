@@ -1070,8 +1070,8 @@ impl SubModel {
     /// `variables` are the displacement primals of `target`, coupled through the
     /// facet normal: one per space dimension, in ambient order (e.g.
     /// `["u_x", "u_y"]`), each dual row read from `target`. Solve with
-    /// [`solve`](crate::ops::solver::solve); build the `−g₀`
-    /// right-hand side with [`Model::contact_gaps`]. See
+    /// [`solve`](crate::ops::solver::solve); its `−g₀` right-hand side is a
+    /// load it carries ([`external_forces`](crate::ops::node_field::external_forces())). See
     /// [`contact::Contact::new`].
     ///
     /// ```
@@ -1952,81 +1952,6 @@ impl Model {
 }
 
 impl Model {
-    /// The contact right-hand side `−g₀`: a [`NodeField`] carrying, at each
-    /// contact multiplier node's `imposed` slot, minus the initial signed
-    /// gap of its relation — the load a contact model needs so that
-    /// non-penetration reads `g₀ + C·u ≥ 0`. Merge it into the global load with
-    /// `|`. The model must hold **exactly one** [`SubModel::Contact`]; pairs
-    /// initially touching contribute `0` (omitting this helper entirely treats
-    /// *every* pair as touching).
-    ///
-    /// ```
-    /// # use pyrucast::ops::element_field::StrainMeasure;
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::tensor::Kinematics;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # use pyrucast::ops::model;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let cible = pyrucast::ops::model::elasticity(&fes, pyrucast::models::tensor::Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)
-    ///     .unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mut maitre = SubMesh::new(coords.clone(), ElementType::SEG2);
-    /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
-    /// # let master = Mesh::from_submesh(maitre);
-    /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
-    /// let contact = model::contact(&slave, &master, &cible,
-    ///     vec!["u_x".into(), "u_y".into()])?;
-    /// // The contact's right-hand side −g₀, ready to union into the load.
-    /// assert_eq!(contact.contact_gaps()?.node_count()?, 1);
-    /// // On a model without contact, the question has no answer.
-    /// assert!(model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?.contact_gaps().is_err());
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn contact_gaps(&self) -> Result<NodeField> {
-        let mut found: Option<Handle<SubModel>> = None;
-        for h in self {
-            if matches!(&*h.read(), SubModel::Contact(_)) {
-                if found.is_some() {
-                    return Err(PyrucastError::Message(
-                        "contact_gaps: model holds several contact sub-models; call it on \
-                         a single-contact model (the `contact` object)"
-                            .into(),
-                    ));
-                }
-                found = Some(h.clone());
-            }
-        }
-        let handle = found.ok_or_else(|| {
-            PyrucastError::Message("contact_gaps: model holds no contact sub-model".into())
-        })?;
-        let sub = handle.read();
-        let SubModel::Contact(c) = &*sub else {
-            unreachable!("filtered on Contact above");
-        };
-        let pairs: Vec<(usize, f64)> = c
-            .gaps()
-            .iter()
-            .enumerate()
-            .map(|(i, &g0)| (i, -g0))
-            .collect();
-        sub.constraint_rhs_by_index(&pairs)
-    }
-
     /// POI1 [`Mesh`] of every constraint multiplier node across the model
     /// (shares the multiplier submeshes — zero-copy). Empty for a model with no
     /// constraint. The handle to the multipliers of a constraint that minted

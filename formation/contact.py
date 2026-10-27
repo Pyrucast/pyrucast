@@ -104,11 +104,9 @@ def main() -> None:
     materiaux = pc.element_field.material_field(
         modele, [("E", E), ("nu", 0.0), ("phi_f_y", -S)]
     )
-    traction = pc.node_field.external_forces(modele, materiaux)
-
-    # `contact_gaps()` supplies the contact's right-hand side — the Cast3M
-    # equivalent of preparing the unilateral problem before RESO.
-    second_membre = traction | modele.contact_gaps()
+    # The pressure and the contact's right-hand side −g₀: the gap is a load
+    # the contact carries, `external_forces` returns it with the others.
+    second_membre = pc.node_field.external_forces(modele, materiaux)
     # ANCHOR_END: chargement_contact
 
     # ANCHOR: resolution_contact

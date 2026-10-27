@@ -2076,15 +2076,6 @@ class Model:
         r"""
         `Model()` — an empty model; add physics with `|`.
         """
-    def contact_gaps(self) -> NodeField:
-        r"""
-        `Model.contact_gaps()` — the contact right-hand side `−g₀`: a
-        `NodeField` carrying, at each contact multiplier node's `imposed`
-        slot, minus the initial signed gap of its relation, so that
-        non-penetration reads `g₀ + C·u ≥ 0`. Merge it into the global load
-        with `|`. The model must hold exactly one contact sub-model; omitting
-        this helper treats every pair as initially touching (`g₀ = 0`).
-        """
     def primal_vars(self) -> builtins.list[builtins.str]:
         r"""
         Names of the primal (primary) variables across the whole model.
@@ -4148,8 +4139,9 @@ def contact(slave: Mesh, master: Mesh, target: Model, variables: typing.Sequence
     `["u_x", "u_y"]`), each dual row read from it. Each relation gets a
     multiplier node of its own, minted beside its slave node.
     
-    Solve with `solve`; build the initial-gap right-hand side
-    with `Model.contact_gaps()`. See the contact chapter of the book.
+    Solve with `solve`. The initial-gap right-hand side `-g0` is a load the
+    contact carries: `node_field.external_forces` returns it with the other
+    loads of the model. See the contact chapter of the book.
     """
 
 def convert(mesh: Mesh, element_type: builtins.str) -> Mesh:

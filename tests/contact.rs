@@ -63,8 +63,8 @@ fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
 }
 
 /// The full two-block setup. Returns the two node grids, the assembled model
-/// (elasticity + rollers + contact), the contact model object (for
-/// `contact_gaps` / multiplier reads) and the material field.
+/// (elasticity + rollers + contact), the contact model object (for its gap and
+/// multiplier reads) and the material field.
 struct TwoBlocks {
     bottom: Vec<Node>,
     top: Vec<Node>,
@@ -153,8 +153,8 @@ fn patch_test_uniform_pressure_through_contact() -> Result<()> {
         &model,
         &[("E", E), ("nu", 0.0), ("phi_f_y", -S)],
     )?;
-    let traction = pyrucast::ops::node_field::external_forces(&model, &materials)?;
-    let rhs = traction.union(&model.contact_gaps()?)?;
+    // The pressure and the contact's own gap: every load the model carries.
+    let rhs = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solver::solve(&k, &rhs)?;
@@ -226,7 +226,9 @@ fn separation_releases_every_pair() -> Result<()> {
                 .map(|n| (n.id(), lift))
                 .collect::<Vec<_>>(),
         )?
-        .union(&model.contact_gaps()?)?;
+        .union(&pyrucast::ops::node_field::external_forces(
+            &model, &materials,
+        )?)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solver::solve(&k, &rhs)?;
@@ -337,8 +339,8 @@ fn contact_3d_two_cubes() -> Result<()> {
         &model,
         &[("E", E), ("nu", 0.0), ("phi_f_z", -S)],
     )?;
-    let traction = pyrucast::ops::node_field::external_forces(&model, &materials)?;
-    let rhs = traction.union(&model.contact_gaps()?)?;
+    // The pressure and the contact's own gap: every load the model carries.
+    let rhs = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solver::solve(&k, &rhs)?;
@@ -368,5 +370,22 @@ fn contact_3d_two_cubes() -> Result<()> {
         .map(|m| -solution.value(*m, "lambda").unwrap())
         .sum();
     assert!((total - S).abs() < TOL);
+    Ok(())
+}
+
+/// The contact's right-hand side is a load it carries: on its own,
+/// `external_forces` gives back `−g₀` at each multiplier node — the two blocks
+/// stand `G0` apart.
+#[test]
+fn the_contact_carries_its_gap() -> Result<()> {
+    let tb = two_blocks()?;
+    let materials =
+        pyrucast::ops::element_field::material_field(&tb.model, &[("E", E), ("nu", 0.0)])?;
+    let gaps = pyrucast::ops::node_field::external_forces(&tb.contact, &materials)?;
+    let mult = tb.contact.multiplier_mesh()?;
+    for r in 0..=N {
+        let m = mult.node(0, r, 0)?.id();
+        assert!((gaps.value(m, "imposed")? + G0).abs() < TOL);
+    }
     Ok(())
 }

@@ -112,18 +112,6 @@ impl PyModel {
         }
     }
 
-    /// `Model.contact_gaps()` — the contact right-hand side `−g₀`: a
-    /// `NodeField` carrying, at each contact multiplier node's `imposed`
-    /// slot, minus the initial signed gap of its relation, so that
-    /// non-penetration reads `g₀ + C·u ≥ 0`. Merge it into the global load
-    /// with `|`. The model must hold exactly one contact sub-model; omitting
-    /// this helper treats every pair as initially touching (`g₀ = 0`).
-    fn contact_gaps(&self) -> PyResult<PyNodeField> {
-        Ok(PyNodeField {
-            inner: self.inner.contact_gaps()?,
-        })
-    }
-
     /// Names of the primal (primary) variables across the whole model.
     fn primal_vars(&self) -> Vec<String> {
         self.inner.primal_vars()

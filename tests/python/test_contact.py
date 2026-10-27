@@ -80,8 +80,8 @@ def test_patch_test_uniform_pressure_through_contact():
     materials = pyrucast.element_field.material_field(
         model, [("E", E), ("nu", 0.0), ("phi_f_y", -S)]
     )
-    traction = pyrucast.node_field.external_forces(model, materials)
-    rhs = traction | model.contact_gaps()
+    # The pressure and the contact's own gap: every load the model carries.
+    rhs = pyrucast.node_field.external_forces(model, materials)
 
     k = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(k, rhs)
@@ -113,7 +113,7 @@ def test_separation_releases_every_pair():
     lift_model = _clamp(model, top_edge_nodes, "u_y")
     model = model | lift_model
     rhs = lift_model.constraint_rhs([(n, lift) for n in top_edge_nodes])
-    rhs = rhs | model.contact_gaps()
+    rhs = rhs | pyrucast.node_field.external_forces(model, materials)
 
     k = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(k, rhs)
@@ -128,15 +128,14 @@ def test_separation_releases_every_pair():
         assert abs(solution.value(m, "lambda")) < TOL
 
 
-def test_contact_gaps_requires_a_contact():
-    """`contact_gaps` on a contact-free model raises a clear error."""
-    c = pyrucast.Coords(2)
-    mesh = pyrucast.Mesh(c, "QUA4")
-    _block(c, mesh, 0.0)
-    fes = pyrucast.FiniteElementSpace(mesh)
-    model = pyrucast.model.elasticity(fes, "plane_stress")
-    with pytest.raises(Exception, match="contact"):
-        model.contact_gaps()
+def test_the_contact_carries_its_gap():
+    """The contact's right-hand side is a load it carries: `external_forces`
+    returns `-g0` at each multiplier node, the blocks being `G0` apart."""
+    _c, _bottom, _top, _model, contact, materials = _two_blocks()
+    gaps = pyrucast.node_field.external_forces(contact, materials)
+    mult_mesh = contact.multiplier_mesh()
+    for r in range(N + 1):
+        assert abs(gaps.value(mult_mesh.node(0, r, 0), "imposed") + G0) < TOL
 
 
 def test_components_must_match_dimension():

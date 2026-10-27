@@ -157,8 +157,9 @@ pub fn embedded(
 /// `["u_x", "u_y"]`), each dual row read from it. Each relation gets a
 /// multiplier node of its own, minted beside its slave node.
 ///
-/// Solve with `solve`; build the initial-gap right-hand side
-/// with `Model.contact_gaps()`. See the contact chapter of the book.
+/// Solve with `solve`. The initial-gap right-hand side `-g0` is a load the
+/// contact carries: `node_field.external_forces` returns it with the other
+/// loads of the model. See the contact chapter of the book.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (slave, master, target, variables))]

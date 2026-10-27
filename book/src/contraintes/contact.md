@@ -64,18 +64,19 @@ composantes entre elles (coefficients `+n_c` sur l'esclave, `−Nᵢ·n_c` sur
 chaque nœud maître). `variables` doit donc en donner exactement une par
 dimension.
 
-## Second membre : le helper `contact_gaps`
+## Second membre : le jeu, porté par le contact
 
-Le second membre de chaque relation est `−g₀` — une donnée **géométrique**
-que le sous-modèle connaît déjà. Le helper la transforme en champ de
-chargement, à fusionner avec `|` :
+Le second membre de chaque relation est `−g₀` — une donnée **géométrique**,
+que le sous-modèle connaît déjà et que l'utilisateur n'a pas à choisir. Le
+contact la **porte** donc comme une charge : [`external_forces`](../operateurs/comportement.md)
+la rend, au slot `imposed` de chaque nœud multiplicateur, avec les autres
+charges du modèle. Personne ne la calcule à la main, personne ne peut
+l'oublier — l'oubli se lisait comme un jeu nul, deux blocs écartés collés à
+distance.
 
 ```python
-{{#include ../../../tests/python/test_doc_contraintes.py:contact_gaps}}
+{{#include ../../../tests/python/test_doc_contraintes.py:contact_rhs}}
 ```
-
-L'omettre revient à traiter toutes les paires comme **initialement en
-contact** (`g₀ = 0`).
 
 ## Exemple : patch test à deux blocs
 

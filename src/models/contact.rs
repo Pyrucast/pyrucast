@@ -25,10 +25,10 @@
 //! pointing toward the slave body (see
 //! [`project_points`](crate::ops::geom::project_points())): the initial gap `g₀`
 //! is then positive when separated, negative when penetrating. The relation's
-//! right-hand side is `−g₀`; the helper
-//! [`Model::contact_gaps`](crate::containers::model::Model::contact_gaps)
-//! builds that load field so the user never computes it by hand. Omitting it
-//! treats every pair as initially touching (`g₀ = 0`).
+//! right-hand side is `−g₀`, geometry the sub-model knows: it carries it as a
+//! load, which [`external_forces`](crate::ops::node_field::external_forces())
+//! returns with the other loads of the model, at each multiplier node's
+//! `imposed` slot. Nobody computes it by hand, and nobody can forget it.
 //!
 //! # Variables
 //!
@@ -47,9 +47,11 @@
 use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::element_field::SubElementField;
+use crate::containers::field::SubField;
 use crate::containers::matrix::{hash_name, hash_nodes, mint_pair, Symmetry, FNV_SEED};
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{Mesh, SubMesh};
+use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
@@ -295,8 +297,8 @@ impl Contact {
 
     /// The initial signed gaps `g₀`, one per relation (slave node), in relation
     /// order — positive when separated, negative when penetrating. The
-    /// relation's right-hand side is `−g₀` (see
-    /// [`Model::contact_gaps`](crate::containers::model::Model::contact_gaps)).
+    /// relation's right-hand side is `−g₀`, the load the contact carries
+    /// ([`external_forces`](crate::ops::node_field::external_forces())).
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -370,6 +372,24 @@ impl SubModelKind for Contact {
     /// constrained nodes, and `C·u` on its own row.
     fn internal_force_contribution(&self) -> Vec<crate::models::ResidualContribution> {
         vec![crate::models::ResidualContribution::Relations]
+    }
+
+    /// Its right-hand side: `−g` at each relation's multiplier node, component
+    /// `imposed` — the gap is geometry this sub-model knows, so it carries it as
+    /// a load rather than leave it to be remembered.
+    fn external_force_contribution(&self) -> Vec<crate::models::ResidualContribution> {
+        let mult_sm = self
+            .multiplier_sm()
+            .expect("a contact has its multiplier mesh");
+        let mut gaps = SubNodeField::from_poi1(&mult_sm, vec![IMPOSED.to_string()])
+            .expect("the multipliers of a contact are a POI1 support");
+        // The support's node order is the relations' order: a positional write.
+        for (value, pairing) in gaps.values_mut().iter_mut().zip(&self.pairings) {
+            *value = -pairing.gap;
+        }
+        vec![crate::models::ResidualContribution::Literal(
+            NodeField::from_sub(gaps),
+        )]
     }
 
     fn as_constraint(&self) -> Option<&dyn Constraint> {
