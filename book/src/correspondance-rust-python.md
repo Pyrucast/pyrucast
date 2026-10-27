@@ -204,7 +204,7 @@ par la sortie.
 | `stress_measure(stress: &ElementField, gradient: &ElementField, target: StressMeasure) -> ElementField` | `stress_measure(stress, gradient, target) -> ElementField` (`StressMeasure` par son nom : `"cauchy"`, `"kirchhoff"`, `"pk1"`, `"pk2"`, `"hencky"` ; pas de méthode : elle exige une contrainte et un gradient nommés) |
 | `rotate_frame(field: &ElementField, gradient: &ElementField) -> ElementField` | `rotate_frame(field, gradient) -> ElementField` (axes `V1*`, `V2*` tournés par la rotation `R` de `F = R U` ; pas de méthode : elle exige des axes et un gradient nommés) |
 | `cell_integral(field: &ElementField, target: &FiniteElementSpace) -> ElementField` | `cell_integral(field, target) -> ElementField` (`target` : un point par maille, quadrature `REDUCED`) |
-| `shell_deformation(field: &NodeField, fespace: &FiniteElementSpace, model: ShellModel) -> ElementField` | `shell_deformation(field, fespace, model) -> ElementField` |
+| `shell_deformation(field: &NodeField, fespace: &FiniteElementSpace, formulation: ShellFormulation) -> ElementField` | `shell_deformation(field, fespace, formulation) -> ElementField` |
 | `beam_deformation(field: &NodeField, fespace: &FiniteElementSpace, material: &ElementField) -> ElementField` | `beam_deformation(field, fespace, material) -> ElementField` (1-D, plan ou spatial selon le maillage ; le matériau est requis, l'interpolation dépendant de `Φ`) |
 | `consolidate(field: &ElementField) -> ElementField` | `consolidate(field) -> ElementField` (fusionne les zones d'une même fespace) |
 | `mask(field: &ElementField, band: &Band, …) -> ElementField` | `mask(field, ge=None, …) -> ElementField` ; accepte aussi un `SubElementField` |
@@ -248,31 +248,44 @@ un sujet qu'on transforme.
 
 | Rust (`ops::model::…`) | Python (`pyrucast.model.…`) |
 |---|---|
-| `heat_conduction(fes: &FiniteElementSpace, symmetry: MaterialSymmetry) -> Model` | `heat_conduction(fespace, symmetry="isotropic") -> Model` |
-| `fick(fes: &FiniteElementSpace, species: &str, symmetry: MaterialSymmetry) -> Model` | `fick(fespace, species, symmetry="isotropic") -> Model` |
-| `radiation(fes: &FiniteElementSpace, target: &Model) -> Model` | `radiation(fespace, target) -> Model` |
-| `flux(fes: &FiniteElementSpace, target: &Model, dual: String) -> Model` | `flux(fespace, target, dual) -> Model` (`dual="n"` : le mode normal, une pression `phi_n` le long de la normale de la maille) |
-| `boundary_transfer(fes, target: &Model, components: Vec<(String, String)>) -> Model` | `boundary_transfer(fespace, target, components) -> Model` |
-| `interface_transfer(side_a, side_b, target: &Model, components, tol: f64) -> Model` | `interface_transfer(side_a, side_b, target, components, tol=1e-9) -> Model` — défaut `interface_transfer::DEFAULT_TOL` |
-| `truss(fes: &FiniteElementSpace, strain_measure: StrainMeasure) -> Model` | `truss(fespace, strain_measure="linear") -> Model` |
-| `elasticity(fes, kinematics: Kinematics, symmetry: MaterialSymmetry, strain_measure: StrainMeasure) -> Model` | `elasticity(fespace, kinematics, symmetry="isotropic", strain_measure="linear") -> Model` |
-| `plasticity_perfect(fes, kinematics: Kinematics, strain_measure: StrainMeasure) -> Model` | `plasticity_perfect(fespace, kinematics, strain_measure="linear") -> Model` |
-| `plasticity(fes, kinematics, law: PlasticLaw, measure: StrainMeasure) -> Model` | une fonction par loi : `plasticity_isotropic`, `drucker_prager`, `ottosen`, `creep_norton`, `creep_blackburn`, `creep_lemaitre`, `viscoplasticity_chaboche`, `viscoplasticity_lemaitre_chaboche`, `gurson` — toutes `(fespace, kinematics, strain_measure="linear") -> Model`, qui existent aussi en Rust, `(fes, kinematics, strain_measure)` |
-| `mazars(fes, kinematics: Kinematics, strain_measure: StrainMeasure) -> Model` | `mazars(fespace, kinematics, strain_measure="linear") -> Model` |
-| `damage(fes, kinematics, law: DamageLaw, measure: StrainMeasure) -> Model` | une fonction par loi : `damage_tc`, `damage_sic_sic` — `(fespace, kinematics, strain_measure="linear") -> Model`, qui existent aussi en Rust, `(fes, kinematics, strain_measure)` |
-| `bernoulli(fes: &FiniteElementSpace) -> Model` | `bernoulli(fespace) -> Model` |
-| `timoshenko(fes: &FiniteElementSpace) -> Model` | `timoshenko(fespace) -> Model` |
-| `shell(fes, model: ShellModel) -> Model` | `shell(fespace, model) -> Model` |
-| `dirichlet(target: &Model, variable: &str, imposed_mesh: &Mesh, sense: RelationSense) -> Model` | `dirichlet(target, variable, imposed_mesh, sense="=") -> Model` |
-| `mpc(target: &Model, terms: &[(&Mesh, &str, f64)], sense: RelationSense) -> Model` | `mpc(target, terms, sense="=") -> Model` — `terms` : liste de `(mesh, variable, coefficient)` |
-| `embedded(target: &Model, immersed, host, variables: Vec<String>, tol) -> Model` | `embedded(target, immersed, host, variables, tol=1e-6) -> Model` — défaut `embedded::DEFAULT_TOL` |
-| `contact(target: &Model, slave, master, variables: Vec<String>) -> Model` | `contact(target, slave, master, variables) -> Model` |
+| `heat_conduction(fespace: &FiniteElementSpace, symmetry: MaterialSymmetry) -> Model` | `heat_conduction(fespace, symmetry="isotropic") -> Model` |
+| `fick(fespace: &FiniteElementSpace, species: &str, symmetry: MaterialSymmetry) -> Model` | `fick(fespace, species, symmetry="isotropic") -> Model` |
+| `radiation(fespace: &FiniteElementSpace, target: &Model) -> Model` | `radiation(fespace, target) -> Model` |
+| `flux(fespace: &FiniteElementSpace, target: &Model, dual: &str) -> Model` | `flux(fespace, target, dual) -> Model` (`dual="n"` : le mode normal, une pression `phi_n` le long de la normale de la maille) |
+| `boundary_transfer(fespace: &FiniteElementSpace, target: &Model, variables: Vec<String>) -> Model` | `boundary_transfer(fespace, target, variables) -> Model` — la duale de chaque variable est lue dans `target` |
+| `interface_transfer(side_a: &FiniteElementSpace, side_b: &FiniteElementSpace, target: &Model, variables: Vec<String>, tol: f64) -> Model` | `interface_transfer(side_a, side_b, target, variables, tol=1e-9) -> Model` — `tol` est une **distance**, dans l'unité du maillage ; défaut `interface_transfer::DEFAULT_TOL` |
+| `truss(fespace: &FiniteElementSpace, strain_measure: StrainMeasure) -> Model` | `truss(fespace, strain_measure="linear") -> Model` |
+| `elasticity(fespace: &FiniteElementSpace, kinematics: Kinematics, symmetry: MaterialSymmetry, strain_measure: StrainMeasure) -> Model` | `elasticity(fespace, kinematics, symmetry="isotropic", strain_measure="linear") -> Model` |
+| `plasticity_perfect(fespace: &FiniteElementSpace, kinematics: Kinematics, strain_measure: StrainMeasure) -> Model` | `plasticity_perfect(fespace, kinematics, strain_measure="linear") -> Model` |
+| `plasticity(fespace: &FiniteElementSpace, kinematics: Kinematics, law: PlasticLaw, strain_measure: StrainMeasure) -> Model` | une fonction par loi : `plasticity_isotropic`, `drucker_prager`, `ottosen`, `creep_norton`, `creep_blackburn`, `creep_lemaitre`, `viscoplasticity_chaboche`, `viscoplasticity_lemaitre_chaboche`, `gurson` — toutes `(fespace, kinematics, strain_measure="linear") -> Model`, qui existent aussi en Rust, `(fespace, kinematics, strain_measure)` |
+| `mazars(fespace: &FiniteElementSpace, kinematics: Kinematics, strain_measure: StrainMeasure) -> Model` | `mazars(fespace, kinematics, strain_measure="linear") -> Model` |
+| `damage(fespace: &FiniteElementSpace, kinematics: Kinematics, law: DamageLaw, strain_measure: StrainMeasure) -> Model` | une fonction par loi : `damage_tc`, `damage_sic_sic` — `(fespace, kinematics, strain_measure="linear") -> Model`, qui existent aussi en Rust, `(fespace, kinematics, strain_measure)` |
+| `bernoulli(fespace: &FiniteElementSpace) -> Model` | `bernoulli(fespace) -> Model` |
+| `timoshenko(fespace: &FiniteElementSpace) -> Model` | `timoshenko(fespace) -> Model` |
+| `shell(fespace: &FiniteElementSpace, formulation: ShellFormulation) -> Model` | `shell(fespace, formulation) -> Model` (`"thick"` ou `"kirchhoff"`) |
+| `dirichlet(imposed_mesh: &Mesh, target: &Model, variable: &str, sense: RelationSense) -> Model` | `dirichlet(imposed_mesh, target, variable, sense="=") -> Model` |
+| `mpc(terms: &[(&Mesh, &str, f64)], target: &Model, sense: RelationSense) -> Model` | `mpc(terms, target, sense="=") -> Model` — `terms` : liste de `(mesh, variable, coefficient)` |
+| `embedded(immersed: &Mesh, host: &Mesh, target: &Model, variables: Vec<String>, tol: f64) -> Model` | `embedded(immersed, host, target, variables, tol=1e-6) -> Model` — `tol` est un jeu dans l'élément de **référence**, sans dimension ; défaut `embedded::DEFAULT_TOL` |
+| `contact(slave: &Mesh, master: &Mesh, target: &Model, variables: Vec<String>) -> Model` | `contact(slave, master, target, variables) -> Model` |
+
+**Même ordre partout.** Le support d'abord — l'espace EF balayé, ou les
+maillages qui portent une contrainte, celui qui porte les relations en tête
+(`imposed_mesh`, `immersed`, `slave`, les termes d'une MPC) —, puis le modèle
+`target` auquel on se rattache, puis le reste. La duale d'une variable n'est
+jamais un argument : elle se lit dans `target` (`Model.dual_of`).
+
+**Les noms, en Rust.** Un nom seul s'emprunte (`&str`) ; une liste de noms se
+donne (`Vec<String>`), parce que le modèle la garde — comme les constructeurs
+de champs et de matrices. Les termes d'une MPC empruntent leurs maillages : ils
+restent à l'appelant.
 
 **Un argument, deux idiomes.** Un argument que Python prend en mot-clé avec
 valeur par défaut (`symmetry="isotropic"`, `strain_measure="linear"`), Rust le
 reçoit explicitement (`MaterialSymmetry::Isotropic`, `StrainMeasure::Linear`) :
 Rust n'a pas d'argument par défaut. Même nom, même ordre ; c'est
-`physics_operator!` qui écrit les deux faces.
+`physics_operator!` qui écrit les deux faces. La documentation Rust de chaque
+fonction dit la valeur que Python prend par défaut, pour qu'un lecteur qui
+n'écrit que du Rust sache ce que l'autre obtient sans rien dire.
 
 **Le pli des lois.** Rust nomme la loi par une **enum** (`PlasticLaw`,
 `DamageLaw`) dans `plasticity` et `damage` ; Python déplie

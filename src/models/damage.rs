@@ -102,9 +102,9 @@ pub struct Damage {
 
 impl Damage {
     /// Damage under the law `law`, on an FE subspace with the given 2-D/3-D
-    /// kinematics, the law reading the strain `measure`. Errors if
+    /// kinematics, the law reading `strain_measure`. Errors if
     /// `kinematics` is inconsistent with the space dimension (same rule as
-    /// [`crate::models::elasticity::Elasticity::new`]), or if `measure` is not
+    /// [`crate::models::elasticity::Elasticity::new`]), or if `strain_measure` is not
     /// a law input.
     ///
     /// ```
@@ -141,11 +141,11 @@ impl Damage {
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         law: DamageLaw,
-        measure: StrainMeasure,
+        strain_measure: StrainMeasure,
     ) -> Result<Self> {
         Ok(Self {
             continuum: Continuum::new(fespace, kinematics, "Damage")?
-                .with_measure(measure, "Damage")?,
+                .with_measure(strain_measure, "Damage")?,
             law,
         })
     }

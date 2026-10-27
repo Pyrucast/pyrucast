@@ -34,7 +34,7 @@ def _raises(call, fragment):
 def test_a_film_is_thermal_because_its_conduction_is():
     plate, edge = _plate_and_edge()
     conduction = pyrucast.model.heat_conduction(plate)
-    film = pyrucast.model.boundary_transfer(edge, conduction, [("T", "q")])
+    film = pyrucast.model.boundary_transfer(edge, conduction, ["T"])
     assert film[0].physics() == ["thermal"]
     assert film[0].material_components() == ["h_T", "a_ext_T"]
 
@@ -42,9 +42,7 @@ def test_a_film_is_thermal_because_its_conduction_is():
 def test_a_foundation_is_mechanical_because_its_elasticity_is():
     plate, edge = _plate_and_edge()
     elasticity = pyrucast.model.elasticity(plate, "plane_stress")
-    foundation = pyrucast.model.boundary_transfer(
-        edge, elasticity, [("u_x", "f_x"), ("u_y", "f_y")]
-    )
+    foundation = pyrucast.model.boundary_transfer(edge, elasticity, ["u_x", "u_y"])
     assert foundation[0].physics() == ["mechanical"]
     assert foundation[0].material_components() == [
         "h_u_x",
@@ -54,24 +52,29 @@ def test_a_foundation_is_mechanical_because_its_elasticity_is():
     ]
 
 
-def test_a_pair_the_target_does_not_assemble_is_rejected():
+def test_the_dual_row_is_read_from_the_target():
+    plate, edge = _plate_and_edge()
+    elasticity = pyrucast.model.elasticity(plate, "plane_stress")
+    foundation = pyrucast.model.boundary_transfer(edge, elasticity, ["u_y"])
+    assert foundation.dual_vars() == ["f_y"]
+
+
+def test_a_variable_the_target_does_not_declare_is_rejected():
     plate, edge = _plate_and_edge()
     conduction = pyrucast.model.heat_conduction(plate)
     _raises(
-        lambda: pyrucast.model.boundary_transfer(edge, conduction, [("u_x", "f_x")]),
-        "assembles no `u_x` paired with `f_x`",
+        lambda: pyrucast.model.boundary_transfer(edge, conduction, ["u_x"]),
+        "`u_x` is not an unknown",
     )
 
 
-def test_pairs_of_two_natures_are_rejected():
+def test_variables_of_two_natures_are_rejected():
     plate, edge = _plate_and_edge()
     both = pyrucast.model.heat_conduction(plate) | pyrucast.model.elasticity(
         plate, "plane_stress"
     )
     _raises(
-        lambda: pyrucast.model.boundary_transfer(
-            edge, both, [("T", "q"), ("u_x", "f_x")]
-        ),
+        lambda: pyrucast.model.boundary_transfer(edge, both, ["T", "u_x"]),
         "single nature",
     )
 

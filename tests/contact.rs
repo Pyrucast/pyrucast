@@ -59,7 +59,7 @@ fn block(coords: &Handle<Coords>, y0: f64) -> Result<(Vec<Node>, SubMesh)> {
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
 fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-    model::dirichlet(target, var, &imposed, Default::default())
+    model::dirichlet(&imposed, target, var, Default::default())
 }
 
 /// The full two-block setup. Returns the two node grids, the assembled model
@@ -100,9 +100,9 @@ fn two_blocks() -> Result<TwoBlocks> {
         StrainMeasure::Linear,
     )?;
     let contact = model::contact(
-        &elasticite,
         &slave,
         &master,
+        &elasticite,
         vec!["u_x".into(), "u_y".into()],
     )?;
 
@@ -148,9 +148,7 @@ fn patch_test_uniform_pressure_through_contact() -> Result<()> {
     let top_fes = FiniteElementSpace::lagrange1(&top_edge)?;
     // The pressure is a term of the model: it joins it, its density joins
     // the material, and we ask it for its contribution.
-    let model = tb
-        .model
-        .union(&model::flux(&top_fes, &tb.model, "f_y".into())?)?;
+    let model = tb.model.union(&model::flux(&top_fes, &tb.model, "f_y")?)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", E), ("nu", 0.0), ("phi_f_y", -S)],
@@ -311,9 +309,9 @@ fn contact_3d_two_cubes() -> Result<()> {
         StrainMeasure::Linear,
     )?;
     let contact = model::contact(
-        &elasticite,
         &slave,
         &master,
+        &elasticite,
         vec!["u_x".into(), "u_y".into(), "u_z".into()],
     )?;
 
@@ -333,7 +331,7 @@ fn contact_3d_two_cubes() -> Result<()> {
     let mut face = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     face.add_cell(&[top[4].id(), top[5].id(), top[6].id(), top[7].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let model = model.union(&model::flux(&face_fes, &model, "f_z".into())?)?;
+    let model = model.union(&model::flux(&face_fes, &model, "f_z")?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,

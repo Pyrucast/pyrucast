@@ -175,7 +175,7 @@ def test_une_etude_complete(tmp_path):
     impose = pyrucast.Mesh(c, "POI1")
     impose.unit().add_cell([nodes[-1]])
     cible = pyrucast.model.heat_conduction(fes)
-    appui = pyrucast.model.dirichlet(cible, "T", impose)
+    appui = pyrucast.model.dirichlet(impose, cible, "T")
     mult = appui.multiplier_mesh()
 
     modele = cible | appui

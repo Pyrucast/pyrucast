@@ -24,50 +24,55 @@ sur la même maille.**
 
 ## Ce qui est transféré appartient à l'appelant
 
-Aucun des deux ne sait ce qu'il transporte. On lui donne une liste de couples
-`(primale, duale)` — la forme que prennent déjà
-[`embedded`](contraintes/embedded.md) et [`contact`](contraintes/contact.md), les
-deux autres lois qui lient des maillages — et tout le reste en découle :
+Aucun des deux ne sait ce qu'il transporte. On lui donne la liste des variables
+échangées — la forme que prennent déjà [`embedded`](contraintes/embedded.md) et
+[`contact`](contraintes/contact.md), les deux autres lois qui lient des
+maillages —, chacune appariée à la duale que lui donne la cible, et tout le reste
+en découle :
 
-| transféré | matériau | entrée du comportement | sortie |
-|---|---|---|---|
-| `("T", "q")` | `h_T` | `T` / `jump_T` | `flux_T` |
-| `("c_H2", "j_H2")` | `h_c_H2` | `c_H2` / `jump_c_H2` | `flux_c_H2` |
-| `("u_x", "f_x")` | `h_u_x` | `u_x` / `jump_u_x` | `flux_u_x` |
+| transféré | duale (lue dans la cible) | matériau | entrée du comportement | sortie |
+|---|---|---|---|---|
+| `"T"` | `q` | `h_T` | `T` / `jump_T` | `flux_T` |
+| `"c_H2"` | `j_H2` | `h_c_H2` | `c_H2` / `jump_c_H2` | `flux_c_H2` |
+| `"u_x"` | `f_x` | `h_u_x` | `u_x` / `jump_u_x` | `flux_u_x` |
 
 **Un coefficient par grandeur transférée, nommé d'après elle.** C'est ce qui
 permet une raideur par direction, et ce qu'un `h` unique ne pouvait pas exprimer.
 
 Nommer les DDL de la physique de volume est aussi ce qui fait que le terme s'y
-**couple directement** : un `boundary_transfer` sur `("T", "q")` entre dans la
+**couple directement** : un `boundary_transfer` sur `["T"]` entre dans la
 raideur d'un [`heat_conduction`](thermique.md) sans adaptateur, parce que la
 matrice est indexée par le couple *(nœud, nom de champ)*.
 
-## La cible donne la nature
+## La cible donne la duale et la nature
 
-Des noms de variables libres ne disent pas quelle **nature physique** porte
-l'échange (`"thermal"`, `"diffusion"`, `"mechanical"`) — c'est pourtant elle que
-`model.filter(...)` sélectionne. Le modèle dont l'échange nomme les DDL, lui, la
-connaît. Les deux lois se construisent donc **contre** ce modèle, passé en
-argument `target` après le support, exactement comme une
-[charge répartie](operateurs/assemblage.md) ou une [contrainte](contraintes/dirichlet.md) :
+Des noms de variables libres ne disent ni dans quelle ligne la réaction atterrit,
+ni quelle **nature physique** porte l'échange (`"thermal"`, `"diffusion"`,
+`"mechanical"`) — c'est pourtant elle que `model.filter(...)` sélectionne. Le
+modèle dont l'échange nomme les DDL, lui, connaît les deux. Les deux lois se
+construisent donc **contre** ce modèle, passé en argument `target` après le
+support, exactement comme une [charge répartie](operateurs/assemblage.md) ou une
+[contrainte](contraintes/dirichlet.md) :
 
 ```text
 conduction = model.heat_conduction(volume)
-film       = model.boundary_transfer(peau, conduction, [("T", "q")])      # thermique
+film       = model.boundary_transfer(peau, conduction, ["T"])      # thermique
 corps      = model.fick(gauche, "H2") | model.fick(droite, "H2")
-joint      = model.interface_transfer(face_g, face_d, corps, [("c_H2", "j_H2")])  # diffusion
+joint      = model.interface_transfer(face_g, face_d, corps, ["c_H2"])  # diffusion
 ```
 
-Chaque couple doit être **assemblé** par la cible : un de ses sous-modèles compte
-la primale parmi ses inconnues et l'apparie à la duale. La vérification se fait
-une fois, à la construction, et refuse trois erreurs qui passaient jusqu'ici :
+Chaque variable doit être une **inconnue** de la cible, qui l'apparie à sa duale
+(`Model.dual_of`) : la duale n'est pas à retaper, comme pour les
+[contraintes](contraintes/dirichlet.md). La vérification se fait une fois, à la
+construction, et refuse deux erreurs :
 
 | erreur | ce qu'elle bâtissait |
 |---|---|
-| un nom mal tapé, ou une cible qui n'assemble pas ce couple | un échange couplé à rien : une matrice sur des lignes qu'aucune physique ne résout |
-| une primale appariée à la duale d'une autre (`("u_x", "f_y")`) | un film qui écrit dans la mauvaise équation |
-| des couples de deux natures dans un seul échange | un terme que `filter` rangerait d'un seul côté |
+| un nom mal tapé, ou une cible qui ne déclare pas cette variable | un échange couplé à rien : une matrice sur des lignes qu'aucune physique ne résout |
+| des variables de deux natures dans un seul échange | un terme que `filter` rangerait d'un seul côté |
+
+Une primale appariée à la duale d'une autre (`("u_x", "f_y")`, un film qui écrit
+dans la mauvaise équation) ne peut plus s'écrire.
 
 Pour deux natures, on construit deux échanges. Le [rayonnement](thermique.md#rayonnement-à-linfini-stefan-boltzmann)
 reçoit lui aussi sa cible — il écrit dans la ligne `q` d'une conduction —, mais

@@ -306,6 +306,6 @@ crate::physics_operator! {
     /// assert_eq!(m.primal_vars(), vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn gurson(fes, kinematics: Kinematics) = crate::ops::model::plasticity, PlasticLaw::Gurson;
+    pub fn gurson(fespace, kinematics: Kinematics) = crate::ops::model::plasticity, PlasticLaw::Gurson;
     python: "`model.gurson(fespace, kinematics)` — Gurson-Tvergaard-Needleman plasticity\nof a **porous** metal, where the porosity shrinks the yield surface.\nMaterial `E`, `nu`, `sigma_y`, `q_1`, `q_2`, `q_3`, `f_0`, `f_c`, `f_f`.\n\nA ductile metal fails because voids grow and coalesce, not because a\nstress is reached. The `cosh` term makes the surface **pressure\nsensitive**, so voids grow under triaxial tension and close under\ncompression — which a J2 law cannot express, and which is why it can\nnever predict ductile rupture. Beyond `f_c` the effective porosity\naccelerates towards `1/q_1`, modelling coalescence.\n\nThe porosity is exposed as the internal variable `porosity`, starting\nfrom `f_0`. Void **nucleation** is not modelled — only growth."
 }

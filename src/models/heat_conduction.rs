@@ -692,12 +692,12 @@ mod tests {
 }
 
 crate::physics_operator! {
-    /// Heat-conduction `Model` spanning **every** subspace of `fes` — one
+    /// Heat-conduction `Model` spanning **every** subspace of `fespace` — one
     /// [`SubModel::HeatConduction`] per [`SubFiniteElementSpace`].
     ///
     /// This is the parent-level operator (see `CONVENTIONS.md`): it consumes the
     /// FE-space *parent* and returns a `Model`, so the caller never builds a
-    /// `SubModel` by hand. A single-subspace `fes` yields the unit case; several
+    /// `SubModel` by hand. A single-subspace `fespace` yields the unit case; several
     /// subspaces yield one zone each. Compose heterogeneous physics with `union`
     /// (Python `|`).
     ///
@@ -731,6 +731,6 @@ crate::physics_operator! {
     /// assert!(reads.contains(&"V1X".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn heat_conduction(fes, symmetry: MaterialSymmetry = MaterialSymmetry::Isotropic) via SubModel::heat_conduction;
+    pub fn heat_conduction(fespace, symmetry: MaterialSymmetry = MaterialSymmetry::Isotropic) via SubModel::heat_conduction;
     python: "`model.heat_conduction(fespace, symmetry=\"isotropic\")` — heat-conduction\nmodel spanning **every** subspace of `fespace` (one zone per subspace). A\nsingle-subspace space gives the unit case; several give one zone each. Compose\nheterogeneous physics with `|`: `model.heat_conduction(fes) | model.dirichlet(...)`.\n\n`symmetry` is `\"isotropic\"` (the default), `\"orthotropic\"` or\n`\"anisotropic\"`, and selects which conductivity the material field must\ncarry: the scalar `k`, the principal `k_1, k_2, k_3`, or the symmetric\ntensor `k_11 … k_33`. The two oriented ones also require the material\naxes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z` in 3-D."
 }

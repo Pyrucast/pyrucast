@@ -4,7 +4,7 @@ The case that motivates immersion: an immersed node follows the host's
 l'interpolation volumique, en x, y **et** z. Un cube HEX8 en traction uniaxiale
 (élasticité 3-D) a le champ linéaire `u_x = (S/E)x`, `u_y = −(νS/E)y`,
 `u_z = −(νS/E)z`; a node immersed at the core, tied to the host by
-`model.embedded(volume, ..., ["u_x", "u_y", "u_z"])`, recovers that
+`model.embedded(bar, host, volume, ["u_x", "u_y", "u_z"])`, recovers that
 field at its position — without the bar and the volume sharing a node.
 
 Lancer : `python examples/barre_baignee_elastique.py` (après `maturin develop`).
@@ -42,7 +42,7 @@ def main():
     def clamp(target, ids, var):
         picked = [nodes[i] for i in ids]
         imposed = pyrucast.mesh.poi1_from_nodes(picked)
-        return pyrucast.model.dirichlet(target, var, imposed)
+        return pyrucast.model.dirichlet(imposed, target, var)
 
     model = model | clamp(model, [0, 3, 4, 7], "u_x")  # face x = 0
     model = model | clamp(model, [0, 1, 4, 5], "u_y")  # face y = 0
@@ -52,7 +52,7 @@ def main():
     pc = [0.4, 0.7, 0.2]
     p = c.add_node(pc)
     bar = pyrucast.mesh.poi1_from_nodes([p])
-    embedded = pyrucast.model.embedded(model, bar, host, ["u_x", "u_y", "u_z"])
+    embedded = pyrucast.model.embedded(bar, host, model, ["u_x", "u_y", "u_z"])
     model = model | embedded
 
     # Traction S on the x = 1 face (QUA4 [1, 2, 6, 5]) → consistent nodal loads.

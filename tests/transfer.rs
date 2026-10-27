@@ -100,7 +100,7 @@ fn each_direction_carries_its_own_stiffness() -> Result<()> {
     let mut model = elastic.union(&model::boundary_transfer(
         &right,
         &elastic,
-        vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
+        vec!["u_x".into(), "u_y".into()],
     )?)?;
     let left: Vec<Node> = (0..=n).map(|j| grid[idx(0, j)].clone()).collect();
     for var in ["u_x", "u_y"] {
@@ -109,7 +109,7 @@ fn each_direction_carries_its_own_stiffness() -> Result<()> {
 
     // A traction along x, and one along y, applied together.
     for dual in ["f_x", "f_y"] {
-        model = model.union(&model::flux(&right, &model, dual.into())?)?;
+        model = model.union(&model::flux(&right, &model, dual)?)?;
     }
 
     let materials = pyrucast::ops::element_field::material_field(
@@ -165,29 +165,24 @@ fn the_foundation_takes_its_nature_from_the_elasticity() -> Result<()> {
         MaterialSymmetry::Isotropic,
         StrainMeasure::Linear,
     )?;
-    let appui = model::boundary_transfer(&right, &elastic, vec![("u_x".into(), "f_x".into())])?;
+    let appui = model::boundary_transfer(&right, &elastic, vec!["u_x".into()])?;
     assert_eq!(appui.filter(Physics::Mechanical).len(), 1);
     assert!(appui.filter(Physics::Thermal).is_empty());
+    // The row it couples into is the elasticity's own dual of `u_x`.
+    assert_eq!(appui.dual_vars(), vec!["f_x".to_string()]);
 
-    // A conduction on the same square assembles no displacement.
+    // A conduction on the same square declares no displacement.
     let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    let err = model::boundary_transfer(&right, &conduction, vec![("u_x".into(), "f_x".into())])
+    let err = model::boundary_transfer(&right, &conduction, vec!["u_x".into()])
         .unwrap_err()
         .to_string();
-    assert!(
-        err.contains("assembles no `u_x` paired with `f_x`"),
-        "unexpected: {err}"
-    );
+    assert!(err.contains("`u_x` is not an unknown"), "unexpected: {err}");
 
-    // United, each assembles its pair; one exchange does not carry two kinds.
+    // United, each declares its own; one exchange does not carry two kinds.
     let both = elastic.union(&conduction)?;
-    let err = model::boundary_transfer(
-        &right,
-        &both,
-        vec![("u_x".into(), "f_x".into()), ("T".into(), "q".into())],
-    )
-    .unwrap_err()
-    .to_string();
+    let err = model::boundary_transfer(&right, &both, vec!["u_x".into(), "T".into()])
+        .unwrap_err()
+        .to_string();
     assert!(err.contains("single nature"), "unexpected: {err}");
     Ok(())
 }
@@ -249,7 +244,7 @@ fn edge_fespace(
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
 fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-    model::dirichlet(target, var, &imposed, Default::default())
+    model::dirichlet(&imposed, target, var, Default::default())
 }
 
 /// The displacement of the free face of a bar held at `x = 0`, pushed by a
@@ -269,7 +264,7 @@ fn free_face_displacement(n: usize, h: f64) -> Result<f64> {
     let mut model = elastic.union(&model::boundary_transfer(
         &right,
         &elastic,
-        vec![("u_x".into(), "f_x".into())],
+        vec!["u_x".into()],
     )?)?;
     // Held in x on the left face; one node held in y, which is all a uniaxial
     // state needs to be regular (`nu = 0`, so nothing contracts across).
@@ -278,7 +273,7 @@ fn free_face_displacement(n: usize, h: f64) -> Result<f64> {
     let bottom: Vec<Node> = (0..=n).map(|i| grid[idx(i, 0)].clone()).collect();
     model = model.union(&clamp(&model, &bottom, "u_y")?)?;
 
-    model = model.union(&model::flux(&right, &model, "f_x".into())?)?;
+    model = model.union(&model::flux(&right, &model, "f_x")?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,

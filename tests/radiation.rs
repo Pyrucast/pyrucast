@@ -195,7 +195,7 @@ fn a_slab_settles_at_the_imposed_temperature() -> Result<()> {
     // Radiation alone would be non-linear; here the imposed temperature fixes
     // every DOF of the boundary, so the linearised operator suffices to solve.
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&fixture.edge)?);
-    let dirichlet = model::dirichlet(&fixture.radiation, "T", &imposed, Default::default())?;
+    let dirichlet = model::dirichlet(&imposed, &fixture.radiation, "T", Default::default())?;
     let multiplier = dirichlet.multiplier_mesh()?;
     let model = fixture.radiation.union(&dirichlet)?;
     let materials = element_field::material_field(&model, &[("emis", EMIS), ("T_inf", T_INF)])?;

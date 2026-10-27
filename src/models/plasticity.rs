@@ -160,9 +160,9 @@ pub struct Plasticity {
 
 impl Plasticity {
     /// Elastoplasticity under the yield law `law`, on an FE subspace with the
-    /// given 2-D/3-D kinematics, the law reading the strain `measure`. Errors
+    /// given 2-D/3-D kinematics, the law reading `strain_measure`. Errors
     /// if `kinematics` is inconsistent with the space dimension (same rule as
-    /// [`crate::models::elasticity::Elasticity::new`]), or if `measure` is not
+    /// [`crate::models::elasticity::Elasticity::new`]), or if `strain_measure` is not
     /// a law input.
     ///
     /// ```
@@ -201,11 +201,11 @@ impl Plasticity {
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         law: PlasticLaw,
-        measure: StrainMeasure,
+        strain_measure: StrainMeasure,
     ) -> Result<Self> {
         Ok(Self {
             continuum: Continuum::new(fespace, kinematics, "Plasticity")?
-                .with_measure(measure, "Plasticity")?,
+                .with_measure(strain_measure, "Plasticity")?,
             law,
         })
     }

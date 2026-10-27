@@ -87,7 +87,7 @@ pub const NORMAL: &str = "n";
 /// # let zone = fes.get(0).unwrap();
 /// // The target: the model being loaded. It is the one that owns the "q" row.
 /// let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-/// let charge = Flux::new(zone, &cible, "q".into())?;
+/// let charge = Flux::new(zone, &cible, "q")?;
 /// // A load has no primal: it writes into the dual row of another
 /// // autre physique, et n'introduit aucune inconnue.
 /// assert!(charge.primal_vars().is_empty());
@@ -136,27 +136,23 @@ impl Flux {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    /// assert!(Flux::new(zone.clone(), &cible, "q".into()).is_ok());
+    /// assert!(Flux::new(zone.clone(), &cible, "q").is_ok());
     /// // An empty dual row designates nothing: refused at construction.
-    /// assert!(Flux::new(zone.clone(), &cible, String::new()).is_err());
+    /// assert!(Flux::new(zone.clone(), &cible, "").is_err());
     /// // A row the target does not assemble either: that is the whole point
     /// // de recevoir le modèle chargé.
-    /// assert!(Flux::new(zone.clone(), &cible, "f_x".into()).is_err());
+    /// assert!(Flux::new(zone.clone(), &cible, "f_x").is_err());
     /// // A formulation owning its own interpolation (a beam) cannot receive a
     /// // consistent load from here: it alone knows its shape functions. Settled
     /// // at construction, not at the Gauss point.
     /// # use pyrucast::atoms::Interpolation;
     /// let poutre = FiniteElementSpace::new(&maillage, Interpolation::ModelEmbedded).unwrap();
-    /// assert!(Flux::new(poutre.get(0).unwrap(), &cible, "q".into()).is_err());
+    /// assert!(Flux::new(poutre.get(0).unwrap(), &cible, "q").is_err());
     /// // The normal mode feeds displacement rows, which a thermal target lacks.
-    /// assert!(Flux::new(zone, &cible, "n".into()).is_err());
+    /// assert!(Flux::new(zone, &cible, "n").is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn new(
-        fespace: Handle<SubFiniteElementSpace>,
-        target: &Model,
-        dual: String,
-    ) -> Result<Self> {
+    pub fn new(fespace: Handle<SubFiniteElementSpace>, target: &Model, dual: &str) -> Result<Self> {
         if dual.is_empty() {
             return Err(PyrucastError::Message(
                 "Flux: name the dual row this load feeds, e.g. \"q\" for a heat source or \
@@ -188,7 +184,7 @@ impl Flux {
         // A row nobody assembles used to build a mute load; it is now a construction
         // error.
         let feeds: Vec<String> = if normal_rows.is_empty() {
-            vec![dual.clone()]
+            vec![dual.to_string()]
         } else {
             normal_rows.clone()
         };
@@ -213,7 +209,7 @@ impl Flux {
         Ok(Self {
             fespace,
             support,
-            dual,
+            dual: dual.to_string(),
             physics,
             normal_rows,
         })
@@ -367,7 +363,7 @@ impl Domain for Flux {
 }
 
 crate::physics_operator! {
-    /// Distributed-load `Model` spanning **every** subspace of `fes`, feeding
+    /// Distributed-load `Model` spanning **every** subspace of `fespace`, feeding
     /// the `dual` row of `target`; the density is supplied at assembly time, in
     /// the material, as `phi_<dual>`.
     ///
@@ -395,11 +391,11 @@ crate::physics_operator! {
     /// // A load distributed over the thermal model it feeds: that model owns the
     /// // "q" row, and gives its kind.
     /// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    /// let charge = model::flux(&fes, &conduction, "q".into())?;
+    /// let charge = model::flux(&fes, &conduction, "q")?;
     /// assert_eq!(charge.dual_vars(), vec!["q".to_string()]);
     /// assert!(charge.primal_vars().is_empty());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn flux(fes, target, dual: String) via SubModel::flux;
+    pub fn flux(fespace, target, dual: &str) via SubModel::flux;
     python: "`model.flux(fespace, target, dual)` — a **distributed load**: the\nconsistent nodal forces `∫ φ N dΓ` of a given density, fed into the dual row\n`dual` (`\"q\"` for a heat source, `\"f_x\"` for a traction) of the model\n`target`, which gives it its kind and attests that the row is assembled by\nsomeone.\n\nMaterial: `phi_<dual>` — the density, uniform or varying per Gauss point as\nthe field provides.\n\nThe row `\"n\"` is the **normal** mode, a pressure: `phi_n` acts along the\nnormal of the cell, `∫ φ n N dΓ`, into every displacement row of the target\n(`f_x`, `f_y`, `f_z`). The normal is that of the active configuration —\nevaluated on a configuration laid at `X + u` (`coords.displace_from`), the\nload follows the wall. For a contour travelled counter-clockwise the normal\nof a segment points out of the material: a pressure `p` pushing on the wall\nis then `phi_n = -p`.\n\nIts derivative with respect to the solution is taken as **zero**: it feeds no\nmatrix, only the right-hand side, read by\n`node_field.external_forces(model, materials)`. That is what sets it apart\nfrom a physics: it brings no unknown and writes into the dual row of another."
 }

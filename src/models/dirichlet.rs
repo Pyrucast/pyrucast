@@ -74,7 +74,7 @@ use serde::{Deserialize, Serialize};
 /// # use pyrucast::models::dirichlet::Dirichlet;
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// // A support: `u = u_d` at the imposed nodes, through a Lagrange multiplier.
-/// let d = Dirichlet::new(&cible, "T", &impose, RelationSense::Equality)?;
+/// let d = Dirichlet::new(&impose, &cible, "T", RelationSense::Equality)?;
 /// assert_eq!(d.relations()?.len(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -135,7 +135,7 @@ impl Dirichlet {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # use pyrucast::models::dirichlet::Dirichlet;
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-    /// let d = Dirichlet::new(&cible, "T", &impose, RelationSense::Equality)?;
+    /// let d = Dirichlet::new(&impose, &cible, "T", RelationSense::Equality)?;
     /// // The multiplier node is the constraint's own, minted beside the
     /// // imposed node.
     /// let m = d.multiplier_mesh();
@@ -143,13 +143,13 @@ impl Dirichlet {
     /// assert_ne!(m.node(0, 0, 0)?.id(), n[0].id());
     /// assert_eq!(m.node(0, 0, 0)?.position()?, vec![0.0, 0.0]);
     /// // A variable the target does not assemble is refused.
-    /// assert!(Dirichlet::new(&cible, "u_x", &impose, RelationSense::Equality).is_err());
+    /// assert!(Dirichlet::new(&impose, &cible, "u_x", RelationSense::Equality).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(
+        imposed_mesh: &Mesh,
         target: &crate::containers::model::Model,
         variable: &str,
-        imposed_mesh: &Mesh,
         sense: RelationSense,
     ) -> Result<Self> {
         // The target's own names, read from the target rather than retyped: the

@@ -445,10 +445,10 @@ signifie `Φ = 0`, si bien que le même opérateur sert les deux théories sans
 qu'on ait à lui dire laquelle. Le résultat se donne au
 [comportement](comportement.md) pour obtenir les efforts de section.
 
-### `shell_deformation(field, fespace, model)` → `ElementField`
+### `shell_deformation(field, fespace, formulation)` → `ElementField`
 
 Déformations généralisées d'une [coque](../mecanique/coques.md), depuis les six
-DDL `u_x…u_z, r_x…r_z`. `model` est la formulation, `"thick"` ou
+DDL `u_x…u_z, r_x…r_z`. `formulation` vaut `"thick"` ou
 `"kirchhoff"` : les lignes de membrane, de vrillage et de cisaillement sont
 partagées, mais celles de **flexion** sont toute la différence entre les deux.
 

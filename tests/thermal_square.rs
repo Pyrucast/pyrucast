@@ -69,7 +69,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     let right_nodes: Vec<Node> = (0..=N).map(|j| grid[idx(N, j)].clone()).collect();
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&right_nodes)?);
     let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    let dirichlet = model::dirichlet(&conduction, "T", &imposed, Default::default())?;
+    let dirichlet = model::dirichlet(&imposed, &conduction, "T", Default::default())?;
     let multiplier = dirichlet.multiplier_mesh()?;
     let mults: Vec<Node> = (0..=N)
         .map(|j| multiplier.node(0, j, 0))
@@ -85,7 +85,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
         left_edge.add_cell(&[grid[idx(0, j)].id(), grid[idx(0, j + 1)].id()])?;
     }
     let left_fes = FiniteElementSpace::lagrange1(&left_edge)?;
-    let model = model.union(&model::flux(&left_fes, &model, "q".into())?)?;
+    let model = model.union(&model::flux(&left_fes, &model, "q")?)?;
 
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("k", K), ("phi_q", Q)])?;

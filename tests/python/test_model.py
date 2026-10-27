@@ -22,7 +22,7 @@ def _seg2_heat_model(length=1.0, k=1.0, dirichlet_left=False):
     model = pyrucast.model.heat_conduction(fes)
     if dirichlet_left:
         imposed = pyrucast.mesh.poi1_from_nodes([a])
-        model = model | pyrucast.model.dirichlet(model, "T", imposed)
+        model = model | pyrucast.model.dirichlet(imposed, model, "T")
     return c, mesh, fes, sub, materials, model, a, b
 
 
@@ -129,7 +129,7 @@ def test_dirichlet_empty_constraint_mesh_rejected():
     c = pyrucast.Coords(1)
     empty = pyrucast.Mesh(c, "POI1")  # one POI1 submesh, zero cells
     try:
-        pyrucast.model.dirichlet(_cible_1d(c, c.add_node([0.0])), "T", empty)
+        pyrucast.model.dirichlet(empty, _cible_1d(c, c.add_node([0.0])), "T")
     except (RuntimeError, ValueError):
         pass
     else:
@@ -244,7 +244,7 @@ def test_fespace_errors_without_domain_submodel():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     imposed = pyrucast.mesh.poi1_from_nodes([a])
-    only_constraint = pyrucast.model.dirichlet(_cible_1d(c, a), "T", imposed)
+    only_constraint = pyrucast.model.dirichlet(imposed, _cible_1d(c, a), "T")
     try:
         only_constraint.fespace()
     except RuntimeError:

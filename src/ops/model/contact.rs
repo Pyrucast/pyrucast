@@ -12,6 +12,9 @@ use crate::error::Result;
 /// pairing, the normal coupling and the errors. Solve with
 /// [`unilateral`](crate::ops::solver::unilateral).
 ///
+/// The supports come first — `slave`, which carries the relations, then
+/// `master`, onto which it projects — and the model they constrain after them.
+///
 /// ```
 /// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::aggregate::Aggregate;
@@ -42,16 +45,16 @@ use crate::error::Result;
 /// # let cible = pyrucast::ops::model::elasticity(
 /// #     &FiniteElementSpace::lagrange1(&maillage)?,
 /// #     pyrucast::models::tensor::Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
-/// let m = model::contact(&cible, &slave, &master,
+/// let m = model::contact(&slave, &master, &cible,
 ///     vec!["u_x".into(), "u_y".into()])?;
 /// assert_eq!(m.len(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn contact(
-    target: &Model,
     slave: &Mesh,
     master: &Mesh,
+    target: &Model,
     variables: Vec<String>,
 ) -> Result<Model> {
-    single(SubModel::contact(target, slave, master, variables)?)
+    single(SubModel::contact(slave, master, target, variables)?)
 }

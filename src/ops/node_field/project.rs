@@ -22,8 +22,8 @@ use crate::parallel::*;
 /// A node of `target` outside `mesh` — farther than `tol` outside every
 /// cell's reference domain — gets zero, as a nodal field reads a node it does
 /// not define: projecting a patch onto a larger mesh is a normal thing. `tol`
-/// is that reference-domain slack, without unit (`1e-6` everywhere in
-/// pyrucast). A point on a face shared by two cells is read in the first one,
+/// is that reference-domain slack, without unit; the Python face defaults it
+/// to `1e-6`, as for `embedded`. A point on a face shared by two cells is read in the first one,
 /// which gives the same value for a continuous field.
 ///
 /// `field` is read through its zones, first zone wins, and a node of `mesh`

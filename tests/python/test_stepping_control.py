@@ -30,7 +30,7 @@ def _strip():
 
 def _fix(target, nodes, variable, sense="="):
     constraint = pc.model.dirichlet(
-        target, variable, pc.mesh.poi1_from_nodes(nodes), sense
+        pc.mesh.poi1_from_nodes(nodes), target, variable, sense
     )
     return constraint, constraint.multiplier_mesh()
 

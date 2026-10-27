@@ -215,7 +215,7 @@ named_enum!(
     crate::models::damage::law::DamageLaw,
     crate::models::tensor::Kinematics,
     crate::models::plasticity::law::PlasticLaw,
-    crate::models::shell::ShellModel,
+    crate::models::shell::ShellFormulation,
     crate::models::symmetry::MaterialSymmetry,
     crate::containers::evolution::OutOfRange,
     crate::containers::matrix::Symmetry,

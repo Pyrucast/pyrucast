@@ -238,7 +238,7 @@ fn a_non_conforming_interface_is_rejected() -> Result<()> {
         &side_a,
         &side_b,
         &target,
-        vec![(format!("c_{SPECIES}"), format!("j_{SPECIES}"))],
+        vec![format!("c_{SPECIES}")],
         DEFAULT_TOL,
     )
     .unwrap_err();
@@ -248,8 +248,8 @@ fn a_non_conforming_interface_is_rejected() -> Result<()> {
 }
 
 /// The interface is built **against** the model it ties, and takes its nature
-/// from it: nothing in `("c_H2", "j_H2")` says « diffusion », the Fick models
-/// assembling those rows do.
+/// from it: nothing in `"c_H2"` says « diffusion », the Fick models declaring
+/// that unknown do.
 #[test]
 fn the_interface_takes_its_nature_from_its_target() -> Result<()> {
     let (_, model, _) = two_square_model(5.0)?;
@@ -263,10 +263,11 @@ fn the_interface_takes_its_nature_from_its_target() -> Result<()> {
     Ok(())
 }
 
-/// A pair the target does not assemble would couple into nothing: refused at
-/// construction, with the rows the target does assemble in the message.
+/// A variable the target does not declare would couple into nothing: refused
+/// at construction, with the unknowns the target does declare in the message.
+/// One it declares couples into the dual row the target pairs it with.
 #[test]
-fn a_pair_its_target_does_not_assemble_is_rejected() -> Result<()> {
+fn a_variable_its_target_does_not_declare_is_rejected() -> Result<()> {
     let coords = Handle::new(Coords::new(2)?);
     let (a, b) = (
         Node::create_in(coords.clone(), &[1.0, 0.0])?,
@@ -278,42 +279,29 @@ fn a_pair_its_target_does_not_assemble_is_rejected() -> Result<()> {
     let diffusion = model::fick(&face, SPECIES, MaterialSymmetry::Isotropic)?;
 
     // A thermal contact resistance on a model that does not know `T`.
-    let err = model::interface_transfer(
-        &face,
-        &face,
-        &diffusion,
-        vec![("T".into(), "q".into())],
-        DEFAULT_TOL,
-    )
-    .unwrap_err()
-    .to_string();
-    assert!(
-        err.contains("assembles no `T` paired with `q`"),
-        "unexpected: {err}"
-    );
+    let err = model::interface_transfer(&face, &face, &diffusion, vec!["T".into()], DEFAULT_TOL)
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("`T` is not an unknown"), "unexpected: {err}");
 
-    // Primal and dual present, but not paired together: refused too.
+    // Beside a conduction, the concentration still couples into its own flux
+    // row, read from the Fick model: never `q`.
     let both = diffusion.union(&model::heat_conduction(&face, MaterialSymmetry::Isotropic)?)?;
-    let err = model::interface_transfer(
+    let joint = model::interface_transfer(
         &face,
         &face,
         &both,
-        vec![(format!("c_{SPECIES}"), "q".into())],
+        vec![format!("c_{SPECIES}")],
         DEFAULT_TOL,
-    )
-    .unwrap_err()
-    .to_string();
-    assert!(err.contains("paired with `q`"), "unexpected: {err}");
+    )?;
+    assert_eq!(joint.dual_vars(), vec![format!("j_{SPECIES}")]);
 
     // Two kinds in a single interface: one is built per physics.
     let err = model::interface_transfer(
         &face,
         &face,
         &both,
-        vec![
-            (format!("c_{SPECIES}"), format!("j_{SPECIES}")),
-            ("T".into(), "q".into()),
-        ],
+        vec![format!("c_{SPECIES}"), "T".into()],
         DEFAULT_TOL,
     )
     .unwrap_err()
@@ -382,13 +370,13 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
             &face_left,
             &face_right,
             &fick_pair,
-            vec![(format!("c_{SPECIES}"), format!("j_{SPECIES}"))],
+            vec![format!("c_{SPECIES}")],
             DEFAULT_TOL,
         )?)?
         .union(&model::dirichlet(
+            &imposed,
             &fick_pair,
             &format!("c_{SPECIES}"),
-            &imposed,
             Default::default(),
         )?)?;
 
@@ -396,7 +384,7 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
     // is a term of the model, so it joins it here and its density joins the
     // material below.
     let inlet = edge(&left[0], &left[3])?;
-    let model = model.union(&model::flux(&inlet, &model, format!("j_{SPECIES}"))?)?;
+    let model = model.union(&model::flux(&inlet, &model, &format!("j_{SPECIES}"))?)?;
 
     // One material field for the whole model: the squares ask for `D`, the
     // interface for `h`, the inlet for its density, and each resolves its own

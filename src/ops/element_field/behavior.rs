@@ -214,7 +214,7 @@ mod tests {
                 Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
             model
                 .add_sub(Handle::new(
-                    SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
+                    SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap(),
                 ))
                 .unwrap();
         }

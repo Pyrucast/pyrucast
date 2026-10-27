@@ -57,7 +57,7 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     // ── Model: frame + full clamping at the base ───────────────────────────
     let clamp = |target: &Model, node: &Node, var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
-        model::dirichlet(target, var, &imposed, Default::default())
+        model::dirichlet(&imposed, target, var, Default::default())
     };
     let mut model = model::timoshenko(&fes)?;
     model = model.union(&clamp(&model, &nodes[0], "u_x")?)?;

@@ -13,6 +13,10 @@ use crate::models::RelationSense;
 /// [`Dirichlet::new`](crate::models::dirichlet::Dirichlet::new) for the
 /// variable names and the errors.
 ///
+/// The support comes first, then the model it constrains, as for every
+/// operator of [`crate::ops::model`]. The Python face defaults `sense` to
+/// `RelationSense::Equality`.
+///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
@@ -38,15 +42,15 @@ use crate::models::RelationSense;
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// // The whole model of a thermal problem: the physics, then the support.
 /// let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?.union(
-///     &model::dirichlet(&cible, "T", &impose, RelationSense::Equality)?)?;
+///     &model::dirichlet(&impose, &cible, "T", RelationSense::Equality)?)?;
 /// assert_eq!(m.len(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn dirichlet(
+    imposed_mesh: &Mesh,
     target: &Model,
     variable: &str,
-    imposed_mesh: &Mesh,
     sense: RelationSense,
 ) -> Result<Model> {
-    single(SubModel::dirichlet(target, variable, imposed_mesh, sense)?)
+    single(SubModel::dirichlet(imposed_mesh, target, variable, sense)?)
 }

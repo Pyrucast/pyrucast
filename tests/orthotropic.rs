@@ -277,7 +277,7 @@ fn clamped_model(
     let idx = |i: usize, j: usize| j * (N + 1) + i;
     let roller = |target: &Model, nodes: &[Node], var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-        model::dirichlet(target, var, &imposed, Default::default())
+        model::dirichlet(&imposed, target, var, Default::default())
     };
     let left: Vec<Node> = (0..=N).map(|j| grid[idx(0, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=N).map(|i| grid[idx(i, 0)].clone()).collect();
@@ -291,11 +291,7 @@ fn clamped_model(
     model = model.union(&roller(&model, &bottom, "u_y")?)?;
     // The right edge's traction is a term of the model, not a vector built by
     // side: it joins it here, its density will join the material.
-    model = model.union(&model::flux(
-        &right_edge_fes(grid, fes)?,
-        &model,
-        "f_x".into(),
-    )?)?;
+    model = model.union(&model::flux(&right_edge_fes(grid, fes)?, &model, "f_x")?)?;
     Ok(model)
 }
 

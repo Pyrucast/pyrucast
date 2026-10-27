@@ -74,7 +74,7 @@ fn annulus(
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
 fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-    model::dirichlet(target, var, &imposed, Default::default())
+    model::dirichlet(&imposed, target, var, Default::default())
 }
 
 // ─── The measure: 2πr, with no mechanics involved ────────────────────────────
@@ -322,7 +322,7 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
         StrainMeasure::Linear,
     )?;
     model = model.union(&clamp(&model, &ends, "u_y")?)?;
-    let model = model.union(&model::flux(&edge_fes, &model, "f_x".into())?)?;
+    let model = model.union(&model::flux(&edge_fes, &model, "f_x")?)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", E), ("nu", NU), ("phi_f_x", P)],
@@ -513,7 +513,7 @@ fn heat_conduction_through_a_hollow_cylinder_is_logarithmic() -> Result<()> {
         ),
     ] {
         let m = Mesh::from_submesh(SubMesh::poi1_from_nodes(&nodes)?);
-        let dirichlet = model::dirichlet(&model, "T", &m, Default::default())?;
+        let dirichlet = model::dirichlet(&m, &model, "T", Default::default())?;
         let multiplier = dirichlet.multiplier_mesh()?;
         for k in 0..nodes.len() {
             mult_nodes.push((multiplier.node(0, k, 0)?, value));

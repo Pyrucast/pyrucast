@@ -29,7 +29,7 @@ def _plaque():
     fes = pc.FiniteElementSpace(maillage)
 
     def bloquer(cible, noeuds, variable):
-        blocage = pc.model.dirichlet(cible, variable, pc.mesh.poi1_from_nodes(noeuds))
+        blocage = pc.model.dirichlet(pc.mesh.poi1_from_nodes(noeuds), cible, variable)
         return blocage, blocage.multiplier_mesh()
 
     gauche = [noeud(0, j) for j in range(3)]

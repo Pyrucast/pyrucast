@@ -6,7 +6,7 @@ import pyrucast
 def _clamp(target, nodes, var):
     """Homogeneous Dirichlet (u = 0) on `var` over `nodes`."""
     imposed = pyrucast.mesh.poi1_from_nodes(nodes)
-    return pyrucast.model.dirichlet(target, var, imposed)
+    return pyrucast.model.dirichlet(imposed, target, var)
 
 
 def test_plane_stress_uniaxial_tension():

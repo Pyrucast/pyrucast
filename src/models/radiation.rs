@@ -458,7 +458,7 @@ fn surface_mass(geom: &CellGeom, ke: &mut [f64], coeff: impl Fn(usize) -> f64) -
 
 crate::physics_operator! {
     /// Radiation-to-infinity `Model` spanning **every** subspace of a *boundary*
-    /// `fes`, cooling `target`, which must assemble `T` paired with `q`.
+    /// `fespace`, cooling `target`, which must assemble `T` paired with `q`.
     /// Parent-level operator; the emissivity and far-field temperature are
     /// supplied at assembly time.
     ///
@@ -484,6 +484,6 @@ crate::physics_operator! {
     /// assert_eq!(m.primal_vars(), vec!["T".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn radiation(fes, target) via SubModel::radiation;
+    pub fn radiation(fespace, target) via SubModel::radiation;
     python: "`model.radiation(fespace, target)` — radiation to infinity on a\n*boundary* `fespace`: `q·n = σε(T⁴ − T_∞⁴)`, cooling the model `target`.\nSame DOFs (`\"T\"`/`\"q\"`) as `heat_conduction`, which `target` must\nassemble — a radiating boundary with no conduction beneath it raises —, so\nit composes with `|`:\n`conduction = model.heat_conduction(bulk)`\n`model = conduction | model.radiation(boundary, conduction)`.\n\nMaterial: `emis` (emissivity) and `T_inf` (far-field temperature), plus an\noptional `sigma` overriding the SI Stefan-Boltzmann constant. With the\ndefault `sigma`, `T` is an **absolute** temperature — a fourth power has\nno invariance to shift an origin through.\n\nUnlike convection this law is non-linear, so it contributes three terms:\nthe linearised film `4σεT_∞³∫NᵢNⱼ` as stiffness, the exact residual\n`∫Nᵢσε(T⁴ − T_∞⁴)` through `internal_forces`, and the consistent tangent\n`4σεT³∫NᵢNⱼ` through `matrix.tangent(...)`. Its natures are `\"thermal\"`\n**and** `\"radiation\"`."
 }

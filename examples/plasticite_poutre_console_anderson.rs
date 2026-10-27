@@ -141,26 +141,22 @@ fn main() -> Result<()> {
         model::plasticity_perfect(&fes, Kinematics::PlaneStress, StrainMeasure::Linear)?;
     let imposed_mesh = to_poi1(&left_edge)?;
     model = model.union(&model::dirichlet(
+        &imposed_mesh,
         &model,
         "u_x",
-        &imposed_mesh,
         Default::default(),
     )?)?;
     model = model.union(&model::dirichlet(
+        &imposed_mesh,
         &model,
         "u_y",
-        &imposed_mesh,
         Default::default(),
     )?)?;
 
     // The reference load is a term of the model: it joins the model, and its
     // density joins the material.
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
-    let model = model.union(&pyrucast::ops::model::flux(
-        &right_fes,
-        &model,
-        "f_y".into(),
-    )?)?;
+    let model = model.union(&pyrucast::ops::model::flux(&right_fes, &model, "f_y")?)?;
     let materials = material_field(
         &model,
         &[

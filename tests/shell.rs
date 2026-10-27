@@ -35,7 +35,7 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::models::shell::ShellModel;
+use pyrucast::models::shell::ShellFormulation;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -50,7 +50,7 @@ const Q: f64 = 1.0;
 #[test]
 fn a_clamped_plate_matches_its_textbook_deflection() -> Result<()> {
     let h = 0.01; // thin enough to compare with plate theory, thick enough to be safe
-    let w = central_deflection(12, h, ShellModel::Thick, ElementType::QUA4)?;
+    let w = central_deflection(12, h, ShellFormulation::Thick, ElementType::QUA4)?;
     // Timoshenko & Woinowsky-Krieger: w_max = 0.00126 · qa⁴/D.
     let d = E * h * h * h / (12.0 * (1.0 - NU * NU));
     let exact = 0.00126 * Q * A.powi(4) / d;
@@ -72,7 +72,7 @@ fn a_clamped_plate_matches_its_textbook_deflection_in_discrete_kirchhoff() -> Re
     let d = E * h * h * h / (12.0 * (1.0 - NU * NU));
     let exact = 0.00126 * Q * A.powi(4) / d;
     for element in [ElementType::QUA4, ElementType::TRI3] {
-        let w = central_deflection(12, h, ShellModel::Kirchhoff, element)?;
+        let w = central_deflection(12, h, ShellFormulation::Kirchhoff, element)?;
         assert!(
             (w - exact).abs() < 0.03 * exact,
             "{element:?}: central deflection {w}, textbook {exact}"
@@ -92,7 +92,7 @@ fn the_discrete_kirchhoff_element_has_nothing_to_lock() -> Result<()> {
     for element in [ElementType::QUA4, ElementType::TRI3] {
         let mut normalised = Vec::new();
         for h in [0.05, 0.01, 0.002, 0.0005] {
-            let w = central_deflection(8, h, ShellModel::Kirchhoff, element)?;
+            let w = central_deflection(8, h, ShellFormulation::Kirchhoff, element)?;
             let d = E * h * h * h / (12.0 * (1.0 - NU * NU));
             normalised.push(w * d / (Q * A.powi(4)));
         }
@@ -124,9 +124,9 @@ fn the_discrete_kirchhoff_deflection_converges_with_the_mesh() -> Result<()> {
     let d = E * h * h * h / (12.0 * (1.0 - NU * NU));
     let exact = 0.00126 * Q * A.powi(4) / d;
     for element in [ElementType::QUA4, ElementType::TRI3] {
-        let coarse = central_deflection(4, h, ShellModel::Kirchhoff, element)?;
-        let medium = central_deflection(8, h, ShellModel::Kirchhoff, element)?;
-        let fine = central_deflection(16, h, ShellModel::Kirchhoff, element)?;
+        let coarse = central_deflection(4, h, ShellFormulation::Kirchhoff, element)?;
+        let medium = central_deflection(8, h, ShellFormulation::Kirchhoff, element)?;
+        let fine = central_deflection(16, h, ShellFormulation::Kirchhoff, element)?;
         let error = |w: f64| (w - exact).abs();
         assert!(
             error(fine) < error(medium) && error(medium) < error(coarse),
@@ -146,9 +146,9 @@ fn the_discrete_kirchhoff_deflection_converges_with_the_mesh() -> Result<()> {
 #[test]
 fn the_deflection_converges_with_the_mesh() -> Result<()> {
     let h = 0.01;
-    let coarse = central_deflection(4, h, ShellModel::Thick, ElementType::QUA4)?;
-    let medium = central_deflection(8, h, ShellModel::Thick, ElementType::QUA4)?;
-    let fine = central_deflection(16, h, ShellModel::Thick, ElementType::QUA4)?;
+    let coarse = central_deflection(4, h, ShellFormulation::Thick, ElementType::QUA4)?;
+    let medium = central_deflection(8, h, ShellFormulation::Thick, ElementType::QUA4)?;
+    let fine = central_deflection(16, h, ShellFormulation::Thick, ElementType::QUA4)?;
     assert!(coarse < medium && medium < fine, "{coarse} {medium} {fine}");
     // …and the increments shrink: the sequence is converging, not drifting.
     assert!(
@@ -166,7 +166,7 @@ fn the_deflection_converges_with_the_mesh() -> Result<()> {
 fn the_element_does_not_lock_as_the_plate_thins() -> Result<()> {
     let mut normalised = Vec::new();
     for h in [0.05, 0.01, 0.002, 0.0005] {
-        let w = central_deflection(8, h, ShellModel::Thick, ElementType::QUA4)?;
+        let w = central_deflection(8, h, ShellFormulation::Thick, ElementType::QUA4)?;
         let d = E * h * h * h / (12.0 * (1.0 - NU * NU));
         normalised.push(w * d / (Q * A.powi(4)));
     }
@@ -194,13 +194,13 @@ fn the_element_does_not_lock_as_the_plate_thins() -> Result<()> {
 /// here would mean one of them had grown a private copy.
 #[test]
 fn a_stretched_shell_behaves_as_a_membrane() -> Result<()> {
-    for formulation in [ShellModel::Thick, ShellModel::Kirchhoff] {
+    for formulation in [ShellFormulation::Thick, ShellFormulation::Kirchhoff] {
         membrane_stretch(formulation)?;
     }
     Ok(())
 }
 
-fn membrane_stretch(formulation: ShellModel) -> Result<()> {
+fn membrane_stretch(formulation: ShellFormulation) -> Result<()> {
     let h = 0.02;
     let (grid, fes, coords, n) = plate(4, ElementType::QUA4)?;
     let idx = |i: usize, j: usize| j * (n + 1) + i;
@@ -222,7 +222,7 @@ fn membrane_stretch(formulation: ShellModel) -> Result<()> {
         edge.add_cell(&[grid[idx(n, j)].id(), grid[idx(n, j + 1)].id()])?;
     }
     let edge_fes = FiniteElementSpace::lagrange1(&edge)?;
-    model = model.union(&model::flux(&edge_fes, &model, "f_x".into())?)?;
+    model = model.union(&model::flux(&edge_fes, &model, "f_x")?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,
@@ -249,13 +249,13 @@ fn membrane_stretch(formulation: ShellModel) -> Result<()> {
 /// penalty, the tempting shortcut, would fail this.
 #[test]
 fn a_rigid_drilling_rotation_costs_no_energy() -> Result<()> {
-    for formulation in [ShellModel::Thick, ShellModel::Kirchhoff] {
+    for formulation in [ShellFormulation::Thick, ShellFormulation::Kirchhoff] {
         rigid_drilling(formulation)?;
     }
     Ok(())
 }
 
-fn rigid_drilling(formulation: ShellModel) -> Result<()> {
+fn rigid_drilling(formulation: ShellFormulation) -> Result<()> {
     let h = 0.02;
     let (grid, fes, _coords, n) = plate(2, ElementType::QUA4)?;
     let model = model::shell(&fes, formulation)?;
@@ -309,7 +309,7 @@ fn rigid_drilling(formulation: ShellModel) -> Result<()> {
 #[test]
 fn a_rigid_tilt_of_the_plate_costs_no_energy() -> Result<()> {
     let h = 0.02;
-    for formulation in [ShellModel::Thick, ShellModel::Kirchhoff] {
+    for formulation in [ShellFormulation::Thick, ShellFormulation::Kirchhoff] {
         for element in [ElementType::QUA4, ElementType::TRI3] {
             let (grid, fes, _coords, _) = plate(2, element)?;
             let model = model::shell(&fes, formulation)?;
@@ -433,7 +433,7 @@ fn plate(
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
 fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-    model::dirichlet(target, var, &imposed, Default::default())
+    model::dirichlet(&imposed, target, var, Default::default())
 }
 
 /// The central deflection of a clamped square plate under a uniform pressure,
@@ -441,7 +441,7 @@ fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
 fn central_deflection(
     n: usize,
     h: f64,
-    formulation: ShellModel,
+    formulation: ShellFormulation,
     element: ElementType,
 ) -> Result<f64> {
     let (grid, fes, coords, _) = plate(n, element)?;
@@ -476,7 +476,7 @@ fn central_deflection(
         }
     }
     // The uniform pressure, as consistent nodal loads on the surface itself.
-    model = model.union(&model::flux(&fes, &model, "f_z".into())?)?;
+    model = model.union(&model::flux(&fes, &model, "f_z")?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,

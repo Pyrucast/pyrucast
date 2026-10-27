@@ -95,7 +95,7 @@ struct SlaveInfo {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -172,7 +172,7 @@ impl Condensation {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -217,7 +217,7 @@ pub fn solve(matrix: &Matrix, model: &Model, rhs: &NodeField) -> Result<NodeFiel
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -270,7 +270,7 @@ pub fn solve_with_options(
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -320,7 +320,7 @@ pub fn solve_cancellable(
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -759,7 +759,7 @@ mod tests {
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
         model
             .add_sub(Handle::new(
-                SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
+                SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap(),
             ))
             .unwrap();
         let m = crate::ops::matrix::stiffness(&model, &materials).unwrap();

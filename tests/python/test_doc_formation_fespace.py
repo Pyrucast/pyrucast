@@ -45,8 +45,8 @@ impose = pyrucast.mesh.poi1_from_nodes([_n[2]])
 
 # ANCHOR: composer
 conduction = pc.model.heat_conduction(fes)
-modele = conduction | pc.model.boundary_transfer(bord_fes, conduction, [("T", "q")])
-modele = modele | pc.model.dirichlet(modele, "T", impose)
+modele = conduction | pc.model.boundary_transfer(bord_fes, conduction, ["T"])
+modele = modele | pc.model.dirichlet(impose, modele, "T")
 # ANCHOR_END: composer
 
 assert len(modele) == 3
@@ -55,9 +55,9 @@ assert len(modele) == 3
 # ── The boundary conditions, two physics ────────────────────────────────────
 
 # ANCHOR: bloquer
-pc.model.dirichlet(modele, "T", impose)  # Cast3M : BLOQ 'T' ...
+pc.model.dirichlet(impose, modele, "T")  # Cast3M : BLOQ 'T' ...
 mecanique = pc.model.elasticity(fes, "plane_stress")
-pc.model.dirichlet(mecanique, "u_x", impose)  # Cast3M : BLOQ 'UX' ...
+pc.model.dirichlet(impose, mecanique, "u_x")  # Cast3M : BLOQ 'UX' ...
 # ANCHOR_END: bloquer
 
 

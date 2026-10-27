@@ -133,7 +133,7 @@ def main() -> None:
     right_nodes = unique_nodes(right)
     imposed = pyrucast.mesh.poi1_from_nodes(right_nodes)
     cible = pyrucast.model.heat_conduction(fes)
-    held = pyrucast.model.dirichlet(cible, "T", imposed)
+    held = pyrucast.model.dirichlet(imposed, cible, "T")
     mults = [held.multiplier_mesh().node(0, j, 0) for j in range(len(right_nodes))]
 
     model = cible | held

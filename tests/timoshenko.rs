@@ -48,7 +48,7 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
     // ── Model: beam + clamping on the left (w = θ = 0) ─────────────────────
     let clamp = |target: &Model, node: &Node, var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
-        model::dirichlet(target, var, &imposed, Default::default())
+        model::dirichlet(&imposed, target, var, Default::default())
     };
     let mut model = model::timoshenko(&fes)?;
     model = model.union(&clamp(&model, &nodes[0], "w")?)?;
@@ -112,7 +112,7 @@ fn timoshenko_section_forces_cantilever() -> Result<()> {
 
     let clamp = |target: &Model, node: &Node, var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
-        model::dirichlet(target, var, &imposed, Default::default())
+        model::dirichlet(&imposed, target, var, Default::default())
     };
     let mut model = model::timoshenko(&fes)?;
     model = model.union(&clamp(&model, &nodes[0], "w")?)?;

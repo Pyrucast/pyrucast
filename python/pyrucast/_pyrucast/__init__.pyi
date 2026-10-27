@@ -4021,33 +4021,33 @@ def border(mesh: Mesh, angle_deg: typing.Optional[builtins.float] = None) -> Mes
     `angle_deg=None` (the default) keeps every boundary as one closed loop.
     """
 
-def boundary_transfer(fespace: FiniteElementSpace, target: Model, components: typing.Sequence[tuple[builtins.str, builtins.str]]) -> Model:
+def boundary_transfer(fespace: FiniteElementSpace, target: Model, variables: typing.Sequence[builtins.str]) -> Model:
     r"""
-    `model.boundary_transfer(fespace, target, components)` — surface
+    `model.boundary_transfer(fespace, target, variables)` — surface
     exchange with an **imposed ambient** (Robin / film) spanning every
     subspace of a *boundary* `fespace` (edge mesh in 2-D, surface mesh in
     3-D), coupling into the model `target`.
     
-    `components` is a list of `(primal, dual)` pairs, each one that `target`
-    assembles — naming the bulk physics' own DOFs is what makes the boundary
-    term couple into it:
+    `variables` lists the exchanged unknowns of `target`; each couples into
+    the dual row `target` pairs it with — naming the bulk physics' own DOFs is
+    what makes the boundary term couple into it:
     
-    | `target` | `components` | you get |
+    | `target` | `variables` | you get |
     |---|---|---|
-    | `heat_conduction` | `[("T", "q")]` | Newton's law of cooling |
-    | `fick(..., "H2")` | `[("c_H2", "j_H2")]` | a surface mass-transfer law |
-    | `elasticity` | `[("u_x", "f_x"), ("u_y", "f_y")]` | a Winkler elastic foundation |
+    | `heat_conduction` | `["T"]` | Newton's law of cooling |
+    | `fick(..., "H2")` | `["c_H2"]` | a surface mass-transfer law |
+    | `elasticity` | `["u_x", "u_y"]` | a Winkler elastic foundation |
     
-    The nature (`"thermal"`, `"diffusion"`, `"mechanical"`) is not an
-    argument: it is the one of the sub-model of `target` assembling the pairs.
-    A pair `target` does not assemble, or pairs of two natures, raise.
+    Neither the dual row nor the nature (`"thermal"`, `"diffusion"`,
+    `"mechanical"`) is an argument: both are read from `target`. A variable
+    `target` does not declare, or variables of two natures, raise.
     
-    Material, per pair: the coefficient `h_<primal>` and the ambient
-    `a_ext_<primal>`. The film `h∫NᵢNⱼ` goes into the stiffness, the ambient
+    Material, per variable: the coefficient `h_<variable>` and the ambient
+    `a_ext_<variable>`. The film `h∫NᵢNⱼ` goes into the stiffness, the ambient
     term `h·a_ext·∫Nᵢ dΓ` comes out of `node_field.external_forces(...)`.
     Compose with `|`:
     `conduction = model.heat_conduction(bulk)`
-    `model = conduction | model.boundary_transfer(skin, conduction, [("T", "q")])`.
+    `model = conduction | model.boundary_transfer(skin, conduction, ["T"])`.
     """
 
 def cell_integral(field: ElementField, target: FiniteElementSpace) -> ElementField:
@@ -4166,9 +4166,9 @@ def consolidate_node(field: NodeField) -> NodeField:
     pair. `field` itself is left untouched.
     """
 
-def contact(target: Model, slave: Mesh, master: Mesh, variables: typing.Sequence[builtins.str]) -> Model:
+def contact(slave: Mesh, master: Mesh, target: Model, variables: typing.Sequence[builtins.str]) -> Model:
     r"""
-    `model.contact(target, slave, master, variables)` — node-to-surface contact
+    `model.contact(slave, master, target, variables)` — node-to-surface contact
     (a single sub-model): prevent the nodes of `slave` from penetrating the
     oriented `master` surface mesh, one **unilateral** relation (`≥`) per slave
     node.
@@ -4328,16 +4328,16 @@ def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str
     (`H_θθ = u_r / r`).
     """
 
-def dirichlet(target: Model, variable: builtins.str, imposed_mesh: Mesh, sense: builtins.str = '=') -> Model:
+def dirichlet(imposed_mesh: Mesh, target: Model, variable: builtins.str, sense: builtins.str = '=') -> Model:
     r"""
-    `model.dirichlet(target, variable, imposed_mesh, sense="=")` — Dirichlet
+    `model.dirichlet(imposed_mesh, target, variable, sense="=")` — Dirichlet
     constraint (a single sub-model) holding `variable` on the nodes of
     `imposed_mesh`, via Lagrange multipliers.
     
-    `target` is the model being constrained: `variable` must be one of its
-    primals, and its dual row is read from it — the `T → q` map is the target's
-    business, not something to retype. `imposed_mesh` is the POI1 mesh of
-    constrained nodes, one relation per node. Each relation gets a multiplier
+    `imposed_mesh` is the POI1 mesh of constrained nodes, one relation per
+    node. `target` is the model being constrained: `variable` must be one of
+    its primals, and its dual row is read from it — the `T → q` map is the
+    target's business, not something to retype. Each relation gets a multiplier
     node of its own, minted beside its constrained node (`Model.multiplier_mesh()`
     gives them back); its names are those of every constraint relation, `lambda`
     and `imposed`. The imposed value `u_d` is written in the load field at the
@@ -4345,7 +4345,7 @@ def dirichlet(target: Model, variable: builtins.str, imposed_mesh: Mesh, sense: 
     the constrained node.
     
     **One variable, and one only** — compose for a clamp:
-    `dirichlet(m, "u_x", …) | dirichlet(m, "u_y", …)`.
+    `dirichlet(nodes, m, "u_x") | dirichlet(nodes, m, "u_y")`.
     
     `sense` (`"="`, the default, `">="` or `"<="`) turns the constraint
     unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a model is solved with
@@ -4477,9 +4477,9 @@ def elements_on(mesh: Mesh, points: Mesh, strict: builtins.bool = True) -> Mesh:
     `Coords`.
     """
 
-def embedded(target: Model, immersed: Mesh, host: Mesh, variables: typing.Sequence[builtins.str], tol: builtins.float = 1e-06) -> Model:
+def embedded(immersed: Mesh, host: Mesh, target: Model, variables: typing.Sequence[builtins.str], tol: builtins.float = 1e-06) -> Model:
     r"""
-    `model.embedded(target, immersed, host, variables, tol=1e-6)` — embedded
+    `model.embedded(immersed, host, target, variables, tol=1e-6)` — embedded
     (immersed) constraint (a single sub-model) tying each node of `immersed` to
     the interpolation of `host` at that node, via Lagrange multipliers.
     
@@ -4489,9 +4489,10 @@ def embedded(target: Model, immersed: Mesh, host: Mesh, variables: typing.Sequen
     read from it. The coupling weights are the host shape functions at each
     immersed node, computed once at build by locating the node in the host (an
     immersed node outside the host is an error); `tol` is the location
-    tolerance. Each relation — one per immersed node and variable — gets a
-    multiplier node of its own; the right-hand side defaults to `0` (a rigid
-    tie). See the constraints chapter of the book.
+    tolerance, a gap in the host's **reference** element, without dimension.
+    Each relation — one per immersed node and variable — gets a multiplier node
+    of its own; the right-hand side defaults to `0` (a rigid tie). See the
+    constraints chapter of the book.
     """
 
 def exp(field: typing.Any) -> typing.Any:
@@ -4792,24 +4793,25 @@ def integrate_behavior(model: Model, deformation: ElementField, materials: Eleme
     (`∫ Bᵀ·flux = K·u`); a non-linear law is the exact response.
     """
 
-def interface_transfer(side_a: FiniteElementSpace, side_b: FiniteElementSpace, target: Model, components: typing.Sequence[tuple[builtins.str, builtins.str]], tol: builtins.float = 1e-09) -> Model:
+def interface_transfer(side_a: FiniteElementSpace, side_b: FiniteElementSpace, target: Model, variables: typing.Sequence[builtins.str], tol: builtins.float = 1e-09) -> Model:
     r"""
-    `model.interface_transfer(side_a, side_b, target, components, tol=1e-9)` —
+    `model.interface_transfer(side_a, side_b, target, variables, tol=1e-9)` —
     the exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
     that do **not** share their nodes, coupling into the model `target`.
     
-    `components` is a list of `(primal, dual)` pairs, each one that `target`
-    assembles: `[("c_H2", "j_H2")]` on a `fick` model for a coating,
-    `[("T", "q")]` on a `heat_conduction` for a contact resistance, the
-    displacement pairs on an `elasticity` for a bonded joint of finite
-    stiffness. The nature is not an argument: it is the one of the sub-model
-    of `target` assembling the pairs, and a pair `target` does not assemble —
-    or pairs of two natures — raise. `h_<primal>` is supplied at assembly time.
+    `variables` lists the exchanged unknowns of `target`, each coupling into
+    the dual row `target` pairs it with: `["c_H2"]` on a `fick` model for a
+    coating, `["T"]` on a `heat_conduction` for a contact resistance, the
+    displacements on an `elasticity` for a bonded joint of finite stiffness.
+    Neither the dual row nor the nature is an argument: both are read from
+    `target`, and a variable `target` does not declare — or variables of two
+    natures — raise. `h_<variable>` is supplied at assembly time.
     
     `side_a` and `side_b` are the two facing **boundary** FE spaces, which
     must be conforming — same element type, same cell count, and local node
-    `k` of a cell facing local node `k` of its counterpart, within `tol`. A
-    non-matching interface raises rather than being projected.
+    `k` of a cell facing local node `k` of its counterpart, within `tol`, a
+    **distance** in the length unit of the mesh. A non-matching interface
+    raises rather than being projected.
     
     This is what lets the field **jump** across the interface: with a shared
     node it could not. The jump is `q/h` for a flux density `q`.
@@ -5018,17 +5020,17 @@ def merge_triangles(mesh: Mesh) -> Mesh:
     Remove the triangles from a quadrangle-dominant mesh, in pairs.
     """
 
-def mpc(target: Model, terms: typing.Sequence[tuple[Mesh, builtins.str, builtins.float]], sense: builtins.str = '=') -> Model:
+def mpc(terms: typing.Sequence[tuple[Mesh, builtins.str, builtins.float]], target: Model, sense: builtins.str = '=') -> Model:
     r"""
-    `model.mpc(target, terms, sense="=")` — multi-point constraint (a single
+    `model.mpc(terms, target, sense="=")` — multi-point constraint (a single
     sub-model) imposing, per relation, `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange
     multipliers.
     
-    `target` is the model being constrained — the union of two models to tie
-    two bodies. `terms` is a list of `(mesh, variable, coefficient)` tuples: each
-    `mesh` is a POI1 mesh (one node per relation), paired element-for-element
-    with the others (relation `r` = cell `r` of every mesh); each `variable` is
-    a primal of `target`, whose dual row is read from it. Each relation gets a
+    `terms` is a list of `(mesh, variable, coefficient)` tuples: each `mesh` is
+    a POI1 mesh (one node per relation), paired element-for-element with the
+    others (relation `r` = cell `r` of every mesh); each `variable` is a primal
+    of `target`, the model being constrained — the union of two models to tie
+    two bodies — whose dual row is read from it. Each relation gets a
     multiplier node of its own, minted beside the node of the first term; `g`
     is written in the load field at its `imposed` component (default `0`).
     `sense` (`"="`, the default, `">="` or `"<="`) turns the relations
@@ -5517,13 +5519,13 @@ def set_positions(field: NodeField, components: typing.Optional[typing.Sequence[
     `Coords` in place.
     """
 
-def shell(fespace: FiniteElementSpace, model: builtins.str) -> Model:
+def shell(fespace: FiniteElementSpace, formulation: builtins.str) -> Model:
     r"""
-    `model.shell(fespace, model)` — a **shell**: a surface carrying membrane
+    `model.shell(fespace, formulation)` — a **shell**: a surface carrying membrane
     forces and bending moments, on a TRI3/QUA4 mesh in 3-D. Material `E`,
     `nu`, `h` (thickness), plus an optional `rho`.
     
-    | `model` | transverse shear | when |
+    | `formulation` | transverse shear | when |
     |---|---|---|
     | `"thick"` | yes, integrated **reduced** | the general case |
     | `"kirchhoff"` | imposed zero at discrete points | thin shells |
@@ -5547,12 +5549,12 @@ def shell(fespace: FiniteElementSpace, model: builtins.str) -> Model:
     has no constitutive `Q`, only a reaction.
     """
 
-def shell_deformation(field: NodeField, fespace: FiniteElementSpace, model: builtins.str) -> ElementField:
+def shell_deformation(field: NodeField, fespace: FiniteElementSpace, formulation: builtins.str) -> ElementField:
     r"""
     Generalised **strains of a shell** at the Gauss points — the geometric
     producer of the behaviour input for `shell`.
     
-    `shell_deformation(field, fespace, model)` with `model` the formulation
+    `shell_deformation(field, fespace, formulation)` with `formulation`
     (`"thick"` or `"kirchhoff"`), which decides the bending rows and whether a
     transverse shear is reported at all:
     

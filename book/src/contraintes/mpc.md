@@ -53,7 +53,7 @@ Ceux de **toute** relation de contrainte (voir [Dirichlet](dirichlet.md)) :
 Signature complète :
 
 ```text
-model.mpc(target, terms, sense="=")
+model.mpc(terms, target, sense="=")
 # terms : [(maillage, variable, coefficient), …]
 ```
 

@@ -81,8 +81,8 @@ def main() -> None:
     encastrement = pc.mesh.to_poi1(bord_gauche)
 
     modele = pc.model.plasticity_perfect(fes, "plane_stress")
-    modele = modele | pc.model.dirichlet(modele, "u_x", encastrement)
-    modele = modele | pc.model.dirichlet(modele, "u_y", encastrement)
+    modele = modele | pc.model.dirichlet(encastrement, modele, "u_x")
+    modele = modele | pc.model.dirichlet(encastrement, modele, "u_y")
     # ANCHOR_END: modele_plastique
 
     # ANCHOR: chargement_evolution

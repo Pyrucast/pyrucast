@@ -35,7 +35,7 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::models::shell::ShellModel;
+use pyrucast::models::shell::ShellFormulation;
 use pyrucast::ops::element_field::{behavior, material_field, strain, StrainMeasure};
 use pyrucast::ops::model;
 use pyrucast::ops::node_field::internal_forces;
@@ -65,7 +65,7 @@ fn clamp(model: &Model, node: &Node) -> Result<Model> {
     let mut out = model.subset(0..model.len())?;
     for var in model.primal_vars() {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
-        let bc = model::dirichlet(model, &var, &imposed, Default::default())?;
+        let bc = model::dirichlet(&imposed, model, &var, Default::default())?;
         out = out.union(&bc)?;
     }
     Ok(out)
@@ -356,7 +356,7 @@ fn check_shell(
     kind: ElementType,
     plan: &[[f64; 2]],
     cells: &[&[usize]],
-    formulation: ShellModel,
+    formulation: ShellFormulation,
 ) -> Result<()> {
     let (fes, nodes) = plate(kind, plan, cells)?;
     let model = model::shell(&fes, formulation)?;
@@ -381,7 +381,7 @@ fn thick_shell_tri3_internal_forces_match_k_times_u() -> Result<()> {
         ElementType::TRI3,
         &CORNERS,
         &[&[0, 1, 2], &[0, 2, 3]],
-        ShellModel::Thick,
+        ShellFormulation::Thick,
     )
 }
 
@@ -391,7 +391,7 @@ fn thick_shell_qua4_internal_forces_match_k_times_u() -> Result<()> {
         ElementType::QUA4,
         &CORNERS,
         &[&[0, 1, 2, 3]],
-        ShellModel::Thick,
+        ShellFormulation::Thick,
     )
 }
 
@@ -401,7 +401,7 @@ fn discrete_kirchhoff_tri3_internal_forces_match_k_times_u() -> Result<()> {
         ElementType::TRI3,
         &CORNERS,
         &[&[0, 1, 2], &[0, 2, 3]],
-        ShellModel::Kirchhoff,
+        ShellFormulation::Kirchhoff,
     )
 }
 
@@ -411,6 +411,6 @@ fn discrete_kirchhoff_qua4_internal_forces_match_k_times_u() -> Result<()> {
         ElementType::QUA4,
         &CORNERS,
         &[&[0, 1, 2, 3]],
-        ShellModel::Kirchhoff,
+        ShellFormulation::Kirchhoff,
     )
 }

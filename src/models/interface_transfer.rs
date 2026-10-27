@@ -9,19 +9,19 @@
 //! ```
 //!
 //! `h` is the transfer coefficient (its inverse is the contact resistance). What
-//! is transferred is the **caller's** to say: the sub-model is given
-//! `(primal, dual)` pairs — the same shape [`embedded`](crate::models::embedded)
+//! is transferred is the **caller's** to say: the sub-model is given the
+//! exchanged variables — the same shape [`embedded`](crate::models::embedded)
 //! and [`contact`](crate::models::contact) take — and derives its coefficients
 //! `h_<primal>` and its fluxes `flux_<primal>` from them. The same law describes
-//! a thermal contact resistance (`("T", "q")`), a coating on a diffusion
-//! (`("c_H2", "j_H2")`) and a bonded joint of finite stiffness (the three
-//! displacement pairs): the mathematics is identical, only the names change.
+//! a thermal contact resistance (`["T"]`), a coating on a diffusion
+//! (`["c_H2"]`) and a bonded joint of finite stiffness (the displacements): the
+//! mathematics is identical, only the names change.
 //!
-//! The pairs must be ones the model the interface couples into — its `target`,
-//! typically the union of the two bodies — assembles, and that model gives the
-//! nature: `("T", "q")` does not say it is thermal, the conduction assembling
-//! it does. A pair assembled by no one is refused at construction rather than
-//! coupled to nothing.
+//! The variables must be unknowns of the model the interface couples into — its
+//! `target`, typically the union of the two bodies — and that model gives both
+//! the dual row each one couples into and the nature: `"T"` does not say it is
+//! thermal, the conduction declaring it does. A variable declared by no one is
+//! refused at construction rather than coupled to nothing.
 //!
 //! ## When *not* to use it on displacements
 //!
@@ -80,7 +80,7 @@ use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::transfer::{
-    coefficient_name, exchange_matrix, jump_name, material_contract, physics_slice, target_physics,
+    coefficient_name, exchange_matrix, jump_name, material_contract, physics_slice, target_pairs,
 };
 use crate::models::ElementLayout;
 use crate::models::{
@@ -123,8 +123,7 @@ pub const DEFAULT_TOL: f64 = 1e-9;
 /// // Two **conforming** borders — here the same one, which is enough to show
 /// // the contract; in practice two facing sides.
 /// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-/// let i = InterfaceTransfer::new(
-///     zone.clone(), zone, &conduction, vec![("T".into(), "q".into())], DEFAULT_TOL)?;
+/// let i = InterfaceTransfer::new(zone.clone(), zone, &conduction, vec!["T".into()], DEFAULT_TOL)?;
 /// assert_eq!(i.primal_vars(), vec!["T".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -135,7 +134,8 @@ pub struct InterfaceTransfer {
     /// POI1 supports over each side's unique nodes.
     pub(crate) support_a: Handle<SubMesh>,
     pub(crate) support_b: Handle<SubMesh>,
-    /// The transferred quantities, as `(primal, dual)` pairs.
+    /// The transferred quantities, as `(primal, dual)` pairs — the duals read
+    /// from the target at construction.
     pub(crate) components: Vec<(String, String)>,
     /// The physics nature this exchange belongs to — what `model.filter(…)`
     /// selects it by. Free variable names cannot imply it, so it is read from
@@ -148,11 +148,14 @@ impl InterfaceTransfer {
     /// subspaces, coupling into `target`.
     ///
     /// `target` is the model whose unknowns the interface ties — usually the
-    /// union of the two bodies. Every `(primal, dual)` pair must be one it
-    /// assembles, and all must belong to one nature, which the interface then
-    /// carries. Errors on an empty `components`, on a pair `target` does not
-    /// assemble, on pairs of two natures, and unless the two sides match cell
-    /// for cell and node for node, within `tol` of each other geometrically.
+    /// union of the two bodies. Every variable must be one of its unknowns, the
+    /// row it couples into is the dual `target` pairs it with, and all must
+    /// belong to one nature, which the interface then carries. `tol` is a
+    /// **distance**, in the length unit of the mesh; the Python face defaults
+    /// it to [`DEFAULT_TOL`] (`1e-9`). Errors on an empty `variables`, on a
+    /// variable `target` does not declare, on variables of two natures, and
+    /// unless the two sides match cell for cell and node for node, within
+    /// `tol` of each other.
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -175,12 +178,11 @@ impl InterfaceTransfer {
     /// let diffusion = model::fick(&fes, "H2", MaterialSymmetry::Isotropic)?;
     /// // A coating on diffusion: the kind comes from the Fick model.
     /// let i = InterfaceTransfer::new(
-    ///     zone.clone(), zone.clone(), &diffusion,
-    ///     vec![("c_H2".into(), "j_H2".into())], DEFAULT_TOL)?;
+    ///     zone.clone(), zone.clone(), &diffusion, vec!["c_H2".into()], DEFAULT_TOL)?;
     /// assert_eq!(i.physics(), &[Physics::Diffusion]);
-    /// // The target does not assemble temperature: refused rather than coupled to nothing.
-    /// assert!(InterfaceTransfer::new(
-    ///     zone.clone(), zone, &diffusion, vec![("T".into(), "q".into())], DEFAULT_TOL)
+    /// assert_eq!(i.dual_vars(), vec!["j_H2".to_string()]);
+    /// // The target does not declare temperature: refused rather than coupled to nothing.
+    /// assert!(InterfaceTransfer::new(zone.clone(), zone, &diffusion, vec!["T".into()], DEFAULT_TOL)
     ///     .is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -188,11 +190,11 @@ impl InterfaceTransfer {
         side_a: Handle<SubFiniteElementSpace>,
         side_b: Handle<SubFiniteElementSpace>,
         target: &Model,
-        components: Vec<(String, String)>,
+        variables: Vec<String>,
         tol: f64,
     ) -> Result<Self> {
-        material_contract("InterfaceTransfer", &components)?;
-        let physics = target_physics("InterfaceTransfer", target, &components)?;
+        material_contract("InterfaceTransfer", &variables)?;
+        let (components, physics) = target_pairs("InterfaceTransfer", target, &variables)?;
         let (mesh_a, mesh_b) = (side_a.read().submesh(), side_b.read().submesh());
         check_conforming_geometry(&mesh_a, &mesh_b, tol)?;
         let support_a = mesh_a.read().to_poi1()?;

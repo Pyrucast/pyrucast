@@ -44,7 +44,7 @@ fn truss_bar_recovers_axial_elongation() -> Result<()> {
     // `u_y` is clamped at both nodes to make the system well-posed.
     let clamp = |target: &Model, node: &Node, var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
-        model::dirichlet(target, var, &imposed, Default::default())
+        model::dirichlet(&imposed, target, var, Default::default())
     };
     let mut model = model::truss(&fes, StrainMeasure::Linear)?;
     model = model.union(&clamp(&model, &n0, "u_x")?)?;

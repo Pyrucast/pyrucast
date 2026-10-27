@@ -5,7 +5,7 @@
 //! `shell::b_into` its stiffness integrates — to the nodal degrees of freedom,
 //! rotated into the element's triad: the strains *are* `B · u`, and this
 //! operator is that product and nothing else. Which is why it takes the
-//! [`ShellModel`]: the membrane, drilling and shear rows are shared, but the
+//! [`ShellFormulation`]: the membrane, drilling and shear rows are shared, but the
 //! **bending** ones are the whole difference between the two formulations — a plain gradient of the fibre rotation for
 //! Reissner-Mindlin, the discrete-Kirchhoff elimination for the other.
 //!
@@ -45,7 +45,7 @@ use crate::handle::Handle;
 use crate::models::kernel::{self, MAX_CELL_DOFS};
 use crate::models::owned_components;
 use crate::models::shell::{
-    b_into, bending_setup, local_dofs, local_frame, shear_b_into, ShellB, ShellModel,
+    b_into, bending_setup, local_dofs, local_frame, shear_b_into, ShellB, ShellFormulation,
     MAX_SHELL_DOFS, SHEAR_ROW, SHELL_STRAINS,
 };
 
@@ -68,7 +68,7 @@ const DOFS: [&str; 6] = ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"];
 /// # use pyrucast::containers::node_field::{NodeField, SubNodeField};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::shell::ShellModel;
+/// # use pyrucast::models::shell::ShellFormulation;
 /// # use pyrucast::ops::element_field::shell_deformation;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]]
@@ -84,7 +84,7 @@ const DOFS: [&str; 6] = ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"];
 /// // first edge follows `x`, so the local frame is the
 /// // repère global.
 /// u.set_value(n[1].id(), "u_x", 0.1)?;
-/// let d = shell_deformation(&NodeField::from_sub(u), &fes, ShellModel::Thick)?;
+/// let d = shell_deformation(&NodeField::from_sub(u), &fes, ShellFormulation::Thick)?;
 /// let s = d.get(0)?.read();
 /// // ε_xx = 0,1/2 = 0,05, et rien d'autre : ni flexion, ni vrillage.
 /// assert!((s.value(0, 0, "eps_xx")? - 0.05).abs() < 1e-12);
@@ -95,7 +95,7 @@ const DOFS: [&str; 6] = ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"];
 pub fn shell_deformation(
     field: &NodeField,
     fespace: &FiniteElementSpace,
-    model: ShellModel,
+    formulation: ShellFormulation,
 ) -> Result<ElementField> {
     let components = Field::components(field);
     let view = field.view()?;
@@ -105,7 +105,7 @@ pub fn shell_deformation(
             sub,
             &view,
             &components,
-            model,
+            formulation,
         )?))?;
     }
     Ok(out)
@@ -116,7 +116,7 @@ pub(crate) fn subspace_shell_deformation(
     fespace: &Handle<SubFiniteElementSpace>,
     view: &NodeFieldView,
     components: &[String],
-    model: ShellModel,
+    formulation: ShellFormulation,
 ) -> Result<SubElementField> {
     kernel::require_field_basis(fespace, "shape values")?;
     // The field must carry every shell DOF up front (a clearer error than a
@@ -130,7 +130,7 @@ pub(crate) fn subspace_shell_deformation(
         }
     }
     let reads = owned_components(&DOFS);
-    let names = owned_components(model.strains());
+    let names = owned_components(formulation.strains());
 
     // ── Membrane, bending and drilling, at every Gauss point ──────────────
     //
@@ -145,7 +145,7 @@ pub(crate) fn subspace_shell_deformation(
         names[..SHEAR_ROW].to_vec(),
         |geom, g, dofs, out| {
             let frame = local_frame(geom)?;
-            let setup = bending_setup(model, geom, &frame)?;
+            let setup = bending_setup(formulation, geom, &frame)?;
             let mut b: ShellB = [[0.0; MAX_SHELL_DOFS]; SHELL_STRAINS];
             b_into(geom, &frame, &setup, g, &mut b)?;
             let mut d = [0.0_f64; MAX_CELL_DOFS];
@@ -157,7 +157,7 @@ pub(crate) fn subspace_shell_deformation(
             Ok(())
         },
     )?;
-    if !model.has_transverse_shear() {
+    if !formulation.has_transverse_shear() {
         return Ok(full);
     }
 
@@ -245,9 +245,9 @@ mod tests {
             u.set_value(node.id(), "u_z", -0.2).unwrap();
             u.set_value(node.id(), "r_z", w).unwrap();
         }
-        let d = shell_deformation(&NodeField::from_sub(u), &fes, ShellModel::Thick).unwrap();
+        let d = shell_deformation(&NodeField::from_sub(u), &fes, ShellFormulation::Thick).unwrap();
         let s = d.get(0).unwrap().read();
-        for c in ShellModel::Thick.strains() {
+        for c in ShellFormulation::Thick.strains() {
             let v = s.value(0, 0, c).unwrap();
             assert!(v.abs() < 1e-12, "{c} = {v} under a rigid motion");
         }
@@ -261,7 +261,7 @@ mod tests {
         let (fes, n, mut u) = facet();
         u.set_value(n[1].id(), "u_z", 0.05).unwrap();
         u.set_value(n[2].id(), "r_x", 0.02).unwrap();
-        let d = shell_deformation(&NodeField::from_sub(u), &fes, ShellModel::Thick).unwrap();
+        let d = shell_deformation(&NodeField::from_sub(u), &fes, ShellFormulation::Thick).unwrap();
         let s = d.get(0).unwrap().read();
         assert!(s.gauss_count() > 1, "a TRI3 carries several Gauss points");
         for c in ["gamma_xz", "gamma_yz"] {
@@ -281,7 +281,8 @@ mod tests {
     fn discrete_kirchhoff_reports_no_shear() {
         let (fes, n, mut u) = facet();
         u.set_value(n[1].id(), "u_z", 0.05).unwrap();
-        let d = shell_deformation(&NodeField::from_sub(u), &fes, ShellModel::Kirchhoff).unwrap();
+        let d =
+            shell_deformation(&NodeField::from_sub(u), &fes, ShellFormulation::Kirchhoff).unwrap();
         assert_eq!(d.get(0).unwrap().read().components().len(), SHEAR_ROW);
     }
 
@@ -292,7 +293,8 @@ mod tests {
         let (fes, n, _) = facet();
         let support = Handle::new(SubMesh::poi1_from_nodes(&n).unwrap());
         let u = SubNodeField::from_poi1(&support, owned_components(&DOFS[..5])).unwrap();
-        let err = shell_deformation(&NodeField::from_sub(u), &fes, ShellModel::Thick).unwrap_err();
+        let err =
+            shell_deformation(&NodeField::from_sub(u), &fes, ShellFormulation::Thick).unwrap_err();
         assert!(format!("{err}").contains("must carry a 'r_z'"));
     }
 }

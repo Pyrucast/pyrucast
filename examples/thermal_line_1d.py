@@ -53,7 +53,7 @@ def main() -> None:
     # co-located node).
     imposed = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
     cible = pyrucast.model.heat_conduction(fes)
-    held = pyrucast.model.dirichlet(cible, "T", imposed)
+    held = pyrucast.model.dirichlet(imposed, cible, "T")
     mult = held.multiplier_mesh().node(0, 0, 0)
 
     model = cible | held

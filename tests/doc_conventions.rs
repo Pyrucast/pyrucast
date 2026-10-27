@@ -80,7 +80,7 @@ fn un_modele_se_declare_et_s_assemble() -> Result<()> {
     // Mesh of the imposed nodes + support of the multipliers (barycenter
     // co-locates fresh nodes). The model creates no node itself.
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&a))?;
-    let dir = model::dirichlet(&hc, "T", &imposed, RelationSense::Equality)?;
+    let dir = model::dirichlet(&imposed, &hc, "T", RelationSense::Equality)?;
     let model = hc.union(&dir)?;
 
     // Material k = 1, applied to the sub-models that need it (Dirichlet is
@@ -103,7 +103,7 @@ fn filtrer_un_modele_et_sa_matrice_par_nature() -> Result<()> {
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
     let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     let appui = mesh::poi1_from_nodes(std::slice::from_ref(&a))?;
-    let bloque = model::dirichlet(&conduction, "T", &appui, RelationSense::Equality)?;
+    let bloque = model::dirichlet(&appui, &conduction, "T", RelationSense::Equality)?;
     let model = conduction.union(&bloque)?;
     let materials = element_field::material_field(&model, &[("k", 1.0)])?;
     let k = matrix::stiffness(&model, &materials)?;

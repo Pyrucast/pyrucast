@@ -64,7 +64,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     // contraints s'y vérifient.
     let roller = |target: &Model, nodes: &[Node], var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-        model::dirichlet(target, var, &imposed, Default::default())
+        model::dirichlet(&imposed, target, var, Default::default())
     };
     let left: Vec<Node> = (0..=N).map(|j| grid[idx(0, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=N).map(|i| grid[idx(i, 0)].clone()).collect();
@@ -85,7 +85,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
         right_edge.add_cell(&[grid[idx(N, j)].id(), grid[idx(N, j + 1)].id()])?;
     }
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
-    model = model.union(&model::flux(&right_fes, &model, "f_x".into())?)?;
+    model = model.union(&model::flux(&right_fes, &model, "f_x")?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,
@@ -115,7 +115,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
 fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-    model::dirichlet(target, var, &imposed, Default::default())
+    model::dirichlet(&imposed, target, var, Default::default())
 }
 
 /// 3-D solid: uniaxial tension of a unit HEX8 cube. Symmetry rollers on the
@@ -161,7 +161,7 @@ fn elasticity_unit_cube_uniaxial_tension() -> Result<()> {
     let mut face = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    model = model.union(&model::flux(&face_fes, &model, "f_x".into())?)?;
+    model = model.union(&model::flux(&face_fes, &model, "f_x")?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,

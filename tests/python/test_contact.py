@@ -38,7 +38,7 @@ def _block(c, mesh, y0):
 
 def _clamp(target, nodes, var):
     imposed = pyrucast.mesh.poi1_from_nodes(nodes)
-    return pyrucast.model.dirichlet(target, var, imposed)
+    return pyrucast.model.dirichlet(imposed, target, var)
 
 
 def _two_blocks():
@@ -58,7 +58,7 @@ def _two_blocks():
     slave = pyrucast.mesh.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
 
     model = pyrucast.model.elasticity(fes, "plane_stress")
-    contact = pyrucast.model.contact(model, slave, master, ["u_x", "u_y"])
+    contact = pyrucast.model.contact(slave, master, model, ["u_x", "u_y"])
     model = model | _clamp(model, bottom + top, "u_x")
     model = model | _clamp(model, [bottom[idx(i, 0)] for i in range(N + 1)], "u_y")
     model = model | contact
@@ -150,4 +150,4 @@ def test_components_must_match_dimension():
     slave = pyrucast.mesh.poi1_from_nodes([s])
     barre = pyrucast.model.truss(pyrucast.FiniteElementSpace(master))
     with pytest.raises(Exception, match="component"):
-        pyrucast.model.contact(barre, slave, master, ["u_y"])
+        pyrucast.model.contact(slave, master, barre, ["u_y"])

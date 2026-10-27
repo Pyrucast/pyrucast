@@ -565,7 +565,7 @@ def test_assemble_reassembles_scaled_mass_union_stiffness():
     mult_mesh = pyrucast.mesh.barycenter(imposed)
     mult = mult_mesh.node(0, 0, 0)
     conduction = pyrucast.model.heat_conduction(fes)
-    dirichlet = pyrucast.model.dirichlet(conduction, "T", imposed)
+    dirichlet = pyrucast.model.dirichlet(imposed, conduction, "T")
     model = pyrucast.model.heat_conduction(fes) | dirichlet
     materials = pyrucast.element_field.material_field(
         model, [("k", 1.0), ("rho", 2.0), ("cp", 3.0)]

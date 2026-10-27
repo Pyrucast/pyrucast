@@ -68,7 +68,7 @@ def main():
 
     def clamp(target, nodes, var):
         imposed = pc.mesh.poi1_from_nodes(nodes)
-        return pc.model.dirichlet(target, var, imposed)
+        return pc.model.dirichlet(imposed, target, var)
 
     # ── Modèle : conduction + élasticité (contraintes planes) + Dirichlet ────
     # Thermics: imposed temperature on the left/right edges (one multiplier per
@@ -77,7 +77,7 @@ def main():
     th_imposed = pc.mesh.poi1_from_nodes(left + right)
     thermal = pc.model.heat_conduction(fes)
     mecanique = pc.model.elasticity(fes, "plane_stress")
-    held_t = pc.model.dirichlet(thermal, "T", th_imposed)
+    held_t = pc.model.dirichlet(th_imposed, thermal, "T")
     th_mult = held_t.multiplier_mesh()
     model = (
         thermal

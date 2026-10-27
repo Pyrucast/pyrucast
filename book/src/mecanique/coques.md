@@ -8,7 +8,7 @@ moments de flexion. Ses éléments sont des variétés (`ref_dim = 2` dans un es
 massif construirait `B` à partir du gradient tangentiel et serait déficient en
 rang à travers l'épaisseur. Une coque a son noyau et sa cinématique propres.
 
-Comme partout ailleurs ici, la **formulation est un attribut** (`ShellModel`) :
+Comme partout ailleurs ici, la **formulation est un attribut** (`ShellFormulation`) :
 les DDL, le repère local, la loi de membrane et la rotation vers les axes globaux
 sont partagés, seul le traitement flexion/cisaillement change.
 

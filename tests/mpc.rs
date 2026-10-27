@@ -71,7 +71,7 @@ fn mpc_difference_relation_recovers_linear_solution() -> Result<()> {
 
     // Dirichlet T(node0) = 0.
     let imposed0 = poi1(&nodes[0])?;
-    let dir = SubModel::dirichlet(&model, "T", &imposed0, Default::default())?;
+    let dir = SubModel::dirichlet(&imposed0, &model, "T", Default::default())?;
     let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
@@ -80,8 +80,8 @@ fn mpc_difference_relation_recovers_linear_solution() -> Result<()> {
     let mesh_last = poi1(&nodes[N_ELEMS])?;
     let mesh_first = poi1(&nodes[0])?;
     let mpc = SubModel::mpc(
-        &model,
         &[(&mesh_last, "T", 1.0), (&mesh_first, "T", -1.0)],
+        &model,
         Default::default(),
     )?;
     let mpc_mult = mpc.multiplier_nodes()[0];
@@ -129,7 +129,7 @@ fn a_multi_term_reaction_is_spread_by_its_coefficients() -> Result<()> {
 
     // T(node0) = 0, so the bar is held.
     let imposed0 = poi1(&nodes[0])?;
-    let dir = SubModel::dirichlet(&model, "T", &imposed0, Default::default())?;
+    let dir = SubModel::dirichlet(&imposed0, &model, "T", Default::default())?;
     let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
@@ -138,8 +138,8 @@ fn a_multi_term_reaction_is_spread_by_its_coefficients() -> Result<()> {
     let mesh_last = poi1(&nodes[N_ELEMS])?;
     let mesh_mid = poi1(&nodes[N_ELEMS / 2])?;
     let mpc = SubModel::mpc(
-        &model,
         &[(&mesh_last, "T", a), (&mesh_mid, "T", b)],
+        &model,
         Default::default(),
     )?;
     let mpc_mult = mpc.multiplier_nodes()[0];
@@ -209,8 +209,8 @@ fn single_term_mpc_matches_dirichlet() -> Result<()> {
         let (nodes, coords, mut model, materials) = heat_bar()?;
         let left = poi1(&nodes[0])?;
         let right = poi1(&nodes[N_ELEMS])?;
-        let dl = SubModel::dirichlet(&model, "T", &left, Default::default())?;
-        let dr = SubModel::dirichlet(&model, "T", &right, Default::default())?;
+        let dl = SubModel::dirichlet(&left, &model, "T", Default::default())?;
+        let dr = SubModel::dirichlet(&right, &model, "T", Default::default())?;
         let (nl, nr) = (dl.multiplier_nodes()[0], dr.multiplier_nodes()[0]);
         model.add_sub(Handle::new(dl))?;
         model.add_sub(Handle::new(dr))?;
@@ -229,12 +229,12 @@ fn single_term_mpc_matches_dirichlet() -> Result<()> {
     let solve_mpc = || -> Result<NodeField> {
         let (nodes, coords, mut model, materials) = heat_bar()?;
         let left = poi1(&nodes[0])?;
-        let dl = SubModel::dirichlet(&model, "T", &left, Default::default())?;
+        let dl = SubModel::dirichlet(&left, &model, "T", Default::default())?;
         let nl = dl.multiplier_nodes()[0];
         model.add_sub(Handle::new(dl))?;
 
         let right = poi1(&nodes[N_ELEMS])?;
-        let mpc = SubModel::mpc(&model, &[(&right, "T", 1.0)], Default::default())?;
+        let mpc = SubModel::mpc(&[(&right, "T", 1.0)], &model, Default::default())?;
         let nm = mpc.multiplier_nodes()[0];
         model.add_sub(Handle::new(mpc))?;
 
@@ -277,7 +277,7 @@ fn mpc_elimination_matches_lagrange() -> Result<()> {
 
     // Dirichlet T(node0) = 0.
     let imposed0 = poi1(&nodes[0])?;
-    let dir = SubModel::dirichlet(&model, "T", &imposed0, Default::default())?;
+    let dir = SubModel::dirichlet(&imposed0, &model, "T", Default::default())?;
     let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
@@ -285,8 +285,8 @@ fn mpc_elimination_matches_lagrange() -> Result<()> {
     let mesh4 = poi1(&nodes[N_ELEMS])?;
     let mesh2 = poi1(&nodes[N_ELEMS / 2])?;
     let mpc = SubModel::mpc(
-        &model,
         &[(&mesh4, "T", 2.0), (&mesh2, "T", -1.0)],
+        &model,
         Default::default(),
     )?;
     let mpc_mult = mpc.multiplier_nodes()[0];
@@ -337,8 +337,8 @@ fn single_term_mpc_elimination_equals_dirichlet() -> Result<()> {
         let (nodes, coords, mut model, materials) = heat_bar()?;
         let left = poi1(&nodes[0])?;
         let right = poi1(&nodes[N_ELEMS])?;
-        let dl = SubModel::dirichlet(&model, "T", &left, Default::default())?;
-        let dr = SubModel::dirichlet(&model, "T", &right, Default::default())?;
+        let dl = SubModel::dirichlet(&left, &model, "T", Default::default())?;
+        let dr = SubModel::dirichlet(&right, &model, "T", Default::default())?;
         let (nl, nr) = (dl.multiplier_nodes()[0], dr.multiplier_nodes()[0]);
         model.add_sub(Handle::new(dl))?;
         model.add_sub(Handle::new(dr))?;
@@ -357,12 +357,12 @@ fn single_term_mpc_elimination_equals_dirichlet() -> Result<()> {
     let by_elimination = || -> Result<NodeField> {
         let (nodes, coords, mut model, materials) = heat_bar()?;
         let left = poi1(&nodes[0])?;
-        let dl = SubModel::dirichlet(&model, "T", &left, Default::default())?;
+        let dl = SubModel::dirichlet(&left, &model, "T", Default::default())?;
         let nl = dl.multiplier_nodes()[0];
         model.add_sub(Handle::new(dl))?;
 
         let right = poi1(&nodes[N_ELEMS])?;
-        let mpc = SubModel::mpc(&model, &[(&right, "T", 1.0)], Default::default())?;
+        let mpc = SubModel::mpc(&[(&right, "T", 1.0)], &model, Default::default())?;
         let nm = mpc.multiplier_nodes()[0];
         model.add_sub(Handle::new(mpc))?;
 
@@ -401,8 +401,8 @@ fn elimination_recovers_reaction_equals_multiplier() -> Result<()> {
     let (nodes, coords, mut model, materials) = heat_bar()?;
     let left = poi1(&nodes[0])?;
     let right = poi1(&nodes[N_ELEMS])?;
-    let dl = SubModel::dirichlet(&model, "T", &left, Default::default())?;
-    let dr = SubModel::dirichlet(&model, "T", &right, Default::default())?;
+    let dl = SubModel::dirichlet(&left, &model, "T", Default::default())?;
+    let dr = SubModel::dirichlet(&right, &model, "T", Default::default())?;
     let (nl, nr) = (dl.multiplier_nodes()[0], dr.multiplier_nodes()[0]);
     model.add_sub(Handle::new(dl))?;
     model.add_sub(Handle::new(dr))?;
@@ -450,7 +450,7 @@ fn elimination_periodicity_constant_field() -> Result<()> {
 
     // Dirichlet T(node1) = 0.5 (interior anchor).
     let anchor = poi1(&nodes[1])?;
-    let dir = SubModel::dirichlet(&model, "T", &anchor, Default::default())?;
+    let dir = SubModel::dirichlet(&anchor, &model, "T", Default::default())?;
     let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
@@ -458,8 +458,8 @@ fn elimination_periodicity_constant_field() -> Result<()> {
     let mesh4 = poi1(&nodes[N_ELEMS])?;
     let mesh0 = poi1(&nodes[0])?;
     let mpc = SubModel::mpc(
-        &model,
         &[(&mesh4, "T", 1.0), (&mesh0, "T", -1.0)],
+        &model,
         Default::default(),
     )?;
     let mpc_mult = mpc.multiplier_nodes()[0];
@@ -496,13 +496,13 @@ fn elimination_rejects_chaining() -> Result<()> {
     let (nodes, coords, mut model, materials) = heat_bar()?;
 
     let imposed0 = poi1(&nodes[0])?;
-    let dir = SubModel::dirichlet(&model, "T", &imposed0, Default::default())?;
+    let dir = SubModel::dirichlet(&imposed0, &model, "T", Default::default())?;
     let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
     // A single-term MPC on the *same* node0 — its only DOF is already a slave.
     let mesh0 = poi1(&nodes[0])?;
-    let mpc = SubModel::mpc(&model, &[(&mesh0, "T", 1.0)], Default::default())?;
+    let mpc = SubModel::mpc(&[(&mesh0, "T", 1.0)], &model, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
@@ -524,7 +524,7 @@ fn elimination_rejects_zero_coefficient() -> Result<()> {
     let (nodes, coords, mut model, materials) = heat_bar()?;
 
     let mesh4 = poi1(&nodes[N_ELEMS])?;
-    let mpc = SubModel::mpc(&model, &[(&mesh4, "T", 0.0)], Default::default())?;
+    let mpc = SubModel::mpc(&[(&mesh4, "T", 0.0)], &model, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
@@ -546,12 +546,12 @@ fn elimination_condensation_cached_then_invalidated() -> Result<()> {
     let (nodes, coords, mut model, materials) = heat_bar()?;
 
     let left = poi1(&nodes[0])?;
-    let dl = SubModel::dirichlet(&model, "T", &left, Default::default())?;
+    let dl = SubModel::dirichlet(&left, &model, "T", Default::default())?;
     let nl = dl.multiplier_nodes()[0];
     model.add_sub(Handle::new(dl))?;
 
     let right = poi1(&nodes[N_ELEMS])?;
-    let mpc = SubModel::mpc(&model, &[(&right, "T", 1.0)], Default::default())?;
+    let mpc = SubModel::mpc(&[(&right, "T", 1.0)], &model, Default::default())?;
     let nm = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 

@@ -37,17 +37,19 @@ chacune a son nœud.
 Signature complète :
 
 ```text
-model.dirichlet(target, variable, imposed_mesh, sense="=")
+model.dirichlet(imposed_mesh, target, variable, sense="=")
 ```
 
-Quatre arguments, et chacun porte une décision. La **cible** est le modèle qu'on
-contraint : `variable` doit être une de ses primales, et sa ligne duale s'y lit
+Quatre arguments, et chacun porte une décision. Le **support** vient en tête,
+comme pour tous les opérateurs de `pyrucast.model` : les nœuds contraints. La
+**cible** suit : c'est le modèle qu'on
+contraint, `variable` doit être une de ses primales, et sa ligne duale s'y lit
 — le passage `T → q` est l'affaire de la physique visée, pas quelque chose à
 retaper. Le donner permet aussi de refuser à la construction une variable que
 la cible ne déclare pas, au lieu de découvrir une matrice singulière.
 
 **Une variable, et une seule.** Pour encastrer, on compose :
-`dirichlet(m, "u_x", …) | dirichlet(m, "u_y", …)`, chacun avec ses propres
+`dirichlet(nœuds, m, "u_x") | dirichlet(nœuds, m, "u_y")`, chacun avec ses propres
 nœuds-multiplicateurs. Une contrainte est une famille de relations scalaires
 avec un multiplicateur par relation ; on n'empaquette plusieurs composantes que
 lorsqu'elles partagent quelque chose de coûteux, ce qu'un Dirichlet ne fait

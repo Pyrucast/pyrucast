@@ -6,7 +6,7 @@ import pyrucast
 def _clamp(target, c, node, var):
     """Homogeneous Dirichlet (u = 0) on `var` at `node` (imposed value 0)."""
     imposed = pyrucast.mesh.poi1_from_nodes([node])
-    return pyrucast.model.dirichlet(target, var, imposed)
+    return pyrucast.model.dirichlet(imposed, target, var)
 
 
 def test_truss_bar_axial_elongation():

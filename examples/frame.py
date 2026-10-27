@@ -30,7 +30,7 @@ E, A, I, G, A_S, L, P, N = 1.0, 1.0, 1.0, 30.0, 1.0, 1.0, 1.0, 40
 
 def _clamp(target, node, var):
     imposed = pyrucast.mesh.poi1_from_nodes([node])
-    return pyrucast.model.dirichlet(target, var, imposed)
+    return pyrucast.model.dirichlet(imposed, target, var)
 
 
 def main() -> None:

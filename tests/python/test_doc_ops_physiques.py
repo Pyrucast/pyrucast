@@ -34,7 +34,7 @@ def _modele_dirichlet(fes, noeud):
     """Conduction + one imposed temperature, and the multiplier node."""
     imposed = pyrucast.mesh.poi1_from_nodes([noeud])
     cible = pyrucast.model.heat_conduction(fes)
-    appui = pyrucast.model.dirichlet(cible, "T", imposed)
+    appui = pyrucast.model.dirichlet(imposed, cible, "T")
     mult = appui.multiplier_mesh()
 
     model = cible | appui
@@ -110,7 +110,7 @@ assert abs(lagrange.value(noeuds[0], "T") - condense.value(noeuds[0], "T")) < 1e
 _, _, fes, noeuds = _barre_thermique()
 imposed = pyrucast.mesh.poi1_from_nodes([noeuds[0]])
 cible = pyrucast.model.heat_conduction(fes)
-butee = pyrucast.model.dirichlet(cible, "T", imposed, sense=">=")
+butee = pyrucast.model.dirichlet(imposed, cible, "T", sense=">=")
 mult = butee.multiplier_mesh()
 mult_node = mult.node(0, 0, 0)
 
@@ -267,7 +267,7 @@ assert len(materials) == 1
 _, _, bord_fes, _ = _barre_thermique()
 # ANCHOR: boundary_transfer
 conduction = pyrucast.model.heat_conduction(bord_fes)
-film = pyrucast.model.boundary_transfer(bord_fes, conduction, [("T", "q")])
+film = pyrucast.model.boundary_transfer(bord_fes, conduction, ["T"])
 # ANCHOR_END: boundary_transfer
 assert film[0].physics() == ["thermal"]
 
@@ -335,7 +335,7 @@ gauche, droite, face_gauche, face_droite = _deux_corps_en_vis_a_vis()
 # ANCHOR: interface_transfer
 corps = pyrucast.model.fick(gauche, "H2") | pyrucast.model.fick(droite, "H2")
 model = corps | pyrucast.model.interface_transfer(
-    face_gauche, face_droite, corps, [("c_H2", "j_H2")]
+    face_gauche, face_droite, corps, ["c_H2"]
 )
 materials = pyrucast.element_field.material_field(
     model, [("D_H2", 2.0), ("h_c_H2", 5.0)]
@@ -352,20 +352,18 @@ semelle = peau
 # Thermal film: enters the stiffness of the conduction it cools, and
 # en prend la nature.
 conduction = pyrucast.model.heat_conduction(fes)
-model = conduction | pyrucast.model.boundary_transfer(peau, conduction, [("T", "q")])
+model = conduction | pyrucast.model.boundary_transfer(peau, conduction, ["T"])
 materials = pyrucast.element_field.material_field(
     model, [("k", 5.0), ("h_T", 12.0), ("a_ext_T", 20.0)]
 )
 
 # Contact resistance between two meshes.
 corps = pyrucast.model.heat_conduction(gauche) | pyrucast.model.heat_conduction(droite)
-joint = pyrucast.model.interface_transfer(face_gauche, face_droite, corps, [("T", "q")])
+joint = pyrucast.model.interface_transfer(face_gauche, face_droite, corps, ["T"])
 
 # Elastic foundation: the same law, on displacements.
 plaque = pyrucast.model.elasticity(fes, "plane_stress")
-appui = pyrucast.model.boundary_transfer(
-    semelle, plaque, [("u_x", "f_x"), ("u_y", "f_y")]
-)
+appui = pyrucast.model.boundary_transfer(semelle, plaque, ["u_x", "u_y"])
 
 # No kind in argument: each took its target's own.
 joint[0].physics()  # ["thermal"]

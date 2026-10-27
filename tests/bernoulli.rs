@@ -53,9 +53,9 @@ fn a_cantilever_under_a_tip_load_matches_its_closed_form() -> Result<()> {
     for var in ["w", "theta"] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
         model = model.union(&model::dirichlet(
+            &imposed,
             &model,
             var,
-            &imposed,
             Default::default(),
         )?)?;
     }
@@ -128,9 +128,9 @@ fn a_plane_frame_carries_axial_and_bending_independently() -> Result<()> {
     for var in ["u_x", "u_y", "r_z"] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
         model = model.union(&model::dirichlet(
+            &imposed,
             &model,
             var,
-            &imposed,
             Default::default(),
         )?)?;
     }
@@ -171,9 +171,9 @@ fn a_space_frame_twists_by_its_closed_form() -> Result<()> {
     for var in ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
         model = model.union(&model::dirichlet(
+            &imposed,
             &model,
             var,
-            &imposed,
             Default::default(),
         )?)?;
     }
@@ -237,7 +237,7 @@ fn bernoulli_and_timoshenko_differ_only_for_a_stocky_beam() -> Result<()> {
             for var in ["w", "theta"] {
                 let imposed =
                     Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
-                let bc = model::dirichlet(&m, var, &imposed, Default::default())?;
+                let bc = model::dirichlet(&imposed, &m, var, Default::default())?;
                 m = m.union(&bc)?;
             }
             Ok(m)
@@ -300,9 +300,9 @@ fn clamped_1d(a: &Node, fes: &FiniteElementSpace) -> Result<Model> {
     for var in ["w", "theta"] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(a))?);
         model = model.union(&model::dirichlet(
+            &imposed,
             &model,
             var,
-            &imposed,
             Default::default(),
         )?)?;
     }

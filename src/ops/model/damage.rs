@@ -8,7 +8,7 @@ use crate::models::damage::law::DamageLaw;
 use crate::models::tensor::Kinematics;
 use crate::ops::element_field::StrainMeasure;
 
-/// Damage `Model` spanning **every** subspace of `fes`, with an explicit
+/// Damage `Model` spanning **every** subspace of `fespace`, with an explicit
 /// law. Parent-level operator; the material each law needs is
 /// supplied at assembly / integration time.
 ///
@@ -42,10 +42,12 @@ use crate::ops::element_field::StrainMeasure;
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn damage(
-    fes: &FiniteElementSpace,
+    fespace: &FiniteElementSpace,
     kinematics: Kinematics,
     law: DamageLaw,
-    measure: StrainMeasure,
+    strain_measure: StrainMeasure,
 ) -> Result<Model> {
-    spanning(fes, |zone| SubModel::damage(zone, kinematics, law, measure))
+    spanning(fespace, |zone| {
+        SubModel::damage(zone, kinematics, law, strain_measure)
+    })
 }

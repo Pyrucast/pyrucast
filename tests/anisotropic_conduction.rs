@@ -202,7 +202,7 @@ fn patch_model(
             let node = grid[j * (N + 1) + i].clone();
             let imposed =
                 Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&node))?);
-            let dirichlet = model::dirichlet(&model, "T", &imposed, Default::default())?;
+            let dirichlet = model::dirichlet(&imposed, &model, "T", Default::default())?;
             multipliers.push((
                 dirichlet.multiplier_mesh()?.node(0, 0, 0)?.id(),
                 i as f64 * h,

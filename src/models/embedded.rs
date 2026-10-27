@@ -129,7 +129,7 @@ struct Component {
 /// # let cible = pyrucast::ops::model::elasticity(
 /// #     &FiniteElementSpace::lagrange1(&maillage)?,
 /// #     pyrucast::models::tensor::Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
-/// let e = Embedded::new(&cible, &immergee, &maillage,
+/// let e = Embedded::new(&immergee, &maillage, &cible,
 ///     vec!["u_x".into(), "u_y".into()], pyrucast::models::embedded::DEFAULT_TOL)?;
 /// assert_eq!(e.relations()?.len(), 4); // two nodes × two components
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -203,7 +203,7 @@ impl Embedded {
     /// # let cible = pyrucast::ops::model::elasticity(
     /// #     &FiniteElementSpace::lagrange1(&maillage)?,
     /// #     pyrucast::models::tensor::Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
-    /// let e = Embedded::new(&cible, &immergee, &maillage,
+    /// let e = Embedded::new(&immergee, &maillage, &cible,
     ///     vec!["u_x".into(), "u_y".into()], pyrucast::models::embedded::DEFAULT_TOL)?;
     /// assert_eq!(e.relations()?.len(), 4); // two nodes × two components
     /// // A multiplier node per relation: one per immersed node and component.
@@ -211,9 +211,9 @@ impl Embedded {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(
-        target: &crate::containers::model::Model,
         immersed: &Mesh,
         host: &Mesh,
+        target: &crate::containers::model::Model,
         variables: Vec<String>,
         tol: f64,
     ) -> Result<Self> {
@@ -593,7 +593,7 @@ mod tests {
     #[test]
     fn empty_components_rejected() {
         let (bar, host, _c) = hex_and_bar();
-        assert!(Embedded::new(&cible_mecanique(&host), &bar, &host, vec![], DEFAULT_TOL).is_err());
+        assert!(Embedded::new(&bar, &host, &cible_mecanique(&host), vec![], DEFAULT_TOL).is_err());
     }
 
     #[test]
@@ -610,9 +610,9 @@ mod tests {
         bsm.add_cell(&[p.id()]).unwrap();
         let bar = Mesh::from_submesh(bsm);
         assert!(Embedded::new(
-            &cible_barre(&host),
             &bar,
             &host,
+            &cible_barre(&host),
             vec!["u_x".into()],
             DEFAULT_TOL
         )
@@ -623,9 +623,9 @@ mod tests {
     fn relations_have_immersed_plus_host_terms() {
         let (bar, host, _c) = hex_and_bar();
         let emb = Embedded::new(
-            &cible_mecanique(&host),
             &bar,
             &host,
+            &cible_mecanique(&host),
             vec!["u_x".into(), "u_y".into()],
             DEFAULT_TOL,
         )

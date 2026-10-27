@@ -59,7 +59,7 @@ def profil_stationnaire() -> None:
     imposed = pyrucast.Mesh(c, "POI1")
     imposed.unit().add_cell([nodes[-1]])
     cible = pyrucast.model.fick(fes, SPECIES)
-    held = pyrucast.model.dirichlet(cible, f"c_{SPECIES}", imposed)
+    held = pyrucast.model.dirichlet(imposed, cible, f"c_{SPECIES}")
     mult = held.multiplier_mesh().node(0, 0, 0)
 
     model = cible | held

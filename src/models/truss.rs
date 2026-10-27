@@ -113,8 +113,8 @@ pub struct Truss {
 }
 
 impl Truss {
-    /// Truss physics on a `SEG2` FE subspace, its law reading the strain
-    /// `measure`: `linear`, or `green_lagrange` for large displacements — the
+    /// Truss physics on a `SEG2` FE subspace, its law reading
+    /// `strain_measure`: `linear`, or `green_lagrange` for large displacements — the
     /// law then reads `E_*` and writes the second Piola–Kirchhoff axial force
     /// `S_n`. Builds the stable POI1 [`SubMesh`] over the subspace's unique
     /// nodes.
@@ -158,8 +158,11 @@ impl Truss {
     /// assert!(Truss::new(zone.clone(), StrainMeasure::Hencky).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn new(fespace: Handle<SubFiniteElementSpace>, measure: StrainMeasure) -> Result<Self> {
-        match measure {
+    pub fn new(
+        fespace: Handle<SubFiniteElementSpace>,
+        strain_measure: StrainMeasure,
+    ) -> Result<Self> {
+        match strain_measure {
             StrainMeasure::Linear | StrainMeasure::GreenLagrange => {}
             StrainMeasure::Hencky => {
                 return Err(PyrucastError::Message(
@@ -195,7 +198,7 @@ impl Truss {
             fespace,
             support,
             space_dim,
-            measure,
+            measure: strain_measure,
         })
     }
 
@@ -776,7 +779,7 @@ mod tests {
 
 // ANCHOR: operator
 crate::physics_operator! {
-    /// Truss / bar `Model` spanning **every** subspace of `fes` — one
+    /// Truss / bar `Model` spanning **every** subspace of `fespace` — one
     /// [`SubModel::Truss`] per
     /// [`SubFiniteElementSpace`].
     /// Parent-level operator; material (`E`, `A`) is supplied at assembly time.
@@ -811,7 +814,7 @@ crate::physics_operator! {
     /// assert_eq!(m.primal_vars(), vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn truss(fes, strain_measure: StrainMeasure = StrainMeasure::Linear) via SubModel::truss;
+    pub fn truss(fespace, strain_measure: StrainMeasure = StrainMeasure::Linear) via SubModel::truss;
     python: "`model.truss(fespace, strain_measure=\"linear\")` — truss / bar\n(axial-force) model spanning **every** subspace of `fespace` (SEG2 elements).\nDOFs are the vector displacement `u_x, u_y(, u_z)`; the orientation is taken\nfrom the node coordinates. Material (`E`, `A`) is supplied at assembly time.\n\n`strain_measure` is the strain the law reads: `\"linear\"` (the default; it\nwrites the axial force `n`) or `\"green_lagrange\"` (large displacements: it\nwrites the second Piola–Kirchhoff axial force `S_n`, which\n`element_field.stress_measure` turns into the nominal force vector `P_*` or\nthe true force `n`)."
 }
 // ANCHOR_END: operator

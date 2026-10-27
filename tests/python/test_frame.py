@@ -7,7 +7,7 @@ import pyrucast
 
 def _clamp(target, node, var):
     imposed = pyrucast.mesh.poi1_from_nodes([node])
-    return pyrucast.model.dirichlet(target, var, imposed)
+    return pyrucast.model.dirichlet(imposed, target, var)
 
 
 def test_inclined_cantilever_perpendicular_load():

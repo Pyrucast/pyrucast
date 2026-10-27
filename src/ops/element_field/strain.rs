@@ -329,7 +329,7 @@ mod tests {
         )
         .unwrap();
         let clamp = mesh::poi1_from_nodes(&n[..1]).unwrap();
-        let support = model::dirichlet(&solid, "u_x", &clamp, RelationSense::Equality);
+        let support = model::dirichlet(&clamp, &solid, "u_x", RelationSense::Equality);
         let blocked = solid.union(&support.unwrap()).unwrap();
         let got = strain(&blocked, &sol, &unit_material(&fes)).unwrap();
         assert_eq!(got.len(), 1);

@@ -143,7 +143,7 @@ def main() -> None:
 
     # FR — Dirichlet : le support bloqué ; la contrainte crée ses multiplicateurs.
     # EN — Dirichlet: the constrained support; the constraint mints its multipliers.
-    blocage_T = pc.model.dirichlet(modele, "T", alesage)
+    blocage_T = pc.model.dirichlet(alesage, modele, "T")
     modele = modele | blocage_T
 
     # FR — Le flux imposé sur la face gauche est un terme du modèle.
@@ -216,10 +216,8 @@ def main() -> None:
     # EN — Convection adds into the matrix: `|` on the very same dofs.
     basse_fes = pc.FiniteElementSpace(face_basse)
     conduction = pc.model.heat_conduction(fes)
-    modele = conduction | pc.model.boundary_transfer(
-        basse_fes, conduction, [("T", "q")]
-    )
-    modele = modele | pc.model.dirichlet(modele, "T", alesage)
+    modele = conduction | pc.model.boundary_transfer(basse_fes, conduction, ["T"])
+    modele = modele | pc.model.dirichlet(alesage, modele, "T")
 
     # FR — Un seul champ matériau : « k » pour la conduction, « h » et son
     #      ambiant pour le film.

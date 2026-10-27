@@ -110,7 +110,7 @@
 //! let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
 //! model
 //!     .add_sub(Handle::new(
-//!         SubModel::dirichlet(&model, "T", &imposed, Default::default())
+//!         SubModel::dirichlet(&imposed, &model, "T", Default::default())
 //!             .unwrap(),
 //!     ))
 //!     .unwrap();
@@ -339,14 +339,14 @@ impl SubModel {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    /// let charge = SubModel::flux(zone, &cible, "q".into())?;
+    /// let charge = SubModel::flux(zone, &cible, "q")?;
     /// assert_eq!(charge.as_kind().label(), "Flux");
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn flux(
         fespace: Handle<SubFiniteElementSpace>,
         target: &Model,
-        dual: String,
+        dual: &str,
     ) -> Result<Self> {
         Ok(SubModel::Flux(flux::Flux::new(fespace, target, dual)?))
     }
@@ -402,12 +402,12 @@ impl SubModel {
     }
 
     /// Surface exchange with an imposed ambient (Robin / film) on a boundary FE
-    /// subspace, on the `(primal, dual)` pairs given.
+    /// subspace, on the variables given.
     ///
     /// Naming the bulk physics' own DOFs is what makes the boundary term couple
-    /// straight into it — `[("T", "q")]` beside a conduction, `[("c_H2",
-    /// "j_H2")]` beside a diffusion, the three displacement pairs for an elastic
-    /// foundation. `target` is the model assembling those pairs; it gives the
+    /// straight into it — `["T"]` beside a conduction, `["c_H2"]` beside a
+    /// diffusion, the displacements for an elastic foundation. `target` is the
+    /// model declaring those variables; it gives each its dual row, and the
     /// exchange its nature. The coefficients `h_<primal>` **and** the ambients
     /// `a_ext_<primal>` are supplied at assembly time, in the material: the
     /// exchange goes into the matrix, the ambient term `h·a_ext ∫N_i dΓ` comes
@@ -441,8 +441,7 @@ impl SubModel {
     /// # let fes_bord = FiniteElementSpace::lagrange1(&Mesh::from_submesh(bord))?;
     /// // Naming the volumetric physics' DOFs is what makes the boundary term
     /// // couple straight into it.
-    /// let m = SubModel::boundary_transfer(
-    ///     fes_bord.get(0)?, &cible, vec![("T".into(), "q".into())])?;
+    /// let m = SubModel::boundary_transfer(fes_bord.get(0)?, &cible, vec!["T".into()])?;
     /// assert_eq!(m.primal_vars(), vec!["T".to_string()]);
     /// assert!(m.material_components().unwrap().contains(&"h_T".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -450,15 +449,15 @@ impl SubModel {
     pub fn boundary_transfer(
         fespace: Handle<SubFiniteElementSpace>,
         target: &Model,
-        components: Vec<(String, String)>,
+        variables: Vec<String>,
     ) -> Result<Self> {
         Ok(SubModel::BoundaryTransfer(
-            boundary_transfer::BoundaryTransfer::new(fespace, target, components)?,
+            boundary_transfer::BoundaryTransfer::new(fespace, target, variables)?,
         ))
     }
 
     /// Truss / bar sub-model on a `SEG2` FE subspace, its law reading the
-    /// strain `measure` (`linear`, or `green_lagrange` in large displacements).
+    /// `strain_measure` (`linear`, or `green_lagrange` in large displacements).
     /// Material data (`E`, `A`) is supplied at assembly time. See
     /// [`truss::Truss::new`].
     ///
@@ -492,14 +491,17 @@ impl SubModel {
     /// assert_eq!(m.material_components(), Some(vec!["E".to_string(), "A".to_string()]));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn truss(fespace: Handle<SubFiniteElementSpace>, measure: StrainMeasure) -> Result<Self> {
-        Ok(SubModel::Truss(truss::Truss::new(fespace, measure)?))
+    pub fn truss(
+        fespace: Handle<SubFiniteElementSpace>,
+        strain_measure: StrainMeasure,
+    ) -> Result<Self> {
+        Ok(SubModel::Truss(truss::Truss::new(fespace, strain_measure)?))
     }
 
     /// Linear-elasticity sub-model on an FE subspace, with the given 2-D/3-D
     /// `kinematics`. `symmetry` selects the material it reads: `E`, `nu`, or —
     /// orthotropic, anisotropic — its constants **and its axes**, see
-    /// [`crate::models::symmetry`] for the contracts. `measure` is the strain
+    /// [`crate::models::symmetry`] for the contracts. `strain_measure` is the strain
     /// the law reads, and names the stress it writes. Material data is supplied
     /// at assembly time. See [`elasticity::Elasticity::new`].
     ///
@@ -543,10 +545,13 @@ impl SubModel {
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         symmetry: MaterialSymmetry,
-        measure: StrainMeasure,
+        strain_measure: StrainMeasure,
     ) -> Result<Self> {
         Ok(SubModel::Elasticity(elasticity::Elasticity::new(
-            fespace, kinematics, symmetry, measure,
+            fespace,
+            kinematics,
+            symmetry,
+            strain_measure,
         )?))
     }
 
@@ -685,7 +690,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::SubModel;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::shell::ShellModel;
+    /// # use pyrucast::models::shell::ShellFormulation;
     /// # use pyrucast::models::Physics;
     /// // A shell lives on a surface **embedded in 3-D space**.
     /// # let coords = Handle::new(Coords::new(3).unwrap());
@@ -694,17 +699,20 @@ impl SubModel {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
-    /// let m = SubModel::shell(fes.get(0)?, ShellModel::Thick)?;
+    /// let m = SubModel::shell(fes.get(0)?, ShellFormulation::Thick)?;
     /// assert_eq!(m.physics(), &[Physics::Mechanical]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn shell(fespace: Handle<SubFiniteElementSpace>, model: shell::ShellModel) -> Result<Self> {
-        Ok(SubModel::Shell(shell::Shell::new(fespace, model)?))
+    pub fn shell(
+        fespace: Handle<SubFiniteElementSpace>,
+        formulation: shell::ShellFormulation,
+    ) -> Result<Self> {
+        Ok(SubModel::Shell(shell::Shell::new(fespace, formulation)?))
     }
 
     /// Interface-exchange sub-model between two **conforming** boundary FE
-    /// subspaces — `j·n = h(a₁ − a₂)` on each `(primal, dual)` pair given. The
-    /// coefficients `h_<primal>` are supplied at assembly time. See
+    /// subspaces — `j·n = h(a₁ − a₂)` on each variable given, its dual read from
+    /// `target`. The coefficients `h_<primal>` are supplied at assembly time. See
     /// [`interface_transfer::InterfaceTransfer::new`].
     ///
     /// ```
@@ -735,8 +743,7 @@ impl SubModel {
     /// // Two **conforming** boundaries: here the same one, which is enough to
     /// // show the contract; in practice two facing faces.
     /// let m = SubModel::interface_transfer(
-    ///     fes_bord.get(0)?, fes_bord.get(0)?, &cible,
-    ///     vec![("T".into(), "q".into())], 1e-6)?;
+    ///     fes_bord.get(0)?, fes_bord.get(0)?, &cible, vec!["T".into()], 1e-6)?;
     /// assert_eq!(m.primal_vars(), vec!["T".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -744,11 +751,11 @@ impl SubModel {
         side_a: Handle<SubFiniteElementSpace>,
         side_b: Handle<SubFiniteElementSpace>,
         target: &Model,
-        components: Vec<(String, String)>,
+        variables: Vec<String>,
         tol: f64,
     ) -> Result<Self> {
         Ok(SubModel::InterfaceTransfer(
-            interface_transfer::InterfaceTransfer::new(side_a, side_b, target, components, tol)?,
+            interface_transfer::InterfaceTransfer::new(side_a, side_b, target, variables, tol)?,
         ))
     }
 
@@ -793,10 +800,13 @@ impl SubModel {
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         law: plasticity::law::PlasticLaw,
-        measure: StrainMeasure,
+        strain_measure: StrainMeasure,
     ) -> Result<Self> {
         Ok(SubModel::Plasticity(plasticity::Plasticity::new(
-            fespace, kinematics, law, measure,
+            fespace,
+            kinematics,
+            law,
+            strain_measure,
         )?))
     }
 
@@ -838,10 +848,13 @@ impl SubModel {
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         law: damage::law::DamageLaw,
-        measure: StrainMeasure,
+        strain_measure: StrainMeasure,
     ) -> Result<Self> {
         Ok(SubModel::Damage(damage::Damage::new(
-            fespace, kinematics, law, measure,
+            fespace,
+            kinematics,
+            law,
+            strain_measure,
         )?))
     }
 
@@ -923,22 +936,22 @@ impl SubModel {
     /// // `u_d` is not here: it is written later, at the multiplier node, in
     /// // the `imposed` component.
     /// let m = SubModel::dirichlet(
-    ///     &cible, "T", &impose, RelationSense::Equality)?;
+    ///     &impose, &cible, "T", RelationSense::Equality)?;
     /// assert_eq!(m.multiplier_nodes().len(), 1);
     /// // A constraint, and a thermal one: the nature of what it pins.
     /// assert_eq!(m.physics(), &[Physics::Constraint, Physics::Thermal]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn dirichlet(
+        imposed_mesh: &Mesh,
         target: &Model,
         variable: &str,
-        imposed_mesh: &Mesh,
         sense: RelationSense,
     ) -> Result<Self> {
         Ok(SubModel::Dirichlet(dirichlet::Dirichlet::new(
+            imposed_mesh,
             target,
             variable,
-            imposed_mesh,
             sense,
         )?))
     }
@@ -980,12 +993,12 @@ impl SubModel {
     /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
     /// // A "both nodes have the same temperature" relation: the weighted sum
     /// // of the terms equals `g`, written later at the multiplier.
-    /// let m = SubModel::mpc(&cible, &[(&a, "T", 1.0), (&b, "T", -1.0)], RelationSense::Equality)?;
+    /// let m = SubModel::mpc(&[(&a, "T", 1.0), (&b, "T", -1.0)], &cible, RelationSense::Equality)?;
     /// assert_eq!(m.multiplier_nodes().len(), 1); // one λ per relation
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn mpc(target: &Model, terms: &[(&Mesh, &str, f64)], sense: RelationSense) -> Result<Self> {
-        Ok(SubModel::Mpc(mpc::Mpc::new(target, terms, sense)?))
+    pub fn mpc(terms: &[(&Mesh, &str, f64)], target: &Model, sense: RelationSense) -> Result<Self> {
+        Ok(SubModel::Mpc(mpc::Mpc::new(terms, target, sense)?))
     }
 
     /// Embedded (immersed) constraint sub-model: tie each node of `immersed` to
@@ -1032,20 +1045,20 @@ impl SubModel {
     /// // host's interpolation at that point — the weights are the N_i, hence
     /// // coefficients that **vary from one node to the next**.
     /// let m = SubModel::embedded(
-    ///     &cible, &immergee, &maillage,
+    ///     &immergee, &maillage, &cible,
     ///     vec!["u_x".into(), "u_y".into()], pyrucast::models::embedded::DEFAULT_TOL)?;
     /// assert_eq!(m.physics(), &[Physics::Constraint, Physics::Mechanical]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn embedded(
-        target: &Model,
         immersed: &Mesh,
         host: &Mesh,
+        target: &Model,
         variables: Vec<String>,
         tol: f64,
     ) -> Result<Self> {
         Ok(SubModel::Embedded(embedded::Embedded::new(
-            target, immersed, host, variables, tol,
+            immersed, host, target, variables, tol,
         )?))
     }
 
@@ -1092,19 +1105,19 @@ impl SubModel {
     /// // One **unilateral** relation per slave node, paired with its nearest
     /// // master facet as soon as it is built.
     /// let m = SubModel::contact(
-    ///     &cible, &slave, &master,
+    ///     &slave, &master, &cible,
     ///     vec!["u_x".into(), "u_y".into()])?;
     /// assert_eq!(m.multiplier_nodes().len(), 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn contact(
-        target: &Model,
         slave: &Mesh,
         master: &Mesh,
+        target: &Model,
         variables: Vec<String>,
     ) -> Result<Self> {
         Ok(SubModel::Contact(contact::Contact::new(
-            target, slave, master, variables,
+            slave, master, target, variables,
         )?))
     }
 
@@ -1178,7 +1191,7 @@ impl SubModel {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// let d = SubModel::dirichlet(
-    ///     &cible, "T", &impose, RelationSense::Equality)?;
+    ///     &impose, &cible, "T", RelationSense::Equality)?;
     /// assert_eq!(d.multiplier_nodes().len(), 1);
     /// // Empty for a volumetric physics: it introduces no multiplier.
     /// assert!(SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic)?.multiplier_nodes().is_empty());
@@ -1224,7 +1237,7 @@ impl SubModel {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// let d = SubModel::dirichlet(
-    ///     &cible, "T", &impose, RelationSense::Equality)?;
+    ///     &impose, &cible, "T", RelationSense::Equality)?;
     /// // The **shared** POI1 mesh — not a copy: it is the handle on which to
     /// // build the load field.
     /// assert!(d.multiplier_mesh()?.node(0, 0, 0).is_ok());
@@ -1289,7 +1302,7 @@ impl SubModel {
     /// # use pyrucast::containers::field::SubField;
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// let d = SubModel::dirichlet(
-    ///     &cible, "T", &impose, RelationSense::Equality)?;
+    ///     &impose, &cible, "T", RelationSense::Equality)?;
     /// // One names the **constrained** node; the method finds its multiplier
     /// // and writes the value there, under the right component name.
     /// let rhs = d.constraint_rhs(&[(n[0].id(), 100.0)])?;
@@ -1381,7 +1394,7 @@ impl SubModel {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// let d = SubModel::dirichlet(
-    ///     &cible, "T", &impose, RelationSense::Equality)?;
+    ///     &impose, &cible, "T", RelationSense::Equality)?;
     /// // By **relation index**: the way when one node keys several of them.
     /// let rhs = d.constraint_rhs_by_index(&[(0, 100.0)])?;
     /// assert_eq!(rhs.node_count()?, 1);
@@ -1484,7 +1497,7 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// // A constraint has no matter.
     /// let d = SubModel::dirichlet(
-    ///     &cible, "T", &impose, RelationSense::Equality)?;
+    ///     &impose, &cible, "T", RelationSense::Equality)?;
     /// assert!(d.material_fespace().is_none());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1689,7 +1702,7 @@ impl SubModel {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// let d = SubModel::dirichlet(&cible, "T", &impose, RelationSense::Equality)?;
+    /// let d = SubModel::dirichlet(&impose, &cible, "T", RelationSense::Equality)?;
     /// assert_eq!(d.label(), "Dirichlet");
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1726,7 +1739,7 @@ impl SubModel {
     /// assert!(SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic)?.has_behavior());
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// let d = SubModel::dirichlet(
-    ///     &cible, "T", &impose, RelationSense::Equality)?;
+    ///     &impose, &cible, "T", RelationSense::Equality)?;
     /// assert!(!d.has_behavior()); // a constraint has no constitutive law
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1887,7 +1900,7 @@ impl crate::dump::Dump for SubModel {
 /// // keeps its nature, which is what lets them be found again later — the
 /// // support is thermal too, being what pins the temperature.
 /// let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?.union(
-///     &model::dirichlet(&cible, "T", &impose,
+///     &model::dirichlet(&impose, &cible, "T",
 ///                       RelationSense::Equality)?)?;
 /// assert_eq!(m.len(), 2);
 /// assert_eq!(m.filter(Physics::Thermal).len(), 2);
@@ -1976,7 +1989,7 @@ impl Model {
     /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let master = Mesh::from_submesh(maitre);
     /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
-    /// let contact = model::contact(&cible, &slave, &master,
+    /// let contact = model::contact(&slave, &master, &cible,
     ///     vec!["u_x".into(), "u_y".into()])?;
     /// // The contact's right-hand side −g₀, ready to union into the load.
     /// assert_eq!(contact.contact_gaps()?.node_count()?, 1);
@@ -2044,7 +2057,7 @@ impl Model {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?.union(
-    ///     &model::dirichlet(&cible, "T", &impose,
+    ///     &model::dirichlet(&impose, &cible, "T",
     ///                       RelationSense::Equality)?)?;
     /// // The multipliers of **all** the model's constraints, shared.
     /// assert!(m.multiplier_mesh()?.node(0, 0, 0).is_ok());
@@ -2138,7 +2151,7 @@ impl Model {
     /// # use pyrucast::ops::model;
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?.union(
-    ///     &model::dirichlet(&cible, "T", &impose,
+    ///     &model::dirichlet(&impose, &cible, "T",
     ///                       RelationSense::Equality)?)?;
     /// // The whole model's constraint load, to be unioned into the load.
     /// let rhs = m.constraint_rhs(&[(n[0].id(), 100.0)])?;
@@ -2177,7 +2190,7 @@ impl Model {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-    /// let m = model::dirichlet(&cible, "T", &impose,
+    /// let m = model::dirichlet(&impose, &cible, "T",
     ///                          RelationSense::Equality)?;
     /// // The indices run over the relations, constraint by constraint.
     /// assert!(m.constraint_rhs_by_index(&[(0, 100.0)]).is_ok());
@@ -2426,7 +2439,7 @@ impl Model {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let appui = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// let solide = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
-    /// let bloque = solide.union(&model::dirichlet(&solide, "u_x", &appui, RelationSense::Equality)?)?;
+    /// let bloque = solide.union(&model::dirichlet(&appui, &solide, "u_x", RelationSense::Equality)?)?;
     /// // The support is mechanical too: it comes with the mechanics…
     /// assert_eq!(bloque.filter(Physics::Mechanical).len(), 2);
     /// // …and leaves it when constraints are excluded.
@@ -2539,7 +2552,7 @@ mod tests {
                 Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
             model
                 .add_sub(Handle::new(
-                    SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
+                    SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap(),
                 ))
                 .unwrap();
         }
@@ -2751,7 +2764,7 @@ mod tests {
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let cible = target_conduction(&coords, &a);
-        let sub = SubModel::dirichlet(&cible, "T", &imposed, Default::default()).unwrap();
+        let sub = SubModel::dirichlet(&imposed, &cible, "T", Default::default()).unwrap();
         // The multiplier node is minted by the sub-model, beside the imposed
         // node, and owned by its multiplier submesh alone.
         let mult_id = sub.multiplier_nodes()[0];
@@ -2771,7 +2784,7 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let cible = target_conduction(&coords, &a);
         let empty = Mesh::empty();
-        assert!(SubModel::dirichlet(&cible, "T", &empty, Default::default()).is_err());
+        assert!(SubModel::dirichlet(&empty, &cible, "T", Default::default()).is_err());
     }
 
     #[test]
@@ -2840,7 +2853,7 @@ mod tests {
 
         // Compose with a Dirichlet model via `union` (Python `|`).
         let imp = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
-        let dir = model::dirichlet(&hc, "T", &imp, Default::default()).unwrap();
+        let dir = model::dirichlet(&imp, &hc, "T", Default::default()).unwrap();
         assert_eq!(dir.len(), 1);
         let full = hc.union(&dir).unwrap();
         assert_eq!(full.len(), 3);
@@ -2959,7 +2972,7 @@ mod tests {
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let cible = target_conduction(&coords, &a);
-        let dir = SubModel::dirichlet(&cible, "T", &imposed, Default::default()).unwrap();
+        let dir = SubModel::dirichlet(&imposed, &cible, "T", Default::default()).unwrap();
         assert!(dir.material_components().is_none());
     }
 
@@ -2999,7 +3012,7 @@ mod tests {
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let cible = target_conduction(&coords, &a);
-        let dirichlet = model::dirichlet(&cible, "T", &imposed, Default::default()).unwrap();
+        let dirichlet = model::dirichlet(&imposed, &cible, "T", Default::default()).unwrap();
 
         let rhs = dirichlet.constraint_rhs(&[(a.id(), 3.0)]).unwrap();
         let mult_id = dirichlet
@@ -3026,8 +3039,8 @@ mod tests {
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&b)).unwrap());
         let cible = target_conduction(&a.coords(), &a);
         let model = model::mpc(
-            &cible,
             &[(&mesh_b, "T", 1.0), (&mesh_a, "T", -1.0)],
+            &cible,
             Default::default(),
         )
         .unwrap();
@@ -3068,8 +3081,8 @@ mod tests {
 
         let cible = target_conduction(&a.coords(), &a);
         let model = model::mpc(
-            &cible,
             &[(&t1_mesh, "T", 1.0), (&t2_mesh, "T", -1.0)],
+            &cible,
             Default::default(),
         )
         .unwrap();
@@ -3104,7 +3117,7 @@ mod tests {
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let cible = target_conduction(&coords, &a);
-        let dirichlet = model::dirichlet(&cible, "T", &imposed, Default::default()).unwrap();
+        let dirichlet = model::dirichlet(&imposed, &cible, "T", Default::default()).unwrap();
 
         let mult_id = dirichlet
             .multiplier_mesh()

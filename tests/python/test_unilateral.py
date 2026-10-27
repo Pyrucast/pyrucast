@@ -37,11 +37,11 @@ def _bounded_bar(q, bound, sense):
 
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     conduction = pyrucast.model.heat_conduction(fes)
-    dirichlet = pyrucast.model.dirichlet(conduction, "T", imposed0)
+    dirichlet = pyrucast.model.dirichlet(imposed0, conduction, "T")
     dir_mult = dirichlet.multiplier_mesh().node(0, 0, 0)
 
     imposed1 = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
-    unilateral = pyrucast.model.dirichlet(conduction, "T", imposed1, sense=sense)
+    unilateral = pyrucast.model.dirichlet(imposed1, conduction, "T", sense=sense)
     uni_mult = unilateral.multiplier_mesh().node(0, 0, 0)
 
     model = pyrucast.model.heat_conduction(fes) | dirichlet | unilateral
@@ -104,15 +104,15 @@ def test_unilateral_mpc_difference_relation():
 
         imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
         conduction = pyrucast.model.heat_conduction(fes)
-        dirichlet = pyrucast.model.dirichlet(conduction, "T", imposed0)
+        dirichlet = pyrucast.model.dirichlet(imposed0, conduction, "T")
         dir_mult = dirichlet.multiplier_mesh().node(0, 0, 0)
 
         base = pyrucast.model.heat_conduction(fes)
         mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
         mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
         mpc = pyrucast.model.mpc(
-            base,
             [(mesh_last, "T", 1.0), (mesh_first, "T", -1.0)],
+            base,
             sense=">=",
         )
         mpc_mult = mpc.multiplier_mesh().node(0, 0, 0)
@@ -162,4 +162,4 @@ def test_unknown_sense_rejected():
     imposed = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     conduction = pyrucast.model.heat_conduction(fes)
     with pytest.raises(ValueError, match="relation sense '~'"):
-        pyrucast.model.dirichlet(conduction, "T", imposed, sense="~")
+        pyrucast.model.dirichlet(imposed, conduction, "T", sense="~")

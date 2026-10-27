@@ -25,7 +25,7 @@ def _rod(n_cells=2, length=2.0):
 
 
 def _held(target, nodes, variable):
-    held = pc.model.dirichlet(target, variable, pc.mesh.poi1_from_nodes(nodes))
+    held = pc.model.dirichlet(pc.mesh.poi1_from_nodes(nodes), target, variable)
     return held, held.multiplier_mesh()
 
 
@@ -131,7 +131,7 @@ def test_steady_conduction_between_two_temperatures_is_linear():
 
 
 def _held2(target, nodes):
-    held = pc.model.dirichlet(target, "T", pc.mesh.poi1_from_nodes(nodes))
+    held = pc.model.dirichlet(pc.mesh.poi1_from_nodes(nodes), target, "T")
     return held, held.multiplier_mesh()
 
 

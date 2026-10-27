@@ -308,7 +308,7 @@ fes = pyrucast.FiniteElementSpace(mesh)
 imposed = pyrucast.mesh.poi1_from_nodes([a])
 cible = pyrucast.model.heat_conduction(fes)
 
-model = cible | pyrucast.model.dirichlet(cible, "T", imposed)
+model = cible | pyrucast.model.dirichlet(imposed, cible, "T")
 
 # Material k = 1 (the Dirichlet sub-models are skipped automatically).
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])

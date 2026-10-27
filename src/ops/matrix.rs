@@ -791,7 +791,7 @@ mod tests {
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
         model
             .add_sub(Handle::new(
-                SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
+                SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap(),
             ))
             .unwrap();
         model
@@ -834,7 +834,7 @@ mod tests {
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
         model
             .add_sub(Handle::new(
-                SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
+                SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap(),
             ))
             .unwrap();
 
@@ -936,7 +936,7 @@ mod tests {
         for _ in 0..2 {
             model
                 .add_sub(Handle::new(
-                    SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
+                    SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap(),
                 ))
                 .unwrap();
         }
@@ -988,7 +988,7 @@ mod tests {
         model.add_sub(physics.get(0).unwrap()).unwrap();
         model
             .add_sub(Handle::new(
-                SubModel::embedded(&physics, &bar, &host, vec!["T".into()], 1e-9).unwrap(),
+                SubModel::embedded(&bar, &host, &physics, vec!["T".into()], 1e-9).unwrap(),
             ))
             .unwrap();
         let materials = material_field_per_sub_model(&model, &[&[("k", 1.0)], &[]]).unwrap();
@@ -1067,9 +1067,9 @@ mod tests {
         )
         .unwrap();
         let contact = crate::ops::model::contact(
-            &elasticity,
             &slave,
             &master,
+            &elasticity,
             vec!["u_x".into(), "u_y".into()],
         )
         .unwrap();
@@ -1113,8 +1113,11 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::shell(fes.get(0).unwrap(), crate::models::shell::ShellModel::Thick)
-                    .unwrap(),
+                SubModel::shell(
+                    fes.get(0).unwrap(),
+                    crate::models::shell::ShellFormulation::Thick,
+                )
+                .unwrap(),
             ))
             .unwrap();
         let materials =

@@ -4800,7 +4800,7 @@ impl Matrix {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let appui = mesh::poi1_from_nodes(&[a.clone()]).unwrap();
     /// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    /// let m = conduction.union(&model::dirichlet(&conduction, "T", &appui, RelationSense::Equality)?)?;
+    /// let m = conduction.union(&model::dirichlet(&appui, &conduction, "T", RelationSense::Equality)?)?;
     /// let materiaux = element_field::material_field(&m, &[("k", 1.0)])?;
     /// let k = matrix::stiffness(&m, &materiaux)?;
     /// // The conduction block plus the Dirichlet's C / Cᵀ pair, all thermal…

@@ -73,7 +73,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     // ── Modèle : élasticité + deux bords en x encastrés + appui u_y en bas ──
     let clamp = |target: &Model, nodes: &[Node], var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-        model::dirichlet(target, var, &imposed, Default::default())
+        model::dirichlet(&imposed, target, var, Default::default())
     };
     let left: Vec<Node> = (0..=NY).map(|j| grid[idx(0, j)].clone()).collect();
     let right: Vec<Node> = (0..=NY).map(|j| grid[idx(NX, j)].clone()).collect();

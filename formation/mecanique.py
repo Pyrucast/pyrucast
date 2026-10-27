@@ -90,7 +90,7 @@ def resoudre_thermique(plaque, trou):
     modele_th = pc.model.heat_conduction(fes)
 
     trou_poi1 = pc.mesh.to_poi1(trou)
-    blocage = pc.model.dirichlet(modele_th, "T", trou_poi1)
+    blocage = pc.model.dirichlet(trou_poi1, modele_th, "T")
     modele_th = modele_th | blocage
 
     materiaux_th = pc.element_field.material_field(modele_th, [("k", K_COND)])
@@ -110,8 +110,8 @@ def main() -> None:
     encastrement = pc.mesh.to_poi1(gauche)
 
     modele = pc.model.elasticity(fes, "plane_stress")
-    modele = modele | pc.model.dirichlet(modele, "u_x", encastrement)
-    modele = modele | pc.model.dirichlet(modele, "u_y", encastrement)
+    modele = modele | pc.model.dirichlet(encastrement, modele, "u_x")
+    modele = modele | pc.model.dirichlet(encastrement, modele, "u_y")
 
     # The hung mass's force, spread over the lower half of the hole —
     # analogue de FSUR 'MASS' / PRES 'MASS' (Cast3M section 6).

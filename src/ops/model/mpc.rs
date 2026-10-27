@@ -13,6 +13,9 @@ use crate::models::RelationSense;
 /// [`mpc::Mpc::new`](crate::models::mpc::Mpc::new) for the mesh-per-term
 /// layout, the variable names and the errors.
 ///
+/// The terms carry the support, so they come first, then the model they
+/// constrain. The Python face defaults `sense` to `RelationSense::Equality`.
+///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
@@ -38,10 +41,10 @@ use crate::models::RelationSense;
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let a = mesh::poi1_from_nodes(&n[..1])?;
 /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
-/// let m = model::mpc(&cible, &[(&a, "T", 1.0), (&b, "T", -1.0)], RelationSense::Equality)?;
+/// let m = model::mpc(&[(&a, "T", 1.0), (&b, "T", -1.0)], &cible, RelationSense::Equality)?;
 /// assert_eq!(m.len(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn mpc(target: &Model, terms: &[(&Mesh, &str, f64)], sense: RelationSense) -> Result<Model> {
-    single(SubModel::mpc(target, terms, sense)?)
+pub fn mpc(terms: &[(&Mesh, &str, f64)], target: &Model, sense: RelationSense) -> Result<Model> {
+    single(SubModel::mpc(terms, target, sense)?)
 }

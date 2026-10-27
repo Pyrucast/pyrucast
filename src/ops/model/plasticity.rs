@@ -8,7 +8,7 @@ use crate::models::plasticity::law::PlasticLaw;
 use crate::models::tensor::Kinematics;
 use crate::ops::element_field::StrainMeasure;
 
-/// Elastoplastic `Model` spanning **every** subspace of `fes`, with an
+/// Elastoplastic `Model` spanning **every** subspace of `fespace`, with an
 /// explicit yield law (von Mises perfect or hardening, Drucker-Prager,
 /// Ottosen). Parent-level operator; the material each law needs is
 /// supplied at assembly / integration time.
@@ -44,12 +44,12 @@ use crate::ops::element_field::StrainMeasure;
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn plasticity(
-    fes: &FiniteElementSpace,
+    fespace: &FiniteElementSpace,
     kinematics: Kinematics,
     law: PlasticLaw,
-    measure: StrainMeasure,
+    strain_measure: StrainMeasure,
 ) -> Result<Model> {
-    spanning(fes, |zone| {
-        SubModel::plasticity(zone, kinematics, law, measure)
+    spanning(fespace, |zone| {
+        SubModel::plasticity(zone, kinematics, law, strain_measure)
     })
 }

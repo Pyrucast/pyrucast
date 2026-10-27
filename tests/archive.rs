@@ -382,7 +382,7 @@ fn a_whole_study_makes_the_round_trip() -> Result<()> {
         nodes.last().unwrap(),
     ))?);
     let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    let dirichlet = model::dirichlet(&conduction, "T", &imposed, Default::default())?;
+    let dirichlet = model::dirichlet(&imposed, &conduction, "T", Default::default())?;
     let mult = dirichlet.multiplier_mesh()?.node(0, 0, 0)?.id();
     let model = conduction.union(&dirichlet)?;
     let materials = pyrucast::ops::element_field::material_field(&model, &[("k", K)])?;

@@ -294,7 +294,7 @@ pub fn beam_deformation(
 /// Generalised **strains of a shell** at the Gauss points — the geometric
 /// producer of the behaviour input for `shell`.
 ///
-/// `shell_deformation(field, fespace, model)` with `model` the formulation
+/// `shell_deformation(field, fespace, formulation)` with `formulation`
 /// (`"thick"` or `"kirchhoff"`), which decides the bending rows and whether a
 /// transverse shear is reported at all:
 ///
@@ -314,10 +314,12 @@ pub fn beam_deformation(
 pub fn shell_deformation(
     field: PyRef<PyNodeField>,
     fespace: PyRef<PyFiniteElementSpace>,
-    model: &str,
+    formulation: &str,
 ) -> PyResult<PyElementField> {
-    let model = <crate::models::shell::ShellModel as crate::named::Named>::parse(model)?;
-    let ef = crate::ops::element_field::shell_deformation(&field.inner, &fespace.inner, model)?;
+    let formulation =
+        <crate::models::shell::ShellFormulation as crate::named::Named>::parse(formulation)?;
+    let ef =
+        crate::ops::element_field::shell_deformation(&field.inner, &fespace.inner, formulation)?;
     Ok(PyElementField { inner: ef })
 }
 

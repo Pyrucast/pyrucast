@@ -31,7 +31,7 @@ def test_fick_recovers_the_linear_profile():
     imposed = pyrucast.Mesh(c, "POI1")
     imposed.unit().add_cell([nodes[-1]])
     cible = pyrucast.model.fick(fes, "H2")
-    held = pyrucast.model.dirichlet(cible, "c_H2", imposed)
+    held = pyrucast.model.dirichlet(imposed, cible, "c_H2")
     mult = held.multiplier_mesh().node(0, 0, 0)
 
     model = cible | held

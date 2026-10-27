@@ -82,8 +82,7 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
 
     let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    let convection =
-        model::boundary_transfer(&right_fes, &conduction, vec![("T".into(), "q".into())])?;
+    let convection = model::boundary_transfer(&right_fes, &conduction, vec!["T".into()])?;
     let model = conduction.union(&convection)?;
 
     // Material: k for the conduction, h and the ambient for the convection (each
@@ -96,7 +95,7 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
         left_edge.add_cell(&[grid[idx(0, j)].id(), grid[idx(0, j + 1)].id()])?;
     }
     let left_fes = FiniteElementSpace::lagrange1(&left_edge)?;
-    let model = model.union(&model::flux(&left_fes, &model, "q".into())?)?;
+    let model = model.union(&model::flux(&left_fes, &model, "q")?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,

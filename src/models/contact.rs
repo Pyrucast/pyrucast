@@ -40,8 +40,8 @@
 //! - [`IMPOSED`] — the dual: the constraint row and the slot for the
 //!   right-hand side `−g₀`.
 //!
-//! `components` names the displacement components and their duals in ambient
-//! order (e.g. `[("u_x","f_x"), ("u_y","f_y")]` in 2-D) — exactly one pair per
+//! `variables` names the displacement components in ambient order (e.g.
+//! `["u_x", "u_y"]` in 2-D), each dual read from the target — exactly one per
 //! space dimension, since the normal couples them all in one scalar relation.
 
 use crate::aggregate::Aggregate;
@@ -114,7 +114,7 @@ struct Component {
 /// # let cible = pyrucast::ops::model::truss(
 /// #     &FiniteElementSpace::lagrange1(&maillage)?,
 /// #     pyrucast::ops::element_field::StrainMeasure::Linear)?;
-/// let c = Contact::new(&cible, &slave, &master,
+/// let c = Contact::new(&slave, &master, &cible,
 ///     vec!["u_x".into(), "u_y".into()])?;
 /// assert_eq!(c.relations()?.len(), 1);
 /// assert_eq!(c.gaps().len(), 1);
@@ -186,16 +186,16 @@ impl Contact {
     /// # let cible = pyrucast::ops::model::truss(
     /// #     &FiniteElementSpace::lagrange1(&maillage)?,
     /// #     pyrucast::ops::element_field::StrainMeasure::Linear)?;
-    /// let c = Contact::new(&cible, &slave, &master,
+    /// let c = Contact::new(&slave, &master, &cible,
     ///     vec!["u_x".into(), "u_y".into()])?;
     /// assert_eq!(c.relations()?.len(), 1);
     /// assert_eq!(c.gaps().len(), 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(
-        target: &crate::containers::model::Model,
         slave: &Mesh,
         master: &Mesh,
+        target: &crate::containers::model::Model,
         variables: Vec<String>,
     ) -> Result<Self> {
         let target_physics = constrained_physics(target, variables.iter().map(String::as_str));
@@ -326,7 +326,7 @@ impl Contact {
     /// # let cible = pyrucast::ops::model::truss(
     /// #     &FiniteElementSpace::lagrange1(&maillage)?,
     /// #     pyrucast::ops::element_field::StrainMeasure::Linear)?;
-    /// let c = Contact::new(&cible, &slave, &master,
+    /// let c = Contact::new(&slave, &master, &cible,
     ///     vec!["u_x".into(), "u_y".into()])?;
     /// assert_eq!(c.relations()?.len(), 1);
     /// assert_eq!(c.gaps().len(), 1);
@@ -576,9 +576,9 @@ mod tests {
     fn relations_couple_all_components_through_the_normal() {
         let (slave, master) = seg_and_node(0.25);
         let contact = Contact::new(
-            &cible_mecanique(&master),
             &slave,
             &master,
+            &cible_mecanique(&master),
             vec!["u_x".into(), "u_y".into()],
         )
         .unwrap();
@@ -618,9 +618,9 @@ mod tests {
     fn component_count_must_match_dimension() {
         let (slave, master) = seg_and_node(0.25);
         assert!(Contact::new(
-            &cible_mecanique(&master),
             &slave,
             &master,
+            &cible_mecanique(&master),
             vec!["u_y".into()], // 1 component in 2-D
         )
         .is_err());

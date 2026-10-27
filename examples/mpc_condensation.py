@@ -49,14 +49,14 @@ def main():
 
     # Dirichlet T(node0) = 0 (esclave node0).
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-    dirichlet = pyrucast.model.dirichlet(base, "T", imposed0)
+    dirichlet = pyrucast.model.dirichlet(imposed0, base, "T")
 
     # MPC 2·T(node4) − 1·T(node2) = 1.5 (esclave node4, maître node2 — disjoints).
     mesh4 = pyrucast.mesh.poi1_from_nodes([nodes[4]])
     mesh2 = pyrucast.mesh.poi1_from_nodes([nodes[2]])
     mpc = pyrucast.model.mpc(
-        base,
         [(mesh4, "T", 2.0), (mesh2, "T", -1.0)],
+        base,
     )
 
     model = base | dirichlet | mpc

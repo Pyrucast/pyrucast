@@ -56,7 +56,7 @@ def bloc(coords: pc.Coords, y0: float):
 
 def clamp(target, nodes, var):
     imposed = pc.mesh.poi1_from_nodes(nodes)
-    return pc.model.dirichlet(target, var, imposed)
+    return pc.model.dirichlet(imposed, target, var)
 
 
 def bord_horizontal(mesh: pc.Mesh, y: float) -> pc.Mesh:
@@ -86,7 +86,7 @@ def main() -> None:
     esclave = pc.mesh.poi1_from_nodes([haut[idx(i, 0)] for i in range(N + 1)])
 
     elasticite = pc.model.elasticity(fes, "plane_stress")
-    contact = pc.model.contact(elasticite, esclave, maitre, ["u_x", "u_y"])
+    contact = pc.model.contact(esclave, maitre, elasticite, ["u_x", "u_y"])
     # ANCHOR_END: geometrie_contact
 
     # ANCHOR: modele_contact

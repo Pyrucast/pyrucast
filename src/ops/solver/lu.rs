@@ -62,8 +62,8 @@
 //! // beside its imposed node.
 //! let imposed_a = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
 //! let imposed_b = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&b)).unwrap());
-//! let dir_a = SubModel::dirichlet(&model, "T", &imposed_a, Default::default()).unwrap();
-//! let dir_b = SubModel::dirichlet(&model, "T", &imposed_b, Default::default()).unwrap();
+//! let dir_a = SubModel::dirichlet(&imposed_a, &model, "T", Default::default()).unwrap();
+//! let dir_b = SubModel::dirichlet(&imposed_b, &model, "T", Default::default()).unwrap();
 //! let mult_a = dir_a.multiplier_nodes()[0];
 //! let mult_b = dir_b.multiplier_nodes()[0];
 //! model.add_sub(Handle::new(dir_a)).unwrap();
@@ -394,7 +394,7 @@ pub(crate) fn lu_solve_vec(lu: &SparseLu, b: &[f64]) -> Vec<f64> {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -514,7 +514,7 @@ impl crate::named::Named for SolveMethod {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -587,7 +587,7 @@ impl Default for SolveOptions {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -646,7 +646,7 @@ impl Factorization {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-    /// #     .union(&model::dirichlet(&cible, "T", &impose,
+    /// #     .union(&model::dirichlet(&impose, &cible, "T",
     /// #                              RelationSense::Equality).unwrap()).unwrap();
     /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -743,7 +743,7 @@ impl Factorization {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -790,7 +790,7 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -846,7 +846,7 @@ pub fn solve_with_options(
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -898,7 +898,7 @@ pub fn solve_cancellable(
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -1030,9 +1030,9 @@ mod tests {
         let imposed_right = Mesh::from_submesh(
             SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[n_elems])).unwrap(),
         );
-        let left_dir = SubModel::dirichlet(&model, "T", &imposed_left, Default::default()).unwrap();
+        let left_dir = SubModel::dirichlet(&imposed_left, &model, "T", Default::default()).unwrap();
         let right_dir =
-            SubModel::dirichlet(&model, "T", &imposed_right, Default::default()).unwrap();
+            SubModel::dirichlet(&imposed_right, &model, "T", Default::default()).unwrap();
         let mult_left = left_dir.multiplier_nodes()[0];
         let mult_right = right_dir.multiplier_nodes()[0];
         model.add_sub(Handle::new(left_dir)).unwrap();
@@ -1145,7 +1145,7 @@ mod tests {
             );
             model
                 .add_sub(Handle::new(
-                    SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
+                    SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap(),
                 ))
                 .unwrap();
         }
@@ -1374,7 +1374,7 @@ mod tests {
             .unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
-        let dir = SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap();
+        let dir = SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap();
         model.add_sub(Handle::new(dir)).unwrap();
 
         crate::ops::matrix::stiffness(&model, &materials).unwrap()

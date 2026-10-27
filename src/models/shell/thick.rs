@@ -60,7 +60,7 @@ use crate::models::{CellGeom, ElementLayout};
 /// The membrane law `D_m` of a homogeneous section (plane stress × thickness).
 ///
 /// ```
-/// # use pyrucast::models::shell::{self, ShellModel};
+/// # use pyrucast::models::shell::{self, ShellFormulation};
 /// # use pyrucast::models::shell::thick;
 /// // Plane stress × thickness: D_m is proportional to h.
 /// let a = thick::membrane_law(210_000.0, 0.3, 0.01);
@@ -80,7 +80,7 @@ pub fn membrane_law(e: f64, nu: f64, h: f64) -> [[f64; 3]; 3] {
 /// across the thickness.
 ///
 /// ```
-/// # use pyrucast::models::shell::{self, ShellModel};
+/// # use pyrucast::models::shell::{self, ShellFormulation};
 /// # use pyrucast::models::shell::thick;
 /// // The same material weighted by z² over the thickness: D_b = D_m · h²/12.
 /// let h = 0.01;
@@ -97,7 +97,7 @@ pub fn bending_law(e: f64, nu: f64, h: f64) -> [[f64; 3]; 3] {
 /// The transverse-shear modulus `k_s·G·h`.
 ///
 /// ```
-/// # use pyrucast::models::shell::{self, ShellModel};
+/// # use pyrucast::models::shell::{self, ShellFormulation};
 /// # use pyrucast::models::shell::thick;
 /// // k_s·G·h, with G = E / 2(1+ν).
 /// let g = 210_000.0 / 2.6;

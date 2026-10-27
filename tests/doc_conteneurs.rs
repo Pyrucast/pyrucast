@@ -238,9 +238,9 @@ fn ajouter_un_bloc_invalide_l_assemblage() -> Result<()> {
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&a))?;
     let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     let model = conduction.union(&model::dirichlet(
+        &imposed,
         &conduction,
         "T",
-        &imposed,
         Default::default(),
     )?)?;
     let materials = element_field::material_field(&model, &[("k", 1.0)])?;

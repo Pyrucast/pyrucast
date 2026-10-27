@@ -73,7 +73,7 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
         corner_sm.add_cell(&[n.id()])?;
     }
     let corner_mesh = Mesh::from_submesh(corner_sm);
-    let dir = SubModel::dirichlet(&model, "T", &corner_mesh, Default::default())?;
+    let dir = SubModel::dirichlet(&corner_mesh, &model, "T", Default::default())?;
     let dir_mult_nodes = dir.multiplier_nodes(); // paired corner-for-corner
     model.add_sub(Handle::new(dir))?;
 
@@ -86,7 +86,7 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
         &FiniteElementSpace::lagrange1(&host)?,
         MaterialSymmetry::Isotropic,
     )?;
-    let emb = SubModel::embedded(&hote, &bar, &host, vec!["T".into()], DEFAULT_TOL)?;
+    let emb = SubModel::embedded(&bar, &host, &hote, vec!["T".into()], DEFAULT_TOL)?;
     let emb_mult = emb.multiplier_nodes()[0];
     model.add_sub(Handle::new(emb))?;
 
@@ -160,7 +160,7 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
     let clamp = |target: &Model, ids: &[usize], var: &str| -> Result<Model> {
         let picked: Vec<Node> = ids.iter().map(|&i| nodes[i].clone()).collect();
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&picked)?);
-        model::dirichlet(target, var, &imposed, Default::default())
+        model::dirichlet(&imposed, target, var, Default::default())
     };
     let mut model = model::elasticity(
         &fes,
@@ -177,9 +177,9 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
     let p = Node::create_in(coords.clone(), &pc)?;
     let bar = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&p))?);
     model = model.union(&model::embedded(
-        &model,
         &bar,
         &host,
+        &model,
         vec!["u_x".into(), "u_y".into(), "u_z".into()],
         DEFAULT_TOL,
     )?)?;
@@ -188,7 +188,7 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
     let mut face = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let model = model.union(&model::flux(&face_fes, &model, "f_x".into())?)?;
+    let model = model.union(&model::flux(&face_fes, &model, "f_x")?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,
@@ -244,7 +244,7 @@ fn embedded_per_component_offset() -> Result<()> {
     let clamp = |target: &Model, ids: &[usize], var: &str| -> Result<Model> {
         let picked: Vec<Node> = ids.iter().map(|&i| nodes[i].clone()).collect();
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&picked)?);
-        model::dirichlet(target, var, &imposed, Default::default())
+        model::dirichlet(&imposed, target, var, Default::default())
     };
     let mut model = model::elasticity(
         &fes,
@@ -260,9 +260,9 @@ fn embedded_per_component_offset() -> Result<()> {
     let p = Node::create_in(coords.clone(), &pc)?;
     let bar = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&p))?);
     let embedded = SubModel::embedded(
-        &model,
         &bar,
         &host,
+        &model,
         vec!["u_x".into(), "u_y".into(), "u_z".into()],
         DEFAULT_TOL,
     )?;
@@ -275,7 +275,7 @@ fn embedded_per_component_offset() -> Result<()> {
     let mut face = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let model = model.union(&model::flux(&face_fes, &model, "f_x".into())?)?;
+    let model = model.union(&model::flux(&face_fes, &model, "f_x")?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,

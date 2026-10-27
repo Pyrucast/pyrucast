@@ -64,9 +64,9 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
     ))?);
     let diffusion = model::fick(&fes, SPECIES, MaterialSymmetry::Isotropic)?;
     let dirichlet = model::dirichlet(
+        &imposed,
         &diffusion,
         &primal_var(SPECIES),
-        &imposed,
         Default::default(),
     )?;
     let mult = dirichlet.multiplier_mesh()?.node(0, 0, 0)?.id();

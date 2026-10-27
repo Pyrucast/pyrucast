@@ -52,7 +52,7 @@ immergés :
 Signature complète :
 
 ```text
-model.embedded(target, immersed, host, variables, tol=1e-6)
+model.embedded(immersed, host, target, variables, tol=1e-6)
 # variables : les primales à lier, p.ex. ["u_x", "u_y", "u_z"]
 ```
 

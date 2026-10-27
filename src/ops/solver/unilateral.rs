@@ -88,7 +88,7 @@ type NamedDof = (NodeId, String);
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -154,7 +154,7 @@ pub enum ActiveSetMethod {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -288,7 +288,7 @@ struct ActiveSetState {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -332,7 +332,7 @@ pub fn solve(matrix: &Matrix, model: &Model, rhs: &NodeField) -> Result<NodeFiel
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -383,7 +383,7 @@ pub fn solve_with_options(
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -433,7 +433,7 @@ pub fn solve_cancellable(
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose,
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -1068,7 +1068,7 @@ mod tests {
 
         // Equality T(0) = 0.
         let imp0 = poi1(&nodes[0]);
-        let dir = SubModel::dirichlet(&model, "T", &imp0, Default::default()).unwrap();
+        let dir = SubModel::dirichlet(&imp0, &model, "T", Default::default()).unwrap();
         let dir_mult = dir.multiplier_nodes()[0];
         model.add_sub(Handle::new(dir)).unwrap();
 
@@ -1076,7 +1076,7 @@ mod tests {
         let mut bound_mults = Vec::new();
         for node in [&nodes[1], &nodes[2]] {
             let imp = poi1(node);
-            let b = SubModel::dirichlet(&model, "T", &imp, RelationSense::GreaterEqual).unwrap();
+            let b = SubModel::dirichlet(&imp, &model, "T", RelationSense::GreaterEqual).unwrap();
             bound_mults.push(b.multiplier_nodes()[0]);
             model.add_sub(Handle::new(b)).unwrap();
         }

@@ -655,7 +655,7 @@ pub fn element_storage(
 
 crate::physics_operator! {
     /// Fickian-diffusion `Model` of one named `species`, spanning **every**
-    /// subspace of `fes` — one [`SubModel::Fick`] per [`SubFiniteElementSpace`].
+    /// subspace of `fespace` — one [`SubModel::Fick`] per [`SubFiniteElementSpace`].
     /// Parent-level operator.
     ///
     /// Every name carries the species: DOFs `c_<species>` / `j_<species>`, the
@@ -686,6 +686,6 @@ crate::physics_operator! {
     /// assert_eq!(ortho.dual_vars(), vec!["j_H2".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn fick(fes, species: &str, symmetry: MaterialSymmetry = MaterialSymmetry::Isotropic) via SubModel::fick;
+    pub fn fick(fespace, species: &str, symmetry: MaterialSymmetry = MaterialSymmetry::Isotropic) via SubModel::fick;
     python: "`model.fick(fespace, species, symmetry=\"isotropic\")` — Fickian diffusion of\none named **species**, spanning every subspace of `fespace`.\n\nEvery name carries the species: DOFs are `c_<species>` (primal) and\n`j_<species>` (dual), the diffusivity is `D_<species>`, the reported flux\n`j_<species>_x…`. Two species therefore share a mesh without colliding —\nand no bare `c` can be mistaken for anything else. Its physics nature is\n`\"diffusion\"`, so `model.filter(\"diffusion\")` isolates it from a thermal\nor mechanical model it is composed with.\n\n`symmetry` is `\"isotropic\"` (the default), `\"orthotropic\"` or\n`\"anisotropic\"`, selecting the diffusivity the material field must carry:\n`D_<species>`, `D_1_<species> …`, or the symmetric `D_11_<species> …` —\nthe oriented ones plus the material axes `V1X, V1Y, …`. Those axes and\nthe optional storage `poro` keep **bare** names: they belong to the\nmedium, not to what diffuses through it."
 }

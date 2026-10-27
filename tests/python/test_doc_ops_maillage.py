@@ -529,7 +529,7 @@ conge = pyrucast.mesh.points_in_sphere(plaque, [1.0, 1.0], 0.2)
 mecanique = pyrucast.model.elasticity(
     pyrucast.FiniteElementSpace(plaque), "plane_stress"
 )
-blocage = pyrucast.model.dirichlet(mecanique, "u_x", gauche)
+blocage = pyrucast.model.dirichlet(gauche, mecanique, "u_x")
 
 # The POI1 output is an ordinary mesh: it plugs back into the other operators,
 # here to go back up to the elements carried by the selection.

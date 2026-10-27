@@ -100,7 +100,7 @@ assert pyrucast.load("m.pyr")["maillage"].cell_count() == mesh.cell_count()
 
 _imposed = pyrucast.mesh.poi1_from_nodes([_n[0]])
 cible = pyrucast.model.heat_conduction(fes)
-_appui = pyrucast.model.dirichlet(cible, "T", _imposed)
+_appui = pyrucast.model.dirichlet(_imposed, cible, "T")
 _mult = _appui.multiplier_mesh()
 
 modele = cible | _appui

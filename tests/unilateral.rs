@@ -83,13 +83,13 @@ fn bounded_bar(q: f64, bound: f64, sense: RelationSense) -> Result<Setup> {
 
     // Equality Dirichlet T(0) = 0.
     let imposed0 = poi1(&nodes[0])?;
-    let dir = SubModel::dirichlet(&model, "T", &imposed0, Default::default())?;
+    let dir = SubModel::dirichlet(&imposed0, &model, "T", Default::default())?;
     let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
     // Unilateral bound T(1) ⋈ bound.
     let imposed1 = poi1(&nodes[N_ELEMS])?;
-    let uni = SubModel::dirichlet(&model, "T", &imposed1, sense)?;
+    let uni = SubModel::dirichlet(&imposed1, &model, "T", sense)?;
     let uni_mult = uni.multiplier_nodes()[0];
     model.add_sub(Handle::new(uni))?;
 
@@ -201,15 +201,15 @@ fn unilateral_mpc_difference_relation() -> Result<()> {
         let (nodes, coords, mut model, materials) = heat_bar()?;
 
         let imposed0 = poi1(&nodes[0])?;
-        let dir = SubModel::dirichlet(&model, "T", &imposed0, Default::default())?;
+        let dir = SubModel::dirichlet(&imposed0, &model, "T", Default::default())?;
         let dir_mult = dir.multiplier_nodes()[0];
         model.add_sub(Handle::new(dir))?;
 
         let mesh_last = poi1(&nodes[N_ELEMS])?;
         let mesh_first = poi1(&nodes[0])?;
         let mpc = SubModel::mpc(
-            &model,
             &[(&mesh_last, "T", 1.0), (&mesh_first, "T", -1.0)],
+            &model,
             RelationSense::GreaterEqual,
         )?;
         let mpc_mult = mpc.multiplier_nodes()[0];
@@ -304,7 +304,7 @@ fn schur_falls_back_when_base_is_singular() -> Result<()> {
     let (nodes, coords, mut model, materials) = heat_bar()?;
     // A single `T(1) ≤ 2` bound, no other constraint.
     let imp = poi1(&nodes[N_ELEMS])?;
-    let uni = SubModel::dirichlet(&model, "T", &imp, RelationSense::LessEqual)?;
+    let uni = SubModel::dirichlet(&imp, &model, "T", RelationSense::LessEqual)?;
     let uni_mult = uni.multiplier_nodes()[0];
     model.add_sub(Handle::new(uni))?;
 

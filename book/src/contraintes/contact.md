@@ -53,7 +53,7 @@ Les noms sont ceux de **toute** relation de contrainte :
 Signature complète :
 
 ```text
-model.contact(target, slave, master, variables)
+model.contact(slave, master, target, variables)
 # variables : les primales de déplacement de la cible, une PAR dimension
 #             d'espace, dans l'ordre ambiant, p.ex. ["u_x", "u_y"]
 ```

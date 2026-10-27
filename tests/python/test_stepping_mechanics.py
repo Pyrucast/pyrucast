@@ -38,7 +38,7 @@ def _fix(target, nodes, variable, sense="="):
     """``variable`` held on ``nodes``, one multiplier per node; returns the
     constraint and its multiplier support (where an imposed value goes)."""
     constraint = pc.model.dirichlet(
-        target, variable, pc.mesh.poi1_from_nodes(nodes), sense
+        pc.mesh.poi1_from_nodes(nodes), target, variable, sense
     )
     return constraint, constraint.multiplier_mesh()
 

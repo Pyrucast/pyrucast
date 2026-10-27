@@ -36,7 +36,7 @@ E, I, G, A_S, L, P = 1.0, 1.0, 30.0, 1.0, 1.0, 1.0
 
 def _clamp(target, node, var):
     imposed = pyrucast.mesh.poi1_from_nodes([node])
-    return pyrucast.model.dirichlet(target, var, imposed)
+    return pyrucast.model.dirichlet(imposed, target, var)
 
 
 def tip_deflection(n_elems: int) -> float:

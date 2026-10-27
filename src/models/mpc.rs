@@ -98,7 +98,7 @@ struct Term {
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
 /// // "Both nodes have the same temperature": Σ aₖ·uₖ = g, with one λ per
 /// // relation.
-/// let m = Mpc::new(&cible, &[(&a, "T", 1.0), (&b, "T", -1.0)], RelationSense::Equality)?;
+/// let m = Mpc::new(&[(&a, "T", 1.0), (&b, "T", -1.0)], &cible, RelationSense::Equality)?;
 /// assert_eq!(m.relations()?.len(), 1);
 /// assert_eq!(m.relations()?[0].terms.len(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -154,14 +154,14 @@ impl Mpc {
     /// # let a = mesh::poi1_from_nodes(&n[..1])?;
     /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    /// let m = Mpc::new(&cible, &[(&a, "T", 1.0), (&b, "T", -1.0)], RelationSense::Equality)?;
+    /// let m = Mpc::new(&[(&a, "T", 1.0), (&b, "T", -1.0)], &cible, RelationSense::Equality)?;
     /// // One multiplier node per relation, minted beside the first term's node.
     /// assert_eq!(m.multiplier_mesh().node(0, 0, 0)?.position()?, vec![0.0, 0.0]);
     /// // A variable the target does not assemble is refused.
-    /// assert!(Mpc::new(&cible, &[(&a, "u_x", 1.0)], RelationSense::Equality).is_err());
+    /// assert!(Mpc::new(&[(&a, "u_x", 1.0)], &cible, RelationSense::Equality).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn new(target: &Model, terms: &[(&Mesh, &str, f64)], sense: RelationSense) -> Result<Self> {
+    pub fn new(terms: &[(&Mesh, &str, f64)], target: &Model, sense: RelationSense) -> Result<Self> {
         let Some(&(first, _, _)) = terms.first() else {
             return Err(PyrucastError::Message(
                 "Mpc: at least one term is required".into(),
@@ -418,7 +418,7 @@ mod tests {
         let coords = Handle::new(Coords::new(1).unwrap());
         let n = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let cible = cible_conduction(&coords, &n);
-        assert!(Mpc::new(&cible, &[], Default::default()).is_err());
+        assert!(Mpc::new(&[], &cible, Default::default()).is_err());
     }
 
     #[test]
@@ -434,8 +434,8 @@ mod tests {
         let one = poi1(&a);
         let cible = cible_conduction(&coords, &a);
         assert!(Mpc::new(
-            &cible,
             &[(&one, "T", 1.0), (&two, "T", 1.0)],
+            &cible,
             Default::default()
         )
         .is_err());
@@ -450,8 +450,8 @@ mod tests {
         let mesh_b = poi1(&b);
         let cible = cible_conduction(&coords, &a);
         let mpc = Mpc::new(
-            &cible,
             &[(&mesh_a, "T", 2.0), (&mesh_b, "T", -3.0)],
+            &cible,
             Default::default(),
         )
         .unwrap();

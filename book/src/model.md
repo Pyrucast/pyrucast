@@ -102,24 +102,24 @@ opérateurs qui les déclarent et leurs variables, vus du `Model` :
 
 | Opérateur (`ops::model::…`, Python `pyrucast.model.…`) | Primales | Duales | Matériau | Chapitre |
 |---|---|---|---|---|
-| `heat_conduction(fes, sym)` | `T` | `q` | `k` ; orientée : `k_1…` / `k_11…` + repère | [Thermique](thermique.md), [conduction orientée](thermique.md#conduction-orthotrope-et-anisotrope) |
-| `boundary_transfer(fes, cible, comps)` | libres | libres | `h_<primale>`, `a_ext_<primale>` | [Échanges](echanges.md) |
-| `radiation(fes, cible)` | `T` | `q` | `emis, T_inf` (+ `sigma` facultatif) | [Rayonnement](thermique.md#rayonnement-à-linfini-stefan-boltzmann) |
-| `fick(fes, espèce, sym)` | `c_<espèce>` | `j_<espèce>` | `D_<espèce>` ; orientée : `D_1_<espèce>…` + repère ; `poro` facultatif | [Diffusion](diffusion.md) |
-| `interface_transfer(a, b, cible, comps, tol)` | libres | libres | `h_<primale>` | [Échanges](echanges.md) |
-| `truss(fes, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, A` | [Barre](mecanique/truss.md) |
-| `elasticity(fes, cinématique, sym, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu` ; orientée : `E_1…G_23` / `C_11…C_66` + repère | [Élasticité](mecanique/elasticite.md), [orthotropie](mecanique/orthotropie.md) ; en grandes transformations, [mesure de déformation](mecanique/grandes-transformations.md) |
-| `plasticity_perfect(fes, cinématique, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu, sigma_y` | [Plasticité](mecanique/plasticite.md) |
-| `plasticity(fes, cinématique, loi, mesure)` | idem | idem | selon la loi | [Lois d'écoulement](mecanique/lois-plastiques.md), [Fluage](mecanique/fluage.md) |
-| `bernoulli(fes)` | selon la configuration | idem | `E, I` (+ `A`, `I_y…`) | [Euler-Bernoulli](mecanique/bernoulli.md) |
-| `timoshenko(fes)` | selon la configuration lue sur le maillage : `w, theta` (1-D), `u_x, u_y, r_z` (plan), `u_x…r_z` (6, espace) | `f_w, m_theta` ; `f_x, f_y, m_z` ; `f_x…m_z` | 1-D : `E, I, G, A_s` ; plan : `E, A, I, G, A_s` ; espace : `E, A, I_y, I_z, J, G, A_sy, A_sz` | [Timoshenko](mecanique/timoshenko.md) |
-| `shell(fes, model)`<br>`thick`, `kirchhoff` | `u_x…r_z` (6) | `f_x…m_z` (6) | `E, nu, h` | [Coques](mecanique/coques.md) |
-| `dirichlet(cible, variable, maillage, sens)` | `lambda` | `imposed` | — | [Dirichlet](contraintes/dirichlet.md) |
-| `mpc(cible, termes, sens)` | `lambda` | `imposed` | — | [Multi-points](contraintes/mpc.md) |
-| `embedded(cible, immergé, hôte, variables, tol)` | `lambda` | `imposed` | — | [Baignage](contraintes/embedded.md) |
-| `contact(cible, esclave, maître, variables)` | `lambda` | `imposed` | — | [Contact](contraintes/contact.md) |
+| `heat_conduction(fespace, sym)` | `T` | `q` | `k` ; orientée : `k_1…` / `k_11…` + repère | [Thermique](thermique.md), [conduction orientée](thermique.md#conduction-orthotrope-et-anisotrope) |
+| `boundary_transfer(fespace, cible, variables)` | celles données | lues dans la cible | `h_<primale>`, `a_ext_<primale>` | [Échanges](echanges.md) |
+| `radiation(fespace, cible)` | `T` | `q` | `emis, T_inf` (+ `sigma` facultatif) | [Rayonnement](thermique.md#rayonnement-à-linfini-stefan-boltzmann) |
+| `fick(fespace, espèce, sym)` | `c_<espèce>` | `j_<espèce>` | `D_<espèce>` ; orientée : `D_1_<espèce>…` + repère ; `poro` facultatif | [Diffusion](diffusion.md) |
+| `interface_transfer(a, b, cible, variables, tol)` | celles données | lues dans la cible | `h_<primale>` | [Échanges](echanges.md) |
+| `truss(fespace, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, A` | [Barre](mecanique/truss.md) |
+| `elasticity(fespace, cinématique, sym, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu` ; orientée : `E_1…G_23` / `C_11…C_66` + repère | [Élasticité](mecanique/elasticite.md), [orthotropie](mecanique/orthotropie.md) ; en grandes transformations, [mesure de déformation](mecanique/grandes-transformations.md) |
+| `plasticity_perfect(fespace, cinématique, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu, sigma_y` | [Plasticité](mecanique/plasticite.md) |
+| `plasticity(fespace, cinématique, loi, mesure)` | idem | idem | selon la loi | [Lois d'écoulement](mecanique/lois-plastiques.md), [Fluage](mecanique/fluage.md) |
+| `bernoulli(fespace)` | selon la configuration | idem | `E, I` (+ `A`, `I_y…`) | [Euler-Bernoulli](mecanique/bernoulli.md) |
+| `timoshenko(fespace)` | selon la configuration lue sur le maillage : `w, theta` (1-D), `u_x, u_y, r_z` (plan), `u_x…r_z` (6, espace) | `f_w, m_theta` ; `f_x, f_y, m_z` ; `f_x…m_z` | 1-D : `E, I, G, A_s` ; plan : `E, A, I, G, A_s` ; espace : `E, A, I_y, I_z, J, G, A_sy, A_sz` | [Timoshenko](mecanique/timoshenko.md) |
+| `shell(fespace, formulation)`<br>`thick`, `kirchhoff` | `u_x…r_z` (6) | `f_x…m_z` (6) | `E, nu, h` | [Coques](mecanique/coques.md) |
+| `dirichlet(maillage, cible, variable, sens)` | `lambda` | `imposed` | — | [Dirichlet](contraintes/dirichlet.md) |
+| `mpc(termes, cible, sens)` | `lambda` | `imposed` | — | [Multi-points](contraintes/mpc.md) |
+| `embedded(immergé, hôte, cible, variables, tol)` | `lambda` | `imposed` | — | [Baignage](contraintes/embedded.md) |
+| `contact(esclave, maître, cible, variables)` | `lambda` | `imposed` | — | [Contact](contraintes/contact.md) |
 
-Toutes balaient **tous** les sous-espaces du `fes` (une zone par sous-espace),
+Toutes balaient **tous** les sous-espaces du `fespace` (une zone par sous-espace),
 sauf `dirichlet`, `mpc`, `embedded` et `contact` qui sont des
 [contraintes](contraintes.md) portées par des maillages fournis par
 l'utilisateur. Le matériau est toujours fourni **à l'assemblage**, pas au

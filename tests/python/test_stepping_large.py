@@ -40,7 +40,7 @@ def _grid(nx, ny, length, height):
 def _fix(target, nodes, variable):
     """``variable`` held on ``nodes``; returns the constraint and the support
     its imposed value goes on."""
-    constraint = pc.model.dirichlet(target, variable, pc.mesh.poi1_from_nodes(nodes))
+    constraint = pc.model.dirichlet(pc.mesh.poi1_from_nodes(nodes), target, variable)
     return constraint, constraint.multiplier_mesh()
 
 
@@ -345,9 +345,7 @@ def _cooled_strip(scheme, stretch_x, stretch_y, materials, held=None, start=None
     face = pc.Mesh(c, "SEG2")
     for j in range(2):
         face.unit().add_cell([node(4, j), node(4, j + 1)])
-    cooling = pc.model.boundary_transfer(
-        pc.FiniteElementSpace(face), conduction, [("T", "q")]
-    )
+    cooling = pc.model.boundary_transfer(pc.FiniteElementSpace(face), conduction, ["T"])
     solid = pc.model.elasticity(fes, "plane_strain", strain_measure="green_lagrange")
     along, along_support = _fix(solid, [node(4, j) for j in range(3)], "u_x")
     across, across_support = _fix(solid, [node(i, 2) for i in range(5)], "u_y")

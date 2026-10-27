@@ -52,7 +52,7 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
     ))?);
 
     let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    let dirichlet = model::dirichlet(&conduction, "T", &imposed, Default::default())?;
+    let dirichlet = model::dirichlet(&imposed, &conduction, "T", Default::default())?;
     let mult = dirichlet.multiplier_mesh()?.node(0, 0, 0)?.id();
     let model = conduction.union(&dirichlet)?;
 

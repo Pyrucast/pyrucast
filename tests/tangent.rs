@@ -283,9 +283,9 @@ fn constraints_enter_the_tangent() -> Result<()> {
     let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     let imposed = mesh::poi1_from_nodes(&n[..1])?;
     let constrained = conduction.union(&model::dirichlet(
+        &imposed,
         &conduction,
         "T",
-        &imposed,
         RelationSense::Equality,
     )?)?;
     let materials = material_field(&constrained, &[("k", 1.0)])?;

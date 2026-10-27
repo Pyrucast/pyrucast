@@ -29,7 +29,7 @@ def _modele_thermique():
 
     imposed = pyrucast.mesh.poi1_from_nodes([noeuds[0]])
     cible = pyrucast.model.heat_conduction(fes)
-    appui = pyrucast.model.dirichlet(cible, "T", imposed)
+    appui = pyrucast.model.dirichlet(imposed, cible, "T")
 
     model = cible | appui
     return model, fes, appui.multiplier_mesh(), noeuds

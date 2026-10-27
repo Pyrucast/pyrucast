@@ -76,9 +76,7 @@ def main() -> None:
     # The film is built against the conduction it cools: that conduction assembles
     # "T" and "q", and gives it its thermal kind.
     conduction = pyrucast.model.heat_conduction(fes)
-    model = conduction | pyrucast.model.boundary_transfer(
-        right_fes, conduction, [("T", "q")]
-    )
+    model = conduction | pyrucast.model.boundary_transfer(right_fes, conduction, ["T"])
 
     # ── Chargement ───────────────────────────────────────────────────────────
     # Source: uniform flux (density Q) on the left edge. It is a term of the model

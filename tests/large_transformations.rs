@@ -673,11 +673,7 @@ fn a_pressure_follows_the_normal_of_the_active_configuration() -> Result<()> {
         MaterialSymmetry::Isotropic,
         StrainMeasure::Linear,
     )?;
-    let load = model::flux(
-        &FiniteElementSpace::lagrange1(&contour)?,
-        &solid_model,
-        "n".into(),
-    )?;
+    let load = model::flux(&FiniteElementSpace::lagrange1(&contour)?, &solid_model, "n")?;
     assert_eq!(load.dual_vars(), vec!["f_x".to_string(), "f_y".to_string()]);
     let density = material_field(&load, &[("phi_n", 2.0)])?;
     // The load feeds no matrix: asked for a geometric stiffness beside the solid

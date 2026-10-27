@@ -28,7 +28,7 @@ E, A, L, F = 210.0e9, 1.0e-4, 2.0, 1000.0
 def _clamp(target, node, var):
     """Homogeneous Dirichlet (u = 0) on `var` at node `node`."""
     imposed = pyrucast.mesh.poi1_from_nodes([node])
-    return pyrucast.model.dirichlet(target, var, imposed)
+    return pyrucast.model.dirichlet(imposed, target, var)
 
 
 def main() -> None:

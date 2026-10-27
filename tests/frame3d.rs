@@ -59,7 +59,7 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
     // ── Model: 3-D frame + full clamping (6 DOFs) at the base ──────────────
     let clamp = |target: &Model, node: &Node, var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
-        model::dirichlet(target, var, &imposed, Default::default())
+        model::dirichlet(&imposed, target, var, Default::default())
     };
     let mut model = model::timoshenko(&fes)?;
     for var in ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"] {

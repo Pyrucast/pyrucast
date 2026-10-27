@@ -87,7 +87,7 @@ pub struct Elasticity {
 impl Elasticity {
     /// Linear elasticity on an FE subspace, with the given 2-D/3-D kinematics,
     /// material symmetry and strain measure. Errors if `kinematics` is
-    /// inconsistent with the space dimension, or if `measure` is not a law input
+    /// inconsistent with the space dimension, or if `strain_measure` is not a law input
     /// (see [`Continuum::with_measure`]).
     ///
     /// ```
@@ -129,11 +129,11 @@ impl Elasticity {
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         symmetry: MaterialSymmetry,
-        measure: StrainMeasure,
+        strain_measure: StrainMeasure,
     ) -> Result<Self> {
         Ok(Self {
             continuum: Continuum::new(fespace, kinematics, "Elasticity")?
-                .with_measure(measure, "Elasticity")?,
+                .with_measure(strain_measure, "Elasticity")?,
             symmetry,
             law: ElasticLaw::Linear,
         })
@@ -496,7 +496,7 @@ mod tests {
 }
 
 crate::physics_operator! {
-    /// Linear-elasticity `Model` spanning **every** subspace of `fes` — one
+    /// Linear-elasticity `Model` spanning **every** subspace of `fespace` — one
     /// [`SubModel::Elasticity`] per [`SubFiniteElementSpace`], with the same
     /// 2-D/3-D `kinematics` for all. Parent-level operator.
     ///
@@ -535,7 +535,7 @@ crate::physics_operator! {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn elasticity(
-        fes,
+        fespace,
         kinematics: Kinematics,
         symmetry: MaterialSymmetry = MaterialSymmetry::Isotropic,
         strain_measure: StrainMeasure = StrainMeasure::Linear,

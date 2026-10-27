@@ -26,7 +26,7 @@ use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
 use crate::handle::Handle;
 
-/// Build a `Model` covering **every** subspace of `fes`, one sub-model per
+/// Build a `Model` covering **every** subspace of `fespace`, one sub-model per
 /// subspace — the shape of every operator on a finite-element space: those
 /// [`physics_operator!`](crate::physics_operator) generates and the two generic
 /// laws, [`plasticity()`] and [`damage()`].
@@ -38,11 +38,11 @@ use crate::handle::Handle;
 /// reads the `pub fn` of an `ops` module root and would demand a Python binding
 /// for it. It is machinery, not an operator.
 pub(crate) fn spanning(
-    fes: &FiniteElementSpace,
+    fespace: &FiniteElementSpace,
     mut make: impl FnMut(Handle<SubFiniteElementSpace>) -> Result<SubModel>,
 ) -> Result<Model> {
     let mut model = Model::empty();
-    for zone in fes {
+    for zone in fespace {
         model.add_sub(Handle::new(make(zone.clone())?))?;
     }
     Ok(model)

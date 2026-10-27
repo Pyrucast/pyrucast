@@ -50,7 +50,7 @@ use crate::handle::Handle;
 ///     &meca.get(0)?.read(), &[("E", 210e3)]).is_err());
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// // A constraint has no matter to receive.
-/// let appui = model::dirichlet(&cible, "T", &impose,
+/// let appui = model::dirichlet(&impose, &cible, "T",
 ///                              RelationSense::Equality)?;
 /// assert!(element_field::sub_material_field(
 ///     &appui.get(0)?.read(), &[]).is_err());
@@ -130,7 +130,7 @@ pub fn sub_material_field(
 /// // The same values for **every** sub-model that asks for matter; those that
 /// // want none are skipped without an error.
 /// let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?.union(
-///     &model::dirichlet(&cible, "T", &impose,
+///     &model::dirichlet(&impose, &cible, "T",
 ///                       RelationSense::Equality)?)?;
 /// assert_eq!(modele.len(), 2);
 /// let mat = element_field::material_field(&modele, &[("k", 1.0)])?;
@@ -262,7 +262,7 @@ mod tests {
                 Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
             model
                 .add_sub(Handle::new(
-                    SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
+                    SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap(),
                 ))
                 .unwrap();
         }
@@ -310,7 +310,7 @@ mod tests {
         )
         .unwrap();
         let cible = crate::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-        let dir = SubModel::dirichlet(&cible, "T", &imposed, Default::default()).unwrap();
+        let dir = SubModel::dirichlet(&imposed, &cible, "T", Default::default()).unwrap();
         assert!(sub_material_field(&dir, &[("k", 1.0)]).is_err());
     }
 
@@ -455,7 +455,7 @@ mod tests {
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
         model
             .add_sub(Handle::new(
-                SubModel::dirichlet(&model, "T", &imposed, Default::default()).unwrap(),
+                SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap(),
             ))
             .unwrap();
         model

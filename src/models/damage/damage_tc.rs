@@ -280,6 +280,6 @@ crate::physics_operator! {
     /// assert_eq!(m.primal_vars(), vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn damage_tc(fes, kinematics: Kinematics) = crate::ops::model::damage, DamageLaw::DamageTc;
+    pub fn damage_tc(fespace, kinematics: Kinematics) = crate::ops::model::damage, DamageLaw::DamageTc;
     python: "`model.damage_tc(fespace, kinematics)` — **two** damage variables, tension\nand compression apart: `σ = (1−d⁺)σ̃⁺ + (1−d⁻)σ̃⁻`. Material `E`, `nu`,\n`f_t`, `f_c`, `A_t`, `A_c`.\n\nMazars blends its two branches into one scalar, so a material damaged in\ncompression is equally damaged in tension and a crack that **closes**\ncannot carry load again. Keeping the two apart recovers the compressive\nstiffness on closure — the unilateral effect — which is what makes the\nlaw usable under cyclic loading. State: `r_plus`, `r_minus`, `d_plus`,\n`d_minus`."
 }

@@ -15,17 +15,17 @@
 //!
 //! ## What is transferred is the caller's to say
 //!
-//! Neither physics knows what it transports. It is given a list of
-//! `(primal, dual)` pairs — the same shape
-//! [`embedded`](crate::models::embedded) and [`contact`](crate::models::contact)
-//! take, the two other laws that tie meshes together — and everything else
-//! follows from it:
+//! Neither physics knows what it transports. It is given a list of variables —
+//! the same shape [`embedded`](crate::models::embedded) and
+//! [`contact`](crate::models::contact) take, the two other laws that tie meshes
+//! together — each paired with the dual row the model it couples into declares
+//! for it, and everything else follows from it:
 //!
 //! ```text
-//! transferred      material          behaviour input     behaviour output
-//! ("T", "q")       h_T               T      / jump_T     flux_T
-//! ("c_H2","j_H2")  h_c_H2            c_H2   / jump_c_H2  flux_c_H2
-//! ("u_x", "f_x")   h_u_x             u_x    / jump_u_x   flux_u_x
+//! transferred  (dual)  material   behaviour input     behaviour output
+//! "T"          q       h_T        T      / jump_T     flux_T
+//! "c_H2"       j_H2    h_c_H2     c_H2   / jump_c_H2  flux_c_H2
+//! "u_x"        f_x     h_u_x      u_x    / jump_u_x   flux_u_x
 //! ```
 //!
 //! One coefficient per transferred quantity, named after it. A surface exchange
@@ -108,32 +108,27 @@ pub fn jump_name(primal: &str) -> String {
     format!("jump_{primal}")
 }
 
-/// Check a caller's transferred list, and return the material contract it
-/// implies. An empty list is a caller error: a law that transfers nothing has no
-/// matrix to assemble and no coefficient to read.
+/// Check a caller's transferred variables, and return the material contract
+/// they imply. An empty list is a caller error: a law that transfers nothing has
+/// no matrix to assemble and no coefficient to read.
 ///
 /// ```
 /// # use pyrucast::models::transfer;
-/// let paires = vec![("T".to_string(), "q".to_string())];
-/// assert_eq!(transfer::material_contract("BoundaryTransfer", &paires)?,
+/// assert_eq!(transfer::material_contract("BoundaryTransfer", &["T".to_string()])?,
 ///            vec!["h_T".to_string()]);
 /// // A law that transports nothing has neither matrix nor coefficient: that
 /// // is a call error, not a degenerate case to let through.
 /// assert!(transfer::material_contract("BoundaryTransfer", &[]).is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn material_contract(label: &str, components: &[(String, String)]) -> Result<Vec<String>> {
-    if components.is_empty() {
+pub fn material_contract(label: &str, variables: &[String]) -> Result<Vec<String>> {
+    if variables.is_empty() {
         return Err(PyrucastError::Message(format!(
-            "{label}: nothing to transfer — give at least one (primal, dual) pair, e.g. \
-             [(\"T\", \"q\")] for a thermal exchange or [(\"u_x\", \"f_x\"), …] for an elastic \
-             one"
+            "{label}: nothing to transfer — give at least one variable, e.g. [\"T\"] for a \
+             thermal exchange or [\"u_x\", \"u_y\"] for an elastic one"
         )));
     }
-    Ok(components
-        .iter()
-        .map(|(primal, _)| coefficient_name(primal))
-        .collect())
+    Ok(variables.iter().map(|v| coefficient_name(v)).collect())
 }
 
 /// The `'static` singleton slice of one nature, so a physics whose nature is
@@ -265,15 +260,12 @@ pub(crate) fn owner_physics(target: &Model, owns: impl Fn(&SubModel) -> bool) ->
 /// // Le constructeur d'un échange s'en sert : la nature sort de la cible.
 /// let deux = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?
 ///     .union(&model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?)?;
-/// let film = BoundaryTransfer::new(zone.clone(), &deux, vec![("T".into(), "q".into())])?;
+/// let film = BoundaryTransfer::new(zone.clone(), &deux, vec!["T".into()])?;
 /// assert_eq!(film.physics(), &[Physics::Thermal]);
-/// let appui = BoundaryTransfer::new(zone.clone(), &deux, vec![("u_x".into(), "f_x".into())])?;
+/// let appui = BoundaryTransfer::new(zone.clone(), &deux, vec!["u_x".into()])?;
 /// assert_eq!(appui.physics(), &[Physics::Mechanical]);
-/// // Present but not paired at the target: refused.
-/// assert!(BoundaryTransfer::new(zone.clone(), &deux, vec![("u_x".into(), "f_y".into())]).is_err());
 /// // Two kinds in a single term: refused.
-/// assert!(BoundaryTransfer::new(
-///     zone, &deux, vec![("T".into(), "q".into()), ("u_x".into(), "f_x".into())]).is_err());
+/// assert!(BoundaryTransfer::new(zone, &deux, vec!["T".into(), "u_x".into()]).is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub(crate) fn target_physics(
@@ -312,6 +304,34 @@ pub(crate) fn target_physics(
             "{label}: nothing to transfer — give at least one (primal, dual) pair"
         ))
     })
+}
+
+/// The `(primal, dual)` pairs of the `variables` a term acts on, each dual read
+/// from the model it couples into ([`Model::dual_of`]), with that model's nature
+/// for them ([`target_physics`]).
+///
+/// The caller names what is transferred and nothing more: the dual row is a
+/// fact of the physics already declared, not something to type again. A
+/// variable `target` does not declare is refused here, rather than building a
+/// term coupled to nothing.
+pub(crate) fn target_pairs(
+    label: &str,
+    target: &Model,
+    variables: &[String],
+) -> Result<(Vec<(String, String)>, Physics)> {
+    let mut pairs = Vec::with_capacity(variables.len());
+    for v in variables {
+        let dual = target.dual_of(v).ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "{label}: `{v}` is not an unknown of the model it couples into — it declares \
+                 {:?}",
+                target.primal_vars()
+            ))
+        })?;
+        pairs.push((v.clone(), dual));
+    }
+    let physics = target_physics(label, target, &pairs)?;
+    Ok((pairs, physics))
 }
 
 /// `sign · h ∫_Γ N_i^row N_j^col dΓ`, one uncoupled sub-block per transferred

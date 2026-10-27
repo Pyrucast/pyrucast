@@ -71,7 +71,7 @@ def main() -> None:
     right_nodes = [grid[idx(N, j)] for j in range(N + 1)]
     imposed = pyrucast.mesh.poi1_from_nodes(right_nodes)
     cible = pyrucast.model.heat_conduction(fes)
-    held = pyrucast.model.dirichlet(cible, "T", imposed)
+    held = pyrucast.model.dirichlet(imposed, cible, "T")
     mults = [held.multiplier_mesh().node(0, j, 0) for j in range(N + 1)]
 
     model = cible | held

@@ -12,6 +12,12 @@ use crate::error::Result;
 /// [`embedded::Embedded::new`](crate::models::embedded::Embedded::new) for the
 /// coupling weights, the per-component variable names and the errors.
 ///
+/// The supports come first — `immersed`, which carries the relations, then
+/// `host`, which interpolates — and the model they constrain after them.
+/// `tol` is the location tolerance, a gap in the host's **reference** element,
+/// without dimension; the Python face defaults it to
+/// [`DEFAULT_TOL`](crate::models::embedded::DEFAULT_TOL) (`1e-6`).
+///
 /// ```
 /// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::aggregate::Aggregate;
@@ -43,17 +49,17 @@ use crate::error::Result;
 /// # let cible = pyrucast::ops::model::elasticity(
 /// #     &FiniteElementSpace::lagrange1(&maillage)?,
 /// #     pyrucast::models::tensor::Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
-/// let m = model::embedded(&cible, &immergee, &maillage,
+/// let m = model::embedded(&immergee, &maillage, &cible,
 ///     vec!["u_x".into(), "u_y".into()], pyrucast::models::embedded::DEFAULT_TOL)?;
 /// assert_eq!(m.len(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn embedded(
-    target: &Model,
     immersed: &Mesh,
     host: &Mesh,
+    target: &Model,
     variables: Vec<String>,
     tol: f64,
 ) -> Result<Model> {
-    single(SubModel::embedded(target, immersed, host, variables, tol)?)
+    single(SubModel::embedded(immersed, host, target, variables, tol)?)
 }

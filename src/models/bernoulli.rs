@@ -720,7 +720,7 @@ fn planar_mass(geom: &CellGeom, rho_a: f64, rho_i: f64, ei: f64, ke: &mut [f64])
 }
 
 crate::physics_operator! {
-    /// Euler-Bernoulli beam `Model` spanning **every** subspace of `fes`.
+    /// Euler-Bernoulli beam `Model` spanning **every** subspace of `fespace`.
     /// Parent-level operator; material is supplied at assembly time.
     ///
     /// ```
@@ -753,6 +753,6 @@ crate::physics_operator! {
     /// assert_eq!(m.len(), 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn bernoulli(fes) via SubModel::bernoulli;
+    pub fn bernoulli(fespace) via SubModel::bernoulli;
     python: "`model.bernoulli(fespace)` — the classical **Euler-Bernoulli** beam,\nwhere plane sections stay normal to the deflected axis and there is no\ntransverse shear at all.\n\nThe configuration follows the mesh: a 1-D `Coords` gives a pure-bending\nbeam (DOFs `w`, `theta`; material `E`, `I`), a 2-D one a plane frame\n(`u_x, u_y, r_z`; `+ A`), a 3-D one a space frame (six DOFs;\n`+ I_y, I_z, J, G`). Read them back with `model.primal_vars()`.\n\nThe deflection is interpolated by **cubic Hermite** functions, so the\nsubspace must be `HERMITE3` — build it with\n`FiniteElementSpace(mesh, interpolation=\"HERMITE3\")`. That basis is what\nmakes the element **nodally exact** wherever the interior carries no\ndistributed load, so one element per member suffices for a frame; a\nLagrange subspace would carry a linear deflection, of zero curvature, and\nis refused.\n\nPrefer `timoshenko` for a stocky member, where the shear compliance\nmatters. Reaching Bernoulli by making the shear area huge would work in\nexact arithmetic and lock in floating point, which is why this is a\nphysics of its own rather than a limiting case."
 }

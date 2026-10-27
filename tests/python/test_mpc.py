@@ -41,15 +41,15 @@ def test_mpc_difference_relation_recovers_linear_solution():
 
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     cible = pyrucast.model.heat_conduction(fes)
-    dirichlet = pyrucast.model.dirichlet(cible, "T", imposed0)
+    dirichlet = pyrucast.model.dirichlet(imposed0, cible, "T")
     dir_mult = dirichlet.multiplier_mesh().node(0, 0, 0)
 
     base = pyrucast.model.heat_conduction(fes)
     mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
     mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mpc = pyrucast.model.mpc(
-        base,
         [(mesh_last, "T", 1.0), (mesh_first, "T", -1.0)],
+        base,
     )
     mpc_mult = mpc.multiplier_mesh().node(0, 0, 0)
 
@@ -79,8 +79,8 @@ def test_single_term_mpc_matches_dirichlet():
         left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
         right = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
         cible = pyrucast.model.heat_conduction(fes)
-        at_left = pyrucast.model.dirichlet(cible, "T", left)
-        at_right = pyrucast.model.dirichlet(cible, "T", right)
+        at_left = pyrucast.model.dirichlet(left, cible, "T")
+        at_right = pyrucast.model.dirichlet(right, cible, "T")
         model = cible | at_left | at_right
         rhs = at_left.constraint_rhs([(nodes[0], 0.0)]) | at_right.constraint_rhs(
             [(nodes[-1], 1.0)]
@@ -94,8 +94,8 @@ def test_single_term_mpc_matches_dirichlet():
         left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
         right = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
         cible = pyrucast.model.heat_conduction(fes)
-        at_left = pyrucast.model.dirichlet(cible, "T", left)
-        relation = pyrucast.model.mpc(cible, [(right, "T", 1.0)])
+        at_left = pyrucast.model.dirichlet(left, cible, "T")
+        relation = pyrucast.model.mpc([(right, "T", 1.0)], cible)
         model = cible | at_left | relation
         rhs = at_left.constraint_rhs([(nodes[0], 0.0)]) | relation.constraint_rhs(
             [(nodes[-1], 1.0)]
@@ -120,14 +120,14 @@ def test_constraint_rhs_helper_builds_second_member():
 
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     cible = pyrucast.model.heat_conduction(fes)
-    dirichlet = pyrucast.model.dirichlet(cible, "T", imposed0)
+    dirichlet = pyrucast.model.dirichlet(imposed0, cible, "T")
 
     base = pyrucast.model.heat_conduction(fes)
     mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
     mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mpc = pyrucast.model.mpc(
-        base,
         [(mesh_last, "T", 1.0), (mesh_first, "T", -1.0)],
+        base,
     )
 
     model = base | dirichlet | mpc
@@ -155,8 +155,8 @@ def test_constraint_rhs_by_index_matches_node_keying():
     mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
     mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mpc = pyrucast.model.mpc(
-        base,
         [(mesh_last, "T", 1.0), (mesh_first, "T", -1.0)],
+        base,
     )
     mult = mpc.multiplier_mesh().node(0, 0, 0)
 
@@ -177,7 +177,7 @@ def test_constraint_rhs_rejects_bad_input():
         base.constraint_rhs([(nodes[0], 0.0)])
 
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-    dirichlet = pyrucast.model.dirichlet(base, "T", imposed0)
+    dirichlet = pyrucast.model.dirichlet(imposed0, base, "T")
     with pytest.raises(RuntimeError, match="is not constrained by this Dirichlet"):
         dirichlet.constraint_rhs([(nodes[-1], 0.0)])
 
@@ -190,14 +190,14 @@ def test_mpc_elimination_matches_lagrange():
 
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     cible = pyrucast.model.heat_conduction(fes)
-    dirichlet = pyrucast.model.dirichlet(cible, "T", imposed0)
+    dirichlet = pyrucast.model.dirichlet(imposed0, cible, "T")
     dir_mult = dirichlet.multiplier_mesh().node(0, 0, 0)
 
     mesh4 = pyrucast.mesh.poi1_from_nodes([nodes[4]])
     mesh2 = pyrucast.mesh.poi1_from_nodes([nodes[2]])
     mpc = pyrucast.model.mpc(
-        cible,
         [(mesh4, "T", 2.0), (mesh2, "T", -1.0)],
+        cible,
     )
     mpc_mult = mpc.multiplier_mesh().node(0, 0, 0)
 

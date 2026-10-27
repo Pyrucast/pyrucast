@@ -31,7 +31,7 @@ a = pyrucast.NodeField(_support, ["v"])
 b = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(_n[:2]), ["w"])
 _imposed = pyrucast.mesh.poi1_from_nodes([_n[0]])
 cible = pyrucast.model.heat_conduction(fes)
-_appui = pyrucast.model.dirichlet(cible, "T", _imposed)
+_appui = pyrucast.model.dirichlet(_imposed, cible, "T")
 _mult = _appui.multiplier_mesh()
 
 model = cible | _appui

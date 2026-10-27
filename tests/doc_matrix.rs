@@ -41,7 +41,7 @@ fn barre() -> Result<(
 
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&n[0]))?;
     let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    let appui = model::dirichlet(&conduction, "T", &imposed, RelationSense::Equality)?;
+    let appui = model::dirichlet(&imposed, &conduction, "T", RelationSense::Equality)?;
     let mult = appui.multiplier_mesh()?;
     let mult_node = mult.node(0, 0, 0)?;
     let model = conduction.union(&appui)?;

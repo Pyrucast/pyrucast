@@ -66,7 +66,7 @@ def rouleau(target, c, noeuds, variable):
     imposed = pyrucast.Mesh(c, "POI1")
     for n in noeuds:
         imposed.unit().add_cell([n])
-    return pyrucast.model.dirichlet(target, variable, imposed)
+    return pyrucast.model.dirichlet(imposed, target, variable)
 
 
 def resoudre(angle_deg):

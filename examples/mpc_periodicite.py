@@ -44,14 +44,14 @@ def main():
 
     # Dirichlet T(0) = 0.
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-    dirichlet = pyrucast.model.dirichlet(base, "T", imposed0)
+    dirichlet = pyrucast.model.dirichlet(imposed0, base, "T")
 
     # MPC 1·T(node_last) − 1·T(node_0) = 1.
     mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
     mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mpc = pyrucast.model.mpc(
-        base,
         [(mesh_last, "T", 1.0), (mesh_first, "T", -1.0)],
+        base,
     )
 
     model = base | dirichlet | mpc
