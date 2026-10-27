@@ -75,7 +75,7 @@ use std::path::Path;
 const MAGIC: &[u8; 8] = b"PYRUCAST";
 /// Format number. Bumped on any incompatible change; before 1.0.0 no migration
 /// is offered, an unknown number is simply refused.
-const FORMAT: u32 = 3;
+const FORMAT: u32 = 4;
 
 // ─── What a type must offer to be archived ──────────────────────────────────
 

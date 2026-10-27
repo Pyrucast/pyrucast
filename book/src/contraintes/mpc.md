@@ -59,8 +59,8 @@ model.mpc(terms, target, sense="=")
 
 `sense` (`"="`, `">="`, `"<="`) rend les relations **unilatérales**
 (`Σₖ aₖ·uₖ ≥ g` : une liaison à jeu) — voir la section « Relations
-unilatérales » de la page [Contraintes](../contraintes.md) et le solveur
-`solve_unilateral`.
+unilatérales » de la page [Contraintes](../contraintes.md) et le
+[solveur](../operateurs/solveur.md), qui lit le sens dans la matrice.
 
 ## Les blocs `C` / `Cᵀ`
 

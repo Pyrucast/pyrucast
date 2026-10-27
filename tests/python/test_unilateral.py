@@ -1,5 +1,5 @@
 """Python tests for unilateral (inequality) constraints (`sense=">="` / `"<="`)
-and the active-set solver `solve_unilateral`.
+and the active-set loop `solve` runs when the matrix carries them.
 
 A 1-D heat-conduction bar `-T'' = 0` on `[0, 1]`, `T(0) = 0` and a flux load
 `q` at the right end: the unconstrained solution is `T(x) = q·x`. A unilateral
@@ -77,7 +77,7 @@ def test_unilateral_bound_statuses(q, bound, sense, slope, lam):
     """The four sense × status cases of a bound `T(1) ⋈ a` under a flux `q`."""
     nodes, model, materials, rhs, uni_mult = _bounded_bar(q, bound, sense)
     k = pyrucast.matrix.stiffness(model, materials)
-    solution = pyrucast.solver.solve_unilateral(k, model, rhs)
+    solution = pyrucast.solver.solve(k, rhs)
     _check(nodes, solution, uni_mult, slope, lam)
 
 
@@ -85,15 +85,15 @@ def test_warm_start_survives_a_status_flip():
     """Re-solving on the same matrix warm-starts; a load flip re-iterates."""
     nodes, model, materials, rhs, uni_mult = _bounded_bar(1.0, 2.0, ">=")
     k = pyrucast.matrix.stiffness(model, materials)
-    first = pyrucast.solver.solve_unilateral(k, model, rhs)
+    first = pyrucast.solver.solve(k, rhs)
     _check(nodes, first, uni_mult, 2.0, -1.0)
     # Identical re-solve: pure warm start (cached status + factorization).
-    again = pyrucast.solver.solve_unilateral(k, model, rhs)
+    again = pyrucast.solver.solve(k, rhs)
     _check(nodes, again, uni_mult, 2.0, -1.0)
     # Stronger push on the same matrix: the relation must release from the
     # warm-started (active) status.
     rhs[0].set_value(nodes[-1], "q", 5.0)
-    released = pyrucast.solver.solve_unilateral(k, model, rhs)
+    released = pyrucast.solver.solve(k, rhs)
     _check(nodes, released, uni_mult, 5.0, 0.0)
 
 
@@ -125,8 +125,8 @@ def test_unilateral_mpc_difference_relation():
         rhs[0].set_value(dir_mult, "imposed", 0.0)
         rhs[0].set_value(mpc_mult, "imposed", g)
 
-        solution = pyrucast.solver.solve_unilateral(
-            pyrucast.matrix.stiffness(model, materials), model, rhs
+        solution = pyrucast.solver.solve(
+            pyrucast.matrix.stiffness(model, materials), rhs
         )
         for i, node in enumerate(nodes):
             assert abs(solution.value(node, "T") - slope * i * H) < TOL
@@ -137,22 +137,26 @@ def test_unilateral_mpc_difference_relation():
             assert lam < 0.0
 
 
-def test_all_equality_model_falls_back_to_plain_solve():
-    """No inequality: `solve_unilateral` agrees with the plain `solve`."""
-    nodes, model, materials, rhs, _ = _bounded_bar(3.0, 0.5, "=")
-    k = pyrucast.matrix.stiffness(model, materials)
-    a = pyrucast.solver.solve_unilateral(k, model, rhs)
-    b = pyrucast.solver.solve(k, rhs)
-    for node in nodes:
-        assert abs(a.value(node, "T") - b.value(node, "T")) < TOL
+def test_the_matrix_carries_the_sense():
+    """Same bar, same load, the bound declared `>=` or `=`: `solve` reads which
+    from the matrix. Feasible push (`q = 5 > 2`): the inequality releases
+    (`T(1) = 5`), the equation holds (`T(1) = 2`)."""
+    answers = {}
+    for sense in (">=", "="):
+        nodes, model, materials, rhs, _ = _bounded_bar(5.0, 2.0, sense)
+        k = pyrucast.matrix.stiffness(model, materials)
+        answers[sense] = pyrucast.solver.solve(k, rhs).value(nodes[-1], "T")
+    assert abs(answers[">="] - 5.0) < TOL
+    assert abs(answers["="] - 2.0) < TOL
 
 
 def test_eliminate_rejects_unilateral_relations():
-    """`solve_eliminate` must reject a unilateral model with a clear error."""
+    """The elimination enforces every relation as an equation: it must reject
+    a unilateral one with a clear error."""
     _, model, materials, rhs, _ = _bounded_bar(1.0, 2.0, ">=")
     k = pyrucast.matrix.stiffness(model, materials)
-    with pytest.raises(Exception, match="solve_unilateral"):
-        pyrucast.solver.solve_eliminate(k, model, rhs)
+    with pytest.raises(RuntimeError, match='relations="lagrange"'):
+        pyrucast.solver.solve(k, rhs, relations="eliminate")
 
 
 def test_unknown_sense_rejected():

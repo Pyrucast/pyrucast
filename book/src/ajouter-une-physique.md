@@ -507,12 +507,15 @@ cisaillement à intégrer.
 `GreaterEqual` / `LessEqual` pour l'unilatéral, cf.
 [Contact](contraintes/contact.md)).
 
-C'est la **source unique de vérité**, indépendante de la méthode d'imposition :
-la voie Lagrange (`contributions()`) en tire ses blocs C / Cᵀ — via le helper
-partagé `constraint_block_pair` — et la voie par **élimination**
-(`ops::solver::eliminate`) lit les mêmes relations. Ni l'une ni l'autre ne
-re-parse le maillage-par-terme fourni par l'utilisateur. Une nouvelle contrainte
-n'a donc à décrire ses relations **qu'une fois**.
+C'est la **source unique de vérité** : `contributions()` en tire les blocs
+C / Cᵀ — via le helper partagé `constraint_block_pair`, qui pose aussi le sens
+des relations sur le bloc C (`SubMatrix::set_row_sense`) — et les forces
+internes (`Cᵀλ`, `C·u`) les appliquent. La **résolution**, elle, ne lit plus
+que la matrice : la ligne `imposed` est la relation, ses coefficients sont la
+ligne, son sens est celui du bloc ; multiplicateurs, ensemble actif ou
+élimination s'en servent tous trois. Une nouvelle contrainte n'a donc à décrire
+ses relations **qu'une fois**, et à poser leur sens sur son bloc C si elles
+sont unilatérales.
 
 ### Le comportement : le montage incrémental A → B
 

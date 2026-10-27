@@ -191,10 +191,10 @@ def balance(problem, solution, behaviour, step, inertia=None):
     return Balance(system, system - reactions, reactions)
 
 
-def _solve(problem, operator, rhs):
-    """``operator⁻¹ rhs`` — the unilateral solver, which is the plain one when
-    no constraint is an inequality; its factorization stays on ``operator``."""
-    return solver.solve_unilateral(operator, problem.mechanics, rhs)
+def _solve(operator, rhs):
+    """``operator⁻¹ rhs`` — the active-set loop when the operator carries an
+    inequality, a plain factorization otherwise; either stays on ``operator``."""
+    return solver.solve(operator, rhs)
 
 
 def _advanced(problem, solution, increment):
@@ -608,7 +608,7 @@ def equilibrium_iterations(
                 pause = 2
                 accelerations += 1
                 rhs = rhs - node_field.restrict_like(correction, rhs)
-        increment = _solve(problem, operator, rhs)
+        increment = _solve(operator, rhs)
         previous_increment = part(increment, problem.displacement_names)
         solution = _advanced(problem, solution, increment)
         if controller is not None:
@@ -801,7 +801,7 @@ def mechanical_step(data, problem, state, t_end, temperature, options):
             step,
             inertia(start.solution) if inertia else None,
         )
-        first_correction = _solve(problem, operator, first.system)
+        first_correction = _solve(operator, first.system)
         # This step's load increment: the first residual, less what the
         # previous step left unbalanced.
         increment = part(first.out_of_balance, forces)
@@ -982,9 +982,7 @@ def _controller(
     if options.indirect_control is not None:
         settings = options.indirect_control
         pilot = settings["load"]
-        response = _solve(
-            problem, operator, node_field.restrict_like(pilot, first.system)
-        )
+        response = _solve(operator, node_field.restrict_like(pilot, first.system))
 
         def control_step(level):
             loads = step.loads + (pilot * level,)

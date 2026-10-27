@@ -29,7 +29,7 @@ use pyrucast::ops::model;
 
 use pyrucast::handle::Handle;
 use pyrucast::ops::element_field::StrainMeasure;
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::ops::{element_field, measure, mesh, node_field};
 use pyrucast::Result;
 

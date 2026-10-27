@@ -23,7 +23,7 @@ use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::model;
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 const TOL: f64 = 1e-9;

@@ -28,7 +28,7 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::ops::model;
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 #[test]

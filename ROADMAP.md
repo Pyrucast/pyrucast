@@ -162,10 +162,11 @@ scatter driver.
 
 ## Solver
 
-Direct sparse LU (`faer`), factorisation cached on the `Matrix`. Three routes:
-**Lagrange** (`solve`, augmented system), **elimination / condensation**
-(`solve_eliminate`), **unilateral active-set** (`solve_unilateral`). Output on
-block supports (reused POI1 handles, subtractable fields).
+Direct sparse LU (`faer`), factorisation cached on the `Matrix`. One entry,
+`solve`, reading everything in the matrix (relation rows, coefficients, sense):
+**Lagrange** (augmented system), **elimination / condensation**
+(`relations="eliminate"`), **unilateral active-set** as soon as a relation is an
+inequality. Output on block supports (reused POI1 handles, subtractable fields).
 
 ## Meshing
 
@@ -374,8 +375,8 @@ operators (`RIGI`, `KTAN`, `BSIG`, `RESO`, `COMP`, `EXCO`…). Here, the
 orchestration language is **Python** instead of GIBIANE:
 
 - **the Rust core supplies the bricks** — assembly (`stiffness`, `mass`,
-  `geometric`, `tangent`), linear solving (`solve`, `solve_eliminate`,
-  `solve_unilateral`), behaviour integration (`behavior`), internal forces
+  `geometric`, `tangent`), linear solving (`solve`), behaviour integration
+  (`behavior`), internal forces
   (`internal_forces`), field operations;
 - **Python assembles the algorithm** — the Newton loop (residual, tangent,
   increment, convergence test) and the time scheme are Python functions calling

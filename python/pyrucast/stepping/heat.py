@@ -182,8 +182,10 @@ def _capacity(problem, materials, dt):
     return matrix.mass(problem.heat_domain, materials) * (1.0 / dt)
 
 
-def _solve(problem, operator, rhs):
-    return solver.solve_unilateral(operator, problem.heat, rhs)
+def _solve(operator, rhs):
+    """``operator⁻¹ rhs`` — the active-set loop when the operator carries an
+    inequality, a plain factorization otherwise; either stays on ``operator``."""
+    return solver.solve(operator, rhs)
 
 
 def heat_step(data, problem, state, t_end, options):
@@ -241,7 +243,7 @@ def heat_step(data, problem, state, t_end, options):
             if correction is not None:
                 pause = 2
                 rhs = rhs - node_field.restrict_like(correction, rhs)
-        increment = _solve(problem, operator, rhs)
+        increment = _solve(operator, rhs)
         temperature = _advanced(problem, temperature, increment)
         change = infinity_norm(increment, ["T"])
         size = 0.5 * (size_start + infinity_norm(temperature, ["T"]))
@@ -281,7 +283,7 @@ def heat_step_linear(data, problem, state, t_end, options):
     loads = _loads(data, problem, state, t_end, materials, options)
     behaviour = _laws(problem, _temperatures(problem, start), materials, dt)
     system, _ = _system(problem, loads, start, behaviour, start, materials)
-    temperature = _advanced(problem, start, _solve(problem, operator, system))
+    temperature = _advanced(problem, start, _solve(operator, system))
     behaviour = _laws(problem, _temperatures(problem, temperature), materials, dt)
     return HeatOutcome(True, temperature, behaviour, materials, 1)
 
@@ -347,8 +349,6 @@ def heat_step_dupont(data, problem, state, t_end, options):
         materials,
         tangent * (weighted - extrapolated),
     )
-    temperature = _advanced(
-        problem, state.temperature, _solve(problem, operator, system)
-    )
+    temperature = _advanced(problem, state.temperature, _solve(operator, system))
     behaviour = _laws(problem, _temperatures(problem, temperature), materials, dt)
     return HeatOutcome(True, temperature, behaviour, materials, 1)

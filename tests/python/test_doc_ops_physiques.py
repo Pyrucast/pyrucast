@@ -101,7 +101,7 @@ rhs = _chargement(mult_mesh, mult_node, 1.0)
 # ANCHOR: eliminate
 K = pyrucast.matrix.stiffness(model, materials)
 lagrange = pyrucast.solver.solve(K, rhs)  # système augmenté
-condense = pyrucast.solver.solve_eliminate(K, model, rhs)  # reduced system — same field
+condense = pyrucast.solver.solve(K, rhs, relations="eliminate")  # reduced system
 # ANCHOR_END: eliminate
 assert abs(lagrange.value(noeuds[0], "T") - condense.value(noeuds[0], "T")) < 1e-9
 
@@ -119,11 +119,11 @@ materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 rhs = _chargement(mult, mult_node, 1.0)
 # ANCHOR: unilateral
 K = pyrucast.matrix.stiffness(model, materials)  # model with sense=">="
-solution = pyrucast.solver.solve_unilateral(K, model, rhs)  # "schur" by default
+solution = pyrucast.solver.solve(K, rhs)  # the matrix carries the ">="
 reaction = solution.value(mult_node, "lambda")  # 0 if the stop is released
 
 # Forcing the old method (refactorization at every step):
-sol2 = pyrucast.solver.solve_unilateral(K, model, rhs, active_set="refactorize")
+sol2 = pyrucast.solver.solve(K, rhs, active_set="refactorize")
 # ANCHOR_END: unilateral
 assert abs(solution.value(noeuds[0], "T") - sol2.value(noeuds[0], "T")) < 1e-9
 

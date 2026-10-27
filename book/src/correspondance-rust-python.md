@@ -307,9 +307,13 @@ correspondantes sont enregistrées, avec leur raison, dans
 
 | Rust (`ops::solver::…`) | Python (`pyrucast.solver.…`) |
 |---|---|
-| `lu::solve(matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve(matrix, rhs, method="lu", cache=True, verbosity="silent") -> NodeField` |
-| `eliminate::solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve_eliminate(matrix, model, rhs, method="lu", cache=True, verbosity="silent") -> NodeField` |
-| `unilateral::solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve_unilateral(matrix, model, rhs, method="lu", active_set=None, cache=True, max_iter=100, tol=1e-10, verbosity="silent") -> NodeField` |
+| `solve(matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve(matrix, rhs, method="lu", relations="lagrange", active_set="schur", cache=True, max_iter=100, tol=1e-10, verbosity="silent") -> NodeField` |
+| `solve_with_options(matrix: &Matrix, rhs: &NodeField, options: &SolveOptions) -> NodeField` | les options sont les arguments nommés de `solve` |
+
+La matrice se suffit : ses lignes de relation portent leur sens (`SubMatrix::row_sense`),
+aucun modèle n'est passé à la résolution. L'élimination est une option
+(`relations="eliminate"`), et l'ensemble actif s'enclenche de lui-même sur une
+matrice qui porte des inégalités.
 
 ### `ops::export` — export vers des formats externes
 

@@ -10,7 +10,7 @@ use crate::error::Result;
 /// Parent-level operator — see [`SubModel::contact`] and
 /// [`contact::Contact::new`](crate::models::contact::Contact::new) for the
 /// pairing, the normal coupling and the errors. Solve with
-/// [`unilateral`](crate::ops::solver::unilateral).
+/// [`solve`](crate::ops::solver::solve).
 ///
 /// The supports come first — `slave`, which carries the relations, then
 /// `master`, onto which it projects — and the model they constrain after them.

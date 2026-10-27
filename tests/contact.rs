@@ -1,5 +1,5 @@
 //! Node-to-surface contact exercised end-to-end through the public API —
-//! the `Contact` sub-model + the active-set solver.
+//! the `Contact` sub-model + the active-set loop of `solve`.
 //!
 //! **Patch test** (2-D, plane stress, `ν = 0`): two elastic blocks stacked in
 //! `y` with an initial gap `g₀`, every `u_x` blocked (uniaxial column). A
@@ -20,7 +20,7 @@ use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::model;
-use pyrucast::ops::solver::unilateral;
+use pyrucast::ops::solver;
 use pyrucast::Result;
 
 const E: f64 = 100.0;
@@ -157,7 +157,7 @@ fn patch_test_uniform_pressure_through_contact() -> Result<()> {
     let rhs = traction.union(&model.contact_gaps()?)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
-    let solution = unilateral::solve(&k, &model, &rhs)?;
+    let solution = solver::solve(&k, &rhs)?;
 
     // Bottom block: u_y = −(S/E)·y; top block: −(S/E)·y shifted by the closed
     // gap (its own coordinates start at 1 + g₀ but its base lands at the
@@ -229,7 +229,7 @@ fn separation_releases_every_pair() -> Result<()> {
         .union(&model.contact_gaps()?)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
-    let solution = unilateral::solve(&k, &model, &rhs)?;
+    let solution = solver::solve(&k, &rhs)?;
 
     // Top block translates rigidly; bottom block stays put.
     for j in 0..=N {
@@ -341,7 +341,7 @@ fn contact_3d_two_cubes() -> Result<()> {
     let rhs = traction.union(&model.contact_gaps()?)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
-    let solution = unilateral::solve(&k, &model, &rhs)?;
+    let solution = solver::solve(&k, &rhs)?;
 
     // u_z = −(S/E)·z on both cubes (touching: no gap offset).
     for (nodes, z0) in [(&bottom, 0.0), (&top, 1.0)] {

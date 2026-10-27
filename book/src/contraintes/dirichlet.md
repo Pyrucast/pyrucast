@@ -57,7 +57,7 @@ pas. La valeur imposée, elle, se donne variable par variable.
 
 `sense` (`"="`, `">="`, `"<="`) rend la contrainte **unilatérale** (`u ≥ u_d` :
 une butée) — voir la section « Relations unilatérales » de la page
-[Contraintes](../contraintes.md) et le solveur `solve_unilateral`.
+[Contraintes](../contraintes.md) et le [solveur](../operateurs/solveur.md), qui lit le sens dans la matrice.
 
 ## Les deux blocs unité
 

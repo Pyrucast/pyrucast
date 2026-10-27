@@ -183,7 +183,7 @@ def test_constraint_rhs_rejects_bad_input():
 
 
 def test_mpc_elimination_matches_lagrange():
-    """`solve_eliminate` reproduces the Lagrange `solve` on a non-chained,
+    """The elimination reproduces the Lagrange `solve` on a non-chained,
     two-term MPC: `2·T(node4) − 1·T(node2) = 1.5` with Dirichlet `T(node0) = 0`
     (disjoint slaves). Both fields coincide and the relation holds exactly."""
     c, nodes, fes, materials = _heat_bar()
@@ -212,7 +212,7 @@ def test_mpc_elimination_matches_lagrange():
 
     k = pyrucast.matrix.stiffness(model, materials)
     lagrange = pyrucast.solver.solve(k, rhs)
-    elim = pyrucast.solver.solve_eliminate(k, model, rhs)
+    elim = pyrucast.solver.solve(k, rhs, relations="eliminate")
 
     for node in nodes:
         assert abs(lagrange.value(node, "T") - elim.value(node, "T")) < TOL

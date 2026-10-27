@@ -17,7 +17,7 @@
 //! multiplier `λ ≤ 0` carries the contact reaction (the force in the solution
 //! field is `−λ·n` on the slave, spread as `+λ·Nᵢ·n` on the master facet). The
 //! model is solved by the active-set operator
-//! [`solve_unilateral`](crate::ops::solver::unilateral).
+//! [`solve`](crate::ops::solver::solve).
 //!
 //! # Orientation and right-hand side
 //!
@@ -424,6 +424,8 @@ impl SubModelKind for Contact {
             DofOrdering::NodesThenVars,
             Symmetry::Half(id_c),
         );
+        // Every row is a unilateral relation: the solver reads it here.
+        c.set_row_sense(RelationSense::GreaterEqual);
         // Cᵀ: rows (support, every dual), cols (multiplier, MULTIPLIER).
         let mut ct = SubMatrix::new(
             support_sm,

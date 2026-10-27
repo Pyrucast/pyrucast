@@ -60,11 +60,10 @@ k = pyrucast.matrix.stiffness(model, materials)
 rhs = encastrement.constraint_rhs([(noeuds[0], 0.0)]) | butee.constraint_rhs(
     [(noeuds[-1], 0.0)]
 )
-# ANCHOR: solve_unilateral
-solution = pyrucast.solver.solve_unilateral(
-    k, model, rhs
-)  # method, cache, max_iter, tol
-# ANCHOR_END: solve_unilateral
+# ANCHOR: solve_inequalities
+# The matrix knows which relations are inequalities: `solve` runs the active set.
+solution = pyrucast.solver.solve(k, rhs)  # active_set, max_iter, tol
+# ANCHOR_END: solve_inequalities
 assert solution.node_count() > 0
 
 # ── Loading of a constraint ─────────────────────────────────────────────────
@@ -177,9 +176,7 @@ materials = pyrucast.element_field.material_field(
 )
 
 rhs = pyrucast.node_field.external_forces(model, materials) | model.contact_gaps()
-solution = pyrucast.solver.solve_unilateral(
-    pyrucast.matrix.stiffness(model, materials), model, rhs
-)
+solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
 # ANCHOR_END: contact
 assert solution.node_count() > 0
 

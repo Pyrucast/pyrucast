@@ -39,7 +39,7 @@ use pyrucast::models::shell::ShellFormulation;
 use pyrucast::ops::element_field::{behavior, material_field, strain, StrainMeasure};
 use pyrucast::ops::model;
 use pyrucast::ops::node_field::internal_forces;
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 /// A chain of `SEG2` cells through `points`, and its FE space under

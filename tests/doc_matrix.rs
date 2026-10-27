@@ -103,7 +103,7 @@ fn additionner_deux_matrices_puis_resoudre() -> Result<()> {
     // assemblées, sur l'union de leurs degrés de liberté : rien n'est recalculé,
     // et la somme se résout telle quelle.
     let sys = (&m / dt + &k)?;
-    let u = solver::lu::solve(&sys, &rhs)?;
+    let u = solver::solve(&sys, &rhs)?;
 
     assert!(u.node_count()? > 0);
     Ok(())

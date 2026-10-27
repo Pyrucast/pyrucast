@@ -1,13 +1,12 @@
 """Résolution de systèmes linéaires — miroir de ``ops::solver`` (Rust).
 
-Solves ``A · x = b``: direct path, path by elimination/condensation of the
-constraints, and unilateral (active-set) solver for contact.
+Solves ``A · x = b`` from the matrix alone: its relation rows, their
+coefficients and their sense come with it. One entry, ``solve``: the
+constraint relations are enforced by their multipliers (``"lagrange"``, the
+active-set loop as soon as one is an inequality) or by elimination
+(``"eliminate"``).
 """
 
-from ._pyrucast import (
-    solve,
-    solve_eliminate,
-    solve_unilateral,
-)
+from ._pyrucast import solve
 
-__all__ = ["solve", "solve_eliminate", "solve_unilateral"]
+__all__ = ["solve"]

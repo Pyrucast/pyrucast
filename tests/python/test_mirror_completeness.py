@@ -48,6 +48,11 @@ RUST_ONLY = {
     "pave_volume_cancellable": "interruption is wired into the nominal wrapper",
     "triangulate_surface_cancellable": "interruption is wired into the nominal wrapper",
     "triangulate_volume_cancellable": "interruption is wired into the nominal wrapper",
+    "solve_cancellable": "interruption is wired into the nominal wrapper",
+    "solve_cancellable_with_options": "interruption is wired into the nominal wrapper",
+    # Rust passes the options in a struct; Python passes them as keyword
+    # arguments of the nominal function.
+    "solve_with_options": "the options are the keyword arguments of `solve`",
     # Shared implementation details, not operators.
     "check_unique_component_per_support": "internal guard of the merge, not an operator",
     "assemble_kind": "common engine of the assemblers, not an operation of use",
@@ -78,7 +83,6 @@ RUST_ONLY = {
     # context manager on the `Coords`, beside `select` and `add_config`.
     "in_config": "the method `Coords.in_config`, used with `with`",
     "set": "exposed under the short name in `pyrucast.coords`",
-    "solve": "exposed per variant (`solve`, `solve_eliminate`, `solve_unilateral`)",
     "Band": "value type, carried by the `ge`/`gt`/`le`/`lt` arguments",
     "FluxDensity": "value type, carried by the `density` argument",
     "Location": "return type of `geom`, not exposed",
@@ -86,12 +90,6 @@ RUST_ONLY = {
     # `nearest_node` has left `ops::geom`: it is not an operator but a method of
     # `Mesh`, on both sides (single container, derived view).
 }
-
-
-# `solver` is the only module whose entry points live in the sub-modules (one
-# `solve` per back-end) without being re-exported at the root: the sweep below
-# cannot see them, so they are named explicitly.
-SOLVER_ENTRY_POINTS = ["solve", "solve_eliminate", "solve_unilateral"]
 
 
 def module_roots():
@@ -133,9 +131,6 @@ def rust_exports():
                     yield module, name
         for m in re.finditer(r"^pub fn (\w+)", text, re.MULTILINE):
             yield module, m.group(1)
-        if module == "solver":
-            for name in SOLVER_ENTRY_POINTS:
-                yield module, name
 
 
 def test_every_rust_operator_has_a_python_binding():
@@ -177,8 +172,6 @@ PYTHON_ONLY = {
     "select": "dispatched by type onto `mesh::select_nodes` / `select_cells`",
     "integral": "dispatched by type onto `measure::integral` / `integral_element`",
     "integrate_behavior": "qualified name of `element_field::behavior::integrate`",
-    "solve_eliminate": "qualified name of `solver::eliminate::solve`",
-    "solve_unilateral": "qualified name of `solver::unilateral::solve`",
     "export_vtk": "qualified name of `export::vtk::write`",
     "xtx": "primitive of the `Field` trait, exposed as a reduction operator",
     "xty": "primitive of the `Field` trait, exposed as a reduction operator",
@@ -233,10 +226,10 @@ def test_python_only_entries_are_documented_and_real():
     Rust twin without anything flagging it. A stale exemption is a piece of
     reasoning one still believes to be valid.
     """
-    # Three names exist on both sides without the exemption being stale: there
+    # One name exists on both sides without the exemption being stale: there
     # the Python function spreads over **several** Rust functions, one of which
     # carries the same name. The name coincides, the operation does not.
-    dispatchers = {"integral", "solve_eliminate", "solve_unilateral"}
+    dispatchers = {"integral"}
     rust = {name for _, name in rust_exports()}
     for fn, reason in PYTHON_ONLY.items():
         assert reason.strip(), f"{fn}: exemption with no written reason"

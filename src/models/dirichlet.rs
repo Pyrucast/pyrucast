@@ -110,7 +110,7 @@ impl Dirichlet {
     /// `sense` turns the constraint unilateral: `GreaterEqual` imposes
     /// `u ≥ u_d` (`LessEqual`: `u ≤ u_d`), enforced only while in contact — such
     /// a model is solved by the active-set operator
-    /// [`unilateral`](crate::ops::solver::unilateral).
+    /// [`solve`](crate::ops::solver::solve).
     ///
     /// Errors when `variable` is not a primal of `target`, when `imposed_mesh`
     /// holds no node, or when one of its submeshes is not POI1.
@@ -242,6 +242,7 @@ impl SubModelKind for Dirichlet {
                 &self.imposed_variable,
                 &self.target_dual,
                 1.0,
+                self.sense,
             )?;
             blocks.push(c_block);
             blocks.push(ct_block);

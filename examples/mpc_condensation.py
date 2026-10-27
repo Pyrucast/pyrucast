@@ -12,7 +12,7 @@ multiplier degree) and definite, `K̂ û = f̂` with `K̂ = Tᵀ K T`, then exte
 Two paths to the same result
 --------------------------------
 `solve(K, rhs)` solves the system augmented by Lagrange multipliers;
-`solve_eliminate(K, model, rhs)` condenses the constraints. Both produce the
+`solve(K, rhs, relations="eliminate")` condenses the constraints. Both produce the
 **same** field. The elimination recovers, as a bonus, the *reaction* (the
 multiplier's equivalent) in each slave's dual row.
 
@@ -68,7 +68,7 @@ def main():
 
     k = pyrucast.matrix.stiffness(model, materials)
     lagrange = pyrucast.solver.solve(k, rhs)
-    elimination = pyrucast.solver.solve_eliminate(k, model, rhs)
+    elimination = pyrucast.solver.solve(k, rhs, relations="eliminate")
 
     print("x      T (Lagrange)  T (élimination)")
     for i, node in enumerate(nodes):

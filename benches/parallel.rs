@@ -38,7 +38,7 @@ use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field;
 use pyrucast::ops::element_field::{material_field, StrainMeasure};
-use pyrucast::ops::solver::lu::{solve, solve_with_options, SolveMethod, SolveOptions};
+use pyrucast::ops::solver::{solve, solve_with_options, SolveMethod, SolveOptions};
 
 /// Grid side for the assembly / integration groups.
 ///

@@ -34,7 +34,7 @@ use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::model;
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 /// Traction on the right edge.

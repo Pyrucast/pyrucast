@@ -10,7 +10,7 @@ use pyrucast::atoms::{ElementType, Node};
 use pyrucast::containers::element_field::{ElementField, SubElementField};
 use pyrucast::containers::field::SubField;
 use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
+use pyrucast::containers::matrix::Matrix;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
@@ -18,13 +18,24 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::ops::matrix::stiffness;
-use pyrucast::ops::solver::eliminate::{self, Condensation};
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::{solve, solve_with_options, RelationMethod, SolveOptions};
 use pyrucast::Result;
 
 const N_ELEMS: usize = 4;
 const H: f64 = 1.0 / N_ELEMS as f64;
 const TOL: f64 = 1e-10;
+
+/// The system solved by master/slave elimination instead of multipliers.
+fn eliminate(k: &Matrix, rhs: &NodeField) -> Result<NodeField> {
+    solve_with_options(
+        k,
+        rhs,
+        &SolveOptions {
+            relations: RelationMethod::Eliminate,
+            ..Default::default()
+        },
+    )
+}
 
 /// Build the `[0, 1]` SEG2 bar with a `k = 1` heat-conduction sub-model already
 /// added; returns the nodes, the base model and the material field.
@@ -304,7 +315,7 @@ fn mpc_elimination_matches_lagrange() -> Result<()> {
 
     let k = stiffness(&model, &materials)?;
     let lagrange = solve(&k, &rhs)?;
-    let elim = eliminate::solve(&k, &model, &rhs)?;
+    let elim = eliminate(&k, &rhs)?;
 
     // The two methods produce the same field, node-for-node.
     for (i, node) in nodes.iter().enumerate() {
@@ -374,7 +385,7 @@ fn single_term_mpc_elimination_equals_dirichlet() -> Result<()> {
         rhs.set_value(nl, "imposed", 0.0)?;
         rhs.set_value(nm, "imposed", 1.0)?;
         let k = stiffness(&model, &materials)?;
-        eliminate::solve(&k, &model, &NodeField::from_sub(rhs))
+        eliminate(&k, &NodeField::from_sub(rhs))
     };
 
     let (nodes, ..) = heat_bar()?;
@@ -418,7 +429,7 @@ fn elimination_recovers_reaction_equals_multiplier() -> Result<()> {
 
     let k = stiffness(&model, &materials)?;
     let lagrange = solve(&k, &rhs)?;
-    let elim = eliminate::solve(&k, &model, &rhs)?;
+    let elim = eliminate(&k, &rhs)?;
 
     // Lagrange multipliers (reference boundary fluxes).
     let lambda_l = lagrange.value(nl, "lambda")?;
@@ -476,7 +487,7 @@ fn elimination_periodicity_constant_field() -> Result<()> {
     let rhs = NodeField::from_sub(rhs);
 
     let k = stiffness(&model, &materials)?;
-    let elim = eliminate::solve(&k, &model, &rhs)?;
+    let elim = eliminate(&k, &rhs)?;
 
     for node in &nodes {
         let got = elim.value(node.id(), "T")?;
@@ -513,7 +524,7 @@ fn elimination_rejects_chaining() -> Result<()> {
     let rhs = NodeField::from_sub(SubNodeField::from_poi1(&rhs_sm, vec!["imposed".into()])?);
 
     let k = stiffness(&model, &materials)?;
-    assert!(eliminate::solve(&k, &model, &rhs).is_err());
+    assert!(eliminate(&k, &rhs).is_err());
     Ok(())
 }
 
@@ -534,15 +545,15 @@ fn elimination_rejects_zero_coefficient() -> Result<()> {
     let rhs = NodeField::from_sub(SubNodeField::from_poi1(&rhs_sm, vec!["imposed".into()])?);
 
     let k = stiffness(&model, &materials)?;
-    assert!(eliminate::solve(&k, &model, &rhs).is_err());
+    assert!(eliminate(&k, &rhs).is_err());
     Ok(())
 }
 
-/// The condensation is cached on the matrix after the first elimination solve,
-/// reused on the second (identical result), and invalidated when the matrix
-/// changes.
+/// A second elimination solve on the same matrix gives the same result — the
+/// condensation is reused from the matrix's cache (the cache itself is checked
+/// where its type lives, in the elimination path's own tests).
 #[test]
-fn elimination_condensation_cached_then_invalidated() -> Result<()> {
+fn elimination_resolve_gives_the_same_result() -> Result<()> {
     let (nodes, coords, mut model, materials) = heat_bar()?;
 
     let left = poi1(&nodes[0])?;
@@ -564,34 +575,13 @@ fn elimination_condensation_cached_then_invalidated() -> Result<()> {
     rhs.set_value(nm, "imposed", 1.0)?;
     let rhs = NodeField::from_sub(rhs);
 
-    let mut k = stiffness(&model, &materials)?;
-    assert!(k.cached_factorization::<Condensation>().is_none());
-
-    let s1 = eliminate::solve(&k, &model, &rhs)?;
-    assert!(k.cached_factorization::<Condensation>().is_some());
-    let s2 = eliminate::solve(&k, &model, &rhs)?;
+    let k = stiffness(&model, &materials)?;
+    let s1 = eliminate(&k, &rhs)?;
+    let s2 = eliminate(&k, &rhs)?;
     for node in &nodes {
         assert_eq!(s1.value(node.id(), "T")?, s2.value(node.id(), "T")?);
     }
-
-    // Mutating the matrix invalidates the cached condensation.
-    let other = Handle::new(Coords::new(1)?);
-    let b = Node::create_in(other.clone(), &[0.0])?;
-    let bsm = {
-        let mut bsm = SubMesh::new(other, ElementType::POI1);
-        bsm.add_cell(&[b.id()])?;
-        Handle::new(bsm)
-    };
-    let mut block = SubMatrix::new(
-        bsm.clone(),
-        bsm,
-        vec!["q".into()],
-        vec!["T".into()],
-        DofOrdering::NodesThenVars,
-        Symmetry::None,
-    );
-    block.add_entry(b.id(), "q", b.id(), "T", 4.0)?;
-    k.add_sub(Handle::new(block))?;
-    assert!(k.cached_factorization::<Condensation>().is_none());
+    // T = x on the bar: the relations hold.
+    assert!((s1.value(nodes[N_ELEMS].id(), "T")? - 1.0).abs() < 1e-12);
     Ok(())
 }

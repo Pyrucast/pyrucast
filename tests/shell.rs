@@ -37,7 +37,7 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::shell::ShellFormulation;
 use pyrucast::ops::model;
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 const E: f64 = 210_000.0;

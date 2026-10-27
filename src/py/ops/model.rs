@@ -64,8 +64,9 @@ pub fn interface_transfer(
 /// `dirichlet(nodes, m, "u_x") | dirichlet(nodes, m, "u_y")`.
 ///
 /// `sense` (`"="`, the default, `">="` or `"<="`) turns the constraint
-/// unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a model is solved with
-/// `solve_unilateral`. See the model chapter of the book for the full semantics.
+/// unilateral (`u ≥ u_d` / `u ≤ u_d`): the matrix carries the sense, and
+/// `solve` runs its active-set loop. See the model chapter of the book for the
+/// full semantics.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (imposed_mesh, target, variable, sense = RelationSense::Equality))]
@@ -91,8 +92,8 @@ pub fn dirichlet(
 /// multiplier node of its own, minted beside the node of the first term; `g`
 /// is written in the load field at its `imposed` component (default `0`).
 /// `sense` (`"="`, the default, `">="` or `"<="`) turns the relations
-/// unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`) — such a model is solved with
-/// `solve_unilateral`. See the constraints chapter of the book.
+/// unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`): the matrix carries the sense, and
+/// `solve` runs its active-set loop. See the constraints chapter of the book.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (terms, target, sense = RelationSense::Equality))]
@@ -156,7 +157,7 @@ pub fn embedded(
 /// `["u_x", "u_y"]`), each dual row read from it. Each relation gets a
 /// multiplier node of its own, minted beside its slave node.
 ///
-/// Solve with `solve_unilateral`; build the initial-gap right-hand side
+/// Solve with `solve`; build the initial-gap right-hand side
 /// with `Model.contact_gaps()`. See the contact chapter of the book.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]

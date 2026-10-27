@@ -138,8 +138,6 @@ __all__ = [
     "sinh",
     "skin",
     "solve",
-    "solve_eliminate",
-    "solve_unilateral",
     "spill_stats",
     "sqrt",
     "stiffness",
@@ -1257,86 +1255,52 @@ class Matrix:
         (Cast3M `LUMP`). Applied to a consistent mass / capacity matrix it yields the
         diagonal (lumped) mass, conserving the total mass.
         """
-    def solve(self, rhs: NodeField, method: builtins.str = 'lu', cache: builtins.bool = True, verbosity: builtins.str = 'silent') -> NodeField:
+    def solve(self, rhs: NodeField, method: builtins.str = 'lu', relations: builtins.str = 'lagrange', active_set: builtins.str = 'schur', cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10, verbosity: builtins.str = 'silent') -> NodeField:
         r"""
         Solve the linear system `A·x = b` for `x` (sparse direct, faer).
         
-        `matrix` is the finalized system `A`; `rhs` is the right-hand side `b`
-        as a `NodeField` (read through the aggregate, zones resolved per DOF).
-        Returns the solution `x` as a single-zone `NodeField` over the
-        column-DOF nodes.
+        `matrix` is the assembled system `A`; `rhs` is the right-hand side `b` as a
+        `NodeField`, read at every row DOF of the matrix (a DOF no zone defines
+        reads zero). The imposed value of a constraint relation lives at its
+        multiplier node, component `imposed`. The matrix carries everything the
+        solve needs: its relation rows, their coefficients and their sense (`=`,
+        `>=`, `<=`), declared by the constraints that built them — no model is
+        passed alongside.
+        
+        `relations` says how the constraint relations are enforced:
+        
+        - `"lagrange"` (default) — by their multipliers, the saddle-point solved as
+          assembled; the multipliers come back in the solution as the reactions.
+          As soon as the matrix carries an inequality, the **active-set** loop
+          decides which relations are saturated: an active relation holds as an
+          equation (its `lambda` is `<= 0` for `>=`, `>= 0` for `<=`), an inactive
+          one reports `lambda = 0`;
+        - `"eliminate"` — each equality relation eliminates one unknown, and the
+          smaller system left, without multipliers, is solved; each eliminated
+          unknown's reaction is returned in its dual row. Scope: non-chained,
+          disjoint slaves.
         
         `method` selects the factorization: `"lu"` (default) works on any square
-        matrix, `"cholesky"` is half the factors and no pivot search but asks that the
-        matrix be symmetric **and** positive definite. A Lagrange saddle-point — what
-        any multiplier boundary condition assembles — is symmetric and *indefinite*,
-        and comes back as an error naming the pivot that refused; solve it with the
-        LU, or eliminate the constraints first (`solve_eliminate`).
+        matrix, `"cholesky"` asks that the system be symmetric **and** positive
+        definite — never a Lagrange saddle-point, usually a system reduced by
+        elimination. The active-set loop factorizes by LU whatever is asked.
         
-        `verbosity` says how much the solve reports on stdout: `"silent"` (default),
-        `"brief"` (one line: size, non-zeros, method) or `"detailed"` (plus timings).
-        
-        `cache` (default `True`) reuses a factorization stored transparently on the
-        matrix: the first solve factorizes, later solves on the same matrix reuse the
-        factors (much cheaper). The cache is cleared automatically when the matrix
-        changes.
-        
-        A `Ctrl+C` is honoured at the solver's phase boundaries. The factorization
-        itself is a single library call and is not interrupted mid-way; when it is
-        already cached, only the (cheap) substitution runs.
-        """
-    def solve_eliminate(self, model: Model, rhs: NodeField, method: builtins.str = 'lu', cache: builtins.bool = True, verbosity: builtins.str = 'silent') -> NodeField:
-        r"""
-        Solve `model`'s constrained system by **master/slave elimination**
-        (condensation) — the alternative to the Lagrange-multiplier path of
-        [`solve`].
-        
-        `model` is the constrained model; `matrix` is its assembled (saddle-point)
-        stiffness; `rhs` is the load field (its right-hand sides `g` live at the
-        multiplier nodes' imposed-value slots). Each linear relation eliminates one
-        slave DOF, so the system solved is smaller and definite (no multiplier DOFs).
-        The solution carries the primal field at every physics node plus each slave's
-        reaction (the multiplier equivalent) in its dual row.
-        
-        A model with no constraint falls back to a plain [`solve`]. v1 scope:
-        non-chained, disjoint slaves (a slave DOF may not appear in another relation).
-        
-        `method` selects the factorization of the reduced system: `"lu"` (default) or
-        `"cholesky"`. Unlike the saddle-point it replaces, the reduced system carries
-        no multiplier DOF and is usually positive definite, so this is the path where
-        a Cholesky stands a real chance. `verbosity` (`"silent"`, `"brief"`,
-        `"detailed"`) says how much it reports. `cache` (default `True`) reuses the
-        condensation stored transparently on the matrix, cleared when the matrix
-        changes. `Ctrl+C` is honoured at phase boundaries.
-        """
-    def solve_unilateral(self, model: Model, rhs: NodeField, method: builtins.str = 'lu', active_set: typing.Optional[builtins.str] = None, cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10, verbosity: builtins.str = 'silent') -> NodeField:
-        r"""
-        Solve `model`'s system with **unilateral** (inequality) constraints by the
-        active-set (status) method — the operator for constraints built with
-        `sense=">="` / `"<="` (Dirichlet, MPC).
-        
-        `model` is the constrained model; `matrix` is its assembled (saddle-point)
-        stiffness; `rhs` is the load field (the right-hand sides `g` live at the
-        multiplier nodes' imposed-value slots). The status loop starts with every
-        inequality active (or from the previous converged status when `cache` is
-        on — a warm start), solves, releases the relations whose reaction pulls,
-        activates the relations whose gap penetrates, and repeats until the status
-        is stable. Inactive relations report `λ = 0` in the solution.
-        
-        A model with no inequality relation falls back to a plain `solve`.
-        
-        `method` selects the factorization of each iteration — `"lu"` (default); a
-        `"cholesky"` is refused here, blanking a row breaking the symmetry
-        structurally. `verbosity` (`"silent"`, `"brief"`, `"detailed"`) says how much
-        each iteration reports. `active_set` selects how each status's system is
-        factorized:
+        `active_set` selects how each status of the active-set loop is factorized:
         `"schur"` (default) factorizes the inequality-free base once and updates it
-        per status (falling back to refactorization when that base is singular),
-        `"refactorize"` refactorizes the full system at each status change. `cache`
-        (default `True`) stores the active-set state transparently on the matrix
-        (cleared when the matrix changes). `max_iter` (default `100`) bounds the
-        status loop; `tol` (default `1e-10`) is the sign tolerance on the multiplier
-        and the gap. `Ctrl+C` is honoured at each iteration boundary.
+        per status (falling back when that base is singular), `"refactorize"`
+        refactorizes the full system at each status change. `max_iter` (default
+        `100`) bounds the status loop; `tol` (default `1e-10`) is its sign
+        tolerance on the multiplier and on the gap.
+        
+        `cache` (default `True`) reuses what is stored transparently on the matrix —
+        the factorization, the condensation, the active-set state and its last
+        status — cleared automatically when the matrix changes. `verbosity` says
+        how much the solve reports on stdout: `"silent"` (default), `"brief"` or
+        `"detailed"`.
+        
+        A `Ctrl+C` is honoured at the solver's phase boundaries and at each status
+        iteration; a factorization itself is a single library call and is not
+        interrupted mid-way.
         """
 
 @typing.final
@@ -4182,7 +4146,7 @@ def contact(slave: Mesh, master: Mesh, target: Model, variables: typing.Sequence
     `["u_x", "u_y"]`), each dual row read from it. Each relation gets a
     multiplier node of its own, minted beside its slave node.
     
-    Solve with `solve_unilateral`; build the initial-gap right-hand side
+    Solve with `solve`; build the initial-gap right-hand side
     with `Model.contact_gaps()`. See the contact chapter of the book.
     """
 
@@ -4348,8 +4312,9 @@ def dirichlet(imposed_mesh: Mesh, target: Model, variable: builtins.str, sense: 
     `dirichlet(nodes, m, "u_x") | dirichlet(nodes, m, "u_y")`.
     
     `sense` (`"="`, the default, `">="` or `"<="`) turns the constraint
-    unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a model is solved with
-    `solve_unilateral`. See the model chapter of the book for the full semantics.
+    unilateral (`u ≥ u_d` / `u ≤ u_d`): the matrix carries the sense, and
+    `solve` runs its active-set loop. See the model chapter of the book for the
+    full semantics.
     """
 
 def displace(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
@@ -5034,8 +4999,8 @@ def mpc(terms: typing.Sequence[tuple[Mesh, builtins.str, builtins.float]], targe
     multiplier node of its own, minted beside the node of the first term; `g`
     is written in the load field at its `imposed` component (default `0`).
     `sense` (`"="`, the default, `">="` or `"<="`) turns the relations
-    unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`) — such a model is solved with
-    `solve_unilateral`. See the constraints chapter of the book.
+    unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`): the matrix carries the sense, and
+    `solve` runs its active-set loop. See the constraints chapter of the book.
     """
 
 def orient(mesh: Mesh) -> Mesh:
@@ -5604,88 +5569,52 @@ def skin(mesh: Mesh, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
     orientation; the original nodes are reused.
     """
 
-def solve(matrix: Matrix, rhs: NodeField, method: builtins.str = 'lu', cache: builtins.bool = True, verbosity: builtins.str = 'silent') -> NodeField:
+def solve(matrix: Matrix, rhs: NodeField, method: builtins.str = 'lu', relations: builtins.str = 'lagrange', active_set: builtins.str = 'schur', cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10, verbosity: builtins.str = 'silent') -> NodeField:
     r"""
     Solve the linear system `A·x = b` for `x` (sparse direct, faer).
     
-    `matrix` is the finalized system `A`; `rhs` is the right-hand side `b`
-    as a `NodeField` (read through the aggregate, zones resolved per DOF).
-    Returns the solution `x` as a single-zone `NodeField` over the
-    column-DOF nodes.
+    `matrix` is the assembled system `A`; `rhs` is the right-hand side `b` as a
+    `NodeField`, read at every row DOF of the matrix (a DOF no zone defines
+    reads zero). The imposed value of a constraint relation lives at its
+    multiplier node, component `imposed`. The matrix carries everything the
+    solve needs: its relation rows, their coefficients and their sense (`=`,
+    `>=`, `<=`), declared by the constraints that built them — no model is
+    passed alongside.
+    
+    `relations` says how the constraint relations are enforced:
+    
+    - `"lagrange"` (default) — by their multipliers, the saddle-point solved as
+      assembled; the multipliers come back in the solution as the reactions.
+      As soon as the matrix carries an inequality, the **active-set** loop
+      decides which relations are saturated: an active relation holds as an
+      equation (its `lambda` is `<= 0` for `>=`, `>= 0` for `<=`), an inactive
+      one reports `lambda = 0`;
+    - `"eliminate"` — each equality relation eliminates one unknown, and the
+      smaller system left, without multipliers, is solved; each eliminated
+      unknown's reaction is returned in its dual row. Scope: non-chained,
+      disjoint slaves.
     
     `method` selects the factorization: `"lu"` (default) works on any square
-    matrix, `"cholesky"` is half the factors and no pivot search but asks that the
-    matrix be symmetric **and** positive definite. A Lagrange saddle-point — what
-    any multiplier boundary condition assembles — is symmetric and *indefinite*,
-    and comes back as an error naming the pivot that refused; solve it with the
-    LU, or eliminate the constraints first (`solve_eliminate`).
+    matrix, `"cholesky"` asks that the system be symmetric **and** positive
+    definite — never a Lagrange saddle-point, usually a system reduced by
+    elimination. The active-set loop factorizes by LU whatever is asked.
     
-    `verbosity` says how much the solve reports on stdout: `"silent"` (default),
-    `"brief"` (one line: size, non-zeros, method) or `"detailed"` (plus timings).
-    
-    `cache` (default `True`) reuses a factorization stored transparently on the
-    matrix: the first solve factorizes, later solves on the same matrix reuse the
-    factors (much cheaper). The cache is cleared automatically when the matrix
-    changes.
-    
-    A `Ctrl+C` is honoured at the solver's phase boundaries. The factorization
-    itself is a single library call and is not interrupted mid-way; when it is
-    already cached, only the (cheap) substitution runs.
-    """
-
-def solve_eliminate(matrix: Matrix, model: Model, rhs: NodeField, method: builtins.str = 'lu', cache: builtins.bool = True, verbosity: builtins.str = 'silent') -> NodeField:
-    r"""
-    Solve `model`'s constrained system by **master/slave elimination**
-    (condensation) — the alternative to the Lagrange-multiplier path of
-    [`solve`].
-    
-    `model` is the constrained model; `matrix` is its assembled (saddle-point)
-    stiffness; `rhs` is the load field (its right-hand sides `g` live at the
-    multiplier nodes' imposed-value slots). Each linear relation eliminates one
-    slave DOF, so the system solved is smaller and definite (no multiplier DOFs).
-    The solution carries the primal field at every physics node plus each slave's
-    reaction (the multiplier equivalent) in its dual row.
-    
-    A model with no constraint falls back to a plain [`solve`]. v1 scope:
-    non-chained, disjoint slaves (a slave DOF may not appear in another relation).
-    
-    `method` selects the factorization of the reduced system: `"lu"` (default) or
-    `"cholesky"`. Unlike the saddle-point it replaces, the reduced system carries
-    no multiplier DOF and is usually positive definite, so this is the path where
-    a Cholesky stands a real chance. `verbosity` (`"silent"`, `"brief"`,
-    `"detailed"`) says how much it reports. `cache` (default `True`) reuses the
-    condensation stored transparently on the matrix, cleared when the matrix
-    changes. `Ctrl+C` is honoured at phase boundaries.
-    """
-
-def solve_unilateral(matrix: Matrix, model: Model, rhs: NodeField, method: builtins.str = 'lu', active_set: typing.Optional[builtins.str] = None, cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10, verbosity: builtins.str = 'silent') -> NodeField:
-    r"""
-    Solve `model`'s system with **unilateral** (inequality) constraints by the
-    active-set (status) method — the operator for constraints built with
-    `sense=">="` / `"<="` (Dirichlet, MPC).
-    
-    `model` is the constrained model; `matrix` is its assembled (saddle-point)
-    stiffness; `rhs` is the load field (the right-hand sides `g` live at the
-    multiplier nodes' imposed-value slots). The status loop starts with every
-    inequality active (or from the previous converged status when `cache` is
-    on — a warm start), solves, releases the relations whose reaction pulls,
-    activates the relations whose gap penetrates, and repeats until the status
-    is stable. Inactive relations report `λ = 0` in the solution.
-    
-    A model with no inequality relation falls back to a plain `solve`.
-    
-    `method` selects the factorization of each iteration — `"lu"` (default); a
-    `"cholesky"` is refused here, blanking a row breaking the symmetry
-    structurally. `verbosity` (`"silent"`, `"brief"`, `"detailed"`) says how much
-    each iteration reports. `active_set` selects how each status's system is
-    factorized:
+    `active_set` selects how each status of the active-set loop is factorized:
     `"schur"` (default) factorizes the inequality-free base once and updates it
-    per status (falling back to refactorization when that base is singular),
-    `"refactorize"` refactorizes the full system at each status change. `cache`
-    (default `True`) stores the active-set state transparently on the matrix
-    (cleared when the matrix changes). `max_iter` (default `100`) bounds the
-    status loop; `tol` (default `1e-10`) is the sign tolerance on the multiplier
-    and the gap. `Ctrl+C` is honoured at each iteration boundary.
+    per status (falling back when that base is singular), `"refactorize"`
+    refactorizes the full system at each status change. `max_iter` (default
+    `100`) bounds the status loop; `tol` (default `1e-10`) is its sign
+    tolerance on the multiplier and on the gap.
+    
+    `cache` (default `True`) reuses what is stored transparently on the matrix —
+    the factorization, the condensation, the active-set state and its last
+    status — cleared automatically when the matrix changes. `verbosity` says
+    how much the solve reports on stdout: `"silent"` (default), `"brief"` or
+    `"detailed"`.
+    
+    A `Ctrl+C` is honoured at the solver's phase boundaries and at each status
+    iteration; a factorization itself is a single library call and is not
+    interrupted mid-way.
     """
 
 def spill_stats() -> dict:

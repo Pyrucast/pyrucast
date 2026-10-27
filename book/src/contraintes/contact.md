@@ -14,7 +14,7 @@ C'est une **relation unilatérale** (`≥`, cf. la section [Relations
 unilatérales](../contraintes.md)) à coefficients variant par nœud (comme le
 baignage) et couplant **toutes les composantes** du déplacement via la
 normale. Le modèle se résout avec
-[`solve_unilateral`](../operateurs/solveur.md) ; le multiplicateur `λ ≤ 0`
+[`solve`](../operateurs/solveur.md), qui lit l'inégalité dans la matrice ; le multiplicateur `λ ≤ 0`
 porte la réaction de contact (`λ = 0` quand la paire est décollée).
 
 Implémentation : `src/models/contact.rs` ; opérateur `ops::model::contact(…)`.

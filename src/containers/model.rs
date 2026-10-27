@@ -908,7 +908,7 @@ impl SubModel {
     /// conduction, `"f_x"` for elasticity in `x`).
     /// `sense` (default equality) turns the constraint unilateral (`u ≥ u_d` /
     /// `u ≤ u_d`), solved by the active-set operator
-    /// [`unilateral`](crate::ops::solver::unilateral).
+    /// [`solve`](crate::ops::solver::solve).
     /// See [`dirichlet::Dirichlet::new`].
     ///
     /// ```
@@ -965,7 +965,7 @@ impl SubModel {
     /// multiplier node's `imposed` component (default `0`). `sense` (default
     /// equality) turns the relations unilateral
     /// (`Σ aₖ·uₖ ≥ g` / `≤ g`), solved by the active-set operator
-    /// [`unilateral`](crate::ops::solver::unilateral). See [`mpc::Mpc::new`].
+    /// [`solve`](crate::ops::solver::solve). See [`mpc::Mpc::new`].
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -1070,7 +1070,7 @@ impl SubModel {
     /// `variables` are the displacement primals of `target`, coupled through the
     /// facet normal: one per space dimension, in ambient order (e.g.
     /// `["u_x", "u_y"]`), each dual row read from `target`. Solve with
-    /// [`unilateral`](crate::ops::solver::unilateral); build the `−g₀`
+    /// [`solve`](crate::ops::solver::solve); build the `−g₀`
     /// right-hand side with [`Model::contact_gaps`]. See
     /// [`contact::Contact::new`].
     ///

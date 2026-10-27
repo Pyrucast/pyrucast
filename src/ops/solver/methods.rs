@@ -1,28 +1,22 @@
-//! Delegation methods — the "subject" face of the solvers.
+//! Delegation methods — the "subject" face of the solver.
 //!
-//! See `CONVENTIONS.md` § "The verb also exposed as a method". The three
-//! variants file as a family behind `Matrix::solve`, which the order
-//! of the free functions' arguments has mirrored since it puts the matrix —
-//! the subject — first.
+//! See `CONVENTIONS.md` § "The verb also exposed as a method": the matrix is
+//! the subject of a solve, and the free function puts it first.
 
 use crate::containers::matrix::Matrix;
-use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
 use crate::error::Result;
 
+use super::SolveOptions;
+
 impl Matrix {
-    /// See [`solver::lu::solve`](fn@crate::ops::solver::lu::solve).
+    /// See [`solver::solve`](fn@crate::ops::solver::solve).
     pub fn solve(&self, rhs: &NodeField) -> Result<NodeField> {
-        crate::ops::solver::lu::solve(self, rhs)
+        crate::ops::solver::solve(self, rhs)
     }
 
-    /// See [`solver::eliminate::solve`](fn@crate::ops::solver::eliminate::solve).
-    pub fn solve_eliminate(&self, model: &Model, rhs: &NodeField) -> Result<NodeField> {
-        crate::ops::solver::eliminate::solve(self, model, rhs)
-    }
-
-    /// See [`solver::unilateral::solve`](fn@crate::ops::solver::unilateral::solve).
-    pub fn solve_unilateral(&self, model: &Model, rhs: &NodeField) -> Result<NodeField> {
-        crate::ops::solver::unilateral::solve(self, model, rhs)
+    /// See [`solver::solve_with_options`](fn@crate::ops::solver::solve_with_options).
+    pub fn solve_with_options(&self, rhs: &NodeField, options: &SolveOptions) -> Result<NodeField> {
+        crate::ops::solver::solve_with_options(self, rhs, options)
     }
 }

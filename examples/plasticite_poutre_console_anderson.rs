@@ -72,7 +72,7 @@ use pyrucast::ops::mesh::{line, sweep, to_poi1};
 use pyrucast::ops::model;
 use pyrucast::ops::node_field::{external_forces, internal_forces};
 use pyrucast::ops::node_field::{positions, restrict, restrict_like};
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 /// Depth of the Anderson history (number of `(u, g)` pairs kept).

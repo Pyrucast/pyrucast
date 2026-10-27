@@ -1,5 +1,6 @@
 //! Unilateral (inequality) constraints exercised end-to-end through the
-//! public API — the active-set solver `ops::solver::unilateral`.
+//! public API — the active-set loop of `ops::solver::solve`, which the matrix
+//! sends down that path when its relation rows carry an inequality.
 //!
 //! A 1-D heat-conduction bar `-T'' = 0` on `[0, 1]` (SEG2 grid, `k = 1`),
 //! `T(0) = 0` (equality Dirichlet) and a flux load `q` at the right end: the
@@ -24,7 +25,7 @@ use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::RelationSense;
 use pyrucast::ops::matrix::stiffness;
-use pyrucast::ops::solver::{eliminate, lu, unilateral};
+use pyrucast::ops::solver::{self, ActiveSetMethod, RelationMethod, SolveOptions};
 use pyrucast::Result;
 
 const N_ELEMS: usize = 4;
@@ -138,7 +139,7 @@ fn check(setup: &Setup, solution: &NodeField, slope: f64, lambda: f64) -> Result
 fn greater_equal_releases_when_feasible() -> Result<()> {
     let setup = bounded_bar(5.0, 2.0, RelationSense::GreaterEqual)?;
     let k = stiffness(&setup.model, &setup.materials)?;
-    let solution = unilateral::solve(&k, &setup.model, &setup.rhs)?;
+    let solution = solver::solve(&k, &setup.rhs)?;
     check(&setup, &solution, 5.0, 0.0)
 }
 
@@ -148,7 +149,7 @@ fn greater_equal_releases_when_feasible() -> Result<()> {
 fn greater_equal_holds_when_violated() -> Result<()> {
     let setup = bounded_bar(1.0, 2.0, RelationSense::GreaterEqual)?;
     let k = stiffness(&setup.model, &setup.materials)?;
-    let solution = unilateral::solve(&k, &setup.model, &setup.rhs)?;
+    let solution = solver::solve(&k, &setup.rhs)?;
     check(&setup, &solution, 2.0, -1.0)
 }
 
@@ -158,7 +159,7 @@ fn greater_equal_holds_when_violated() -> Result<()> {
 fn less_equal_holds_when_violated() -> Result<()> {
     let setup = bounded_bar(5.0, 2.0, RelationSense::LessEqual)?;
     let k = stiffness(&setup.model, &setup.materials)?;
-    let solution = unilateral::solve(&k, &setup.model, &setup.rhs)?;
+    let solution = solver::solve(&k, &setup.rhs)?;
     check(&setup, &solution, 2.0, 3.0)
 }
 
@@ -167,7 +168,7 @@ fn less_equal_holds_when_violated() -> Result<()> {
 fn less_equal_releases_when_feasible() -> Result<()> {
     let setup = bounded_bar(1.0, 2.0, RelationSense::LessEqual)?;
     let k = stiffness(&setup.model, &setup.materials)?;
-    let solution = unilateral::solve(&k, &setup.model, &setup.rhs)?;
+    let solution = solver::solve(&k, &setup.rhs)?;
     check(&setup, &solution, 1.0, 0.0)
 }
 
@@ -179,16 +180,16 @@ fn warm_start_survives_a_status_flip() -> Result<()> {
     // Start active (q = 1 against T(1) ≥ 2)…
     let setup = bounded_bar(1.0, 2.0, RelationSense::GreaterEqual)?;
     let k = stiffness(&setup.model, &setup.materials)?;
-    let first = unilateral::solve(&k, &setup.model, &setup.rhs)?;
+    let first = solver::solve(&k, &setup.rhs)?;
     check(&setup, &first, 2.0, -1.0)?;
 
     // …re-solve identically (pure warm start, no refactorization)…
-    let again = unilateral::solve(&k, &setup.model, &setup.rhs)?;
+    let again = solver::solve(&k, &setup.rhs)?;
     check(&setup, &again, 2.0, -1.0)?;
 
     // …then push hard (q = 5): the relation must release from the warm start.
     let strong = bounded_bar(5.0, 2.0, RelationSense::GreaterEqual)?;
-    let flipped = unilateral::solve(&k, &setup.model, &strong.rhs)?;
+    let flipped = solver::solve(&k, &strong.rhs)?;
     check(&strong, &flipped, 5.0, 0.0)
 }
 
@@ -225,7 +226,7 @@ fn unilateral_mpc_difference_relation() -> Result<()> {
         let rhs = NodeField::from_sub(rhs);
 
         let k = stiffness(&model, &materials)?;
-        let solution = unilateral::solve(&k, &model, &rhs)?;
+        let solution = solver::solve(&k, &rhs)?;
         for (i, node) in nodes.iter().enumerate() {
             let got = solution.value(node.id(), "T")?;
             let expected = slope * i as f64 * H;
@@ -252,8 +253,6 @@ fn unilateral_mpc_difference_relation() -> Result<()> {
 /// falls back.
 #[test]
 fn schur_and_refactorize_agree() -> Result<()> {
-    use pyrucast::ops::solver::unilateral::{ActiveSetMethod, UnilateralOptions};
-
     let cases = [
         (5.0, 2.0, RelationSense::GreaterEqual),
         (1.0, 2.0, RelationSense::GreaterEqual),
@@ -263,20 +262,18 @@ fn schur_and_refactorize_agree() -> Result<()> {
     for (q, bound, sense) in cases {
         let setup = bounded_bar(q, bound, sense)?;
         let k = stiffness(&setup.model, &setup.materials)?;
-        let schur = unilateral::solve_with_options(
+        let schur = solver::solve_with_options(
             &k,
-            &setup.model,
             &setup.rhs,
-            &UnilateralOptions {
+            &SolveOptions {
                 active_set: ActiveSetMethod::SchurComplement,
                 ..Default::default()
             },
         )?;
-        let refac = unilateral::solve_with_options(
+        let refac = solver::solve_with_options(
             &k,
-            &setup.model,
             &setup.rhs,
-            &UnilateralOptions {
+            &SolveOptions {
                 active_set: ActiveSetMethod::Refactorize,
                 ..Default::default()
             },
@@ -293,14 +290,46 @@ fn schur_and_refactorize_agree() -> Result<()> {
     Ok(())
 }
 
+/// The sense travels in the matrix: the same bar, the same load, the bound
+/// declared `≥` or `=` — `solve` reads which from the blocks and answers
+/// differently. Feasible push (`q = 5 > 2`): the inequality releases
+/// (`T(1) = 5`), the equation holds (`T(1) = 2`).
+#[test]
+fn the_matrix_carries_the_sense() -> Result<()> {
+    let bound = bounded_bar(5.0, 2.0, RelationSense::GreaterEqual)?;
+    let equation = bounded_bar(5.0, 2.0, RelationSense::Equality)?;
+    let free = solver::solve(&stiffness(&bound.model, &bound.materials)?, &bound.rhs)?;
+    let held = solver::solve(
+        &stiffness(&equation.model, &equation.materials)?,
+        &equation.rhs,
+    )?;
+    let right = |s: &Setup| s.nodes[N_ELEMS].id();
+    assert!((free.value(right(&bound), "T")? - 5.0).abs() < TOL);
+    assert!((held.value(right(&equation), "T")? - 2.0).abs() < TOL);
+    Ok(())
+}
+
+/// A sum of matrices keeps the blocks of both operands, so the sense of a
+/// relation survives `K_physics + K_constraints` — what an operator built
+/// piece by piece (stiffness, mass, geometric stiffness) relies on. Active
+/// bound (`q = 1 < 2`): `T = 2x`, `λ = q − a = −1`.
+#[test]
+fn the_sense_survives_a_sum() -> Result<()> {
+    use pyrucast::models::Physics;
+    let setup = bounded_bar(1.0, 2.0, RelationSense::GreaterEqual)?;
+    let physics = stiffness(&setup.model.exclude(Physics::Constraint), &setup.materials)?;
+    let relations = stiffness(&setup.model.filter(Physics::Constraint), &setup.materials)?;
+    let k = (&physics + &relations)?;
+    let solution = solver::solve(&k, &setup.rhs)?;
+    check(&setup, &solution, 2.0, -1.0)
+}
+
 /// When the inequality-free base is **singular** (a structure that only holds
 /// once the contact is active — here a bar with a single bound and no equality
 /// Dirichlet, so the released state is pure Neumann), the Schur path must fall
 /// back to refactorization and still return the correct solution.
 #[test]
 fn schur_falls_back_when_base_is_singular() -> Result<()> {
-    use pyrucast::ops::solver::unilateral::{ActiveSetMethod, UnilateralOptions};
-
     let (nodes, coords, mut model, materials) = heat_bar()?;
     // A single `T(1) ≤ 2` bound, no other constraint.
     let imp = poi1(&nodes[N_ELEMS])?;
@@ -320,20 +349,18 @@ fn schur_falls_back_when_base_is_singular() -> Result<()> {
     let rhs = NodeField::from_sub(rhs);
 
     let k = stiffness(&model, &materials)?;
-    let schur = unilateral::solve_with_options(
+    let schur = solver::solve_with_options(
         &k,
-        &model,
         &rhs,
-        &UnilateralOptions {
+        &SolveOptions {
             active_set: ActiveSetMethod::SchurComplement,
             ..Default::default()
         },
     )?;
-    let refac = unilateral::solve_with_options(
+    let refac = solver::solve_with_options(
         &k,
-        &model,
         &rhs,
-        &UnilateralOptions {
+        &SolveOptions {
             active_set: ActiveSetMethod::Refactorize,
             ..Default::default()
         },
@@ -347,18 +374,16 @@ fn schur_falls_back_when_base_is_singular() -> Result<()> {
     Ok(())
 }
 
-/// A model whose constraints are all equalities routes through the plain LU
-/// path: `solve_unilateral` and `solve` agree to machine precision.
+/// A matrix whose relations are all equations goes down the plain LU path, and
+/// the bound then holds as an equation: `T(1) = a`, so `T(x) = a·x`.
 #[test]
 fn all_equality_model_falls_back_to_plain_solve() -> Result<()> {
     let setup = bounded_bar(3.0, 0.5, RelationSense::Equality)?;
     let k = stiffness(&setup.model, &setup.materials)?;
-    let via_unilateral = unilateral::solve(&k, &setup.model, &setup.rhs)?;
-    let via_lu = lu::solve(&k, &setup.rhs)?;
-    for node in &setup.nodes {
-        let a = via_unilateral.value(node.id(), "T")?;
-        let b = via_lu.value(node.id(), "T")?;
-        assert!((a - b).abs() < TOL);
+    let solution = solver::solve(&k, &setup.rhs)?;
+    for (i, node) in setup.nodes.iter().enumerate() {
+        let x = i as f64 / N_ELEMS as f64;
+        assert!((solution.value(node.id(), "T")? - 0.5 * x).abs() < TOL);
     }
     Ok(())
 }
@@ -369,11 +394,15 @@ fn all_equality_model_falls_back_to_plain_solve() -> Result<()> {
 fn eliminate_rejects_unilateral_relations() -> Result<()> {
     let setup = bounded_bar(1.0, 2.0, RelationSense::GreaterEqual)?;
     let k = stiffness(&setup.model, &setup.materials)?;
-    let err = eliminate::solve(&k, &setup.model, &setup.rhs).unwrap_err();
+    let eliminate = SolveOptions {
+        relations: RelationMethod::Eliminate,
+        ..Default::default()
+    };
+    let err = solver::solve_with_options(&k, &setup.rhs, &eliminate).unwrap_err();
     let msg = err.to_string();
     assert!(
-        msg.contains("solve_unilateral"),
-        "error should point at solve_unilateral, got: {msg}"
+        msg.contains("relations=\"lagrange\""),
+        "error should point at the Lagrange path, got: {msg}"
     );
     Ok(())
 }

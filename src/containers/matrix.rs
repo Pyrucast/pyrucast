@@ -87,7 +87,7 @@ use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::handle::{Handle, ReadGuard};
-use crate::models::{MatrixKind, Physics};
+use crate::models::{MatrixKind, Physics, RelationSense, IMPOSED};
 use crate::parallel::*;
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
@@ -589,6 +589,12 @@ pub struct SubMatrix {
     /// `local_coo_arrays`/`local_triplets`, which stay raw — every consumer of
     /// those applies the factor itself.
     factor: f64,
+    /// The sense of the **relation rows** of this block — its rows named
+    /// [`IMPOSED`], one per constraint relation.
+    /// `Equality` unless the constraint that built it is unilateral; the solver
+    /// reads it to know which rows are inequalities, the coefficients being
+    /// the row itself. Meaningless on any other row.
+    row_sense: RelationSense,
 }
 
 impl SubMatrix {
@@ -653,6 +659,7 @@ impl SubMatrix {
             recipe: None,
             physics: Vec::new(),
             factor: 1.0,
+            row_sense: RelationSense::Equality,
         }
     }
 
@@ -729,6 +736,7 @@ impl SubMatrix {
             recipe: Some(recipe),
             physics: Vec::new(),
             factor: 1.0,
+            row_sense: RelationSense::Equality,
         }
     }
 
@@ -816,6 +824,7 @@ impl SubMatrix {
             recipe: None,
             physics: Vec::new(),
             factor: 1.0,
+            row_sense: RelationSense::Equality,
         })
     }
 
@@ -948,6 +957,73 @@ impl SubMatrix {
     /// ```
     pub fn set_physics(&mut self, physics: Vec<Physics>) {
         self.physics = physics;
+    }
+
+    /// The sense of this block's relation rows (those named
+    /// [`IMPOSED`]): `Equality` unless a unilateral
+    /// constraint built it. The solver reads it to tell an inequality row from
+    /// an equation; the relation's coefficients are the row itself.
+    ///
+    /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::RelationSense;
+    /// # use pyrucast::ops::{element_field, matrix, mesh, model};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let n: Vec<Node> = (0..2)
+    /// #     .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let appui = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// let barre = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
+    /// let plancher = model::dirichlet(&appui, &barre, "T", RelationSense::GreaterEqual)?;
+    /// let modele = barre.union(&plancher)?;
+    /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)])?;
+    /// let k = matrix::stiffness(&modele, &materiaux)?;
+    /// // The block of the relation row carries the sense of the constraint that
+    /// // built it; the conduction's block keeps the default.
+    /// let senses: Vec<RelationSense> = k.iter().map(|b| b.read().row_sense()).collect();
+    /// assert!(senses.contains(&RelationSense::GreaterEqual));
+    /// assert!(senses.contains(&RelationSense::Equality));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn row_sense(&self) -> RelationSense {
+        self.row_sense
+    }
+
+    /// Declare the sense of this block's relation rows — what a unilateral
+    /// constraint does on its `C` block when it builds it.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
+    /// # use pyrucast::containers::mesh::SubMesh;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{RelationSense, IMPOSED};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let support = {
+    /// #     let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+    /// #     sm.add_cell(&[a.id()]).unwrap();
+    /// #     Handle::new(sm)
+    /// # };
+    /// let mut c = SubMatrix::new(
+    ///     support.clone(), support.clone(), vec![IMPOSED.into()], vec!["T".into()],
+    ///     DofOrdering::NodesThenVars, Symmetry::None);
+    /// assert_eq!(c.row_sense(), RelationSense::Equality);
+    /// c.set_row_sense(RelationSense::LessEqual);
+    /// assert_eq!(c.row_sense(), RelationSense::LessEqual);
+    /// ```
+    pub fn set_row_sense(&mut self, sense: RelationSense) {
+        self.row_sense = sense;
     }
 
     /// The scalar factor applied to every value this block emits (`1.0` unless
@@ -3880,6 +3956,33 @@ impl Matrix {
         })
     }
 
+    /// Whether a block declares inequality relation rows
+    /// ([`SubMatrix::row_sense`]) — what sends a solve down the active-set
+    /// path. Read off the blocks, no assembly needed.
+    pub(crate) fn has_inequality(&self) -> bool {
+        self.iter().any(|h| {
+            let b = h.read();
+            b.row_sense != RelationSense::Equality && b.dual_vars.iter().any(|v| v == IMPOSED)
+        })
+    }
+
+    /// The sense of every **inequality** relation row, keyed by its multiplier
+    /// node — the row `(node, imposed)`. A relation row absent from the map is
+    /// an equation.
+    pub(crate) fn inequality_senses(&self) -> HashMap<NodeId, RelationSense> {
+        let mut senses = HashMap::new();
+        for h in self {
+            let b = h.read();
+            if b.row_sense == RelationSense::Equality || !b.dual_vars.iter().any(|v| v == IMPOSED) {
+                continue;
+            }
+            for &node in b.row_support.read().connectivity() {
+                senses.insert(node, b.row_sense);
+            }
+        }
+        senses
+    }
+
     /// Union of all row DOFs across blocks, in first-seen order.
     /// If finalized, returns the cached order (consistent with the CSR).
     ///
@@ -5080,7 +5183,7 @@ impl Matrix {
     /// Columns carry the **primal** variables and rows the **dual** ones
     /// (`K · u = f`), so this maps a *primal* field (e.g. `"T"`, `"u"`) to a
     /// *dual* one (e.g. `"q"`). That is the exact mirror of
-    /// [`crate::ops::solver::lu::solve`], which reads a *dual* right-hand side at the
+    /// [`crate::ops::solver::solve`], which reads a *dual* right-hand side at the
     /// rows and produces a *primal* solution at the columns. Both use
     /// [`NodeField::gather`] / [`NodeField::from_dof_values`] to bridge the
     /// abstract field and the flat DOF vector. Requires

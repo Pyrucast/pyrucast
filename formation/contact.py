@@ -4,7 +4,7 @@ A classic patch test: two elastic blocks stacked along `y`, separated by an
 initial gap `G0`. A pressure on the upper block closes the contact and
 transmits a uniform stress across the interface — the pyrucast equivalent of
 Cast3M's node-to-surface contact (section 10 of the training), driven here
-straight by the active-set solver `solve_unilateral`, in a single solve —
+straight by the active-set loop of `solve`, in a single solve —
 `pyrucast.stepping.step_by_step` composes the same contact with heat,
 plasticity and load steps when a history is needed.
 
@@ -113,7 +113,7 @@ def main() -> None:
 
     # ANCHOR: resolution_contact
     K = pc.matrix.stiffness(modele, materiaux)
-    solution = pc.solver.solve_unilateral(K, modele, second_membre)
+    solution = pc.solver.solve(K, second_membre)
     # ANCHOR_END: resolution_contact
 
     print(f"Pression appliquée : {S}")

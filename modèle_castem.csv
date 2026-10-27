@@ -189,7 +189,7 @@ THERMIQUE;SOURCE;Densité volumique de chaleur appliquée sur le maillage;—;�
 THERMIQUE;SOURCE GAUSSIENNE SPHERIQUE;Source gaussienne à distribution sphérique (massifs 2D/3D);—;—;—
 THERMIQUE;SOURCE GAUSSIENNE ELLIPTIQUE;Source gaussienne à distribution elliptique (massifs 2D/3D);—;—;—
 THERMIQUE;SOURCE GAUSSIENNE ELARGIE;Source gaussienne élargie (3D uniquement);—;—;—
-CONTACT;CONTACT UNILATERAL;Contact sans frottement, décollement autorisé (option par défaut);constraint;—;model.contact + solve_unilateral (active-set nœud-surface)
+CONTACT;CONTACT UNILATERAL;Contact sans frottement, décollement autorisé (option par défaut);constraint;—;model.contact + solve (active-set nœud-surface)
 CONTACT;CONTACT BILATERAL;Contact sans décollement (conditions écrites sur les zones en contact);constraint;—;model.mpc (relation d'égalité)
 CONTACT;FROTTANT COULOMB;Frottement de Coulomb entre deux lignes (2D) ou surfaces (3D);—;—;—
 CONTACT;FROTTANT FROCABLE;Frottement des câbles de précontrainte selon le BPEL99;—;—;—

@@ -1,6 +1,6 @@
 //! Unilateral (inequality) constraint solve by the **active-set** (status)
-//! method — the operator for models whose constraints carry a non-equality
-//! [`RelationSense`].
+//! method — the path of [`super::solve`] for a matrix whose relation rows carry
+//! a non-equality [`RelationSense`].
 //!
 //! A unilateral relation `Σₖ aₖ·u(nodeₖ,varₖ) ≥ g` (or `≤ g`) obeys the KKT
 //! complementarity conditions instead of a plain equation: either the relation
@@ -32,34 +32,32 @@
 //! An inactive relation reports `λ = 0` exactly (its row is the identity on the
 //! multiplier DOF).
 //!
-//! # Method-neutral input
+//! # Input
 //!
-//! Like [`eliminate`](super::eliminate), the constraint structure is read from
-//! [`Constraint::relations()`](crate::models::Constraint::relations) — the same
-//! seam the Lagrange blocks are built from — so the user's mesh-per-term input
-//! is never re-parsed here. Equality relations are left untouched (their rows
-//! are always enforced); a model with **no** inequality falls back to a plain
-//! [`lu::solve`].
+//! Everything is read from the matrix ([`relation_rows`]): an inequality is a
+//! relation row whose block declares a sense, its coefficients are the row, its
+//! multiplier the column of the same node. Equality relations are left untouched
+//! (their rows are always enforced). [`super::solve`] only comes here when the
+//! matrix carries an inequality.
 
 use crate::atoms::NodeId;
 use crate::containers::matrix::Matrix;
-use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
-use crate::interrupt::{Cancel, NoCancel};
-use crate::models::{RelationSense, IMPOSED, MULTIPLIER};
+use crate::interrupt::Cancel;
+use crate::models::RelationSense;
 use nalgebra::{DMatrix, DVector};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::lu::{
-    self, factorize_csc_arrays, lu_solve_vec, SolveMethod, SolveOptions, SparseLu, Verbosity,
-};
+use super::lu::{self, factorize_csc_arrays, lu_solve_vec, SparseLu};
+use super::relations::relation_rows;
+use super::SolveOptions;
 
 type NamedDof = (NodeId, String);
 
-/// How the active-set loop assembles each status's system.
+/// How the active-set loop factorizes each status's system.
 ///
 /// Both variants explore the **same** status trajectory (identical KKT checks,
 /// same converged result) — they differ only in how the linear system of a
@@ -72,12 +70,13 @@ type NamedDof = (NodeId, String);
 /// # use pyrucast::containers::field::SubField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
 /// # use pyrucast::containers::node_field::NodeField;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
+/// # use pyrucast::named::Named;
+/// # use pyrucast::ops::{element_field, matrix, mesh, model, solver};
+/// # use pyrucast::ops::solver::{ActiveSetMethod, SolveOptions};
 /// # let coords = Handle::new(Coords::new(1).unwrap());
 /// # let n: Vec<Node> = (0..3)
 /// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
@@ -86,28 +85,21 @@ type NamedDof = (NodeId, String);
 /// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&impose, &cible, "T",
-/// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
-/// #                                      vec!["imposed".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
-/// # use pyrucast::ops::solver::unilateral::{ActiveSetMethod, UnilateralOptions};
-/// # use pyrucast::ops::model;
+/// # let barre = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
+/// # let modele = barre.union(&model::dirichlet(&impose, &barre, "T", RelationSense::GreaterEqual)?)?;
+/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)])?;
+/// # let k = matrix::stiffness(&modele, &materiaux)?;
+/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh()?.get(0)?,
+/// #                                      vec!["imposed".into()])?;
+/// # charge.get(0)?.write().add_to_component("imposed", 100.0)?;
+/// assert_eq!(ActiveSetMethod::parse("refactorize")?, ActiveSetMethod::Refactorize);
 /// // Both variants walk the **same** status trajectory and converge to the
 /// // same result; only the way of factorizing differs.
-/// let lire = |o| {
-///     let u = solver::unilateral::solve_with_options(&k, &modele, &charge, &o).unwrap();
-///     u.get(0).unwrap().read().value(n[2].id(), "T").unwrap()
+/// let lire = |active_set| -> f64 {
+///     let o = SolveOptions { active_set, cache: false, ..Default::default() };
+///     solver::solve_with_options(&k, &charge, &o).unwrap().value(n[2].id(), "T").unwrap()
 /// };
-/// let schur = lire(UnilateralOptions {
-///     active_set: ActiveSetMethod::SchurComplement, ..Default::default() });
-/// let refacto = lire(UnilateralOptions {
-///     active_set: ActiveSetMethod::Refactorize, ..Default::default() });
-/// assert!((schur - refacto).abs() < 1e-9);
+/// assert!((lire(ActiveSetMethod::SchurComplement) - lire(ActiveSetMethod::Refactorize)).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -126,81 +118,17 @@ pub enum ActiveSetMethod {
     Refactorize,
 }
 
-/// Options for [`solve_with_options`]. `method` / `cache` mirror
-/// [`SolveOptions`]; `max_iter` bounds the status loop; `tol` is the
-/// complementarity tolerance on both the multiplier sign and the gap sign
-/// (absolute, in the units of the reaction / of the relation).
-///
-/// ```
-/// # use pyrucast::models::symmetry::MaterialSymmetry;
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let n: Vec<Node> = (0..3)
-/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-/// #     .collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&impose, &cible, "T",
-/// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
-/// #                                      vec!["imposed".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
-/// # use pyrucast::ops::solver::unilateral::UnilateralOptions;
-/// # use pyrucast::ops::model;
-/// // By default: Schur complement, cache on, and a complementarity tolerance
-/// // that covers **both** the multiplier's sign and the gap's.
-/// let d = UnilateralOptions::default();
-/// assert!(d.cache && d.max_iter > 0 && d.tol > 0.0);
-/// assert!(solver::unilateral::solve_with_options(&k, &modele, &charge, &d).is_ok());
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-#[derive(Clone, Copy, Debug)]
-pub struct UnilateralOptions {
-    /// Direct back-end for each status iteration's system.
-    pub method: SolveMethod,
-    /// How each status's system is factorized (Schur base reuse vs. refactorize).
-    pub active_set: ActiveSetMethod,
-    /// Cache the active-set state (layout + last converged status and, per
-    /// method, its factorization / the base factorization and Schur columns) on
-    /// the matrix: a re-solve warm-starts from the previous status and reuses the
-    /// cached factors. Cleared automatically when the matrix changes.
-    pub cache: bool,
-    /// Maximum number of status iterations.
-    pub max_iter: usize,
-    /// Sign tolerance for releasing (`λ` past `tol`) and activating (gap past
-    /// `−tol`) a relation.
-    pub tol: f64,
-    /// How much the solve says about what it did.
-    pub verbosity: Verbosity,
-}
+impl crate::named::Named for ActiveSetMethod {
+    const LABEL: &'static str = "active-set method";
+    const VALUES: &'static [Self] = &[
+        ActiveSetMethod::SchurComplement,
+        ActiveSetMethod::Refactorize,
+    ];
 
-impl Default for UnilateralOptions {
-    fn default() -> Self {
-        Self {
-            // The active-set path is LU-only: the system of one status is
-            // never symmetric (see `factorize_status`).
-            method: SolveMethod::Lu,
-            active_set: ActiveSetMethod::default(),
-            cache: true,
-            max_iter: 100,
-            tol: 1e-10,
-            verbosity: Verbosity::Silent,
+    fn name(self) -> &'static str {
+        match self {
+            ActiveSetMethod::SchurComplement => "schur",
+            ActiveSetMethod::Refactorize => "refactorize",
         }
     }
 }
@@ -247,7 +175,7 @@ struct ActiveSetState {
     /// [`Matrix::field_from_col_values`], which reads the column layout from
     /// the assembled matrix itself).
     row_dofs: Vec<NamedDof>,
-    /// The resolved inequality relations, in model order (deterministic).
+    /// The resolved inequality relations, in matrix row order (deterministic).
     inequalities: Vec<Inequality>,
     /// [`Refactorize`](ActiveSetMethod::Refactorize) warm start: last converged
     /// status (`true` = active, one per inequality) and the LU of its system.
@@ -256,218 +184,16 @@ struct ActiveSetState {
     schur: Mutex<SchurSlot>,
 }
 
-/// Solve `model`'s system with unilateral constraints by the active-set method,
-/// using the default options. `matrix` is the assembled saddle-point stiffness
-/// of `model` (as produced by [`crate::ops::matrix::stiffness`]); `rhs` is
-/// the load field (the right-hand sides `g` live at the multiplier nodes'
-/// imposed-value slots).
-///
-/// A model with no inequality relation falls back to a plain [`lu::solve`].
-///
-/// ```
-/// # use pyrucast::models::symmetry::MaterialSymmetry;
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-/// # use pyrucast::ops::model;
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let n: Vec<Node> = (0..3)
-/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-/// #     .collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&impose, &cible, "T",
-/// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
-/// #                                      vec!["imposed".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
-/// // A `≥` constraint: the active-set loop decides, relation by relation,
-/// // which one is saturated. Here the support at 100 °C is active, and the
-/// // barre entière s'y met.
-/// let u = solver::unilateral::solve(&k, &modele, &charge)?;
-/// assert!((u.get(0)?.read().value(n[2].id(), "T")? - 100.0).abs() < 1e-9);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn solve(matrix: &Matrix, model: &Model, rhs: &NodeField) -> Result<NodeField> {
-    solve_inner(matrix, model, rhs, &UnilateralOptions::default(), &NoCancel)
-}
-
-/// Like [`solve`] but with explicit [`UnilateralOptions`] (back-end, cache,
-/// iteration bound, sign tolerance).
-///
-/// ```
-/// # use pyrucast::models::symmetry::MaterialSymmetry;
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let n: Vec<Node> = (0..3)
-/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-/// #     .collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&impose, &cible, "T",
-/// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
-/// #                                      vec!["imposed".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
-/// # use pyrucast::ops::solver::unilateral::UnilateralOptions;
-/// # use pyrucast::ops::model;
-/// let u = solver::unilateral::solve_with_options(
-///     &k, &modele, &charge, &UnilateralOptions::default())?;
-/// assert!(u.node_count()? > 0);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn solve_with_options(
+/// The active-set path of [`super::solve`], for a matrix that carries
+/// inequality relations.
+pub(super) fn solve(
     matrix: &Matrix,
-    model: &Model,
     rhs: &NodeField,
-    options: &UnilateralOptions,
-) -> Result<NodeField> {
-    solve_inner(matrix, model, rhs, options, &NoCancel)
-}
-
-/// Like [`solve`], but polls `cancel` at each status iteration so the call can
-/// be stopped early (returning [`PyrucastError::Interrupted`]). Same granularity
-/// as [`lu::solve_cancellable`]: each factorization is a single library call and
-/// is not interrupted mid-way.
-///
-/// ```
-/// # use pyrucast::models::symmetry::MaterialSymmetry;
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let n: Vec<Node> = (0..3)
-/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-/// #     .collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&impose, &cible, "T",
-/// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
-/// #                                      vec!["imposed".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
-/// # use std::sync::atomic::{AtomicBool, Ordering};
-/// # use pyrucast::ops::model;
-/// let stop = AtomicBool::new(false);
-/// assert!(solver::unilateral::solve_cancellable(&k, &modele, &charge, &stop).is_ok());
-/// stop.store(true, Ordering::Relaxed);
-/// assert!(solver::unilateral::solve_cancellable(&k, &modele, &charge, &stop).is_err());
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn solve_cancellable(
-    matrix: &Matrix,
-    model: &Model,
-    rhs: &NodeField,
+    options: &SolveOptions,
     cancel: &dyn Cancel,
 ) -> Result<NodeField> {
-    solve_inner(matrix, model, rhs, &UnilateralOptions::default(), cancel)
-}
-
-/// [`solve_cancellable`] with explicit [`UnilateralOptions`] — the full form the
-/// Python binding routes to.
-///
-/// ```
-/// # use pyrucast::models::symmetry::MaterialSymmetry;
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let n: Vec<Node> = (0..3)
-/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-/// #     .collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&impose, &cible, "T",
-/// #                              RelationSense::GreaterEqual).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
-/// #                                      vec!["imposed".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
-/// # use pyrucast::ops::solver::unilateral::UnilateralOptions;
-/// # use std::sync::atomic::AtomicBool;
-/// # use pyrucast::ops::model;
-/// let stop = AtomicBool::new(false);
-/// let u = solver::unilateral::solve_cancellable_with_options(
-///     &k, &modele, &charge, &UnilateralOptions::default(), &stop)?;
-/// assert!(u.node_count()? > 0);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn solve_cancellable_with_options(
-    matrix: &Matrix,
-    model: &Model,
-    rhs: &NodeField,
-    options: &UnilateralOptions,
-    cancel: &dyn Cancel,
-) -> Result<NodeField> {
-    solve_inner(matrix, model, rhs, options, cancel)
-}
-
-fn solve_inner(
-    matrix: &Matrix,
-    model: &Model,
-    rhs: &NodeField,
-    options: &UnilateralOptions,
-    cancel: &dyn Cancel,
-) -> Result<NodeField> {
-    // `options.method` ne s'applique pas ici : le système d'un statut n'est
-    // jamais symétrique — voir `factorize_status`.
+    // `options.method` does not apply here: the system of a status is never
+    // symmetric — see `factorize_status`.
     cancel.check()?;
 
     // ── Step 1 — obtain the active-set state (cached or fresh) ─────────
@@ -475,23 +201,18 @@ fn solve_inner(
         match matrix.cached_factorization::<ActiveSetState>() {
             Some(s) => s,
             None => {
-                let s = Arc::new(build_state(model, matrix)?);
+                let s = Arc::new(build_state(matrix)?);
                 matrix.store_factorization(s.clone());
                 s
             }
         }
     } else {
-        Arc::new(build_state(model, matrix)?)
+        Arc::new(build_state(matrix)?)
     };
 
-    // No inequality ⇒ the saddle-point is linear; solve it as-is.
+    // A block declared a sense on rows it does not hold: nothing to decide.
     if state.inequalities.is_empty() {
-        let opts = SolveOptions {
-            method: options.method,
-            cache: options.cache,
-            verbosity: options.verbosity,
-        };
-        return lu::solve_cancellable_with_options(matrix, rhs, &opts, cancel);
+        return lu::solve(matrix, rhs, options, cancel);
     }
     cancel.check()?;
 
@@ -559,7 +280,7 @@ fn solve_refactorize(
     csc: &nalgebra_sparse::CscMatrix<f64>,
     b_full: &[f64],
     matrix: &Matrix,
-    options: &UnilateralOptions,
+    options: &SolveOptions,
     cancel: &dyn Cancel,
 ) -> Result<NodeField> {
     // Initial status: warm start (status + its factorization) or all-active.
@@ -589,7 +310,7 @@ fn solve_refactorize(
         let x = lu_solve_vec(&lu, &b);
         if x.iter().any(|v| !v.is_finite()) {
             return Err(PyrucastError::Message(
-                "solve_unilateral: LU failed (matrix is singular — check that the \
+                "solve: LU failed (matrix is singular — check that the \
                  structure is supported when every unilateral relation releases)"
                     .into(),
             ));
@@ -609,7 +330,7 @@ fn solve_refactorize(
     }
 
     Err(PyrucastError::Message(format!(
-        "solve_unilateral: the active set did not converge in {} iterations \
+        "solve: the active set did not converge in {} iterations \
          (cycling — try a looser tol, or check the model)",
         options.max_iter
     )))
@@ -627,7 +348,7 @@ fn solve_schur(
     csc: &nalgebra_sparse::CscMatrix<f64>,
     b_full: &[f64],
     matrix: &Matrix,
-    options: &UnilateralOptions,
+    options: &SolveOptions,
     cancel: &dyn Cancel,
 ) -> Result<Option<NodeField>> {
     let n = state.row_dofs.len();
@@ -697,7 +418,7 @@ fn solve_schur(
     }
 
     Err(PyrucastError::Message(format!(
-        "solve_unilateral: the active set did not converge in {} iterations \
+        "solve: the active set did not converge in {} iterations \
          (cycling — try a looser tol, or check the model)",
         options.max_iter
     )))
@@ -846,72 +567,28 @@ fn schur_status_solve(
     Some(x)
 }
 
-/// Resolve the model's inequality relations against the matrix DOF layout.
+/// The inequality relations of the matrix, resolved against its DOF layout.
 /// Equality relations are skipped (their rows are always enforced as-is).
-fn build_state(model: &Model, matrix: &Matrix) -> Result<ActiveSetState> {
+fn build_state(matrix: &Matrix) -> Result<ActiveSetState> {
     let row_dofs = matrix.row_dofs()?;
-    let col_dofs = matrix.col_dofs()?;
-    if row_dofs.len() != col_dofs.len() {
+    let n_cols = matrix.col_dof_keys()?.len();
+    if row_dofs.len() != n_cols {
         return Err(PyrucastError::Message(format!(
-            "solve_unilateral: matrix must be square; got {}×{}",
+            "solve: matrix must be square; got {}×{}",
             row_dofs.len(),
-            col_dofs.len()
+            n_cols
         )));
     }
-    let row_of: HashMap<&NamedDof, usize> = row_dofs.iter().zip(0..).collect();
-    let col_of: HashMap<&NamedDof, usize> = col_dofs.iter().zip(0..).collect();
-
-    let mut inequalities = Vec::new();
-    for h in model {
-        let sub = h.read();
-        let kind = sub.as_kind();
-        let Some(constraint) = kind.as_constraint() else {
-            continue;
-        };
-        for rel in constraint.relations()? {
-            if rel.sense == RelationSense::Equality {
-                continue;
-            }
-            let row = *row_of
-                .get(&(rel.multiplier_node, IMPOSED.to_string()))
-                .ok_or_else(|| {
-                    PyrucastError::Message(format!(
-                        "solve_unilateral: constraint row ({:?}, '{IMPOSED}') is not a row \
-                         of the matrix — was it assembled from this model?",
-                        rel.multiplier_node
-                    ))
-                })?;
-            let lambda_col = *col_of
-                .get(&(rel.multiplier_node, MULTIPLIER.to_string()))
-                .ok_or_else(|| {
-                    PyrucastError::Message(format!(
-                        "solve_unilateral: multiplier DOF ({:?}, '{MULTIPLIER}') is not a \
-                         column of the matrix",
-                        rel.multiplier_node
-                    ))
-                })?;
-            let mut term_cols = Vec::with_capacity(rel.terms.len());
-            for term in &rel.terms {
-                let col = *col_of
-                    .get(&(term.node, term.variable.clone()))
-                    .ok_or_else(|| {
-                        PyrucastError::Message(format!(
-                            "solve_unilateral: term ({:?}, '{}') is not a column of the \
-                             matrix",
-                            term.node, term.variable
-                        ))
-                    })?;
-                term_cols.push((col, term.coefficient));
-            }
-            inequalities.push(Inequality {
-                row,
-                lambda_col,
-                term_cols,
-                sense: rel.sense,
-            });
-        }
-    }
-
+    let inequalities = relation_rows(matrix)?
+        .into_iter()
+        .filter(|r| r.sense != RelationSense::Equality)
+        .map(|r| Inequality {
+            row: r.row,
+            lambda_col: r.lambda_col,
+            term_cols: r.terms,
+            sense: r.sense,
+        })
+        .collect();
     Ok(ActiveSetState {
         row_dofs,
         inequalities,
@@ -1039,7 +716,7 @@ mod tests {
     /// positive flux `q` at the right end. The unconstrained solution `T = q·x`
     /// is positive, so **both bounds release** — a two-status-iteration problem
     /// starting from the all-active warm start.
-    fn two_loose_bounds(q: f64) -> (Model, ElementField, Matrix, NodeField, Vec<Node>) {
+    fn two_loose_bounds(q: f64) -> (Matrix, NodeField, Vec<Node>) {
         let coords = Handle::new(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..=2)
             .map(|i| Node::create_in(coords.clone(), &[i as f64 * 0.5]).unwrap())
@@ -1096,11 +773,11 @@ mod tests {
         let rhs = NodeField::from_sub(rhs);
 
         let k = stiffness(&model, &materials).unwrap();
-        (model, materials, k, rhs, nodes)
+        (k, rhs, nodes)
     }
 
-    fn opts(active_set: ActiveSetMethod) -> UnilateralOptions {
-        UnilateralOptions {
+    fn opts(active_set: ActiveSetMethod) -> SolveOptions {
+        SolveOptions {
             active_set,
             ..Default::default()
         }
@@ -1118,10 +795,14 @@ mod tests {
         let _guard = COUNT_LOCK.lock().unwrap();
         // Refactorize: fresh matrix, count the factorizations (all-active +
         // all-inactive = 2).
-        let (model, _mat, k_ref, rhs, nodes) = two_loose_bounds(5.0);
+        let (k_ref, rhs, nodes) = two_loose_bounds(5.0);
         FACTORIZE_CALLS.store(0, Ordering::Relaxed);
-        let sol_ref =
-            solve_with_options(&k_ref, &model, &rhs, &opts(ActiveSetMethod::Refactorize)).unwrap();
+        let sol_ref = crate::ops::solver::solve_with_options(
+            &k_ref,
+            &rhs,
+            &opts(ActiveSetMethod::Refactorize),
+        )
+        .unwrap();
         let n_ref = FACTORIZE_CALLS.load(Ordering::Relaxed);
         assert!(
             n_ref >= 2,
@@ -1129,11 +810,10 @@ mod tests {
         );
 
         // Schur: fresh matrix, only the base is factorized (1 call).
-        let (model_s, _m2, k_schur, rhs_s, _n2) = two_loose_bounds(5.0);
+        let (k_schur, rhs_s, _n2) = two_loose_bounds(5.0);
         FACTORIZE_CALLS.store(0, Ordering::Relaxed);
-        let sol_schur = solve_with_options(
+        let sol_schur = crate::ops::solver::solve_with_options(
             &k_schur,
-            &model_s,
             &rhs_s,
             &opts(ActiveSetMethod::SchurComplement),
         )
@@ -1156,21 +836,29 @@ mod tests {
     #[test]
     fn schur_resolve_reuses_the_cached_base() {
         let _guard = COUNT_LOCK.lock().unwrap();
-        let (model, _mat, k, rhs, _nodes) = two_loose_bounds(5.0);
+        let (k, rhs, nodes) = two_loose_bounds(5.0);
         FACTORIZE_CALLS.store(0, Ordering::Relaxed);
-        let first =
-            solve_with_options(&k, &model, &rhs, &opts(ActiveSetMethod::SchurComplement)).unwrap();
+        let first = crate::ops::solver::solve_with_options(
+            &k,
+            &rhs,
+            &opts(ActiveSetMethod::SchurComplement),
+        )
+        .unwrap();
         assert_eq!(FACTORIZE_CALLS.load(Ordering::Relaxed), 1);
 
         // Second solve: base cached on the matrix, nothing refactorized.
-        let again =
-            solve_with_options(&k, &model, &rhs, &opts(ActiveSetMethod::SchurComplement)).unwrap();
+        let again = crate::ops::solver::solve_with_options(
+            &k,
+            &rhs,
+            &opts(ActiveSetMethod::SchurComplement),
+        )
+        .unwrap();
         assert_eq!(
             FACTORIZE_CALLS.load(Ordering::Relaxed),
             1,
             "the cached base must be reused (no new factorization)"
         );
-        for node in &_nodes {
+        for node in &nodes {
             assert_eq!(
                 first.value(node.id(), "T").unwrap(),
                 again.value(node.id(), "T").unwrap()

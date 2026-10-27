@@ -1,5 +1,6 @@
 //! Constraint imposition by **master/slave elimination** (condensation) — the
-//! alternative to the Lagrange-multiplier path ([`super::lu`]).
+//! path of [`super::solve`] with [`RelationMethod::Eliminate`](super::RelationMethod::Eliminate),
+//! the alternative to the Lagrange multipliers.
 //!
 //! A constraint relation `Σₖ aₖ·u(nodeₖ,varₖ) = g` is enforced by picking one
 //! term as the **slave** `s` and expressing its DOF from the others (the
@@ -23,14 +24,13 @@
 //! The multiplier-equivalent **reaction** is recovered in post-processing as the
 //! residual `−(K·u − f)` at each slave's dual row (`= aₛ·λ`).
 //!
-//! # Method-neutral input
+//! # Input
 //!
-//! The constraint structure is read from [`Constraint::relations()`](crate::models::Constraint::relations)
-//! — the same seam the Lagrange path builds its `C`/`Cᵀ` blocks from — so the
-//! user's mesh-per-term input is never re-parsed here. The physics stiffness `K`
-//! is taken *numerically* from the assembled saddle-point [`Matrix`]: the
-//! physics×physics sub-block is clean `K` (the multiplier nodes are minted fresh,
+//! Everything is read from the assembled saddle-point [`Matrix`]: the relations
+//! are its rows named `imposed` ([`relation_rows`]), and the physics stiffness
+//! `K` is its physics×physics sub-block (the multiplier nodes are minted fresh,
 //! so they never coincide with a physics node — the DOF partition is exact).
+//! The reaction of each slave is returned in the dual row conjugate to it.
 //!
 //! # v1 scope: non-chained, disjoint slaves
 //!
@@ -40,18 +40,19 @@
 //! that is itself a slave elsewhere) are out of scope for v1.
 
 use crate::atoms::NodeId;
-use crate::containers::matrix::{dof_key, dof_node, DofKey, Matrix};
-use crate::containers::model::Model;
+use crate::containers::matrix::{dof_node, dof_var, DofKey, Matrix};
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
-use crate::interrupt::{Cancel, NoCancel};
-use crate::models::IMPOSED;
+use crate::interrupt::Cancel;
+use crate::models::{RelationSense, IMPOSED};
 use nalgebra::DVector;
 use nalgebra_sparse::{CooMatrix, CsrMatrix};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 
-use super::lu::{self, factorize_csr, Factored, SolveOptions};
+use super::lu::{self, factorize_csr, Factored};
+use super::relations::{relation_rows, RelationRow};
+use super::SolveOptions;
 
 /// One eliminated slave DOF and the data needed to build `u₀` and recover its
 /// reaction. The masters are folded into `T` at build time, so they are not kept.
@@ -68,50 +69,10 @@ struct SlaveInfo {
     multiplier_node: NodeId,
 }
 
-/// The condensation of a model's constraints against an assembled matrix — the
-/// expensive artifact cached transparently on the [`Matrix`] (exactly like
-/// [`super::lu::Factorization`]; cleared on any matrix mutation).
-///
-/// ```
-/// # use pyrucast::models::symmetry::MaterialSymmetry;
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let n: Vec<Node> = (0..3)
-/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-/// #     .collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&impose, &cible, "T",
-/// #                              RelationSense::Equality).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
-/// #                                      vec!["imposed".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
-/// // The elimination's costly artefact, cached on the matrix just like the LU
-/// // factorization — and cleared as soon as the matrix changes.
-/// # use pyrucast::ops::solver::eliminate::Condensation;
-/// # use pyrucast::ops::model;
-/// assert!(k.cached_factorization::<Condensation>().is_none());
-/// solver::eliminate::solve(&k, &modele, &charge)?;
-/// assert!(k.cached_factorization::<Condensation>().is_some());
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub struct Condensation {
+/// The condensation of a matrix's relations — the expensive artifact cached
+/// transparently on the [`Matrix`] (exactly like the LU factorization;
+/// cleared on any matrix mutation).
+pub(super) struct Condensation {
     /// Prolongation `T` (`n_phys × n_free`): `u_phys = T·û + u₀`.
     t: CsrMatrix<f64>,
     /// `Tᵀ` (`n_free × n_phys`), kept to avoid re-transposing at each solve.
@@ -140,238 +101,30 @@ impl Condensation {
     }
 }
 
-/// Solve `model`'s system by master/slave elimination, using the default options
-/// (reduced sparse LU, condensation cached). `matrix` is the assembled
-/// saddle-point stiffness of `model` (as produced by
-/// [`crate::ops::matrix::stiffness`]); `rhs` is the load field (its `g` values
-/// live at the multiplier nodes' imposed-value slots).
-///
-/// A model with no constraint falls back to a plain [`lu::solve`].
-///
-/// ```
-/// # use pyrucast::models::symmetry::MaterialSymmetry;
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-/// # use pyrucast::ops::model;
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let n: Vec<Node> = (0..3)
-/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-/// #     .collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&impose, &cible, "T",
-/// #                              RelationSense::Equality).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
-/// #                                      vec!["imposed".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
-/// // The **alternative** path to Lagrange: the slaves are eliminated instead
-/// // of enlarging the system. Same solution, smaller system.
-/// let par_elimination = solver::eliminate::solve(&k, &modele, &charge)?;
-/// let par_lagrange = solver::lu::solve(&k, &charge)?;
-/// let lu = |f: &NodeField| f.get(0).unwrap().read().value(n[2].id(), "T").unwrap();
-/// assert!((lu(&par_elimination) - lu(&par_lagrange)).abs() < 1e-9);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn solve(matrix: &Matrix, model: &Model, rhs: &NodeField) -> Result<NodeField> {
-    solve_inner(matrix, model, rhs, &SolveOptions::default(), &NoCancel)
-}
-
-/// Like [`solve`] but with explicit [`SolveOptions`] (`method` selects the direct
-/// back-end for the *reduced* system; `cache` toggles the condensation cache).
-///
-/// ```
-/// # use pyrucast::models::symmetry::MaterialSymmetry;
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let n: Vec<Node> = (0..3)
-/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-/// #     .collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&impose, &cible, "T",
-/// #                              RelationSense::Equality).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
-/// #                                      vec!["imposed".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
-/// # use pyrucast::ops::solver::lu::SolveOptions;
-/// # use pyrucast::ops::model;
-/// // `method` picks the **reduced** system's direct engine; `cache`
-/// // pilote la condensation.
-/// let u = solver::eliminate::solve_with_options(
-///     &k, &modele, &charge, &SolveOptions::default())?;
-/// assert!((u.get(0)?.read().value(n[2].id(), "T")? - 100.0).abs() < 1e-9);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn solve_with_options(
+/// The elimination path of [`super::solve`].
+pub(super) fn solve(
     matrix: &Matrix,
-    model: &Model,
-    rhs: &NodeField,
-    options: &SolveOptions,
-) -> Result<NodeField> {
-    solve_inner(matrix, model, rhs, options, &NoCancel)
-}
-
-/// Like [`solve`], but polls `cancel` at each phase boundary so the call can be
-/// stopped early (returning [`PyrucastError::Interrupted`]). Same granularity as
-/// [`lu::solve_cancellable`]: the heavy library calls are not interrupted
-/// mid-way, only around them.
-///
-/// ```
-/// # use pyrucast::models::symmetry::MaterialSymmetry;
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let n: Vec<Node> = (0..3)
-/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-/// #     .collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&impose, &cible, "T",
-/// #                              RelationSense::Equality).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
-/// #                                      vec!["imposed".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
-/// # use std::sync::atomic::{AtomicBool, Ordering};
-/// # use pyrucast::ops::model;
-/// let stop = AtomicBool::new(false);
-/// assert!(solver::eliminate::solve_cancellable(&k, &modele, &charge, &stop).is_ok());
-/// stop.store(true, Ordering::Relaxed);
-/// assert!(solver::eliminate::solve_cancellable(&k, &modele, &charge, &stop).is_err());
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn solve_cancellable(
-    matrix: &Matrix,
-    model: &Model,
-    rhs: &NodeField,
-    cancel: &dyn Cancel,
-) -> Result<NodeField> {
-    solve_inner(matrix, model, rhs, &SolveOptions::default(), cancel)
-}
-
-/// [`solve_cancellable`] with explicit [`SolveOptions`] — the full form the
-/// Python binding routes to.
-///
-/// ```
-/// # use pyrucast::models::symmetry::MaterialSymmetry;
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let n: Vec<Node> = (0..3)
-/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-/// #     .collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
-/// #     .union(&model::dirichlet(&impose, &cible, "T",
-/// #                              RelationSense::Equality).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
-/// #                                      vec!["imposed".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
-/// # use pyrucast::ops::solver::lu::SolveOptions;
-/// # use std::sync::atomic::AtomicBool;
-/// # use pyrucast::ops::model;
-/// let stop = AtomicBool::new(false);
-/// let u = solver::eliminate::solve_cancellable_with_options(
-///     &k, &modele, &charge, &SolveOptions::default(), &stop)?;
-/// assert!(u.node_count()? > 0);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn solve_cancellable_with_options(
-    matrix: &Matrix,
-    model: &Model,
-    rhs: &NodeField,
-    options: &SolveOptions,
-    cancel: &dyn Cancel,
-) -> Result<NodeField> {
-    solve_inner(matrix, model, rhs, options, cancel)
-}
-
-fn solve_inner(
-    matrix: &Matrix,
-    model: &Model,
     rhs: &NodeField,
     options: &SolveOptions,
     cancel: &dyn Cancel,
 ) -> Result<NodeField> {
     cancel.check()?;
 
-    // No constraint ⇒ elimination is a no-op; solve the matrix as-is.
-    if !has_constraint(model) {
-        return lu::solve_cancellable_with_options(matrix, rhs, options, cancel);
-    }
-
     // ── Step 1 — obtain the condensation (cached or fresh) ─────────────
-    let cond: Arc<Condensation> = if options.cache {
-        match matrix.cached_factorization::<Condensation>() {
-            Some(c) => c,
-            None => {
-                let c = Arc::new(build_condensation(model, matrix, options)?);
-                matrix.store_factorization(c.clone());
-                c
+    let cond: Arc<Condensation> = match matrix.cached_factorization::<Condensation>() {
+        Some(c) if options.cache => c,
+        _ => {
+            let relations = relation_rows(matrix)?;
+            // No relation ⇒ elimination is a no-op; solve the matrix as-is.
+            if relations.is_empty() {
+                return lu::solve(matrix, rhs, options, cancel);
             }
+            let c = Arc::new(build_condensation(matrix, relations, options)?);
+            if options.cache {
+                matrix.store_factorization(c.clone());
+            }
+            c
         }
-    } else {
-        Arc::new(build_condensation(model, matrix, options)?)
     };
     cancel.check()?;
 
@@ -434,52 +187,30 @@ fn solve_inner(
     NodeField::from_dof_values(rhs.coords()?, &out_dofs, &out_vals)
 }
 
-/// Whether `model` carries at least one constraint sub-model.
-fn has_constraint(model: &Model) -> bool {
-    for h in model {
-        if h.read().as_kind().as_constraint().is_some() {
-            return true;
-        }
-    }
-    false
-}
-
 /// Build the [`Condensation`]: partition physics vs multiplier DOFs, extract the
 /// physics stiffness, read the relations, pick slaves, assemble `T` and factorize
 /// the reduced matrix.
 fn build_condensation(
-    model: &Model,
     matrix: &Matrix,
+    relations: Vec<RelationRow>,
     options: &SolveOptions,
 ) -> Result<Condensation> {
-    // ── Collect the relations of every constraint ──────────────────────
-    let mut relations: Vec<crate::models::Relation> = Vec::new();
-    for h in model {
-        let sub = h.read();
-        if let Some(constraint) = sub.as_kind().as_constraint() {
-            for rel in constraint.relations()? {
-                // Condensation enforces its relations unconditionally — a
-                // unilateral relation needs the active-set solver instead.
-                if rel.sense != crate::models::RelationSense::Equality {
-                    return Err(PyrucastError::Message(format!(
-                        "elimination: relation at multiplier node {:?} is unilateral \
-                         ('{}') — solve it with solve_unilateral",
-                        rel.multiplier_node, rel.sense
-                    )));
-                }
-                relations.push(rel);
-            }
-        }
+    // Condensation enforces its relations unconditionally — a unilateral
+    // relation needs the active-set loop instead.
+    if let Some(r) = relations
+        .iter()
+        .find(|r| r.sense != RelationSense::Equality)
+    {
+        return Err(PyrucastError::Message(format!(
+            "elimination: the relation at multiplier node {:?} is unilateral ('{}') — \
+             solve it with relations=\"lagrange\"",
+            r.multiplier, r.sense
+        )));
     }
 
     // ── Partition the matrix DOFs: multiplier nodes vs physics ─────────
-    let mult_nodes: HashSet<NodeId> = relations.iter().map(|r| r.multiplier_node).collect();
+    let mult_nodes: HashSet<NodeId> = relations.iter().map(|r| r.multiplier).collect();
     let vars = matrix.dof_vars();
-    let slot_of: HashMap<&str, u32> = vars
-        .iter()
-        .enumerate()
-        .map(|(i, v)| (v.as_str(), i as u32))
-        .collect();
     let full_row = matrix.row_dof_keys()?;
     let full_col = matrix.col_dof_keys()?;
 
@@ -497,12 +228,9 @@ fn build_condensation(
     }
     let mut phys_col_keys = Vec::new();
     let mut full_col_to_phys = vec![usize::MAX; full_col.len()];
-    let mut pos_of_col: HashMap<DofKey, usize> = HashMap::new();
     for (j, &dof) in full_col.iter().enumerate() {
         if !mult_nodes.contains(&dof_node(dof)) {
-            let idx = phys_col_keys.len();
-            full_col_to_phys[j] = idx;
-            pos_of_col.insert(dof, idx);
+            full_col_to_phys[j] = phys_col_keys.len();
             phys_col_keys.push(dof);
         }
     }
@@ -553,74 +281,69 @@ fn build_condensation(
         s_idx: usize,
         a_s: f64,
         masters: Vec<(usize, f64)>,
-        slave_node: NodeId,
-        target_dual: String,
         multiplier_node: NodeId,
     }
     let mut records: Vec<SlaveRecord> = Vec::with_capacity(relations.len());
     let mut slave_set: HashSet<usize> = HashSet::new();
     let mut master_set: HashSet<usize> = HashSet::new();
     for rel in &relations {
-        // Resolve every term to a physics index.
-        let mut resolved: Vec<(usize, &crate::models::ConstraintTerm)> =
-            Vec::with_capacity(rel.terms.len());
-        for term in &rel.terms {
-            let idx = slot_of
-                .get(term.variable.as_str())
-                .and_then(|&s| pos_of_col.get(&dof_key(term.node, s)))
-                .copied()
-                .ok_or_else(|| {
-                    PyrucastError::Message(format!(
-                        "elimination: term ({:?}, '{}') is not a physics DOF of the matrix",
-                        term.node, term.variable
-                    ))
-                })?;
-            resolved.push((idx, term));
+        // Resolve every term to a physics index: a relation that reaches a
+        // multiplier column is not one an elimination can express.
+        let mut resolved: Vec<(usize, f64)> = Vec::with_capacity(rel.terms.len());
+        for &(col, coefficient) in &rel.terms {
+            let idx = full_col_to_phys[col];
+            if idx == usize::MAX {
+                let key = full_col[col];
+                return Err(PyrucastError::Message(format!(
+                    "elimination: the relation at multiplier node {:?} reaches ({:?}, '{}'), \
+                     which is not a physics DOF of the matrix",
+                    rel.multiplier,
+                    dof_node(key),
+                    vars[dof_var(key) as usize]
+                )));
+            }
+            resolved.push((idx, coefficient));
         }
         // Slave = the **available** term (not already a slave or a master of
         // another relation) with the largest |coefficient| — the numerically
         // safest denominator that also keeps shared masters as masters. If no
         // term is available, every DOF of this relation is already constrained:
         // that is a chained/over-constrained system, out of v1 scope.
-        let (slave_pos, &(s_idx, slave_term)) = resolved
+        let (slave_pos, &(s_idx, a_s)) = resolved
             .iter()
             .enumerate()
             .filter(|(_, (idx, _))| !slave_set.contains(idx) && !master_set.contains(idx))
-            .max_by(|a, b| {
-                a.1 .1
-                    .coefficient
-                    .abs()
-                    .total_cmp(&b.1 .1.coefficient.abs())
-            })
+            .max_by(|a, b| a.1 .1.abs().total_cmp(&b.1 .1.abs()))
             .ok_or_else(|| {
                 PyrucastError::Message(format!(
                     "elimination: relation at multiplier node {:?} has no eliminable \
                      DOF — all its terms are already constrained (chaining is out of \
                      scope, v1)",
-                    rel.multiplier_node
+                    rel.multiplier
                 ))
             })?;
-        let a_s = slave_term.coefficient;
         if a_s == 0.0 {
             return Err(PyrucastError::Message(format!(
                 "elimination: relation at multiplier node {:?} has no term with a \
                  nonzero coefficient",
-                rel.multiplier_node
+                rel.multiplier
             )));
         }
         let mut masters = Vec::with_capacity(resolved.len() - 1);
-        for (p, &(m_idx, term)) in resolved.iter().enumerate() {
+        for (p, &(m_idx, coefficient)) in resolved.iter().enumerate() {
             if p == slave_pos {
                 continue;
             }
             if slave_set.contains(&m_idx) {
+                let key = phys_col_keys[m_idx];
                 return Err(PyrucastError::Message(format!(
                     "elimination: master DOF ({:?}, '{}') is a slave of another \
                      relation — chaining is out of scope (v1)",
-                    term.node, term.variable
+                    dof_node(key),
+                    vars[dof_var(key) as usize]
                 )));
             }
-            masters.push((m_idx, term.coefficient));
+            masters.push((m_idx, coefficient));
         }
         slave_set.insert(s_idx);
         master_set.extend(masters.iter().map(|(m, _)| *m));
@@ -628,9 +351,7 @@ fn build_condensation(
             s_idx,
             a_s,
             masters,
-            slave_node: slave_term.node,
-            target_dual: slave_term.target_dual.clone(),
-            multiplier_node: rel.multiplier_node,
+            multiplier_node: rel.multiplier,
         });
     }
 
@@ -683,12 +404,15 @@ fn build_condensation(
         options,
     )?;
 
+    // The slave's node, and the dual row its reaction lands in: the physics
+    // rows and columns are conjugate-aligned (checked above), so the row of the
+    // same physics index is the slave's dual.
     let slaves = records
         .into_iter()
         .map(|r| SlaveInfo {
             phys_idx: r.s_idx,
-            slave_node: r.slave_node,
-            target_dual: r.target_dual,
+            slave_node: dof_node(phys_col_keys[r.s_idx]),
+            target_dual: vars[dof_var(phys_row_keys[r.s_idx]) as usize].clone(),
             a_s: r.a_s,
             multiplier_node: r.multiplier_node,
         })
@@ -716,6 +440,7 @@ mod tests {
     use crate::containers::matrix::Symmetry;
     use crate::containers::matrix::{DofOrdering, SubMatrix};
     use crate::containers::mesh::SubMesh;
+    use crate::containers::model::Model;
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
     use crate::handle::Handle;
@@ -768,12 +493,97 @@ mod tests {
             method: crate::ops::solver::lu::SolveMethod::Cholesky,
             ..Default::default()
         };
-        let cond = build_condensation(&model, &m, &ask_cholesky).unwrap();
+        let cond = build_condensation(&m, relation_rows(&m).unwrap(), &ask_cholesky).unwrap();
         assert_eq!(cond.method(), "cholesky");
 
         // And the default takes the LU, on the very same reduced system.
-        let cond = build_condensation(&model, &m, &SolveOptions::default()).unwrap();
+        let cond =
+            build_condensation(&m, relation_rows(&m).unwrap(), &SolveOptions::default()).unwrap();
         assert_eq!(cond.method(), "lu");
+    }
+
+    /// The condensation is cached on the matrix by the first elimination solve,
+    /// reused by the next, and dropped as soon as the matrix changes.
+    #[test]
+    fn condensation_cached_then_invalidated() {
+        use crate::containers::element_field::{ElementField, SubElementField};
+        use crate::containers::field::SubField;
+        use crate::containers::finite_element_space::FiniteElementSpace;
+        use crate::containers::mesh::Mesh;
+        use crate::containers::model::SubModel;
+
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let nodes: Vec<Node> = (0..=2)
+            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
+            .collect();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+        for i in 0..2 {
+            mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()]).unwrap();
+        }
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let sub = fes.get(0).unwrap();
+        let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
+        mat.set_uniform("k", 1.0).unwrap();
+        let mut materials = ElementField::empty();
+        materials.add_sub(Handle::new(mat)).unwrap();
+        let mut model = Model::empty();
+        model
+            .add_sub(Handle::new(
+                SubModel::heat_conduction(sub, MaterialSymmetry::Isotropic).unwrap(),
+            ))
+            .unwrap();
+        let imposed =
+            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
+        let clamp = SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap();
+        let mult = clamp.multiplier_nodes()[0];
+        model.add_sub(Handle::new(clamp)).unwrap();
+        let mut k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
+
+        let sm = {
+            let mut sm = SubMesh::new(coords, ElementType::POI1);
+            sm.add_cell(&[mult]).unwrap();
+            Handle::new(sm)
+        };
+        let mut rhs = SubNodeField::from_poi1(&sm, vec![IMPOSED.into()]).unwrap();
+        rhs.set_value(mult, IMPOSED, 5.0).unwrap();
+        let rhs = NodeField::from_sub(rhs);
+        let eliminate = SolveOptions {
+            relations: crate::ops::solver::RelationMethod::Eliminate,
+            ..Default::default()
+        };
+
+        assert!(k.cached_factorization::<Condensation>().is_none());
+        let s1 = crate::ops::solver::solve_with_options(&k, &rhs, &eliminate).unwrap();
+        assert!(k.cached_factorization::<Condensation>().is_some());
+        let s2 = crate::ops::solver::solve_with_options(&k, &rhs, &eliminate).unwrap();
+        for node in &nodes {
+            let (a, b) = (
+                s1.value(node.id(), "T").unwrap(),
+                s2.value(node.id(), "T").unwrap(),
+            );
+            assert_eq!(a, b);
+            assert!((a - 5.0).abs() < 1e-12);
+        }
+
+        // Any change to the matrix drops what was cached.
+        let other = Handle::new(Coords::new(1).unwrap());
+        let b = Node::create_in(other.clone(), &[0.0]).unwrap();
+        let bsm = {
+            let mut bsm = SubMesh::new(other, ElementType::POI1);
+            bsm.add_cell(&[b.id()]).unwrap();
+            Handle::new(bsm)
+        };
+        let mut block = SubMatrix::new(
+            bsm.clone(),
+            bsm,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            Symmetry::None,
+        );
+        block.add_entry(b.id(), "q", b.id(), "T", 4.0).unwrap();
+        k.add_sub(Handle::new(block)).unwrap();
+        assert!(k.cached_factorization::<Condensation>().is_none());
     }
 
     /// A constraint-free model must route through the plain LU solver: a
@@ -804,8 +614,11 @@ mod tests {
         rhs.set_value(a.id(), "q", 6.0).unwrap();
         let rhs = NodeField::from_sub(rhs);
 
-        let model = Model::empty();
-        let sol = solve(&m, &model, &rhs).unwrap();
+        let eliminate = SolveOptions {
+            relations: crate::ops::solver::RelationMethod::Eliminate,
+            ..Default::default()
+        };
+        let sol = crate::ops::solver::solve_with_options(&m, &rhs, &eliminate).unwrap();
         assert!((sol.value(a.id(), "T").unwrap() - 3.0).abs() < 1e-12);
     }
 }

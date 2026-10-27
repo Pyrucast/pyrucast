@@ -80,8 +80,8 @@ Résolution;VIBR;Modes propres de vibration;—
 Résolution;FLAM;Modes de flambage;—
 Résolution;INVE (mat.);Inverse d'une matrice;solve (résolution dense LU)
 Résolution;KRES;Résolution avec conditions (rigidité + blocages);solve
-Résolution;CONDENSATION;Élimination des relations linéaires (maître/esclave) au lieu de multiplicateurs;solve_eliminate
-Résolution;RESO (INEG);Résolution avec relations unilatérales (statut actif/inactif);solve_unilateral
+Résolution;CONDENSATION;Élimination des relations linéaires (maître/esclave) au lieu de multiplicateurs;solve (relations="eliminate")
+Résolution;RESO (INEG);Résolution avec relations unilatérales (statut actif/inactif);solve (le sens est lu dans la matrice)
 Champs - dérivation;GRAD;Gradient d'un champ aux points de Gauss;gradient
 Champs - dérivation;EPSI;Déformations à partir d'un déplacement;strain (avec modèle : l'entrée de chaque loi, toutes physiques ; la mesure est celle de la loi, strain_measure) / deformation (sans ; measure : linéaire, F, Green–Lagrange, Cauchy-Green, Hencky, Almansi) / beam_deformation / shell_deformation
 Champs - dérivation;SIGM;Contraintes à partir des déformations;integrate_behavior

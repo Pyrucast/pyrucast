@@ -113,7 +113,7 @@ Newton modifié demande alors davantage d'itérations, accélérées par Anderso
 
 Cast3M pilote aussi le contact par `PASAPAS` (table `tab3`, section 10).
 Pour un seul chargement, le contact se résout directement par le solveur
-actif-set `pyrucast.solver.solve_unilateral` ; `step_by_step` le compose avec
+actif-set que `pyrucast.solver.solve` lance de lui-même ; `step_by_step` le compose avec
 la thermique, la plasticité et les pas de charge quand il faut une histoire.
 Ici, un patch-test classique (deux blocs superposés, jeu initial, pression
 sur le bloc du haut) :

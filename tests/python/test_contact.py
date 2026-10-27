@@ -1,5 +1,5 @@
 """Python tests for node-to-surface contact (`model.contact`) solved by the
-active-set operator `solve_unilateral`.
+active-set loop of `solve`.
 
 Patch test: two elastic blocks stacked in `y` with an initial gap, every `u_x`
 blocked (uniaxial column, plane stress, ν = 0). Pressing the top block closes
@@ -84,7 +84,7 @@ def test_patch_test_uniform_pressure_through_contact():
     rhs = traction | model.contact_gaps()
 
     k = pyrucast.matrix.stiffness(model, materials)
-    solution = pyrucast.solver.solve_unilateral(k, model, rhs)
+    solution = pyrucast.solver.solve(k, rhs)
 
     for j in range(N + 1):
         for i in range(N + 1):
@@ -116,7 +116,7 @@ def test_separation_releases_every_pair():
     rhs = rhs | model.contact_gaps()
 
     k = pyrucast.matrix.stiffness(model, materials)
-    solution = pyrucast.solver.solve_unilateral(k, model, rhs)
+    solution = pyrucast.solver.solve(k, rhs)
 
     for j in range(N + 1):
         for i in range(N + 1):

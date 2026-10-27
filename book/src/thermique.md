@@ -95,7 +95,7 @@ Le pipeline est toujours le même :
      nodales cohérentes par l'opérateur [`flux`](#exemple--un-carré) (analogue
      de `FLUX`/`PRES` de Cast3M).
 7. **Assemblage + résolution** — `matrix::stiffness` puis le solveur
-   `solver::lu::solve` (LU creuse directe, voir [Modèle physique](model.md)).
+   `solver::solve` (LU creuse directe, voir [Modèle physique](model.md)).
 
 ### Exemple : ligne chauffée
 

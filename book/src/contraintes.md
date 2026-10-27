@@ -43,7 +43,7 @@ mute jamais le `Coords`.
 ## Imposition par élimination (condensation)
 
 Voie **alternative** aux multiplicateurs, sélectionnée au moment de la résolution
-avec [`solve_eliminate`](operateurs/solveur.md) au lieu de `solve`. Plutôt que
+par [`solve(…, relations="eliminate")`](operateurs/solveur.md). Plutôt que
 d'agrandir le système, on **élimine** chaque relation : un terme *esclave* `s`
 est exprimé par les *maîtres*,
 
@@ -87,8 +87,8 @@ admissible et `λ = 0`). Avec la convention des blocs assemblés
 relation `≥` active, `λ ≥ 0` pour une `≤` active.
 
 Comme l'ensemble actif n'est pas connu d'avance, la résolution est itérative —
-la **méthode du statut** (*active-set*), portée par l'opérateur
-[`solve_unilateral`](operateurs/solveur.md) :
+la **méthode du statut** (*active-set*), que [`solve`](operateurs/solveur.md)
+lance dès que la matrice porte une inégalité :
 
 1. statut initial : toutes les inégalités actives (ou le statut convergé
    précédent quand le cache est chaud — *warm start*) ;
@@ -102,15 +102,15 @@ la **méthode du statut** (*active-set*), portée par l'opérateur
    de la méthode du statut classique, bornée par `max_iter`).
 
 ```python
-{{#include ../../tests/python/test_doc_contraintes.py:solve_unilateral}}
+{{#include ../../tests/python/test_doc_contraintes.py:solve_inequalities}}
 ```
 
 Les relations inactives sortent avec `λ = 0` exact ; la solution a la même
-forme que la voie Lagrange (primal + multiplicateurs). L'assemblage est
-**inchangé** — le `sense` n'est lu que par les solveurs : `solve` sur un modèle
-unilatéral résout la version « tout collé » (toutes les relations en égalité),
-et `solve_eliminate` le **refuse** avec une erreur explicite. Un modèle sans
-inégalité retombe sur le `solve` ordinaire.
+forme que la voie Lagrange (primal + multiplicateurs). Les coefficients
+assemblés sont **inchangés** : le `sense` est posé sur le bloc `C` de la
+contrainte, et c'est là que `solve` le lit — aucun modèle n'est passé à la
+résolution, aucun ne peut contredire la matrice. Une matrice sans inégalité
+est résolue par la factorisation ordinaire.
 
 Le second membre `g` (la borne) suit le mécanisme habituel : au slot
 `imposed` du nœud-multiplicateur, donc `constraint_rhs` fonctionne tel
@@ -169,7 +169,7 @@ un index dépasse le nombre de relations.
   maillage **esclave** de pénétrer une surface **maître** : une relation
   **unilatérale** (`≥`) par nœud esclave, à coefficients `n·Nᵢ` calculés par
   **projection** à la construction (petits glissements, sans frottement).
-  Résolu par `solve_unilateral`.
+  Résolu par `solve`, qui y trouve des inégalités.
 
 D'autres contraintes suivront le même patron : une struct
 implémentant `SubModelKind`, des blocs `C`/`Cᵀ` littéraux. Voir [Ajouter une

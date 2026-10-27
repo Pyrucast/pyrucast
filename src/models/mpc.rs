@@ -132,7 +132,7 @@ impl Mpc {
     ///
     /// A non-equality `sense` turns the relations unilateral (enforced only
     /// while active); such a model is solved by the active-set operator
-    /// [`unilateral`](crate::ops::solver::unilateral).
+    /// [`solve`](crate::ops::solver::solve).
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -286,6 +286,7 @@ impl SubModelKind for Mpc {
                     &t.variable,
                     &t.target_dual,
                     t.coefficient,
+                    self.sense,
                 )?;
                 blocks.push(c_block);
                 blocks.push(ct_block);

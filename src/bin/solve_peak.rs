@@ -17,9 +17,9 @@
 //!              before/after reference
 //!   thermal-lu        n×n×n HEX8 heat conduction, bottom face held by
 //!                     Lagrange multipliers, through the public
-//!                     `solver::lu::solve` — the path a user's script takes
+//!                     `solver::solve` — the path a user's script takes
 //!   thermal-cholesky  the same cube, constraints eliminated, then Cholesky
-//!                     (`solver::eliminate`) — the SPD path
+//!                     (`relations: Eliminate`) — the SPD path
 //!   n          grid size → n×n×n HEX8 cells, 3-D elasticity (default 20)
 //! ```
 //!
@@ -33,7 +33,7 @@
 //! so running two paths in one process would report the worse of the two for
 //! both.
 //!
-//! The solve modes mirror `ops::solver::lu` rather than calling it: its entry
+//! The solve modes mirror the LU path of `ops::solver` rather than calling it: its entry
 //! points are `pub(crate)`, and a binary is a separate crate. They are kept
 //! faithful to it by hand — if that module's handover to faer changes, they
 //! change with it.
@@ -219,7 +219,7 @@ fn build_cube(n: usize) -> (Model, ElementField) {
     (model, materials)
 }
 
-/// CSR → CSC by counting sort, as `ops::solver::lu::transpose_to_csc` does.
+/// CSR → CSC by counting sort, as the LU path of `ops::solver` does.
 fn transpose_to_csc(
     n: usize,
     offsets: &[usize],
@@ -258,7 +258,7 @@ fn thermal(n: usize, eliminate: bool) {
     use pyrucast::aggregate::Aggregate;
     use pyrucast::containers::node_field::NodeField;
     use pyrucast::models::RelationSense;
-    use pyrucast::ops::solver::lu::{SolveMethod, SolveOptions};
+    use pyrucast::ops::solver::{RelationMethod, SolveMethod, SolveOptions};
     use pyrucast::ops::{mesh, solver};
 
     let path = if eliminate {
@@ -333,15 +333,16 @@ fn thermal(n: usize, eliminate: bool) {
         } else {
             SolveMethod::Lu
         },
+        relations: if eliminate {
+            RelationMethod::Eliminate
+        } else {
+            RelationMethod::Lagrange
+        },
         cache: false,
         ..Default::default()
     };
     let (u, anon, file) = stage_peaks("solve (factorize + substitute)", || {
-        if eliminate {
-            solver::eliminate::solve_with_options(&k, &m, &rhs, &options).unwrap()
-        } else {
-            solver::lu::solve_with_options(&k, &rhs, &options).unwrap()
-        }
+        solver::solve_with_options(&k, &rhs, &options).unwrap()
     });
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     let mut counted = 0usize;
@@ -375,7 +376,7 @@ fn thermal(n: usize, eliminate: bool) {
 }
 
 /// A constrained thermal bar of `n` SEG2, solved through the public
-/// `solver::lu::solve`, reported as a hash of the **bit patterns** of its
+/// `solver::solve`, reported as a hash of the **bit patterns** of its
 /// solution.
 ///
 /// The acceptance check for any change to the handover to faer: what reaches
@@ -413,7 +414,7 @@ fn solve_fingerprint(n: usize) -> (usize, u64) {
         .set_value(mult_node.id(), "imposed", 1.0)
         .unwrap();
 
-    let u = solver::lu::solve(&k, &rhs).unwrap();
+    let u = solver::solve(&k, &rhs).unwrap();
     // FNV-1a over each value's raw bits, in node order — deterministic, and
     // sensitive to the last bit.
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;

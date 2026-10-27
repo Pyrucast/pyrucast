@@ -186,8 +186,7 @@ Two practical consequences:
 
 - **An argument order that does not put the subject first is a defect to fix,
   not a reason to give up the method.** That is what moved
-  `internal_forces(model, stresses)` to `(stresses, model)` and
-  `solve_eliminate(model, matrix, rhs)` to `(matrix, model, rhs)`.
+  `internal_forces(model, stresses)` to `(stresses, model)`.
 - **A symmetric operation has no method**: `a.merge(b)` would suggest that
   order matters. `merge` is the named alias of `a | b` — the operator already
   gives the symmetric form, and that is enough.

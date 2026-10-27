@@ -35,7 +35,7 @@ use pyrucast::models::interface_transfer::DEFAULT_TOL;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::{Physics, IMPOSED};
 use pyrucast::ops::model;
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 /// The diffusing species — every name of the Fick physics carries it.

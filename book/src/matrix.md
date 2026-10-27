@@ -82,7 +82,7 @@ Pour qui veut une matrice creuse d'une autre bibliothèque, des conversions **à
 Mais **le solveur n'en emprunte aucune**. La forme assemblée n'a pas besoin d'être
 convertie, seulement d'être regardée sous le bon angle : une CSR est, octet pour
 octet, la CSC de la transposée, et une CSC triée sans doublon est exactement ce que
-le LU creux de faer demande. `ops::solver::lu` lit donc les tableaux par
+le LU creux de faer demande. La voie LU d'`ops::solver` lit donc les tableaux par
 [`Matrix::csr_arrays`](#api-rust--accès-en-lecture) — **empruntés**, la sparsité
 restant celle du motif — transpose une fois par tri par comptage, et tend à faer
 une vue. Aucune copie de la matrice ne coexiste avec la factorisation, qui est

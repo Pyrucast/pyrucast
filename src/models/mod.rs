@@ -1262,7 +1262,7 @@ pub struct ConstraintTerm {
 
 /// The sense of a constraint relation: an **equality** (the default, always
 /// enforced) or a **unilateral inequality** solved by the active-set operator
-/// [`solver::unilateral`](crate::ops::solver::unilateral).
+/// [`solver::solve`](crate::ops::solver::solve).
 ///
 /// The KKT conditions follow the sign convention of the existing Lagrange
 /// blocks (`Cᵀ·λ` is *added* to the target's dual row):
@@ -1418,7 +1418,8 @@ pub struct Relation {
 /// element-for-element), every entry equal to `coefficient`:
 ///
 /// - **`C`**  — rows `(multiplier, IMPOSED)`, cols `(constrained, variable)`:
-///   the constraint-equation row;
+///   the constraint-equation row, which carries the relations' `sense`
+///   ([`SubMatrix::row_sense`]) for the solver to read;
 /// - **`Cᵀ`** — rows `(constrained, target_dual)`, cols `(multiplier, MULTIPLIER)`:
 ///   the reaction in the target's dual row.
 ///
@@ -1431,6 +1432,7 @@ pub(crate) fn constraint_block_pair(
     variable: &str,
     target_dual: &str,
     coefficient: f64,
+    sense: RelationSense,
 ) -> Result<(SubMatrix, SubMatrix)> {
     // Neither block is symmetric — both are rectangular — but together they are,
     // and this is the one place that knows it: the same coefficient is written
@@ -1456,6 +1458,7 @@ pub(crate) fn constraint_block_pair(
         DofOrdering::NodesThenVars,
         Symmetry::Half(id_c),
     );
+    c.set_row_sense(sense);
     // Cᵀ block: rows = constrained × target_dual, cols = multiplier × MULTIPLIER.
     let mut ct = SubMatrix::new(
         constrained_sm.clone(),

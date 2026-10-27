@@ -34,7 +34,7 @@ use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::Physics;
 use pyrucast::ops::element_field;
 use pyrucast::ops::model;
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 const EMIS: f64 = 0.8; // emissivity

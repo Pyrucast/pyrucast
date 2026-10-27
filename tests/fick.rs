@@ -33,7 +33,7 @@ use pyrucast::models::fick::{dual_var, primal_var};
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::{Physics, IMPOSED, MULTIPLIER};
 use pyrucast::ops::model;
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 /// The diffusing species — every name of this physics carries it.

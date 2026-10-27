@@ -29,7 +29,7 @@ use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::{deformation, interp_to_gauss, thermal_strain, StrainMeasure};
 use pyrucast::ops::model;
 use pyrucast::ops::node_field::internal_forces;
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 #[test]
