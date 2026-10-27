@@ -221,8 +221,9 @@ fn flux_components(space_dim: usize, species: &str) -> Vec<String> {
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::fick::{self, Fick};
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// // The species names everything: the concentration, the flux, the diffusivity.
-/// let f = Fick::new(zone.clone(), "H2")?;
+/// let f = Fick::new(zone.clone(), "H2", MaterialSymmetry::Isotropic)?;
 /// assert_eq!(f.primal_vars(), vec![fick::primal_var("H2")]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -238,41 +239,8 @@ pub struct Fick {
 }
 
 impl Fick {
-    /// **Isotropic** Fickian diffusion of `species` on an FE subspace.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::element_field::SubElementField;
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::{DofOrdering};
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::kernel::assemble_block;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
-    /// #     zone.clone(), vec!["D_H2".into()], &[2.0]).unwrap());
-    /// # use pyrucast::models::fick::Fick;
-    /// # use pyrucast::models::SubModelKind;
-    /// let f = Fick::new(zone.clone(), "H2")?;
-    /// assert_eq!(f.primal_vars(), vec!["c_H2".to_string()]);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn new(fespace: Handle<SubFiniteElementSpace>, species: &str) -> Result<Self> {
-        Self::with_symmetry(fespace, MaterialSymmetry::Isotropic, species)
-    }
-
-    /// Fickian diffusion with an explicit material symmetry — the general
-    /// constructor, of which [`new`](Self::new) is the isotropic case.
+    /// Fickian diffusion of `species` on an FE subspace, with the given
+    /// material symmetry.
     ///
     /// The species names the concentration, the flux and the diffusivity; an
     /// empty one is refused, since it would give back the bare `c`/`j` the
@@ -281,13 +249,10 @@ impl Fick {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::element_field::SubElementField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::{DofOrdering};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::kernel::assemble_block;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -296,22 +261,20 @@ impl Fick {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
-    /// #     zone.clone(), vec!["D_H2".into()], &[2.0]).unwrap());
     /// # use pyrucast::models::fick::Fick;
     /// # use pyrucast::models::SubModelKind;
-    /// let f = Fick::with_symmetry(zone.clone(), MaterialSymmetry::Isotropic, "H2")?;
+    /// let f = Fick::new(zone.clone(), "H2", MaterialSymmetry::Isotropic)?;
+    /// assert_eq!(f.primal_vars(), vec!["c_H2".to_string()]);
     /// assert_eq!(f.dual_vars(), vec!["j_H2".to_string()]);
     /// // An empty species is refused: it would give back the bare `c`/`j` the
     /// // suffix exists precisely to avoid.
-    /// assert!(Fick::with_symmetry(zone.clone(), MaterialSymmetry::Isotropic, "").is_err());
+    /// assert!(Fick::new(zone.clone(), "", MaterialSymmetry::Isotropic).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn with_symmetry(
+    pub fn new(
         fespace: Handle<SubFiniteElementSpace>,
-        symmetry: MaterialSymmetry,
         species: &str,
+        symmetry: MaterialSymmetry,
     ) -> Result<Self> {
         if species.is_empty() {
             return Err(PyrucastError::Message(

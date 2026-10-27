@@ -215,7 +215,7 @@ impl Plasticity {
     /// # use pyrucast::models::plasticity::Plasticity;
     /// # use pyrucast::models::plasticity::law::PlasticLaw;
     /// // The explicit law, and the coherence check between the kinematics and
-    /// // la dimension de l'espace.
+    /// // the space dimension.
     /// # use pyrucast::ops::element_field::StrainMeasure;
     /// let p = Plasticity::with_law(
     ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Isotropic, StrainMeasure::Linear)?;
@@ -241,7 +241,7 @@ impl Plasticity {
 
 impl Plasticity {
     /// The preamble common to both point kernels: the matter read by
-    /// position, `ε(B)`, et l'état en A reconstruit en 3-D plein.
+    /// position, `ε(B)`, and the state at A rebuilt in full 3-D.
     ///
     /// Passed by closure because `PrevState` borrows a stack array — and generic,
     /// hence monomorphized: no virtual call gets in here.

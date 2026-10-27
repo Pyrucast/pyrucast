@@ -357,7 +357,7 @@ impl SubModel {
     /// the model immutable and material-independent. `symmetry` selects the
     /// conductivity it reads: the scalar `k`, or — orthotropic, anisotropic —
     /// its constants **and its axes**, see [`crate::models::symmetry`]. See
-    /// [`heat_conduction::HeatConduction::with_symmetry`] for the support it
+    /// [`heat_conduction::HeatConduction::new`] for the support it
     /// builds.
     ///
     /// ```
@@ -397,7 +397,7 @@ impl SubModel {
         symmetry: MaterialSymmetry,
     ) -> Result<Self> {
         Ok(SubModel::HeatConduction(
-            heat_conduction::HeatConduction::with_symmetry(fespace, symmetry)?,
+            heat_conduction::HeatConduction::new(fespace, symmetry)?,
         ))
     }
 
@@ -505,7 +505,7 @@ impl SubModel {
     /// orthotropic, anisotropic — its constants **and its axes**, see
     /// [`crate::models::symmetry`] for the contracts. `measure` is the strain
     /// the law reads, and names the stress it writes. Material data is supplied
-    /// at assembly time. See [`elasticity::Elasticity::with_symmetry`].
+    /// at assembly time. See [`elasticity::Elasticity::new`].
     ///
     /// ```
     /// # use pyrucast::ops::element_field::StrainMeasure;
@@ -550,7 +550,7 @@ impl SubModel {
         symmetry: MaterialSymmetry,
         measure: StrainMeasure,
     ) -> Result<Self> {
-        Ok(SubModel::Elasticity(elasticity::Elasticity::with_symmetry(
+        Ok(SubModel::Elasticity(elasticity::Elasticity::new(
             fespace, kinematics, symmetry, measure,
         )?))
     }
@@ -559,7 +559,7 @@ impl SubModel {
     /// `symmetry` selects the diffusivity it reads: `D`, or — orthotropic,
     /// anisotropic — its constants **and its axes**, exactly as
     /// [`Self::heat_conduction`] does; see [`crate::models::symmetry`]. Material
-    /// data is supplied at assembly time. See [`fick::Fick::with_symmetry`].
+    /// data is supplied at assembly time. See [`fick::Fick::new`].
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -597,9 +597,7 @@ impl SubModel {
         species: &str,
         symmetry: MaterialSymmetry,
     ) -> Result<Self> {
-        Ok(SubModel::Fick(fick::Fick::with_symmetry(
-            fespace, symmetry, species,
-        )?))
+        Ok(SubModel::Fick(fick::Fick::new(fespace, species, symmetry)?))
     }
 
     /// Radiation-to-infinity sub-model on a **boundary** FE subspace —
