@@ -104,9 +104,7 @@ pub struct Flux {
     dual: String,
     physics: Physics,
     /// The rows a normal-mode load feeds — every displacement row of its space
-    /// — or empty for a load feeding its one row `dual`. Archives written
-    /// before the normal mode read back as such.
-    #[serde(default)]
+    /// — or empty for a load feeding its one row `dual`.
     normal_rows: Vec<String>,
 }
 

@@ -108,9 +108,7 @@ pub struct Truss {
     /// Spatial dimension (number of displacement components per node).
     pub(crate) space_dim: usize,
     /// The strain measure the law reads — `linear`, or `green_lagrange` in
-    /// large displacements ([`new`](Self::new)). Archives
-    /// written before it existed read back as `linear`.
-    #[serde(default)]
+    /// large displacements ([`new`](Self::new)).
     pub(crate) measure: StrainMeasure,
 }
 

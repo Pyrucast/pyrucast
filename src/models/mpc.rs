@@ -112,7 +112,6 @@ pub struct Mpc {
     multiplier_mesh: Mesh,
     /// Equality (default) or unilateral inequality (`Σ aₖ·uₖ ≥ g` / `≤ g`),
     /// solved by the active-set operator.
-    #[serde(default)]
     sense: RelationSense,
     /// Nature shared by every term's physics, `None` when the relations tie
     /// several physics together.

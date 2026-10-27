@@ -103,8 +103,6 @@ pub struct Continuum {
     pub(crate) kinematics: Kinematics,
     /// The strain measure the law reads — `linear` unless the modelling was
     /// built for large transformations ([`with_measure`](Self::with_measure)).
-    /// Archives written before it existed read back as `linear`.
-    #[serde(default)]
     pub(crate) measure: StrainMeasure,
 }
 

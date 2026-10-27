@@ -93,7 +93,6 @@ pub struct Dirichlet {
     pub(crate) multiplier_mesh: Mesh,
     /// Equality (default) or unilateral inequality (`u ≥ u_d` / `u ≤ u_d`),
     /// solved by the active-set operator.
-    #[serde(default)]
     pub(crate) sense: RelationSense,
     /// Nature of the physics it constrains (`Mechanical` for a `u_x`), read
     /// from the target at construction.
