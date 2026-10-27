@@ -16,7 +16,8 @@
 //!   saturated ([`ActiveSetMethod`]);
 //! - [`RelationMethod::Eliminate`] — every equality relation eliminates one
 //!   unknown (master/slave condensation), and the smaller system left carries
-//!   no multiplier.
+//!   no multiplier but those of the inequalities, which the same active-set
+//!   loop resolves on it.
 //!
 //! Whatever is costly — the factorization, the condensation, the active-set
 //! state — is cached on the matrix ([`SolveOptions::cache`]) and cleared when
@@ -122,7 +123,9 @@ pub enum RelationMethod {
     /// Master/slave elimination: each equality relation expresses one unknown
     /// from the others, and the reduced system — smaller, without multipliers,
     /// usually positive definite — is solved. Each slave's reaction is returned
-    /// in its dual row. Scope: non-chained, disjoint slaves.
+    /// in its dual row. An inequality is not eliminated: it stays on the
+    /// reduced system with its multiplier, for the active-set loop. Scope:
+    /// non-chained, disjoint slaves.
     Eliminate,
 }
 

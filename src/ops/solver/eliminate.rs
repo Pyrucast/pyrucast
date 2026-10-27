@@ -32,26 +32,46 @@
 //! so they never coincide with a physics node — the DOF partition is exact).
 //! The reaction of each slave is returned in the dual row conjugate to it.
 //!
+//! # Inequalities
+//!
+//! Only the **equality** relations are eliminated. An inequality `C_I·u ≥ g_I`
+//! (or `≤`) cannot be: whether it holds as an equation depends on the
+//! solution. It stays a relation of the reduced system, written on the free
+//! unknowns, `(C_I·T)·û ≥ g_I − C_I·u₀`, with a multiplier of its own:
+//!
+//! ```text
+//! ⎡ Tᵀ K T   (C_I T)ᵀ ⎤ ⎡û⎤   ⎡Tᵀ(f − K·u₀)⎤
+//! ⎣ C_I T       0     ⎦ ⎣λ⎦ = ⎣ g_I − C_I·u₀ ⎦
+//! ```
+//!
+//! — the equality multipliers have vanished (`C_E·T = 0`), the inequality ones
+//! remain — and the active-set loop of the Lagrange path
+//! ([`ActiveSet`]) decides which are saturated. Each inequality's `λ` is
+//! returned at its multiplier node, as by multipliers; each slave's reaction is
+//! its own share, the inequalities' `C_Iᵀλ` taken out.
+//!
 //! # v1 scope: non-chained, disjoint slaves
 //!
 //! Each relation eliminates exactly one slave DOF, and a slave DOF may not appear
 //! in any other relation (neither as another slave nor as a master). This covers
 //! periodicity and is validated with a clear error. Chained relations (a master
-//! that is itself a slave elsewhere) are out of scope for v1.
+//! that is itself a slave elsewhere) are out of scope for v1. An inequality
+//! may reach a slave: it goes through `T` like any other row.
 
 use crate::atoms::NodeId;
 use crate::containers::matrix::{dof_node, dof_var, DofKey, Matrix};
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::Cancel;
-use crate::models::{RelationSense, IMPOSED};
+use crate::models::{RelationSense, IMPOSED, MULTIPLIER};
 use nalgebra::DVector;
-use nalgebra_sparse::{CooMatrix, CsrMatrix};
+use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
 use std::collections::HashSet;
 use std::sync::Arc;
 
 use super::lu::{self, factorize_csr, Factored};
 use super::relations::{relation_rows, RelationRow};
+use super::unilateral::{ActiveSet, Inequality};
 use super::SolveOptions;
 
 /// One eliminated slave DOF and the data needed to build `u₀` and recover its
@@ -79,8 +99,8 @@ pub(super) struct Condensation {
     tt: CsrMatrix<f64>,
     /// Physics stiffness `K` (`n_phys × n_phys`), for `K·u₀` and the reactions.
     k_phys: CsrMatrix<f64>,
-    /// LU factorization of the reduced `K̂ = Tᵀ K T` (`n_free × n_free`).
-    reduced: Factored,
+    /// The system left once the equalities are eliminated.
+    reduced: Reduced,
     /// The variable name table the DOF keys below index.
     vars: Arc<Vec<String>>,
     /// Physics dual (row) DOFs, in shared physics-index order — where `f` is read.
@@ -91,13 +111,40 @@ pub(super) struct Condensation {
     slaves: Vec<SlaveInfo>,
 }
 
+/// The system an elimination leaves.
+enum Reduced {
+    /// Equalities only: `K̂ = Tᵀ K T` (`n_free × n_free`), factorized.
+    Plain(Factored),
+    /// Inequalities kept on the free unknowns, for the active-set loop.
+    Unilateral(ReducedInequalities),
+}
+
+/// The inequality relations of a condensation, written on the free unknowns.
+struct ReducedInequalities {
+    /// `[[K̂, Bᵀ], [B, 0]]` with `B = C_I·T`: the free unknowns, then one
+    /// multiplier per inequality.
+    saddle: CscMatrix<f64>,
+    /// `C_I` in physics numbering, one row per inequality — for
+    /// `g_I − C_I·u₀` and for the inequalities' share `C_Iᵀλ` of the reactions.
+    rows: Vec<Vec<(usize, f64)>>,
+    /// Each inequality's multiplier node: where its `g` is read and its `λ`
+    /// returned.
+    multipliers: Vec<NodeId>,
+    /// The loop over `saddle`, with its warm start.
+    set: ActiveSet,
+}
+
 impl Condensation {
     /// Which factorization the **reduced** system admitted — `"cholesky"` or
     /// `"lu"`. Unlike the saddle-point it came from, `K̂` carries no multiplier
-    /// DOFs, so it stands a real chance of being positive definite.
+    /// DOFs, so it stands a real chance of being positive definite; kept
+    /// inequalities make it a saddle-point again, factorized by LU.
     #[cfg(test)]
     pub(crate) fn method(&self) -> &'static str {
-        self.reduced.method()
+        match &self.reduced {
+            Reduced::Plain(factored) => factored.method(),
+            Reduced::Unilateral(_) => "lu",
+        }
     }
 }
 
@@ -148,7 +195,26 @@ pub(super) fn solve(
     cancel.check()?;
 
     // ── Step 4 — solve the reduced system and prolong ──────────────────
-    let u_hat = cond.reduced.solve_vec(rhs_hat.as_slice());
+    let n_free = cond.t.ncols();
+    let (u_hat, lambdas) = match &cond.reduced {
+        Reduced::Plain(factored) => (factored.solve_vec(rhs_hat.as_slice()), Vec::new()),
+        Reduced::Unilateral(kept) => {
+            // The right-hand side of each kept inequality, `g_I − C_I·u₀`.
+            let g_dofs: Vec<(NodeId, String)> = kept
+                .multipliers
+                .iter()
+                .map(|&m| (m, IMPOSED.to_string()))
+                .collect();
+            let g = rhs.gather(&g_dofs)?;
+            let mut b_full: Vec<f64> = rhs_hat.iter().copied().collect();
+            for (row, g_i) in kept.rows.iter().zip(&g) {
+                b_full.push(g_i - row.iter().map(|&(p, a)| a * u0[p]).sum::<f64>());
+            }
+            let mut x = kept.set.run(&kept.saddle, &b_full, options, cancel)?;
+            let lambdas = x.split_off(n_free);
+            (x, lambdas)
+        }
+    };
     if u_hat.iter().any(|v| !v.is_finite()) {
         return Err(PyrucastError::Message(
             "solve: reduced LU failed (matrix is singular)".into(),
@@ -157,8 +223,16 @@ pub(super) fn solve(
     let u_phys = &cond.t * &DVector::from_vec(u_hat) + &u0;
     cancel.check()?;
 
-    // ── Step 5 — reactions: −(K·u − f) at each slave's dual row ─────────
-    let resid = &cond.k_phys * &u_phys - &f_phys;
+    // ── Step 5 — reactions: −(K·u + C_Iᵀλ − f) at each slave's dual row,
+    //    the kept inequalities' own share taken out ──────────────────────
+    let mut resid = &cond.k_phys * &u_phys - &f_phys;
+    if let Reduced::Unilateral(kept) = &cond.reduced {
+        for (row, &lambda) in kept.rows.iter().zip(&lambdas) {
+            for &(p, a) in row {
+                resid[p] += a * lambda;
+            }
+        }
+    }
 
     // ── Step 6 — assemble the solution NodeField ───────────────────────
     // Primal u at every physics node, plus each slave's reaction in its dual row
@@ -184,6 +258,13 @@ pub(super) fn solve(
         out_dofs.push((s.slave_node, s.target_dual.clone()));
         out_vals.push(-resid[s.phys_idx]);
     }
+    // Each kept inequality's multiplier, where the Lagrange path puts it.
+    if let Reduced::Unilateral(kept) = &cond.reduced {
+        for (&m, &lambda) in kept.multipliers.iter().zip(&lambdas) {
+            out_dofs.push((m, MULTIPLIER.to_string()));
+            out_vals.push(lambda);
+        }
+    }
     NodeField::from_dof_values(rhs.coords()?, &out_dofs, &out_vals)
 }
 
@@ -195,21 +276,13 @@ fn build_condensation(
     relations: Vec<RelationRow>,
     options: &SolveOptions,
 ) -> Result<Condensation> {
-    // Condensation enforces its relations unconditionally — a unilateral
-    // relation needs the active-set loop instead.
-    if let Some(r) = relations
-        .iter()
-        .find(|r| r.sense != RelationSense::Equality)
-    {
-        return Err(PyrucastError::Message(format!(
-            "elimination: the relation at multiplier node {:?} is unilateral ('{}') — \
-             solve it with relations=\"lagrange\"",
-            r.multiplier, r.sense
-        )));
-    }
-
     // ── Partition the matrix DOFs: multiplier nodes vs physics ─────────
     let mult_nodes: HashSet<NodeId> = relations.iter().map(|r| r.multiplier).collect();
+    // Only the equations are eliminated; an inequality holds as one or not
+    // depending on the solution, so it stays a relation of the reduced system.
+    let (inequalities, equalities): (Vec<RelationRow>, Vec<RelationRow>) = relations
+        .into_iter()
+        .partition(|r| r.sense != RelationSense::Equality);
     let vars = matrix.dof_vars();
     let full_row = matrix.row_dof_keys()?;
     let full_col = matrix.col_dof_keys()?;
@@ -283,27 +356,32 @@ fn build_condensation(
         masters: Vec<(usize, f64)>,
         multiplier_node: NodeId,
     }
-    let mut records: Vec<SlaveRecord> = Vec::with_capacity(relations.len());
+    // Every term of a relation, as a physics index: a relation that reaches a
+    // multiplier column is not one an elimination can express.
+    let resolve = |rel: &RelationRow| -> Result<Vec<(usize, f64)>> {
+        rel.terms
+            .iter()
+            .map(|&(col, coefficient)| {
+                let idx = full_col_to_phys[col];
+                if idx == usize::MAX {
+                    let key = full_col[col];
+                    return Err(PyrucastError::Message(format!(
+                        "elimination: the relation at multiplier node {:?} reaches \
+                         ({:?}, '{}'), which is not a physics DOF of the matrix",
+                        rel.multiplier,
+                        dof_node(key),
+                        vars[dof_var(key) as usize]
+                    )));
+                }
+                Ok((idx, coefficient))
+            })
+            .collect()
+    };
+    let mut records: Vec<SlaveRecord> = Vec::with_capacity(equalities.len());
     let mut slave_set: HashSet<usize> = HashSet::new();
     let mut master_set: HashSet<usize> = HashSet::new();
-    for rel in &relations {
-        // Resolve every term to a physics index: a relation that reaches a
-        // multiplier column is not one an elimination can express.
-        let mut resolved: Vec<(usize, f64)> = Vec::with_capacity(rel.terms.len());
-        for &(col, coefficient) in &rel.terms {
-            let idx = full_col_to_phys[col];
-            if idx == usize::MAX {
-                let key = full_col[col];
-                return Err(PyrucastError::Message(format!(
-                    "elimination: the relation at multiplier node {:?} reaches ({:?}, '{}'), \
-                     which is not a physics DOF of the matrix",
-                    rel.multiplier,
-                    dof_node(key),
-                    vars[dof_var(key) as usize]
-                )));
-            }
-            resolved.push((idx, coefficient));
-        }
+    for rel in &equalities {
+        let resolved = resolve(rel)?;
         // Slave = the **available** term (not already a slave or a master of
         // another relation) with the largest |coefficient| — the numerically
         // safest denominator that also keeps shared masters as masters. If no
@@ -395,14 +473,62 @@ fn build_condensation(
     // unlike the saddle-point it came from, `K̂` is *definite* — no multiplier
     // DOFs left — so this is the path where a Cholesky actually stands a
     // chance.
-    let reduced = factorize_csr(
-        khat.nrows(),
-        khat.row_offsets(),
-        khat.col_indices(),
-        khat.values(),
-        matrix.symmetric(),
-        options,
-    )?;
+    let reduced = if inequalities.is_empty() {
+        Reduced::Plain(factorize_csr(
+            khat.nrows(),
+            khat.row_offsets(),
+            khat.col_indices(),
+            khat.values(),
+            matrix.symmetric(),
+            options,
+        )?)
+    } else {
+        // Each inequality stays a relation of the reduced system: its row is
+        // `B = C_I·T` on the free unknowns, and its multiplier a column of its
+        // own, after them — the bordering the Lagrange path assembles.
+        let n_kept = inequalities.len();
+        let mut c_coo = CooMatrix::<f64>::new(n_kept, n_phys);
+        let mut rows = Vec::with_capacity(n_kept);
+        for (i, rel) in inequalities.iter().enumerate() {
+            let resolved = resolve(rel)?;
+            for &(p, a) in &resolved {
+                c_coo.push(i, p, a);
+            }
+            rows.push(resolved);
+        }
+        let b: CsrMatrix<f64> = &CsrMatrix::from(&c_coo) * &t;
+        let n = n_free + n_kept;
+        let mut saddle = CooMatrix::<f64>::new(n, n);
+        for (r, c, &v) in khat.triplet_iter() {
+            saddle.push(r, c, v);
+        }
+        let mut kept = Vec::with_capacity(n_kept);
+        for (i, rel) in inequalities.iter().enumerate() {
+            let row = b.row(i);
+            let term_cols: Vec<(usize, f64)> = row
+                .col_indices()
+                .iter()
+                .copied()
+                .zip(row.values().iter().copied())
+                .collect();
+            for &(j, v) in &term_cols {
+                saddle.push(n_free + i, j, v);
+                saddle.push(j, n_free + i, v);
+            }
+            kept.push(Inequality {
+                row: n_free + i,
+                lambda_col: n_free + i,
+                term_cols,
+                sense: rel.sense,
+            });
+        }
+        Reduced::Unilateral(ReducedInequalities {
+            saddle: CscMatrix::from(&saddle),
+            rows,
+            multipliers: inequalities.iter().map(|r| r.multiplier).collect(),
+            set: ActiveSet::new(kept),
+        })
+    };
 
     // The slave's node, and the dual row its reaction lands in: the physics
     // rows and columns are conjugate-aligned (checked above), so the row of the

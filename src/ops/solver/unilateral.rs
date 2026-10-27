@@ -133,16 +133,18 @@ impl crate::named::Named for ActiveSetMethod {
     }
 }
 
-/// One inequality relation, resolved against the matrix DOF layout.
-struct Inequality {
-    /// Row index of the constraint equation `(multiplier_node, imposed)`.
-    row: usize,
-    /// Column index of the multiplier DOF `(multiplier_node, multiplier_var)`.
-    lambda_col: usize,
+/// One inequality relation, resolved against the numbering of the system the
+/// loop runs on — the assembled saddle-point, or the system an elimination
+/// reduced it to.
+pub(super) struct Inequality {
+    /// Row index of the relation.
+    pub(super) row: usize,
+    /// Column index of its multiplier.
+    pub(super) lambda_col: usize,
     /// `(column, coefficient)` of every term — evaluates the gap `C·u − g`.
-    term_cols: Vec<(usize, f64)>,
+    pub(super) term_cols: Vec<(usize, f64)>,
     /// `GreaterEqual` or `LessEqual` (equalities are not collected).
-    sense: RelationSense,
+    pub(super) sense: RelationSense,
 }
 
 /// The Schur/Delassus artifacts cached across solves (matrix-invariant): the LU
@@ -166,22 +168,61 @@ enum SchurSlot {
     Ready(SchurCache),
 }
 
-/// The active-set state cached transparently on the [`Matrix`] (same `dyn Any`
-/// slot as [`lu::Factorization`] / the elimination's condensation; cleared on
-/// any matrix mutation). Holds the resolved layout plus, per method, the warm
-/// start and cached factors.
-struct ActiveSetState {
-    /// The matrix row layout (gathers the rhs; the solution is wrapped by
-    /// [`Matrix::field_from_col_values`], which reads the column layout from
-    /// the assembled matrix itself).
-    row_dofs: Vec<NamedDof>,
-    /// The resolved inequality relations, in matrix row order (deterministic).
+/// The active-set loop over one system: its inequalities and, per method, the
+/// warm start and the cached factors. Kept with whatever is cached on the
+/// matrix — the Lagrange state below, or the elimination's condensation — so
+/// that a re-solve warm-starts.
+pub(super) struct ActiveSet {
+    /// The resolved inequality relations, in row order (deterministic).
     inequalities: Vec<Inequality>,
     /// [`Refactorize`](ActiveSetMethod::Refactorize) warm start: last converged
     /// status (`true` = active, one per inequality) and the LU of its system.
     last: Mutex<Option<(Vec<bool>, Arc<SparseLu>)>>,
     /// [`SchurComplement`](ActiveSetMethod::SchurComplement) base + columns cache.
     schur: Mutex<SchurSlot>,
+}
+
+impl ActiveSet {
+    /// The loop over `inequalities`, nothing cached yet.
+    pub(super) fn new(inequalities: Vec<Inequality>) -> Self {
+        Self {
+            inequalities,
+            last: Mutex::new(None),
+            schur: Mutex::new(SchurSlot::Untried),
+        }
+    }
+
+    /// Run the loop on the system `csc` with the right-hand side `b_full` (the
+    /// imposed values at the relation rows): the solution, in the system's
+    /// column numbering, inactive relations reporting a zero multiplier.
+    pub(super) fn run(
+        &self,
+        csc: &nalgebra_sparse::CscMatrix<f64>,
+        b_full: &[f64],
+        options: &SolveOptions,
+        cancel: &dyn Cancel,
+    ) -> Result<Vec<f64>> {
+        // The Schur path reuses one base factorization; it falls back to the
+        // refactorizing path (Ok(None)) when the base is singular.
+        if options.active_set == ActiveSetMethod::SchurComplement
+            && let Some(x) = solve_schur(self, csc, b_full, options, cancel)?
+        {
+            return Ok(x);
+        }
+        solve_refactorize(self, csc, b_full, options, cancel)
+    }
+}
+
+/// The active-set state of the Lagrange path, cached transparently on the
+/// [`Matrix`] (cleared on any matrix mutation): the row layout the right-hand
+/// side is gathered on, and the loop.
+struct ActiveSetState {
+    /// The matrix row layout (gathers the rhs; the solution is wrapped by
+    /// [`Matrix::field_from_col_values`], which reads the column layout from
+    /// the assembled matrix itself).
+    row_dofs: Vec<NamedDof>,
+    /// The loop over the matrix's inequality relations.
+    set: ActiveSet,
 }
 
 /// The active-set path of [`super::solve`], for a matrix that carries
@@ -211,7 +252,7 @@ pub(super) fn solve(
     };
 
     // A block declared a sense on rows it does not hold: nothing to decide.
-    if state.inequalities.is_empty() {
+    if state.set.inequalities.is_empty() {
         return lu::solve(matrix, rhs, options, cancel);
     }
     cancel.check()?;
@@ -220,15 +261,10 @@ pub(super) fn solve(
     let b_full = rhs.gather(&state.row_dofs)?;
     let csc = matrix.to_csc()?;
 
-    // ── Step 3 — run the chosen active-set method ──────────────────────
-    // The Schur path reuses one base factorization; it falls back to the
-    // refactorizing path (Ok(None)) when the base is singular.
-    if options.active_set == ActiveSetMethod::SchurComplement
-        && let Some(solution) = solve_schur(&state, &csc, &b_full, matrix, options, cancel)?
-    {
-        return Ok(solution);
-    }
-    solve_refactorize(&state, &csc, &b_full, matrix, options, cancel)
+    // ── Step 3 — the loop; the solution wrapped on the blocks' own column
+    //    supports (`x` is in the assembled column order) ────────────────
+    let x = state.set.run(&csc, &b_full, options, cancel)?;
+    matrix.field_from_col_values(&x)
 }
 
 /// The KKT sign test on one status's solution `x`: release every active relation
@@ -276,13 +312,12 @@ fn update_status(
 /// The original method: refactorize the full sparse saddle-point at each status
 /// change, warm-started from the cached converged status + its LU.
 fn solve_refactorize(
-    state: &ActiveSetState,
+    state: &ActiveSet,
     csc: &nalgebra_sparse::CscMatrix<f64>,
     b_full: &[f64],
-    matrix: &Matrix,
     options: &SolveOptions,
     cancel: &dyn Cancel,
-) -> Result<NodeField> {
+) -> Result<Vec<f64>> {
     // Initial status: warm start (status + its factorization) or all-active.
     let (mut status, mut lu_current): (Vec<bool>, Option<Arc<SparseLu>>) =
         match state.last.lock().as_ref() {
@@ -290,7 +325,7 @@ fn solve_refactorize(
             None => (vec![true; state.inequalities.len()], None),
         };
 
-    let n = state.row_dofs.len();
+    let n = csc.nrows();
     for _iter in 0..options.max_iter {
         cancel.check()?;
 
@@ -323,9 +358,7 @@ fn solve_refactorize(
                 *state.last.lock() = Some((status, lu));
             }
             debug_assert_eq!(x.len(), n);
-            // One zone per column support, on the blocks' own POI1 handles
-            // (`x` is in `state.col_dofs` order = the assembled column order).
-            return matrix.field_from_col_values(&x);
+            return Ok(x);
         }
     }
 
@@ -342,16 +375,15 @@ fn solve_refactorize(
 ///
 /// Returns `Ok(None)` (asking the caller to fall back to
 /// [`solve_refactorize`]) when the base is singular or any base solve goes
-/// non-finite; `Ok(Some(_))` on a converged solution.
+/// non-finite; `Ok(Some(x))` on a converged solution.
 fn solve_schur(
-    state: &ActiveSetState,
+    state: &ActiveSet,
     csc: &nalgebra_sparse::CscMatrix<f64>,
     b_full: &[f64],
-    matrix: &Matrix,
     options: &SolveOptions,
     cancel: &dyn Cancel,
-) -> Result<Option<NodeField>> {
-    let n = state.row_dofs.len();
+) -> Result<Option<Vec<f64>>> {
+    let n = csc.nrows();
 
     // ── Base `A` (all relations released), factorized once and cached ──
     let mut slot = state.schur.lock();
@@ -411,9 +443,7 @@ fn solve_schur(
             if options.cache {
                 cache.warm = Some(status);
             }
-            // Same wrapping as `solve_refactorize`: blocks' own column supports.
-            let field = matrix.field_from_col_values(&x)?;
-            return Ok(Some(field));
+            return Ok(Some(x));
         }
     }
 
@@ -591,9 +621,7 @@ fn build_state(matrix: &Matrix) -> Result<ActiveSetState> {
         .collect();
     Ok(ActiveSetState {
         row_dofs,
-        inequalities,
-        last: Mutex::new(None),
-        schur: Mutex::new(SchurSlot::Untried),
+        set: ActiveSet::new(inequalities),
     })
 }
 

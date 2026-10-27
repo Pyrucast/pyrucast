@@ -106,9 +106,26 @@ définie, sans degré multiplicateur), puis prolongé `u = T·û + u₀`.
   factorisation ;
 - une matrice **sans relation** retombe sur la factorisation simple.
 
-**Périmètre** : non chaîné, esclaves disjoints — chaque relation élimine un
+**Les inégalités ne s'éliminent pas.** Qu'une relation unilatérale tienne en
+égalité dépend de la solution : seules les égalités sont éliminées, et chaque
+inégalité `C_I·u ≥ g_I` reste une relation du système réduit, écrite sur les
+inconnues libres, avec son multiplicateur :
+
+```text
+⎡ Tᵀ K T   (C_I T)ᵀ ⎤ ⎡û⎤   ⎡Tᵀ(f − K·u₀)⎤
+⎣ C_I T       0     ⎦ ⎣λ⎦ = ⎣ g_I − C_I·u₀ ⎦
+```
+
+Les multiplicateurs des égalités ont disparu (`C_E·T = 0`) ; ceux des
+inégalités restent, et la même boucle d'[ensemble actif](#les-relations-unilatérales--lensemble-actif)
+décide lesquelles sont saturées. Le `λ` de chaque inégalité revient à son nœud
+multiplicateur, comme par la voie Lagrange ; la réaction de chaque esclave est
+sa part propre, celle des inégalités (`C_Iᵀλ`) ôtée.
+
+**Périmètre** : non chaîné, esclaves disjoints — chaque égalité élimine un
 esclave distinct, jamais réutilisé comme maître ni esclave ailleurs (couvre la
-périodicité ; erreur explicite sinon).
+périodicité ; erreur explicite sinon). Une inégalité peut porter sur un
+esclave : elle passe par `T` comme toute autre ligne.
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_physiques.py:eliminate}}

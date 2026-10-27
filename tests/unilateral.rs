@@ -324,6 +324,66 @@ fn the_sense_survives_a_sum() -> Result<()> {
     check(&setup, &solution, 2.0, -1.0)
 }
 
+/// A saturated bound on an eliminated unknown: its reaction lands in the same
+/// dual row as the slave's, and the elimination must hand back the slave's own
+/// share. `T(0) = 0`, the MPC `T(¼) − ½·T(½) = 0` (slave `T(¼)`), and
+/// `T(¼) ≥ 1` under a weak flux, so the bound holds: the tie's reaction in the
+/// row `q` of `T(¼)` must be its multiplier, the bound's taken out.
+#[test]
+fn a_bound_on_an_eliminated_unknown_keeps_its_own_reaction() -> Result<()> {
+    let (nodes, coords, mut model, materials) = heat_bar()?;
+    let clamp = SubModel::dirichlet(&poi1(&nodes[0])?, &model, "T", Default::default())?;
+    let clamp_mult = clamp.multiplier_nodes()[0];
+    model.add_sub(Handle::new(clamp))?;
+    let (quarter, half) = (poi1(&nodes[1])?, poi1(&nodes[2])?);
+    let tie = SubModel::mpc(
+        &[(&quarter, "T", 1.0), (&half, "T", -0.5)],
+        &model,
+        Default::default(),
+    )?;
+    let tie_mult = tie.multiplier_nodes()[0];
+    model.add_sub(Handle::new(tie))?;
+    let bound = SubModel::dirichlet(&quarter, &model, "T", RelationSense::GreaterEqual)?;
+    let bound_mult = bound.multiplier_nodes()[0];
+    model.add_sub(Handle::new(bound))?;
+
+    let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
+    for n in [nodes[N_ELEMS].id(), clamp_mult, tie_mult, bound_mult] {
+        rhs_sm.add_cell(&[n])?;
+    }
+    let rhs_sm = Handle::new(rhs_sm);
+    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["q".into(), "imposed".into()])?;
+    rhs.set_value(nodes[N_ELEMS].id(), "q", 0.1)?;
+    rhs.set_value(bound_mult, "imposed", 1.0)?;
+    let rhs = NodeField::from_sub(rhs);
+
+    let k = stiffness(&model, &materials)?;
+    let lagrange = solver::solve(&k, &rhs)?;
+    let eliminate = SolveOptions {
+        relations: RelationMethod::Eliminate,
+        ..Default::default()
+    };
+    let elimination = solver::solve_with_options(&k, &rhs, &eliminate)?;
+    assert!((lagrange.value(nodes[1].id(), "T")? - 1.0).abs() < TOL);
+    let bound_lambda = lagrange.value(bound_mult, "lambda")?;
+    assert!(bound_lambda < -1e-3, "the bound must hold: {bound_lambda}");
+    for node in &nodes {
+        let (a, b) = (
+            lagrange.value(node.id(), "T")?,
+            elimination.value(node.id(), "T")?,
+        );
+        assert!((a - b).abs() < TOL);
+    }
+    assert!((elimination.value(bound_mult, "lambda")? - bound_lambda).abs() < TOL);
+    let tie_reaction = elimination.value(nodes[1].id(), "q")?;
+    let tie_lambda = lagrange.value(tie_mult, "lambda")?;
+    assert!(
+        (tie_reaction - tie_lambda).abs() < TOL,
+        "the tie's own reaction {tie_reaction} vs λ {tie_lambda}"
+    );
+    Ok(())
+}
+
 /// When the inequality-free base is **singular** (a structure that only holds
 /// once the contact is active — here a bar with a single bound and no equality
 /// Dirichlet, so the released state is pure Neumann), the Schur path must fall
@@ -388,21 +448,88 @@ fn all_equality_model_falls_back_to_plain_solve() -> Result<()> {
     Ok(())
 }
 
-/// The elimination (condensation) solver enforces every relation
-/// unconditionally: it must reject a unilateral model with a clear error.
+/// The elimination keeps the inequalities on the reduced system and runs the
+/// same active-set loop: it must give the field and the multipliers of the
+/// Lagrange path, and each equation's reaction in the dual row of its slave
+/// (`a_s = 1`: the reaction is the multiplier). Two equations are eliminated,
+/// `T(0) = 0` and the MPC `T(¼) − ½·T(½) = 0`, whose slave is `T(¼)`; two
+/// bounds stay: `T(1) ≥ 2`, saturated under `q = 1`, and `T(¼) ≥ −10` — on the
+/// eliminated unknown itself, reached through `T` — loose.
 #[test]
-fn eliminate_rejects_unilateral_relations() -> Result<()> {
-    let setup = bounded_bar(1.0, 2.0, RelationSense::GreaterEqual)?;
-    let k = stiffness(&setup.model, &setup.materials)?;
+fn elimination_keeps_the_inequalities() -> Result<()> {
+    let (nodes, coords, mut model, materials) = heat_bar()?;
+    let clamp = SubModel::dirichlet(&poi1(&nodes[0])?, &model, "T", Default::default())?;
+    let clamp_mult = clamp.multiplier_nodes()[0];
+    model.add_sub(Handle::new(clamp))?;
+    let (quarter, half) = (poi1(&nodes[1])?, poi1(&nodes[2])?);
+    let tie = SubModel::mpc(
+        &[(&quarter, "T", 1.0), (&half, "T", -0.5)],
+        &model,
+        Default::default(),
+    )?;
+    let tie_mult = tie.multiplier_nodes()[0];
+    model.add_sub(Handle::new(tie))?;
+    let floor = SubModel::dirichlet(
+        &poi1(&nodes[N_ELEMS])?,
+        &model,
+        "T",
+        RelationSense::GreaterEqual,
+    )?;
+    let floor_mult = floor.multiplier_nodes()[0];
+    model.add_sub(Handle::new(floor))?;
+    let loose = SubModel::dirichlet(&quarter, &model, "T", RelationSense::GreaterEqual)?;
+    let loose_mult = loose.multiplier_nodes()[0];
+    model.add_sub(Handle::new(loose))?;
+
+    let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
+    for n in [
+        nodes[N_ELEMS].id(),
+        clamp_mult,
+        tie_mult,
+        floor_mult,
+        loose_mult,
+    ] {
+        rhs_sm.add_cell(&[n])?;
+    }
+    let rhs_sm = Handle::new(rhs_sm);
+    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["q".into(), "imposed".into()])?;
+    rhs.set_value(nodes[N_ELEMS].id(), "q", 1.0)?;
+    rhs.set_value(floor_mult, "imposed", 2.0)?;
+    rhs.set_value(loose_mult, "imposed", -10.0)?;
+    let rhs = NodeField::from_sub(rhs);
+
+    let k = stiffness(&model, &materials)?;
+    let lagrange = solver::solve(&k, &rhs)?;
     let eliminate = SolveOptions {
         relations: RelationMethod::Eliminate,
         ..Default::default()
     };
-    let err = solver::solve_with_options(&k, &setup.rhs, &eliminate).unwrap_err();
-    let msg = err.to_string();
+    let elimination = solver::solve_with_options(&k, &rhs, &eliminate)?;
+
+    for (i, node) in nodes.iter().enumerate() {
+        let (a, b) = (
+            lagrange.value(node.id(), "T")?,
+            elimination.value(node.id(), "T")?,
+        );
+        assert!((b - a).abs() < TOL, "T at node {i}: {b} vs {a}");
+    }
+    // The bound holds as an equation, the tie too.
+    assert!((lagrange.value(nodes[N_ELEMS].id(), "T")? - 2.0).abs() < TOL);
+    let t = |i: usize| elimination.value(nodes[i].id(), "T");
+    assert!((t(1)? - 0.5 * t(2)?).abs() < TOL);
+    // The kept inequalities: one saturated, one loose — not vacuous.
+    let floor_lambda = lagrange.value(floor_mult, "lambda")?;
     assert!(
-        msg.contains("relations=\"lagrange\""),
-        "error should point at the Lagrange path, got: {msg}"
+        floor_lambda < -1e-3,
+        "the floor must carry a reaction: {floor_lambda}"
     );
+    assert!((elimination.value(floor_mult, "lambda")? - floor_lambda).abs() < TOL);
+    assert_eq!(lagrange.value(loose_mult, "lambda")?, 0.0);
+    assert_eq!(elimination.value(loose_mult, "lambda")?, 0.0);
+    // Each eliminated equation's reaction, its own share only.
+    let clamp_reaction = elimination.value(nodes[0].id(), "q")?;
+    assert!((clamp_reaction - lagrange.value(clamp_mult, "lambda")?).abs() < TOL);
+    let tie_reaction = elimination.value(nodes[1].id(), "q")?;
+    assert!((tie_reaction - lagrange.value(tie_mult, "lambda")?).abs() < TOL);
     Ok(())
 }

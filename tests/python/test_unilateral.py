@@ -150,13 +150,18 @@ def test_the_matrix_carries_the_sense():
     assert abs(answers["="] - 2.0) < TOL
 
 
-def test_eliminate_rejects_unilateral_relations():
-    """The elimination enforces every relation as an equation: it must reject
-    a unilateral one with a clear error."""
-    _, model, materials, rhs, _ = _bounded_bar(1.0, 2.0, ">=")
+def test_elimination_keeps_the_inequalities():
+    """The elimination eliminates the equation `T(0) = 0` and keeps the bound
+    `T(1) >= 2` on the reduced system: same field and same multiplier as the
+    Lagrange path. Under `q = 1` the bound saturates: `T = 2x`, `lambda = -1`."""
+    nodes, model, materials, rhs, uni_mult = _bounded_bar(1.0, 2.0, ">=")
     k = pyrucast.matrix.stiffness(model, materials)
-    with pytest.raises(RuntimeError, match='relations="lagrange"'):
-        pyrucast.solver.solve(k, rhs, relations="eliminate")
+    lagrange = pyrucast.solver.solve(k, rhs)
+    elimination = pyrucast.solver.solve(k, rhs, relations="eliminate")
+    for i, node in enumerate(nodes):
+        assert abs(elimination.value(node, "T") - 2.0 * i * H) < TOL
+        assert abs(elimination.value(node, "T") - lagrange.value(node, "T")) < TOL
+    assert abs(elimination.value(uni_mult, "lambda") + 1.0) < TOL
 
 
 def test_unknown_sense_rejected():

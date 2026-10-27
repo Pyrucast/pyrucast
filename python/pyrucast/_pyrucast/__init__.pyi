@@ -1277,8 +1277,10 @@ class Matrix:
           one reports `lambda = 0`;
         - `"eliminate"` — each equality relation eliminates one unknown, and the
           smaller system left, without multipliers, is solved; each eliminated
-          unknown's reaction is returned in its dual row. Scope: non-chained,
-          disjoint slaves.
+          unknown's reaction is returned in its dual row. An inequality is not
+          eliminated: it stays on the reduced system, resolved by the same
+          active-set loop, its `lambda` returned at its multiplier node. Scope:
+          non-chained, disjoint slaves.
         
         `method` selects the factorization: `"lu"` (default) works on any square
         matrix, `"cholesky"` asks that the system be symmetric **and** positive
@@ -5591,8 +5593,10 @@ def solve(matrix: Matrix, rhs: NodeField, method: builtins.str = 'lu', relations
       one reports `lambda = 0`;
     - `"eliminate"` — each equality relation eliminates one unknown, and the
       smaller system left, without multipliers, is solved; each eliminated
-      unknown's reaction is returned in its dual row. Scope: non-chained,
-      disjoint slaves.
+      unknown's reaction is returned in its dual row. An inequality is not
+      eliminated: it stays on the reduced system, resolved by the same
+      active-set loop, its `lambda` returned at its multiplier node. Scope:
+      non-chained, disjoint slaves.
     
     `method` selects the factorization: `"lu"` (default) works on any square
     matrix, `"cholesky"` asks that the system be symmetric **and** positive
