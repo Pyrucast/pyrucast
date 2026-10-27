@@ -361,7 +361,6 @@ pub struct SubEvolution {
     /// Physical **type** of the ordinate, for **scalar** curves only (e.g.
     /// `"young"`). Optional; labels plots and names the component produced when
     /// a field is mapped through the curve.
-    #[serde(default)]
     ordinate_type: Option<String>,
 }
 

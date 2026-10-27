@@ -394,25 +394,15 @@ pub struct ComputedRecipe {
     /// Which element matrix this recipe produces — the discriminant the scatter
     /// dispatches on to pick the sub-model's kernel
     /// ([`SubModelKind::matrix_element`](crate::models::SubModelKind::matrix_element)).
-    /// Defaults to [`MatrixKind::Stiffness`] for backward-compatible deserialization.
-    #[serde(default)]
     pub kind: MatrixKind,
     /// What this kind's kernel reads **besides** the material — see
     /// [`KernelInputs`].
-    #[serde(default)]
     pub inputs: KernelInputs,
     /// FE subspaces carrying the **columns** when this block couples two meshes
     /// (an interface exchange law). **Empty** — the overwhelming case — means
     /// rows and columns live on the same mesh and `fespaces` drives both; the
     /// scatter routes on exactly that emptiness.
-    #[serde(default)]
     pub col_fespaces: Vec<Handle<SubFiniteElementSpace>>,
-}
-
-/// Default value of [`SubMatrix::factor`] for pre-existing serialized data
-/// that predates the field.
-fn default_factor() -> f64 {
-    1.0
 }
 
 /// Identity of a symmetric **pair** of blocks — see [`Symmetry::Half`].
@@ -582,7 +572,6 @@ pub struct SubMatrix {
     /// the contribution is produced on the fly by the global assembler from this
     /// recipe. `None` ⇒ **literal** block, `coo` holds the values (the historical
     /// behaviour, unchanged).
-    #[serde(default)]
     recipe: Option<ComputedRecipe>,
     /// The set of [`Physics`] natures of the sub-model that produced this block,
     /// set by the assembler ([`crate::ops::matrix`]) for **both** the computed
@@ -590,7 +579,6 @@ pub struct SubMatrix {
     /// for a block built directly, outside assembly (the « rien » case), or
     /// carrying several natures for a coupled physics. Consumed by
     /// [`Matrix::filter`](Matrix::filter).
-    #[serde(default)]
     physics: Vec<Physics>,
     /// Lazy scalar scale applied to every value this block emits — at direct
     /// accessors (`get`, `dense`, …) and at global assembly (`build_global_triplets`,
@@ -600,7 +588,6 @@ pub struct SubMatrix {
     /// values don't exist until assembly evaluates the recipe). Never touches
     /// `local_coo_arrays`/`local_triplets`, which stay raw — every consumer of
     /// those applies the factor itself.
-    #[serde(default = "default_factor")]
     factor: f64,
 }
 

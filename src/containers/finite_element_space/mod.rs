@@ -113,9 +113,7 @@ pub struct SubFiniteElementSpace {
     /// Whether the owning `Coords` describes a body of revolution, read at
     /// construction like `space_dim` (the frame is fixed for the lifetime of a
     /// `Coords`). Carried here so the parallel drivers snapshot it once instead
-    /// of re-reading the handle per cell. `#[serde(default)]` for subspaces
-    /// serialised before the frame existed.
-    #[serde(default)]
+    /// of re-reading the handle per cell.
     axisymmetric: bool,
 
     // Reference-space tables (invariant under mesh deformation):
@@ -132,14 +130,11 @@ pub struct SubFiniteElementSpace {
     /// Flat `n_g × shape_count` values of the **field** basis. Empty when it
     /// coincides with the geometric one (every Lagrange space), so the common
     /// case costs no memory and the accessor falls back.
-    #[serde(default)]
     field_n_at_g: Vec<f64>,
     /// Flat `n_g × shape_count × ref_dim` field `∂N_i/∂ξ_j(ξ_g)`. Same fallback.
-    #[serde(default)]
     field_dn_at_g: Vec<f64>,
     /// Flat `n_g × shape_count × ref_dim` field `∂²N_i/∂ξ_j²(ξ_g)`. Only the C¹
     /// families fill it; empty otherwise.
-    #[serde(default)]
     field_d2n_at_g: Vec<f64>,
 
     /// Cell colouring for conflict-free parallel assembly, computed once and

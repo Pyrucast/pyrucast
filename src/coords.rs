@@ -156,9 +156,7 @@ impl fmt::Display for CoordinateFrame {
 #[derive(Serialize, Deserialize)]
 pub struct Coords {
     dim: u8,
-    /// Geometric hypothesis the coordinates obey. `#[serde(default)]` so a
-    /// `Coords` serialised before the frame existed reloads as Cartesian.
-    #[serde(default)]
+    /// Geometric hypothesis the coordinates obey.
     frame: CoordinateFrame,
     /// `configs[c][id * dim + k]` — each configuration holds `capacity * dim` values.
     configs: Vec<Vec<f64>>,
