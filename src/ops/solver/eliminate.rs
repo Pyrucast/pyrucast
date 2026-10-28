@@ -116,7 +116,7 @@ enum Reduced {
     /// Equalities only: `K̂ = Tᵀ K T` (`n_free × n_free`), factorized.
     Plain(Factored),
     /// Inequalities kept on the free unknowns, for the active-set loop.
-    Unilateral(Box<ReducedInequalities>),
+    Unilateral(ReducedInequalities),
 }
 
 /// The inequality relations of a condensation, written on the free unknowns.
@@ -522,12 +522,12 @@ fn build_condensation(
                 sense: rel.sense,
             });
         }
-        Reduced::Unilateral(Box::new(ReducedInequalities {
+        Reduced::Unilateral(ReducedInequalities {
             saddle: CscMatrix::from(&saddle),
             rows,
             multipliers: inequalities.iter().map(|r| r.multiplier).collect(),
             set: ActiveSet::new(kept),
-        }))
+        })
     };
 
     // The slave's node, and the dual row its reaction lands in: the physics

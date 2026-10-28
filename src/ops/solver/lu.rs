@@ -118,16 +118,17 @@ pub(crate) type SparseLlt = faer::sparse::linalg::solvers::Llt<usize, f64>;
 ///
 /// Both variants answer `solve_in_place` identically: faer implements
 /// `Solve` for anything that implements `SolveCore`.
+// faer's `Lu` is an order of magnitude wider than its `Llt` (344 bytes against
+// 32), and an enum is as wide as its widest variant. Here that costs nothing: a
+// factorization exists once per matrix, cached behind an `Arc`, never copied
+// nor stored in numbers — 312 bytes beside factors of megabytes. A box would
+// buy nothing back, and cost the reader an indirection to see through.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum Factored {
     /// `L·Lᵀ` — the matrix was symmetric positive definite.
     Cholesky(SparseLlt),
     /// `L·U` with partial pivoting — everything else.
-    ///
-    /// Boxed: faer's `Lu` is an order of magnitude wider than its `Llt` (344
-    /// bytes against 32), and an enum is as wide as its widest variant. The
-    /// indirection is paid once per solve, ahead of a triangular solve over the
-    /// whole factor — it does not register.
-    Lu(Box<SparseLu>),
+    Lu(SparseLu),
 }
 
 impl Factored {
@@ -255,7 +256,7 @@ pub(crate) fn factorize_csr(
         None => (offsets, cols, vals),
     };
     let out = match options.method {
-        SolveMethod::Lu => Factored::Lu(Box::new(lu_of(n, col_ptr, row_idx, values)?)),
+        SolveMethod::Lu => Factored::Lu(lu_of(n, col_ptr, row_idx, values)?),
         SolveMethod::Cholesky => {
             // faer cannot catch this one: a Cholesky reads a single triangle, so
             // on a non-symmetric matrix it does not fail — it quietly uses the
