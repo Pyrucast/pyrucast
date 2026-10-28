@@ -162,6 +162,22 @@ def test_pave_surface_rejects_a_non_positive_size():
         pc.mesh.pave_surface(contour, "QUA4", size=0.0)
 
 
+def test_qua9_keeps_the_triangles_the_front_leaves():
+    """In QUA9 the quadrangles gain their centre node and the triangles stay
+    TRI6. Asked in QUA9, the triangles a front leaves used to be read as QUA8
+    and fail on a node count that is not a multiple of nine."""
+    coords = pc.Coords(2)
+    contour = _closed_loop(coords, _rect(1.0, 0.63, 10, 6))
+    linear = pc.mesh.pave_surface(contour, "QUA4", 0.1)
+    counts = dict(zip(linear.element_types(), linear.cell_counts()))
+    assert counts.get("TRI3", 0) > 0, "the case needs triangles to test anything"
+    quadratic = pc.mesh.pave_surface(contour, "QUA9", 0.1)
+    assert dict(zip(quadratic.element_types(), quadratic.cell_counts())) == {
+        "QUA9": counts["QUA4"],
+        "TRI6": counts["TRI3"],
+    }
+
+
 def test_relax_along_keeps_a_square_square():
     """`relax="along"` stops the front rounding its own corners away.
 

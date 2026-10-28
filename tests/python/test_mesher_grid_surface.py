@@ -28,6 +28,33 @@ def _cells(mesh):
     return dict(zip(mesh.element_types(), mesh.cell_counts()))
 
 
+HOUSE = [
+    (0.0, 0.0),
+    (0.38, 0.0),
+    (0.38, 0.40),
+    (0.62, 0.40),
+    (0.62, 0.0),
+    (1.0, 0.0),
+    (1.0, 0.80),
+    (0.50, 1.20),
+    (0.0, 0.80),
+]
+
+
+@pytest.mark.parametrize("op", [pc.mesh.grid_surface, pc.mesh.grid_surface2])
+def test_qua9_keeps_the_triangles_the_band_leaves(op):
+    """In QUA9 the quadrangles gain their centre node and the triangles stay
+    TRI6. The house leaves triangles in the band; asked in QUA9 it used to
+    read their TRI6 zone as QUA8 — a panic for `grid_surface`, an error for
+    `grid_surface2`."""
+    coords = pc.Coords(2)
+    contour = _on_grid(coords, HOUSE, 0.05)
+    linear = _cells(op(contour, "QUA4", 0.05))
+    assert linear.get("TRI3", 0) > 0, "the case needs triangles to test anything"
+    quadratic = _cells(op(contour, "QUA9", 0.05))
+    assert quadratic == {"QUA9": linear["QUA4"], "TRI6": linear["TRI3"]}
+
+
 def test_a_rectangle_comes_out_as_the_plain_grid():
     coords = pc.Coords(2)
     corners = [(0.0, 0.0), (0.6, 0.0), (0.6, 0.3), (0.0, 0.3)]
