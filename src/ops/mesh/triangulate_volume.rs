@@ -979,7 +979,7 @@ mod tests {
     }
 
     /// The envelope of a plate meshed by `triangulate_surface`, extruded and
-    /// peeled — the pipeline `tutoriel/maillage_test.py` uses.
+    /// peeled.
     ///
     /// `n` segments per side of a unit square, `size` the target edge length.
     /// Note the `invert`: `extrude` does not check that its direction lies on

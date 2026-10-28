@@ -2250,11 +2250,10 @@ mod tests {
 
     #[test]
     fn refine_plate_with_hole_stays_inside_contour() {
-        // Reproduces the `maillage_test.py` geometry: a plate whose right
-        // edge is a half-circle bulge (radius 0.05 around (0.3,0.05)), with a
-        // concentric circular hole (radius 0.035). Both boundaries are built
-        // from cocircular arc/circle points. The refined mesh must stay
-        // strictly inside the outer loop and outside the hole.
+        // A plate whose right edge is a half-circle bulge (radius 0.05 around
+        // (0.3,0.05)), with a concentric circular hole (radius 0.035). Both
+        // boundaries are built from cocircular arc/circle points. The refined
+        // mesh must stay strictly inside the outer loop and outside the hole.
         let cx = 0.30_f64;
         let cy = 0.05_f64;
         let r_arc = 0.05_f64;
@@ -2305,7 +2304,7 @@ mod tests {
         );
     }
 
-    /// Build the `maillage_test.py` plate + concentric hole with each
+    /// Build the plate + concentric hole of the test above, with each
     /// straight side pre-discretized into `n_side` segments (as
     /// `line(.., n_side)` produces), refine to `max_edge_length = 0.025`,
     /// and check the result stays inside the contour (area = outer − hole).
