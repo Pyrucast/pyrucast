@@ -53,10 +53,12 @@ pub fn sweep(
 
 /// Deliver a `QUA4` grid as the surface type the caller asked for.
 ///
-/// The three structured surface meshers — [`sweep`],
-/// [`transfinite`](super::transfinite), [`pave_surface`](super::pave_surface) —
-/// all build a quadrangle grid first and then owe the same five conversions.
-/// `op` only names the operator in the error message.
+/// The structured surface meshers — [`sweep`],
+/// [`transfinite`](super::transfinite) — build a pure quadrangle grid; the
+/// pavers ([`pave_surface`](super::pave_surface) and the grid meshers) build
+/// one that may also hold a few `TRI3`, and only ask for the quadrangle
+/// types. All owe the same conversions. `op` only names the operator in the
+/// error message.
 pub(super) fn finish_surface(qua4: Mesh, element_type: ElementType, op: &str) -> Result<Mesh> {
     match element_type {
         ElementType::QUA4 => Ok(qua4),
@@ -99,11 +101,19 @@ pub(super) fn qua4_to_tri3(mesh: &Mesh) -> Result<Mesh> {
 /// mean of the 4 corners) — [`super::to_quadratic`] only produces the
 /// serendipity QUA8, which has no center node to re-use.
 ///
+/// Any other zone passes through unchanged: the `TRI6` a paver leaves among
+/// its quadrangles is already the quadratic triangle, and shares its
+/// three-node edges with the `QUA9` around it.
+///
 /// Shared with [`super::transfinite`] (see [`qua4_to_tri3`]).
 pub(super) fn qua8_to_qua9(mesh: &Mesh) -> Result<Mesh> {
     let coords = mesh.coords()?;
     let mut result = Mesh::empty();
     for sm_h in mesh {
+        if sm_h.read().element_type() != ElementType::QUA8 {
+            result.add_sub(sm_h.clone())?;
+            continue;
+        }
         // Guard held for this zone's pass: what follows only reads.
         let s = sm_h.read();
         let (color, conn) = (s.face_color(), s.connectivity());
@@ -293,6 +303,37 @@ mod tests {
 
         let center = qua9.node(0, 0, 8).unwrap();
         assert_eq!(center.position().unwrap(), vec![1.0, 1.0]);
+    }
+
+    #[test]
+    fn qua9_keeps_the_triangles_of_a_quad_dominant_mesh() {
+        // A quadrangle beside a triangle, as a paver leaves them: the QUA8
+        // zone gains its centres, the TRI6 one passes through as it is.
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [2.0, 0.0]]
+            .iter()
+            .map(|p| Node::create_in(coords.clone(), p).unwrap())
+            .collect();
+        let mut quads = SubMesh::new(coords.clone(), ElementType::QUA4);
+        quads
+            .add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])
+            .unwrap();
+        let mut tris = SubMesh::new(coords.clone(), ElementType::TRI3);
+        tris.add_cell(&[n[1].id(), n[4].id(), n[2].id()]).unwrap();
+        let mut mixed = Mesh::empty();
+        mixed.add_sub(Handle::new(quads)).unwrap();
+        mixed.add_sub(Handle::new(tris)).unwrap();
+
+        let qua9 = finish_surface(mixed, ElementType::QUA9, "test").unwrap();
+        assert_eq!(
+            qua9.element_types().unwrap(),
+            vec![ElementType::QUA9, ElementType::TRI6]
+        );
+        assert_eq!(qua9.cell_count(), 2);
+        assert_eq!(
+            qua9.node(0, 0, 8).unwrap().position().unwrap(),
+            vec![0.5, 0.5]
+        );
     }
 
     #[test]

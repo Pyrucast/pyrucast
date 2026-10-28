@@ -139,9 +139,9 @@ Les mailleurs prennent `element_type=None` en Python : `"SEG2"` pour `line`,
 | `symmetry_line(mesh: &Mesh, a: &[f64], b: &[f64]) -> Mesh` | `symmetry_line(mesh, a, b) -> Mesh` |
 | `symmetry_plane(mesh: &Mesh, a: &[f64], b: &[f64], c: &[f64]) -> Mesh` | `symmetry_plane(mesh, a, b, c) -> Mesh` |
 | `triangulate_surface(contour: &Mesh, element_type: ElementType, target_size: Option<f64>) -> Mesh` | `triangulate_surface(contour, element_type, size=None) -> Mesh` |
-| `pave_surface(contour: &Mesh, element_type: ElementType, target_size: Option<f64>, all_quad: bool, relax: FrontRelax) -> Mesh` | `pave_surface(contour, element_type, size=None, all_quad=False, relax=None) -> Mesh` |
-| `grid_surface(contour: &Mesh, element_type: ElementType, target_size: Option<f64>, band: usize, all_quad: bool, relax: FrontRelax) -> Mesh` | `grid_surface(contour, element_type, size=None, band=0, all_quad=False, relax=None) -> Mesh` |
-| `grid_surface2(contour: &Mesh, element_type: ElementType, target_size: Option<f64>, band: usize, all_quad: bool, relax: FrontRelax) -> Mesh` | `grid_surface2(contour, element_type, size=None, band=0, all_quad=False, relax=None) -> Mesh` |
+| `pave_surface(contour: &Mesh, element_type: ElementType, target_size: Option<f64>, prefer_quads: bool, relax: FrontRelax) -> Mesh` | `pave_surface(contour, element_type, size=None, prefer_quads=False, relax=None) -> Mesh` |
+| `grid_surface(contour: &Mesh, element_type: ElementType, target_size: Option<f64>, band: usize, prefer_quads: bool, relax: FrontRelax) -> Mesh` | `grid_surface(contour, element_type, size=None, band=0, prefer_quads=False, relax=None) -> Mesh` |
+| `grid_surface2(contour: &Mesh, element_type: ElementType, target_size: Option<f64>, band: usize, prefer_quads: bool, relax: FrontRelax) -> Mesh` | `grid_surface2(contour, element_type, size=None, band=0, prefer_quads=False, relax=None) -> Mesh` |
 | `triangulate_volume(envelope: &Mesh, target_size: Option<f64>, allow_surface_nodes: bool) -> Mesh` | `triangulate_volume(envelope, size=None, allow_surface_nodes=False) -> Mesh` |
 | `pave_volume(envelope: &Mesh, layers: usize, thickness: Option<f64>, core_size: Option<f64>) -> Mesh` | `pave_volume(envelope, layers=1, thickness=None, size=None) -> Mesh` |
 | `border(mesh: &Mesh, angle_deg: Option<f64>) -> Mesh` | `border(mesh, angle_deg=None) -> Mesh` |

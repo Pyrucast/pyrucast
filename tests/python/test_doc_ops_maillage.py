@@ -651,7 +651,7 @@ assert solide.cell_count() > 0
 
 def _contour_plaque_trouee(h=0.05):
     """CCW outer contour + CW hole circle, each loop with an even number of
-    segments — the condition for `all_quad` to be able to succeed."""
+    segments — the condition for `prefer_quads` to be able to succeed."""
     # A 3-D `Coords` from the start: the extrusion towards +z of the block below
     # requires a three-component direction, hence three-component nodes.
     c = pyrucast.Coords(3)
@@ -677,8 +677,8 @@ contour = _contour_plaque_trouee()
 import pyrucast as pc
 
 # … CCW outer contour and CW hole circle, each consolidated into one loop.
-# Each loop of the contour has an even number of segments, so all_quad works.
-plaque = pc.mesh.pave_surface(contour, "QUA4", size=0.05, all_quad=True)
+# Each loop of the contour has an even number of segments, so prefer_quads works.
+plaque = pc.mesh.pave_surface(contour, "QUA4", size=0.05, prefer_quads=True)
 print(plaque.element_types())  # ['QUA4']
 
 # The prismatic solid then comes for free, and in pure hexahedra.
@@ -705,7 +705,7 @@ def _boite_hex(n=3):
         seg = pyrucast.mesh.line(p, q, n)
         ring = seg if ring is None else ring | seg
     face = pyrucast.mesh.pave_surface(
-        pyrucast.mesh.consolidate(ring), "QUA4", all_quad=True
+        pyrucast.mesh.consolidate(ring), "QUA4", prefer_quads=True
     )
     return pyrucast.mesh.extrude(face, [0.0, 1.0, 0.0], n)
 

@@ -26,9 +26,9 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `symmetry_line(mesh, a, b)` | **copie** symétrique par rapport à la **droite** passant par `a` et `b` (demi-tour en 3D) |
 | `symmetry_plane(mesh, a, b, c)` | **copie** symétrique par rapport au **plan** passant par trois points (3D) |
 | `triangulate_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
-| `pave_surface(contour, type, size=None, all_quad=False, relax="free")` | **pave** l'intérieur des mêmes contours **orientés** en `QUA4`/`QUA8`/`QUA9`, par **front avançant** en rangées parallèles au bord (voir plus bas) |
-| `grid_surface(contour, type, size=None, band=0, all_quad=False, relax="free")` | maille les mêmes contours **orientés** par **cœur en grille** cartésienne et **bande frontale** au bord : sur une forme rectilinéaire, la grille régulière que le front ne sait pas produire (voir plus bas) |
-| `grid_surface2(contour, type, size=None, band=0, all_quad=False, relax="free")` | même chose, mais les lignes viennent **une par nœud du contour** et les rangées ont le droit de plier : meilleur sur les formes rectilinéaires mal découpées, moins bon sur les courbes (voir plus bas) |
+| `pave_surface(contour, type, size=None, prefer_quads=False, relax="free")` | **pave** l'intérieur des mêmes contours **orientés** en `QUA4`/`QUA8`/`QUA9`, par **front avançant** en rangées parallèles au bord (voir plus bas) |
+| `grid_surface(contour, type, size=None, band=0, prefer_quads=False, relax="free")` | maille les mêmes contours **orientés** par **cœur en grille** cartésienne et **bande frontale** au bord : sur une forme rectilinéaire, la grille régulière que le front ne sait pas produire (voir plus bas) |
+| `grid_surface2(contour, type, size=None, band=0, prefer_quads=False, relax="free")` | même chose, mais les lignes viennent **une par nœud du contour** et les rangées ont le droit de plier : meilleur sur les formes rectilinéaires mal découpées, moins bon sur les courbes (voir plus bas) |
 | `pave_volume(envelope, layers=1, thickness=None, size=None)` | **compagnon 3D** de `pave_surface` : couche limite d'`HEX8`/`PENTA6` poussée vers l'intérieur, raccordée par des `PYRA5` à un cœur `TET4` (voir plus bas) |
 | `triangulate_volume(envelope, size=None, allow_surface_nodes=False)` | **compagnon 3D** de `triangulate_surface` : maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` — Delaunay exact, récupération du bord, raffinement intérieur et chasse aux slivers (voir plus bas) |
 | `regularize(mesh, sweeps=20, angular=True, in_place=False)` | **lisse** un maillage de surface existant : déplace ses nœuds intérieurs pour améliorer ses mailles, sans toucher ni à la connectivité ni au bord (voir plus bas) |
@@ -449,7 +449,7 @@ géométriques réutilisables indépendamment du système `Mesh`
 
 ## Pavage frontal d'un contour fermé : `pave_surface`
 
-`pave_surface(contour, element_type, size=None, all_quad=False, relax="free")`
+`pave_surface(contour, element_type, size=None, prefer_quads=False, relax="free")`
 remplit le même contour que `triangulate_surface`, mais en **posant directement
 des quadrangles**, par rangées qui avancent depuis le bord vers l'intérieur.
 C'est
@@ -471,7 +471,7 @@ près des frontières.
 | élément naturel | `TRI3` | `QUA4` |
 | `QUA4` obtenu par | recombinaison de paires | construction |
 | rangées alignées sur le bord | non | oui |
-| tout-quadrangle garanti | impossible | `all_quad=True` |
+| quadrangles seuls | impossible | préférés (`prefer_quads=True`), sans garantie |
 
 ### Convention
 
@@ -624,7 +624,7 @@ Corollaire : un contour avec lequel le paveur ne peut pas travailler est
 **signalé**, pas contourné. Deux cas, tous deux renvoyés en erreur nommant le
 problème :
 
-- `all_quad` sur une boucle à nombre **impair** de segments. Un polygone à
+- `prefer_quads` sur une boucle à nombre **impair** de segments. Un polygone à
   nombre impair de côtés n'admet aucun remplissage en quadrangles seuls ; le
   pavage ne peut pas changer cette parité — une rangée la conserve, une couture
   retire deux nœuds — et rééquilibrer le compte reviendrait à ajouter un nœud
@@ -633,17 +633,22 @@ problème :
   front **se replie sur lui-même** en laissant une région impossible à
   remplir. L'erreur indique l'endroit.
 
-### Le tout-quadrangle
+### Préférer les quadrangles : `prefer_quads`
 
-Laissé à lui-même (`all_quad=False`), un contour impair coûte simplement **un**
+Laissé à lui-même (`prefer_quads=False`), un contour impair coûte simplement **un**
 triangle, rendu dans un sous-maillage `TRI3` séparé — avec les quelques mailles
 qu'un polygone résiduel trop déformé n'a pas pu rendre carrées : la fermeture
 préfère deux triangles à une maille de jacobien négatif, et la validité n'est
 jamais échangée.
 
-Avec `all_quad=True`, la parité devient une exigence sur l'entrée : discrétisez
-chaque boucle de bord avec un nombre pair de segments, et le résultat est sans
-triangle.
+Avec `prefer_quads=True`, la parité devient une exigence sur l'entrée :
+discrétisez chaque boucle de bord avec un nombre pair de segments — c'est votre
+donnée, une boucle impaire est refusée. Le pavage tient ensuite le front pair
+jusqu'au bout : chaque rangée, chaque couture, chaque découpe garde des boucles
+paires. Ce qu'il ne fait pas disparaître, ce sont les triangles **de forme** :
+un polygone résiduel trop déformé pour se couper en quadrangles valides est
+encore fermé par des triangles, puisque la validité passe avant. D'où le nom :
+une **préférence**, pas une garantie.
 
 ### Relaxation du front : `relax`
 
@@ -790,7 +795,7 @@ géométrie, mais laisse une part notable de triangles en `QUA4`.
 
 ## Cœur en grille, bande frontale : `grid_surface`
 
-`grid_surface(contour, element_type, size=None, band=0, all_quad=False,
+`grid_surface(contour, element_type, size=None, band=0, prefer_quads=False,
 relax="free")` prend la même entrée que `pave_surface`, rend la même chose, et
 tient la même promesse — **le contour est intouchable**. Seul l'intérieur est
 obtenu autrement.
@@ -1012,7 +1017,7 @@ manquée se paie en mailles de raccord.
 
 ## Lignes par nœud, rangées pliées : `grid_surface2`
 
-`grid_surface2(contour, element_type, size=None, band=0, all_quad=False,
+`grid_surface2(contour, element_type, size=None, band=0, prefer_quads=False,
 relax="free")` prend les mêmes contours, rend le même maillage, respecte le
 même contour intouchable que `grid_surface`. **Il ne le remplace pas** : la façon de poser la grille
 diffère, et aucune des deux ne gagne partout.

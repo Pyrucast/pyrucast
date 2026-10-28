@@ -847,15 +847,16 @@ pub fn triangulate_surface(
 ///
 /// The contour is untouchable: its nodes come back at their own positions and
 /// no node is ever added on a boundary edge. A contour the paver cannot work
-/// with is therefore reported rather than worked around — `all_quad=True` on a
+/// with is therefore reported rather than worked around — `prefer_quads=True` on a
 /// loop with an odd number of segments raises, since a polygon with an odd
 /// number of sides has no filling by quadrangles alone and evening the count
 /// out would mean adding a boundary node; so does a contour so coarse for the
 /// requested size that the front folds onto itself.
 ///
-/// With `all_quad=False` (the default) an odd loop simply costs one triangle,
+/// With `prefer_quads=False` (the default) an odd loop simply costs one triangle,
 /// returned in a separate TRI3 submesh, along with the few cells a distorted
-/// leftover polygon could not make square.
+/// leftover polygon could not make square. `prefer_quads=True` removes the
+/// first kind, not the second: fewer triangles, none guaranteed.
 ///
 /// `relax` chooses what the front is allowed to do to itself between two rows.
 /// After each row the fresh chain is smoothed, which keeps the front from
@@ -879,13 +880,13 @@ pub fn triangulate_surface(
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (contour, element_type, size=None, all_quad=false, relax=None))]
+#[pyo3(signature = (contour, element_type, size=None, prefer_quads=false, relax=None))]
 pub fn pave_surface(
     py: Python<'_>,
     contour: PyRef<PyMesh>,
     element_type: ElementType,
     size: Option<f64>,
-    all_quad: bool,
+    prefer_quads: bool,
     relax: Option<FrontRelax>,
 ) -> PyResult<PyMesh> {
     // Poll Python signals while paving so a long run stays Ctrl+C-able.
@@ -893,7 +894,7 @@ pub fn pave_surface(
         &contour.inner,
         element_type,
         size,
-        all_quad,
+        prefer_quads,
         relax.unwrap_or_default(),
         &PySignals(py),
     )?;
@@ -1037,14 +1038,14 @@ pub fn merge_triangles(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (contour, element_type, size=None, band=0, all_quad=false, relax=None))]
+#[pyo3(signature = (contour, element_type, size=None, band=0, prefer_quads=false, relax=None))]
 pub fn grid_surface(
     py: Python<'_>,
     contour: PyRef<PyMesh>,
     element_type: ElementType,
     size: Option<f64>,
     band: usize,
-    all_quad: bool,
+    prefer_quads: bool,
     relax: Option<FrontRelax>,
 ) -> PyResult<PyMesh> {
     let mesh = crate::ops::mesh::grid_surface_cancellable(
@@ -1052,7 +1053,7 @@ pub fn grid_surface(
         element_type,
         size,
         band,
-        all_quad,
+        prefer_quads,
         relax.unwrap_or_default(),
         &PySignals(py),
     )?;
@@ -1093,14 +1094,14 @@ pub fn grid_surface(
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (contour, element_type, size=None, band=0, all_quad=false, relax=None))]
+#[pyo3(signature = (contour, element_type, size=None, band=0, prefer_quads=false, relax=None))]
 pub fn grid_surface2(
     py: Python<'_>,
     contour: PyRef<PyMesh>,
     element_type: ElementType,
     size: Option<f64>,
     band: usize,
-    all_quad: bool,
+    prefer_quads: bool,
     relax: Option<FrontRelax>,
 ) -> PyResult<PyMesh> {
     let mesh = crate::ops::mesh::grid_surface2_cancellable(
@@ -1108,7 +1109,7 @@ pub fn grid_surface2(
         element_type,
         size,
         band,
-        all_quad,
+        prefer_quads,
         relax.unwrap_or_default(),
         &PySignals(py),
     )?;
