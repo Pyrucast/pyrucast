@@ -171,7 +171,7 @@ pub fn plan(
     rep: u32,
     size: &dyn Fn(usize) -> f64,
     spacing: &dyn Fn(usize) -> f64,
-    all_quad: bool,
+    prefer_quads: bool,
 ) -> Result<RowPlan, Vec<usize>> {
     let slots = front.loop_slots(rep);
     let n = slots.len();
@@ -229,14 +229,14 @@ pub fn plan(
     }
 
     // A row normally preserves the loop's parity, which is what the
-    // all-quadrangle guarantee rests on. The exception is a chain of ends
+    // quadrangle preference rests on. The exception is a chain of ends
     // whose identifications run together, merging more than two nodes at once
     // and losing a node the count was relying on. Demoting one end to a plain
     // side restores it; each demotion removes an end, so this settles.
     loop {
         let built = assemble(front, pts, rep, &v, &p, &theta, &k, size);
         let Ok(plan) = built else { return built };
-        if !all_quad || plan.chain.len() % 2 == n % 2 || plan.chain.len() < 3 {
+        if !prefer_quads || plan.chain.len() % 2 == n % 2 || plan.chain.len() < 3 {
             return Ok(plan);
         }
         match (0..n).find(|&i| k[i] == 1) {
@@ -583,8 +583,8 @@ mod tests {
         // other `k` contributes the odd count `2k - 3`. The two effects
         // cancel, so the advanced loop always has the parity of the old one.
         // Parity is therefore a property of the contour, and only a seam or
-        // an edge split can change it — which is what the all-quadrangle
-        // guarantee hangs on.
+        // an edge split can change it — which is what the quadrangle
+        // preference hangs on.
         for per_side in 3..9 {
             let (f, pts) = square_loop(per_side);
             let rep = f.live_slots().next().unwrap();

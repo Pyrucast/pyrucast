@@ -75,8 +75,9 @@ use crate::ops::mesh::{contour, paving};
 ///
 /// `element_type` is `QUA4`, `QUA8` or `QUA9`; the quadratic forms are derived
 /// from the `QUA4` mesh. `target_size` sets the wanted edge length, `None`
-/// takes each domain's mean boundary edge length. `all_quad` asks for a
-/// triangle-free result.
+/// takes each domain's mean boundary edge length. `prefer_quads`, as for
+/// [`pave_surface`](fn@super::pave_surface), refuses an odd contour loop and
+/// keeps the front even: fewer triangles, none guaranteed.
 ///
 /// `band` is **extra** clearance, in cells, between the core and the contour.
 /// Zero is the useful value and the one to reach for: the core then goes as
@@ -124,7 +125,7 @@ pub fn grid_surface2(
     element_type: ElementType,
     target_size: Option<f64>,
     band: usize,
-    all_quad: bool,
+    prefer_quads: bool,
     relax: FrontRelax,
 ) -> Result<Mesh> {
     grid_surface2_cancellable(
@@ -132,7 +133,7 @@ pub fn grid_surface2(
         element_type,
         target_size,
         band,
-        all_quad,
+        prefer_quads,
         relax,
         &NoCancel,
     )
@@ -174,7 +175,7 @@ pub fn grid_surface2_cancellable(
     element_type: ElementType,
     target_size: Option<f64>,
     band: usize,
-    all_quad: bool,
+    prefer_quads: bool,
     relax: FrontRelax,
     cancel: &dyn Cancel,
 ) -> Result<Mesh> {
@@ -199,7 +200,7 @@ pub fn grid_surface2_cancellable(
         fabrics.push(paving::pave_grid2(
             d,
             target_size,
-            all_quad,
+            prefer_quads,
             relax,
             band,
             cancel,

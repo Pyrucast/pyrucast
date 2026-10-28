@@ -66,7 +66,7 @@ def test_pave_surface_handles_a_hole():
 def test_pave_surface_all_quad_leaves_no_triangle():
     coords = pc.Coords(2)
     contour = _closed_loop(coords, _rect(1.0, 1.0, 6, 6))  # 24 segments, even
-    mesh = pc.mesh.pave_surface(contour, "QUA4", size=0.2, all_quad=True)
+    mesh = pc.mesh.pave_surface(contour, "QUA4", size=0.2, prefer_quads=True)
     assert _cells(mesh).get("TRI3", 0) == 0
 
 
@@ -75,7 +75,7 @@ def test_pave_surface_all_quad_refuses_an_odd_contour():
     coords = pc.Coords(2)
     contour = _closed_loop(coords, _rect(1.0, 1.0, 4, 4) + [(0.0, 0.125)])
     with pytest.raises(Exception, match="odd"):
-        pc.mesh.pave_surface(contour, "QUA4", size=0.25, all_quad=True)
+        pc.mesh.pave_surface(contour, "QUA4", size=0.25, prefer_quads=True)
     # Left alone it meshes, paying one triangle.
     mesh = pc.mesh.pave_surface(contour, "QUA4", size=0.25)
     assert _cells(mesh).get("TRI3", 0) <= 1
@@ -126,7 +126,7 @@ def test_pave_surface_accepts_quadratic_quadrangles():
     coords = pc.Coords(2)
     contour = _closed_loop(coords, _rect(1.0, 1.0, 4, 4))
     for name in ("QUA8", "QUA9"):
-        mesh = pc.mesh.pave_surface(contour, name, size=0.25, all_quad=True)
+        mesh = pc.mesh.pave_surface(contour, name, size=0.25, prefer_quads=True)
         assert mesh.element_types() == [name]
 
 
@@ -141,7 +141,7 @@ def test_pave_surface_extrudes_to_hexahedra():
     """The prismatic 3-D case: an all-quadrangle mesh extrudes to pure HEX8."""
     coords = pc.Coords(3)
     contour = _closed_loop(coords, [(x, 0.0, y) for x, y in _rect(1.0, 1.0, 6, 6)])
-    plate = pc.mesh.pave_surface(contour, "QUA4", size=0.2, all_quad=True)
+    plate = pc.mesh.pave_surface(contour, "QUA4", size=0.2, prefer_quads=True)
     assert _cells(plate).get("TRI3", 0) == 0
     volume = pc.mesh.extrude(plate, [0.0, 0.2, 0.0], 2)
     assert volume.element_types() == ["HEX8"]

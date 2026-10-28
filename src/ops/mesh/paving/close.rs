@@ -17,15 +17,20 @@
 //! ## Parity
 //!
 //! A polygon with an **even** number of sides always decomposes into
-//! quadrangles alone; an odd one always leaves exactly one triangle. The
+//! quadrangles alone — topologically; with its vertices where they are, a
+//! distorted one may admit no split into *valid* quadrangles, and [`close`]
+//! then prefers triangles to an inverted cell. An odd one always leaves
+//! exactly one triangle. The
 //! recursion below simply chooses diagonals that keep both halves even, and
 //! when handed an odd polygon it clips one triangular ear first — which is the
 //! one triangle, spent where it costs the least.
 //!
 //! Parity is therefore decided by the contour, not by anything the paver does:
 //! a row provably preserves it (see [`super::row`]), and a seam removes two
-//! slots. That is why the all-quadrangle guarantee is enforced once, at the
-//! entrance, by making every input loop even.
+//! slots. That is why the parity half of `prefer_quads` is settled once, at
+//! the entrance, by refusing an odd input loop. The other half — a polygon too
+//! distorted for valid quadrangles — is not, and is why the preference is not a
+//! guarantee.
 
 use super::geom::{orient, quad_is_valid, quad_quality, segments_cross, tri_quality};
 use crate::atoms::{Point2, Vector2};

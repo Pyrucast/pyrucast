@@ -17,17 +17,19 @@ la même chose — un ou plusieurs [contours orientés](operateurs/maillage.md) 
 | opérateur | méthode | types et options | rend |
 |---|---|---|---|
 | `triangulate_surface` | Delaunay contraint + raffinement de Ruppert | `"TRI3"`, `"QUA4"` ; `size` | des `TRI3` — en `QUA4`, des quadrangles et quelques triangles |
-| `pave_surface` | front avançant, en rangées depuis le bord | `"QUA4"`, `"QUA8"`, `"QUA9"` ; `size`, `all_quad`, `relax` | des `QUA4`, quelques `TRI3` |
-| `grid_surface` | cœur en grille + bande frontale au bord | `"QUA4"`, `"QUA8"`, `"QUA9"` ; `size`, `band`, `all_quad`, `relax` | des `QUA4`, quelques `TRI3` |
+| `pave_surface` | front avançant, en rangées depuis le bord | `"QUA4"`, `"QUA8"`, `"QUA9"` ; `size`, `prefer_quads`, `relax` | des `QUA4`, quelques `TRI3` |
+| `grid_surface` | cœur en grille + bande frontale au bord | `"QUA4"`, `"QUA8"`, `"QUA9"` ; `size`, `band`, `prefer_quads`, `relax` | des `QUA4`, quelques `TRI3` |
 | `grid_surface2` | idem, lignes prises une par nœud du contour | comme `grid_surface` | des `QUA4`, quelques `TRI3` |
 
 Le premier argument est le contour, le deuxième le type d'élément. Les options :
 
 - `size` — la taille de maille visée ; sans elle, la longueur moyenne des arêtes
   du contour, domaine par domaine ;
-- `all_quad` (défaut `False`) — `True` demande un résultat sans triangle, et
-  refuse une boucle au nombre impair de segments, qu'aucun pavage en
-  quadrangles ne remplit ;
+- `prefer_quads` (défaut `False`) — `True` refuse une boucle au nombre impair
+  de segments, qu'aucun pavage en quadrangles ne remplit, puis tient le front
+  pair jusqu'au bout. Moins de triangles, mais pas aucun : la fermeture en pose
+  encore là où un quadrangle serait retourné. C'est une préférence, pas une
+  garantie ;
 - `relax` (défaut `"free"`) — ce que le front s'autorise entre deux rangées :
   `"free"`, `"along"` ou `"none"` (voir
   [plus bas](#le-front-peut-garder-ses-angles--relax)) ;
@@ -219,8 +221,10 @@ En pratique :
 - **forme franchement oblique** — `pave_surface`, dont les rangées épousent la
   pente ; mais tant qu'il reste des parois droites autour de l'oblique, les
   mailleurs en grille tiennent — la maison en est l'exemple ;
-- **quadrangles obligatoires** — `pave_surface` accepte `all_quad=True` et
-  refuse par une erreur claire un contour dont la parité l'interdit ;
+- **le moins de triangles possible** — `prefer_quads=True`, sur les trois
+  paveurs, refuse par une erreur claire un contour dont la parité l'interdit ;
+  quelques triangles peuvent encore rester là où un quadrangle serait
+  retourné ;
 - **triangles voulus** — `triangulate_surface`, seul à en produire par
   construction.
 

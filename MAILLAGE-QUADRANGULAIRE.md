@@ -184,16 +184,16 @@ Blossom-Quad's **minimum-cost perfect matching**.
 - *Verdict*: **the best gain/effort ratio of the list.** A known problem, an
   exact published solution, a scope bounded to one operator.
 
-### Lead 2 — The parity discipline, outside `all_quad`
+### Lead 2 — The parity discipline, outside `prefer_quads`
 
 The two places that decide on a split gap already impose "both halves stay even",
-but **only under `all_quad`**:
+but **only under `prefer_quads`**:
 
 ```rust
 // unstick
-if gap < 3 || n - gap < 3 || (all_quad && gap.is_multiple_of(2)) { continue; }
+if gap < 3 || n - gap < 3 || (prefer_quads && gap.is_multiple_of(2)) { continue; }
 // find_seam
-if all_quad && gap % 2 == 1 { continue; }
+if prefer_quads && gap % 2 == 1 { continue; }
 ```
 
 Yet the 65 triangles of the box **all** come from the closure of a small ring (49
@@ -221,7 +221,7 @@ quadrangles, each quadrangle four. ×4 cells, size halved, zero triangles, **and
 never a contour refusal**. That is what gmsh does in QuadQS before the
 topological remeshing.
 
-- *Direct motivation*: `all_quad=True` today **refuses** a contour of odd parity
+- *Direct motivation*: `prefer_quads=True` today **refuses** a contour of odd parity
   ("the outer boundary loop has 1151 segments — an odd number"). The box of the
   study is therefore not entitled to it.
 - *Verdict*: a few dozen lines, no risk, but a density trade-off that the caller

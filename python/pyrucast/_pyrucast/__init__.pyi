@@ -1783,7 +1783,7 @@ class Mesh:
         the result may also carry a few boundary triangles). The contour may be
         2-D or a planar loop in 3-D (meshed in its best-fit plane, lifted back).
         """
-    def pave_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
+    def pave_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, prefer_quads: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
         Pave the inside of a closed contour with quadrangles, in rows walking
         inward from the boundary.
@@ -1803,15 +1803,16 @@ class Mesh:
         
         The contour is untouchable: its nodes come back at their own positions and
         no node is ever added on a boundary edge. A contour the paver cannot work
-        with is therefore reported rather than worked around — `all_quad=True` on a
+        with is therefore reported rather than worked around — `prefer_quads=True` on a
         loop with an odd number of segments raises, since a polygon with an odd
         number of sides has no filling by quadrangles alone and evening the count
         out would mean adding a boundary node; so does a contour so coarse for the
         requested size that the front folds onto itself.
         
-        With `all_quad=False` (the default) an odd loop simply costs one triangle,
+        With `prefer_quads=False` (the default) an odd loop simply costs one triangle,
         returned in a separate TRI3 submesh, along with the few cells a distorted
-        leftover polygon could not make square.
+        leftover polygon could not make square. `prefer_quads=True` removes the
+        first kind, not the second: fewer triangles, none guaranteed.
         
         `relax` chooses what the front is allowed to do to itself between two rows.
         After each row the fresh chain is smoothed, which keeps the front from
@@ -1911,7 +1912,7 @@ class Mesh:
         r"""
         Remove the triangles from a quadrangle-dominant mesh, in pairs.
         """
-    def grid_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
+    def grid_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, prefer_quads: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
         Mesh the inside of a closed contour with a structured grid core and a
         frontal band — the regular-mesh companion of `pave_surface`.
@@ -1949,7 +1950,7 @@ class Mesh:
         which shares the band with this operator and where the choice is spelled
         out.
         """
-    def grid_surface2(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
+    def grid_surface2(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, prefer_quads: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
         Mesh the inside of a closed contour with a structured grid core and a
         frontal band, taking the grid's lines **one per contour node**.
@@ -4633,7 +4634,7 @@ def gradient(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
     (`grad_T_x`, …). Feed the result to `integrate_behavior`.
     """
 
-def grid_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
+def grid_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, prefer_quads: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
     Mesh the inside of a closed contour with a structured grid core and a
     frontal band — the regular-mesh companion of `pave_surface`.
@@ -4672,7 +4673,7 @@ def grid_surface(contour: Mesh, element_type: builtins.str, size: typing.Optiona
     out.
     """
 
-def grid_surface2(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
+def grid_surface2(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, prefer_quads: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
     Mesh the inside of a closed contour with a structured grid core and a
     frontal band, taking the grid's lines **one per contour node**.
@@ -5046,7 +5047,7 @@ def ottosen(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measur
     `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
-def pave_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
+def pave_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, prefer_quads: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
     Pave the inside of a closed contour with quadrangles, in rows walking
     inward from the boundary.
@@ -5066,15 +5067,16 @@ def pave_surface(contour: Mesh, element_type: builtins.str, size: typing.Optiona
     
     The contour is untouchable: its nodes come back at their own positions and
     no node is ever added on a boundary edge. A contour the paver cannot work
-    with is therefore reported rather than worked around — `all_quad=True` on a
+    with is therefore reported rather than worked around — `prefer_quads=True` on a
     loop with an odd number of segments raises, since a polygon with an odd
     number of sides has no filling by quadrangles alone and evening the count
     out would mean adding a boundary node; so does a contour so coarse for the
     requested size that the front folds onto itself.
     
-    With `all_quad=False` (the default) an odd loop simply costs one triangle,
+    With `prefer_quads=False` (the default) an odd loop simply costs one triangle,
     returned in a separate TRI3 submesh, along with the few cells a distorted
-    leftover polygon could not make square.
+    leftover polygon could not make square. `prefer_quads=True` removes the
+    first kind, not the second: fewer triangles, none guaranteed.
     
     `relax` chooses what the front is allowed to do to itself between two rows.
     After each row the fresh chain is smoothed, which keeps the front from

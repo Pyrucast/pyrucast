@@ -270,18 +270,20 @@ fn bury_dead_quads(fab: &mut Fabric) {
 /// Pave one domain: its outer loop, minus its holes.
 ///
 /// `target` is the wanted element size; `None` takes the mean boundary edge
-/// length. With `all_quad`, a loop having an odd number of segments gets one
-/// extra node on its longest segment — the only way to reach a triangle-free
-/// mesh, since parity is a property of the boundary that paving cannot change.
+/// length. With `prefer_quads`, a loop having an odd number of segments is
+/// refused — parity is a property of the boundary that paving cannot change,
+/// and the boundary is the caller's — and every row, seam and cut keeps the
+/// front even. The closure may still leave triangles where a quadrangle would
+/// be inverted: a preference, not a guarantee.
 pub fn pave(
     domain: &Domain,
     target: Option<f64>,
-    all_quad: bool,
+    prefer_quads: bool,
     relax: FrontRelax,
     cancel: &dyn Cancel,
     op: &str,
 ) -> Result<Fabric> {
-    pave_inner(domain, target, all_quad, relax, None, cancel, op)
+    pave_inner(domain, target, prefer_quads, relax, None, cancel, op)
 }
 
 /// Pave `domain` around a structured core: a tensor grid ([`grid`]) fills the
@@ -302,7 +304,7 @@ pub fn pave(
 pub fn pave_grid(
     domain: &Domain,
     target: Option<f64>,
-    all_quad: bool,
+    prefer_quads: bool,
     relax: FrontRelax,
     band: usize,
     cancel: &dyn Cancel,
@@ -311,7 +313,7 @@ pub fn pave_grid(
     pave_inner(
         domain,
         target,
-        all_quad,
+        prefer_quads,
         relax,
         Some((band, false)),
         cancel,
@@ -324,7 +326,7 @@ pub fn pave_grid(
 pub fn pave_grid2(
     domain: &Domain,
     target: Option<f64>,
-    all_quad: bool,
+    prefer_quads: bool,
     relax: FrontRelax,
     band: usize,
     cancel: &dyn Cancel,
@@ -333,7 +335,7 @@ pub fn pave_grid2(
     pave_inner(
         domain,
         target,
-        all_quad,
+        prefer_quads,
         relax,
         Some((band, true)),
         cancel,
@@ -344,7 +346,7 @@ pub fn pave_grid2(
 fn pave_inner(
     domain: &Domain,
     target: Option<f64>,
-    all_quad: bool,
+    prefer_quads: bool,
     relax: FrontRelax,
     band: Option<(usize, bool)>,
     cancel: &dyn Cancel,
@@ -416,12 +418,12 @@ fn pave_inner(
     // The contour is the caller's and is never touched, so an odd loop cannot
     // be fixed here: it simply has no triangle-free filling, and saying so is
     // more useful than quietly producing one triangle anyway.
-    if all_quad {
+    if prefer_quads {
         for (k, verts) in loops.iter().enumerate() {
             if !verts.len().is_multiple_of(2) {
                 let which = if k == 0 { "outer boundary" } else { "hole" };
                 return Err(PyrucastError::Message(format!(
-                    "{op}: all_quad was asked for, but the {which} loop has {} \
+                    "{op}: prefer_quads was asked for, but the {which} loop has {} \
                      segments — an odd number. A polygon with an odd number of sides has no \
                      filling by quadrangles alone, and paving cannot change that parity. \
                      Re-mesh that loop with an even number of segments.",
@@ -503,17 +505,17 @@ fn pave_inner(
             // Cutting the loop in two usually gets it moving again; closing it
             // outright would fill a large polygon with a decomposition, which
             // is a far worse mesh than two more rows would have been.
-            if !unstick(&fab, &mut front, rep, target, all_quad, &mut stack) {
+            if !unstick(&fab, &mut front, rep, target, prefer_quads, &mut stack) {
                 close_loop(&mut fab, &mut front, rep, target, op)?;
             }
             continue;
         }
 
-        match try_row(&mut fab, &mut front, rep, target, all_quad, relax) {
+        match try_row(&mut fab, &mut front, rep, target, prefer_quads, relax) {
             // The row consumed the loop outright.
             Some(None) => {}
             Some(Some(new_rep)) => {
-                let seamed = match find_seam(&front, &fab, new_rep, target, all_quad) {
+                let seamed = match find_seam(&front, &fab, new_rep, target, prefer_quads) {
                     Some((a, b)) => seam(&mut fab, &mut front, a, b, &mut stack),
                     None => false,
                 };
@@ -522,7 +524,7 @@ fn pave_inner(
                 }
             }
             None => {
-                let seamed = match find_seam(&front, &fab, rep, target, all_quad) {
+                let seamed = match find_seam(&front, &fab, rep, target, prefer_quads) {
                     Some((a, b)) => seam(&mut fab, &mut front, a, b, &mut stack),
                     None => false,
                 };
@@ -694,7 +696,7 @@ fn try_row(
     front: &mut Front,
     rep: u32,
     target: f64,
-    all_quad: bool,
+    prefer_quads: bool,
     relax: FrontRelax,
 ) -> Option<Option<u32>> {
     let slots = front.loop_slots(rep);
@@ -740,7 +742,7 @@ fn try_row(
         }
         let sz = |i: usize| base[i] * scale[i];
         let want = |i: usize| base[i];
-        match row::plan(front, &fab.pts, rep, &sz, &want, all_quad) {
+        match row::plan(front, &fab.pts, rep, &sz, &want, prefer_quads) {
             Ok(plan) => {
                 if keeps_orientation(&plan, was) && chain_is_free(front, fab, &grid, &plan) {
                     let out = commit(fab, front, rep, plan);
@@ -1060,7 +1062,7 @@ fn unstick(
     front: &mut Front,
     rep: u32,
     target: f64,
-    all_quad: bool,
+    prefer_quads: bool,
     stack: &mut Vec<(u32, u32)>,
 ) -> bool {
     let slots = front.loop_slots(rep);
@@ -1089,9 +1091,9 @@ fn unstick(
                 let Some(&j) = rank.get(&sb) else { continue };
                 let gap = (j + n - i) % n;
                 // Both sides must be worth paving, and — under the
-                // all-quadrangle guarantee — both must stay even. A chord adds
+                // quadrangle preference — both must stay even. A chord adds
                 // one slot to each side, so an odd gap is what keeps parity.
-                if gap < 3 || n - gap < 3 || (all_quad && gap.is_multiple_of(2)) {
+                if gap < 3 || n - gap < 3 || (prefer_quads && gap.is_multiple_of(2)) {
                     continue;
                 }
                 let d = (fab.pts[front.vertex(sb) as usize] - pa).norm();
@@ -1493,7 +1495,7 @@ fn find_seam(
     fab: &Fabric,
     rep: u32,
     target: f64,
-    all_quad: bool,
+    prefer_quads: bool,
 ) -> Option<(u32, u32)> {
     let radius = SEAM_FACTOR * target;
     let slots = front.loop_slots(rep);
@@ -1526,9 +1528,9 @@ fn find_seam(
                 if gap < 2 || gap > n - 2 {
                     continue;
                 }
-                // A split has to leave two even loops, or the all-quadrangle
-                // guarantee is lost on both halves at once.
-                if all_quad && gap % 2 == 1 {
+                // A split has to leave two even loops, or the quadrangle
+                // preference is lost on both halves at once.
+                if prefer_quads && gap % 2 == 1 {
                     continue;
                 }
             }

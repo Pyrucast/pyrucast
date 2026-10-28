@@ -38,7 +38,7 @@
 //! worked around. There are two such cases and both come back as an error
 //! naming the problem:
 //!
-//! - `all_quad` on a loop with an **odd** number of segments. A polygon with
+//! - `prefer_quads` on a loop with an **odd** number of segments. A polygon with
 //!   an odd number of sides has no filling by quadrangles alone, paving
 //!   provably cannot change that parity — a row preserves it, a seam removes
 //!   two nodes — and evening the count out would mean adding a boundary node.
@@ -46,11 +46,16 @@
 //!   advancing front **folds onto itself**, leaving a region that cannot be
 //!   filled. The error names where.
 //!
-//! Left to itself (`all_quad = false`) an odd loop simply costs one triangle,
+//! Left to itself (`prefer_quads = false`) an odd loop simply costs one triangle,
 //! returned in a separate `TRI3` submesh, along with the few cells a distorted
 //! leftover polygon could not make square — the closure prefers a pair of
 //! triangles to a cell with a negative Jacobian, and validity is never traded
 //! away.
+//!
+//! `prefer_quads` removes the first kind of triangle, not the second. The odd
+//! loop is the caller's input, so it is refused and can be fixed; a distorted
+//! leftover polygon is born inside the paving, and is still closed by
+//! triangles. Fewer triangles, then — none is not promised.
 
 use crate::atoms::ElementType;
 use crate::containers::mesh::Mesh;
@@ -65,9 +70,10 @@ use crate::ops::mesh::{contour, paving};
 ///
 /// `element_type` is `QUA4`, `QUA8` or `QUA9`; the quadratic forms are derived
 /// from the `QUA4` mesh. `target_size` sets the wanted edge length, `None`
-/// takes each domain's mean boundary edge length. `all_quad` guarantees a
-/// triangle-free result, at the cost of at most one extra node per boundary
-/// loop of odd length.
+/// takes each domain's mean boundary edge length. `prefer_quads` refuses a
+/// boundary loop of odd length — the caller's to fix — and keeps the front even
+/// all the way in; a few triangles may still be left where a quadrangle would
+/// come out inverted, so it is a preference, not a guarantee.
 ///
 /// Contour nodes are reused as they are and never moved. The result carries a
 /// `QUA4` submesh and, only when triangles were left over, a `TRI3` one.
@@ -101,7 +107,7 @@ use crate::ops::mesh::{contour, paving};
 /// // contour, rather than triangles paired afterwards.
 /// let m = mesh::pave_surface(&contour, ElementType::QUA4, Some(0.5), false, mesh::FrontRelax::Free)?;
 /// assert!(m.cell_count() > 0);
-/// // `all_quad` demands that nothing stay triangular — which is not
+/// // `prefer_quads` demands that nothing stay triangular — which is not
 /// // possible que si le contour a un nombre **pair** de segments.
 /// assert!(mesh::pave_surface(&contour, ElementType::QUA4, Some(0.5), true, mesh::FrontRelax::Free).is_ok());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -110,14 +116,14 @@ pub fn pave_surface(
     contour: &Mesh,
     element_type: ElementType,
     target_size: Option<f64>,
-    all_quad: bool,
+    prefer_quads: bool,
     relax: FrontRelax,
 ) -> Result<Mesh> {
     pave_surface_cancellable(
         contour,
         element_type,
         target_size,
-        all_quad,
+        prefer_quads,
         relax,
         &NoCancel,
     )
@@ -155,7 +161,7 @@ pub fn pave_surface_cancellable(
     contour: &Mesh,
     element_type: ElementType,
     target_size: Option<f64>,
-    all_quad: bool,
+    prefer_quads: bool,
     relax: FrontRelax,
     cancel: &dyn Cancel,
 ) -> Result<Mesh> {
@@ -181,7 +187,7 @@ pub fn pave_surface_cancellable(
         fabrics.push(paving::pave(
             d,
             target_size,
-            all_quad,
+            prefer_quads,
             relax,
             cancel,
             "pave_surface",
