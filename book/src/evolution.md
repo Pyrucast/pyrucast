@@ -67,10 +67,10 @@ Cast3M, mais saisie à plat, sans composer d'évolutions à la main :
 Pour deux variables, avec `Tₐ ≤ T ≤ T_b` les groupes encadrants et `f_a`, `f_b`
 leurs courbes en `φ` :
 
-\[
-f(T, \varphi) = (1-t)\, f_a(\varphi) + t\, f_b(\varphi),
+\\[
+f(T, \varphi) = (1-t)\\, f_a(\varphi) + t\\, f_b(\varphi),
 \qquad t = \frac{T - T_a}{T_b - T_a}.
-\]
+\\]
 
 Conséquences :
 

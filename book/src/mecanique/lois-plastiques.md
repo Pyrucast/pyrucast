@@ -124,8 +124,8 @@ deux, ce que vérifie un test.
 algorithmique classique évalué au prédicteur :
 
 \\[
-D_{\text{alg}} = K\\,I \otimes I + 2\mu\\,\theta\\,\mathbb I_{\text{dev}}
-- 2\mu\\,\bar\theta\\;\hat n \otimes \hat n,
+D_{\text{alg}} = K\\,I \otimes I + 2\mu\\,\theta\\,\mathbb I_{\text{dev}} -
+2\mu\\,\bar\theta\\;\hat n \otimes \hat n,
 \\]
 \\[
 \theta = \frac{\sigma_y(p_A + \Delta p)}{q^{\text{tr}}}, \qquad
@@ -185,8 +185,8 @@ et la consistance \\( f(\sigma_B) = 0 \\) se résout, comme en J2, sans itérer 
 \\[
 \Delta\lambda = \frac{q^{\text{tr}} + \alpha I_1^{\text{tr}} - k}{3\mu + 9K\alpha\psi},
 \qquad
-\Delta\varepsilon^p = \frac{3\\,\Delta\lambda}{2\\,q^{\text{tr}}}\\,s^{\text{tr}}
-+ \psi\\,\Delta\lambda\\,I .
+\Delta\varepsilon^p = \frac{3\\,\Delta\lambda}{2\\,q^{\text{tr}}}\\,s^{\text{tr}} +
+\psi\\,\Delta\lambda\\,I .
 \\]
 
 Le terme \\( 9K\alpha\psi \\) au dénominateur est **le** couplage
@@ -200,23 +200,23 @@ module \\( H \\) étant algébrique — un \\( H \\) négatif adoucit. Laissée 
 cette croissance serait sans borne, aussi une seconde surface, dite **ultime**,
 l'arrête :
 
-\[
+\\[
 \text{initiale } \alpha I_1 + \beta q = k,
 \qquad
 \text{ultime } \alpha_u I_1 + \beta_u q = k_u .
-\]
+\\]
 
 Les deux sont lues comme les extrémités d'une seule interpolation, que
 l'écrouissage lui-même pilote :
 
-\[
-\lambda = \mathrm{clamp}\!\left(\frac{H\,p}{k_u - k},\, 0,\, 1\right),
+\\[
+\lambda = \mathrm{clamp}\\!\left(\frac{H\\,p}{k_u - k},\\, 0,\\, 1\right),
 \qquad
-\big(\alpha, \beta, k\big)(p) = (1-\lambda)\,\big(\alpha, \beta, k\big) + \lambda\,\big(\alpha_u, \beta_u, k_u\big).
-\]
+\big(\alpha, \beta, k\big)(p) = (1-\lambda)\\,\big(\alpha, \beta, k\big) + \lambda\\,\big(\alpha_u, \beta_u, k_u\big).
+\\]
 
 **C'est une interprétation, et il vaut mieux le dire.** Cast3M donne les deux
-surfaces et \\( dK = H\,dp \\) sans préciser comment elles se rencontrent. Les
+surfaces et \\( dK = H\\,dp \\) sans préciser comment elles se rencontrent. Les
 lire comme une surface qui interpole a deux mérites : \\( k(p) = k + H p \\)
 exactement tant que la limite n'est pas atteinte, donc la loi d'écrouissage
 annoncée est reproduite telle quelle ; et la surface de charge reste **unique**,
@@ -254,7 +254,7 @@ Les deux modèles de Cast3M sont alors des préréglages de celui-ci :
   rend l'écoulement associé, tous les autres à leur défaut. Cast3M le paramètre
   par les limites en traction et compression simples, d'où l'on tire
   \\( \text{friction} = \frac{|LCS| - LTR}{|LCS| + LTR} \\) et
-  \\( k = \frac{2\,|LCS|\,LTR}{|LCS| + LTR} \\).
+  \\( k = \frac{2\\,|LCS|\\,LTR}{|LCS| + LTR} \\).
 - **`PLASTIQUE DRUCKER_PRAGER`** — les neuf.
 
 ### Le sommet
@@ -271,8 +271,8 @@ s_B = 0, \qquad \sigma_{m,B} = \frac{k}{3\alpha},
 tout ce que le prédicteur avait construit au-delà devenant plastique :
 
 \\[
-\Delta\varepsilon^p = \frac{s^{\text{tr}}}{2\mu}
-+ \frac{I_1^{\text{tr}} - k/\alpha}{9K}\\,I,
+\Delta\varepsilon^p = \frac{s^{\text{tr}}}{2\mu} +
+\frac{I_1^{\text{tr}} - k/\alpha}{9K}\\,I,
 \qquad \Delta p = \frac{q^{\text{tr}}}{3\mu}.
 \\]
 

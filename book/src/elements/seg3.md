@@ -40,7 +40,7 @@ w_g = \left(\tfrac59,\ \tfrac89,\ \tfrac59\right), \qquad \sum_g w_g = 2.
 
 ## Notes
 
-- Dimensions valides : \\( d_r = 1 \\), \\( d_s \in \{1, 2, 3\} \\) (arête
+- Dimensions valides : \\( d_r = 1 \\), \\( d_s \in \\{1, 2, 3\\} \\) (arête
   courbe plongée dans le plan ou l'espace).
 - L'interpolation quadratique suit une géométrie **courbe** exactement (arête
   parabolique).

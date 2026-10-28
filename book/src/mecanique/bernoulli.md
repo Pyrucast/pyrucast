@@ -28,15 +28,15 @@ configuration se **déduit**. Les noms de DDL obtenus se relisent par
 La cinématique est celle d'une section rigide qui **tourne avec la pente** :
 
 \\[
-u_x(x, y, z) = u(x) - y\\,w'(x), \qquad u_y = w(x),
-\qquad \theta = w' .
+u_x(x, y, z) = u(x) - y\\,w\'(x), \qquad u_y = w(x),
+\qquad \theta = w\' .
 \\]
 
 D'où une déformation axiale affine dans la section, et **aucune** distorsion :
 
 \\[
-\varepsilon_{xx} = u' - y\\,w'' = \varepsilon_0 - y\\,\chi,
-\qquad \chi = w'',
+\varepsilon_{xx} = u\' - y\\,w\'\' = \varepsilon_0 - y\\,\chi,
+\qquad \chi = w\'\',
 \qquad \gamma_{xy} \equiv 0 .
 \\]
 
@@ -52,14 +52,14 @@ L'équilibre local intégré sur la section donne alors les deux équations
 classiques, découplées elles aussi :
 
 \\[
-(EA\\,u')' + n = 0, \qquad (EI\\,w'')'' = q .
+(EA\\,u\')\' + n = 0, \qquad (EI\\,w\'\')\'\' = q .
 \\]
 
 La seconde est du **quatrième ordre** — et c'est toute la différence avec
 [Timoshenko](timoshenko.md), qui en fait deux du second ordre en gardant
-\\( \theta \\) indépendant de \\( w' \\). En 3-D s'y ajoutent la flexion selon le
-second axe principal (\\( M_z = EI_z\\,w_y'' \\)) et la torsion de Saint-Venant
-\\( M_t = GJ\\,\varphi' \\), qui ne se couple à rien pour une section symétrique.
+\\( \theta \\) indépendant de \\( w\' \\). En 3-D s'y ajoutent la flexion selon le
+second axe principal (\\( M_z = EI_z\\,w_y\'\' \\)) et la torsion de Saint-Venant
+\\( M_t = GJ\\,\varphi\' \\), qui ne se couple à rien pour une section symétrique.
 
 ## Pourquoi une physique à part, et non une aire de cisaillement infinie
 
@@ -98,7 +98,7 @@ La courbure est alors **linéaire** sur l'élément, donc l'espace d'approximati
 contient exactement la solution d'une travée chargée seulement à ses
 extrémités : l'élément est *exact aux nœuds* pour toute charge laissant la travée
 libre d'efforts répartis — c'est pourquoi un élément par barre suffit pour un
-portique. La raideur \\( K_b = \int_0^L EI\\,N''^\top N''\\,dx \\) est **intégrée**
+portique. La raideur \\( K_b = \int_0^L EI\\,N\'\'^\top N\'\'\\,dx \\) est **intégrée**
 depuis cette base, et vaut exactement la forme fermée classique :
 
 \\[

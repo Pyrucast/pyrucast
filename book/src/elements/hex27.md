@@ -13,7 +13,7 @@ centre de volume 26 en \\( (0,0,0) \\).
 ## Fonctions de forme
 
 Produit tensoriel des **fonctions de Lagrange quadratiques 1-D** sur
-\\( \{-1, 0, +1\} \\) :
+\\( \\{-1, 0, +1\\} \\) :
 
 \\[
 \ell_{-}(t) = \tfrac12 t(t-1), \qquad
@@ -29,12 +29,12 @@ dans chaque direction. Le centre de volume est
 ## Dérivées de référence
 
 \\[
-\frac{\partial N_i}{\partial \xi} = \ell_a'(\xi)\\,\ell_b(\eta)\\,\ell_c(\zeta),
+\frac{\partial N_i}{\partial \xi} = \ell_a\'(\xi)\\,\ell_b(\eta)\\,\ell_c(\zeta),
 \\]
 
 et de même pour \\( \partial_\eta \\), \\( \partial_\zeta \\), avec
-\\( \ell_{-}'(t) = t - \tfrac12 \\), \\( \ell_0'(t) = -2t \\),
-\\( \ell_{+}'(t) = t + \tfrac12 \\).
+\\( \ell_{-}\'(t) = t - \tfrac12 \\), \\( \ell_0\'(t) = -2t \\),
+\\( \ell_{+}\'(t) = t + \tfrac12 \\).
 
 ## Quadrature (défaut)
 

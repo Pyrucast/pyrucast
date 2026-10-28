@@ -1147,22 +1147,22 @@ pas l'être, et c'est le cœur de l'affaire.
    qui en veut deux quadrangulaires — ne l'atteignent.
 
 Le second geste tient tout entier dans une identité. Autour d'un nœud portant
-\( q \) quadrangles et \( t \) triangles, chaque quadrangle pose deux arêtes qui
+\\( q \\) quadrangles et \\( t \\) triangles, chaque quadrangle pose deux arêtes qui
 ne le touchent pas et chaque triangle en pose une : l'**étoile** du nœud est
 bordée par un polygone à
 
-\[ n = 2q + t \]
+\\[ n = 2q + t \\]
 
-côtés. Réciproquement, une décomposition d'un \( n \)-gone en \( q' \)
-quadrangles et \( t' \) triangles **sans nœud intérieur** vérifie
+côtés. Réciproquement, une décomposition d'un \\( n \\)-gone en \\( q\' \\)
+quadrangles et \\( t\' \\) triangles **sans nœud intérieur** vérifie
 
-\[ 2q' + t' = n - 2. \]
+\\[ 2q\' + t\' = n - 2. \\]
 
-Avec \( q + t = 3 \), les deux se combinent en \( 2q' + t' = 2q + t - 2 \) : la
+Avec \\( q + t = 3 \\), les deux se combinent en \\( 2q\' + t\' = 2q + t - 2 \\) : la
 redécoupe existe toujours, et toujours avec **une maille de moins** que
 l'étoile qu'elle remplace.
 
-| \( q, t \) | bord de l'étoile | avant | après | mailles |
+| \\( q, t \\) | bord de l'étoile | avant | après | mailles |
 |---|---|---|---|---|
 | 3, 0 | hexagone | 3 quadrangles | 2 quadrangles | 3 → 2 |
 | 2, 1 | pentagone | 2 quadrangles, 1 triangle | 1 de chaque | 3 → 2 |
@@ -1229,10 +1229,10 @@ titre.
 
 Pris ensemble, le calcul s'inverse. Leurs étoiles se recouvrent sur les mailles
 qui portent l'arête commune, si bien qu'à eux deux ils n'en portent que
-\( \mathrm{val}(a) + \mathrm{val}(b) - 2 \) — et la même identité
-\( 2q' + t' = n - 2 \) recoupe ce qui les borde :
+\\( \mathrm{val}(a) + \mathrm{val}(b) - 2 \\) — et la même identité
+\\( 2q\' + t\' = n - 2 \\) recoupe ce qui les borde :
 
-| \( \mathrm{val}(a), \mathrm{val}(b) \) | bord | avant | après | mailles |
+| \\( \mathrm{val}(a), \mathrm{val}(b) \\) | bord | avant | après | mailles |
 |---|---|---|---|---|
 | 3, 3 | hexagone | 4 quadrangles | 2 quadrangles | 4 → 2 |
 | 3, 4 | heptagone | 4 quadrangles, 1 triangle | 2 quadrangles, 1 triangle | 5 → 3 |
@@ -1275,8 +1275,8 @@ votre côté, et `orient` n'est pas un préalable.
 
 ### `merge_triangles` — les triangles, par paires
 
-En comptant les côtés de chaque face, \( 4Q + 3T = 2E_\text{int} + E_\text{bord} \),
-donc \( T \equiv E_\text{bord} \pmod 2 \) : **le nombre de triangles a la
+En comptant les côtés de chaque face, \\( 4Q + 3T = 2E_\text{int} + E_\text{bord} \\),
+donc \\( T \equiv E_\text{bord} \pmod 2 \\) : **le nombre de triangles a la
 parité du nombre d'arêtes de bord**, qui est intouchable. Aucune suite
 d'opérations locales ne peut la changer, et un maillage à nombre impair de
 triangles en garde un.

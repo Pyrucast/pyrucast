@@ -51,7 +51,7 @@ w_g = 1, \qquad \sum_g w_g = 4.
 
 ## Notes
 
-- Dimensions valides : \\( d_r = 2 \\), \\( d_s \in \{2, 3\} \\).
+- Dimensions valides : \\( d_r = 2 \\), \\( d_s \in \\{2, 3\\} \\).
 - Le terme bilinéaire \\( \xi\eta \\) enrichit l'interpolation par rapport à un
   TRI3 : le QUA4 reproduit exactement les champs bilinéaires.
 - Version quadratique sérendipité : [QUA8](qua8.md) ; version complète :

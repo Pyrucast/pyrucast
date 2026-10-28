@@ -33,7 +33,7 @@ pivot :
 - **moteur** : un scalaire \\( \tau \\) construit sur \\( \varepsilon \\) ou
   \\( \tilde\sigma \\) — c'est lui qui décide *ce à quoi* la loi est sensible ;
 - **seuil et irréversibilité** : une variable d'histoire
-  \\( r = \max\big(r_0,\ \max_{t' \le t}\tau(t')\big) \\), non décroissante ;
+  \\( r = \max\big(r_0,\ \max_{t\' \le t}\tau(t\')\big) \\), non décroissante ;
 - **adoucissement** : \\( d = \Phi(r) \\), croissante, avec \\( \Phi(r_0) = 0 \\).
 
 Il n'y a **pas de déformation permanente** : à décharge complète, la contrainte
@@ -59,9 +59,9 @@ qui répond à l'extension et est aveugle à la compression hydrostatique. Deux
 branches, traction et compression, partagent la même forme,
 
 \\[
-D_\bullet(\kappa) = 1 - \frac{\varepsilon_{d0}(1 - A_\bullet)}{\kappa}
-- \frac{A_\bullet}{\exp\big(B_\bullet(\kappa - \varepsilon_{d0})\big)},
-\qquad \bullet \in \{t, c\},
+D_\bullet(\kappa) = 1 - \frac{\varepsilon_{d0}(1 - A_\bullet)}{\kappa} -
+\frac{A_\bullet}{\exp\big(B_\bullet(\kappa - \varepsilon_{d0})\big)},
+\qquad \bullet \in \\{t, c\\},
 \\]
 
 et sont mélangées par des poids issus du découpage de la contrainte effective :
@@ -105,7 +105,7 @@ Chaque endommagement a **son** moteur et **son** histoire :
 \\[
 \tau^+ = \sqrt{\tilde\sigma^+ \\!:\\! \varepsilon},
 \qquad
-\tau^- = \sqrt{\sqrt3\\,\big|K\\,\tilde\sigma^-_{\text{oct}} + \tilde\tau^-_{\text{oct}}\big|},
+\tau^- = \sqrt{\sqrt3\\,\big|K\\,\tilde\sigma^-\_{\text{oct}} + \tilde\tau^-\_{\text{oct}}\big|},
 \\]
 \\[
 r^\pm = \max\big(r_0^\pm,\ \max_t \tau^\pm\big),
@@ -117,8 +117,8 @@ r_0^- = \frac{f_c}{\sqrt E}.
 
 En traction, le moteur est l'**énergie élastique** stockée par la part positive.
 En compression, c'est une mesure **octaédrique** — contrainte normale
-\\( \tilde\sigma^-_{\text{oct}} = \tfrac13\operatorname{tr}\tilde\sigma^- \\) et
-cisaillement \\( \tilde\tau^-_{\text{oct}} \\) — qui répond au **confinement**, et
+\\( \tilde\sigma^-\_{\text{oct}} = \tfrac13\operatorname{tr}\tilde\sigma^- \\) et
+cisaillement \\( \tilde\tau^-\_{\text{oct}} \\) — qui répond au **confinement**, et
 non à la seule extension. Le coefficient `K = 0,171` est la valeur usuelle,
 déduite du rapport des résistances biaxiale et uniaxiale.
 
@@ -129,8 +129,8 @@ d^+ = 1 - \frac{r_0^+}{r^+}\\,
 \exp\\!\Big[A_t\Big(1 - \frac{r^+}{r_0^+}\Big)\Big],
 \\]
 \\[
-d^- = 1 - \frac{r_0^-}{r^-}(1 - A_c)
-- A_c \exp\\!\Big[2\Big(1 - \frac{r^-}{r_0^-}\Big)\Big].
+d^- = 1 - \frac{r_0^-}{r^-}(1 - A_c) -
+A_c \exp\\!\Big[2\Big(1 - \frac{r^-}{r_0^-}\Big)\Big].
 \\]
 
 Adoucissement **exponentiel** en traction — une fissure est fragile, la
@@ -150,7 +150,7 @@ Aucun endommagement scalaire ne peut exprimer cela. Cette loi porte **un
 endommagement par direction matériau** :
 
 \\[
-\kappa_i = \max_t \big\langle \varepsilon^{\text{mat}}_{ii} \big\rangle_+,
+\kappa_i = \max_t \big\langle \varepsilon^{\text{mat}}\_{ii} \big\rangle_+,
 \qquad
 d_i = d_{\max,i}\Big(1 - e^{-(\kappa_i - \varepsilon_{0,i})/\varepsilon_{c,i}}\Big)
 \quad \text{si } \kappa_i > \varepsilon_{0,i},
@@ -166,8 +166,8 @@ direction comprimée n'est pas dégradée du tout.
 La dégradation s'applique dans ces mêmes axes, terme par terme :
 
 \\[
-\sigma^{\text{mat}}_{ij} = \sqrt{1 - d_i}\\,\sqrt{1 - d_j}\\;
-\tilde\sigma^{\text{mat}}_{ij},
+\sigma^{\text{mat}}\_{ij} = \sqrt{1 - d_i}\\,\sqrt{1 - d_j}\\;
+\tilde\sigma^{\text{mat}}\_{ij},
 \qquad
 \sigma = R\\,\sigma^{\text{mat}}\\,R^\top .
 \\]

@@ -91,7 +91,7 @@ L'inconnue porte la température et les multiplicateurs des températures
 imposées. Le schéma θ itéré (`TRANSNON`) résout
 
 \\[
-\Bigl(\theta K(T_n) + \tfrac{C}{\Delta t}\Bigr)\,\delta T
+\Bigl(\theta K(T_n) + \tfrac{C}{\Delta t}\Bigr)\\,\delta T
 = F - F_{int}(T_\theta) - \tfrac{C}{\Delta t}(T - T_n),
 \qquad T_\theta = T_n + \theta (T - T_n),
 \\]
@@ -118,10 +118,9 @@ multiplicateurs **en total** — les réactions courantes, dont le solveur
 unilatéral teste le signe :
 
 \\[
-\begin{bmatrix} K & C^\mathsf{T} \\ C & 0 \end{bmatrix}
-\begin{bmatrix} \delta u \\ \lambda \end{bmatrix}
-=
-\begin{bmatrix} F_{ext} - F_{int}(u) \\ g - C u \end{bmatrix},
+\begin{bmatrix} K & C^\mathsf{T} \\\\ C & 0 \end{bmatrix}
+\begin{bmatrix} \delta u \\\\ \lambda \end{bmatrix}
+= \begin{bmatrix} F_{ext} - F_{int}(u) \\\\ g - C u \end{bmatrix},
 \qquad r = F_{ext} - F_{int}(u) - C^\mathsf{T}\lambda .
 \\]
 

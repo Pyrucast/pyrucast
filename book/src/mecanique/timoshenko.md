@@ -23,9 +23,9 @@ est un champ indépendant, et la distorsion `γ = w' − θ` une déformation à
 entière. C'est toute la différence avec
 [Euler-Bernoulli](bernoulli.md), où `θ = w'` et où `γ` n'existe pas.
 
-- **cinématique** : courbure \\( \kappa = \theta' \\), distorsion \\( \gamma = w' - \theta \\) ;
-- **efforts** : \\( M = EI\,\theta' \\), \\( V = G A_s (w' - \theta) \\) ;
-- **équilibre** : \\( V' + q = 0 \\), \\( M' - V = 0 \\).
+- **cinématique** : courbure \\( \kappa = \theta\' \\), distorsion \\( \gamma = w\' - \theta \\) ;
+- **efforts** : \\( M = EI\\,\theta\' \\), \\( V = G A_s (w\' - \theta) \\) ;
+- **équilibre** : \\( V\' + q = 0 \\), \\( M\' - V = 0 \\).
 
 Ces **deux** équations sont du second ordre, là où Bernoulli en a une seule du
 quatrième. C'est la contrepartie de l'hypothèse cinématique : libérer `θ` de
@@ -39,7 +39,7 @@ travée libre d'efforts répartis. Ses fonctions de forme sont cubiques en `w` e
 quadratiques en `θ`, et elles portent le matériau par
 
 \\[
-\Phi = \frac{12\,E I}{G A_s L^2},
+\Phi = \frac{12\\,E I}{G A_s L^2},
 \\]
 
 le rapport des souplesses de flexion et de cisaillement. La flexion s'écrit
@@ -131,8 +131,8 @@ Et le cadre spatial, avec sa torsion :
 fonctions de forme que sa rigidité :
 
 \\[
-M = \int_0^L \rho A\\, N_w^\top N_w\\, dx
-  + \int_0^L \rho I\\, N_\theta^\top N_\theta\\, dx,
+M = \int_0^L \rho A\\, N_w^\top N_w\\, dx +
+\int_0^L \rho I\\, N_\theta^\top N_\theta\\, dx,
 \\]
 
 le second terme étant l'**inertie de rotation** de la section. Rigidité et masse

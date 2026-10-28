@@ -322,11 +322,11 @@ Hencky (`H_*`) — cf. [Grandes transformations](../mecanique/grandes-transforma
 L'**opérateur élastique** d'un modèle aux points de Gauss, dans les deux sens
 (Cast3M `ELAS`) :
 
-\[
+\\[
 \sigma = \mathbb D : \varepsilon
 \qquad\text{et}\qquad
 \varepsilon = \mathbb D^{-1} : \sigma .
-\]
+\\]
 
 `D` est l'opérateur avec lequel chaque loi **prédit** — pas la réponse de la
 loi elle-même : la matrice de Hooke d'une élasticité dans sa symétrie
@@ -506,10 +506,10 @@ déformation / contrainte aux points de Gauss. Le travail se mesure des deux
 côtés — `f·u` aux nœuds, `Σ_g w_g |J_g| σ:ε` aux points — et `Bᵀ W` est
 l'adjoint de `B` pour ces deux produits :
 
-\[
+\\[
 \sigma \cdot W (B u) = (B^\mathsf{T} W \sigma) \cdot u
-\qquad \forall\, u,\ \sigma ,
-\]
+\qquad \forall\\, u,\ \sigma ,
+\\]
 
 le principe des travaux virtuels écrit au niveau discret :
 

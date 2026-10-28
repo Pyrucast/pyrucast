@@ -35,7 +35,7 @@ La conductivité donne, cellule par cellule, la matrice de **rigidité** :
 
 \\[
 K_{ij} = \int_K k(x)\\,\nabla N_i\cdot\nabla N_j\\,dx
-\quad\approx\quad \sum_g k(\xi_g)\\,(\nabla N_i\cdot\nabla N_j)\big|_g\\,|J|_g\\,w_g
+\quad\approx\quad \sum_g k(\xi_g)\\,(\nabla N_i\cdot\nabla N_j)\big|\_g\\,|J|\_g\\,w_g
 \\]
 
 (implémentée dans `src/models/heat_conduction.rs`). En notant
@@ -50,7 +50,7 @@ En transitoire, le terme de stockage discrétise en une **matrice de capacité**
 
 \\[
 C_{ij} = \int_\Omega \rho\\,c_p\\,N_i\\,N_j\\,d\Omega
-\\;\approx\\; \sum_g \rho\\,c_p\\,N_i(\xi_g)\\,N_j(\xi_g)\\,|J|_g\\,w_g,
+\\;\approx\\; \sum_g \rho\\,c_p\\,N_i(\xi_g)\\,N_j(\xi_g)\\,|J|\_g\\,w_g,
 \\]
 
 assemblée par [`assemble.mass`](operateurs/assemblage.md) (matériau `rho`, `cp`)
@@ -102,7 +102,7 @@ Le pipeline est toujours le même :
 **Problème.** Sur \\([0,1]\\), une source de chaleur (flux de Neumann \\(Q\\)) est
 appliquée en \\(x=0\\), et la température est imposée à \\(T=20\\) en \\(x=1\\).
 
-**Solution analytique.** Sans génération volumique, \\(T''=0\\) : le profil est
+**Solution analytique.** Sans génération volumique, \\(T\'\'=0\\) : le profil est
 linéaire. En notant \\(Q\\) le flux injecté et \\(k\\) la conductivité,
 
 \\[
@@ -294,9 +294,9 @@ où \\(h\\) est le **coefficient d'échange** (film). Injectée dans le terme de
 bord de la forme faible de la conduction, elle se scinde en deux ingrédients :
 
 \\[
-\underbrace{K_{ij} = h \int_\Gamma N_i\\,N_j\\,d\Gamma}_{\text{matrice de film (raideur)}}
+\underbrace{K_{ij} = h \int_\Gamma N_i\\,N_j\\,d\Gamma}\_{\text{matrice de film (raideur)}}
 \qquad
-\underbrace{f_i = h\\,T_\text{ext} \int_\Gamma N_i\\,d\Gamma}_{\text{charge (second membre)}}
+\underbrace{f_i = h\\,T_\text{ext} \int_\Gamma N_i\\,d\Gamma}\_{\text{charge (second membre)}}
 \\]
 
 On le construit **contre** la conduction qu'il refroidit, en lui passant les

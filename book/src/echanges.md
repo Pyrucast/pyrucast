@@ -87,9 +87,9 @@ La forme faible du terme de bord se scinde en deux ingrédients, dont le
 sous-modèle ne porte que le premier :
 
 \\[
-\underbrace{K_{ij} = h \int_\Gamma N_i\\,N_j\\,d\Gamma}_{\text{matrice de film (raideur)}}
+\underbrace{K_{ij} = h \int_\Gamma N_i\\,N_j\\,d\Gamma}\_{\text{matrice de film (raideur)}}
 \qquad
-\underbrace{f_i = h\\,a_\text{ext} \int_\Gamma N_i\\,d\Gamma}_{\text{charge (second membre)}}
+\underbrace{f_i = h\\,a_\text{ext} \int_\Gamma N_i\\,d\Gamma}\_{\text{charge (second membre)}}
 \\]
 
 La part ambiante est un **chargement**, et le sous-modèle le porte : `a_ext` est

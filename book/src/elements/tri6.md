@@ -49,6 +49,6 @@ les tests. \\( \sum_g w_g = \tfrac12 \\).
 
 ## Notes
 
-- Dimensions valides : \\( d_r = 2 \\), \\( d_s \in \{2, 3\} \\).
+- Dimensions valides : \\( d_r = 2 \\), \\( d_s \in \\{2, 3\\} \\).
 - Déformation linéaire : bien plus précis qu'un TRI3 en flexion, et suit des
   bords **courbes** (arêtes paraboliques).

@@ -99,10 +99,10 @@ second membre changent.
 `X`. Mis à jour pour un déplacement `u_k`, le contact range donc le jeu du
 nouvel appariement mesuré **sur `X`** :
 
-\[
+\\[
 \tilde g = n \cdot \big(X_s - \textstyle\sum_i N_i X_{m_i}\big),
-\qquad \tilde g + C\,u = g(X+u_k) + C\,(u - u_k),
-\]
+\qquad \tilde g + C\\,u = g(X+u_k) + C\\,(u - u_k),
+\\]
 
 soit le jeu réel de `X + u_k`, linéarisé là.
 

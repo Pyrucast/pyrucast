@@ -16,8 +16,7 @@ multiplicateur) et deux blocs **rectangulaires** dans la matrice :
 \\[
 \begin{bmatrix} K & C^\top \\\\ C & 0 \end{bmatrix}
 \begin{bmatrix} u \\\\ \lambda \end{bmatrix}
-=
-\begin{bmatrix} f \\\\ u_d \end{bmatrix}
+= \begin{bmatrix} f \\\\ u_d \end{bmatrix}
 \\]
 
 - le bloc **`C`** porte la relation de contrainte (lignes = duale propre,

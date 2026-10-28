@@ -75,9 +75,9 @@ Soit un polygone à \\(n\\) sommets \\(P_0, \dots, P_{n-1}\\) approximativement 
 
 - chaque composante de \\(\vec{n}\\) vaut **2 × l'aire signée du polygone projeté sur le plan coordonné correspondant** (lacet généralisé en 3D) ;
 - \\(\vec{n}\\) est invariant par translation des sommets ;
-- la direction de \\(\vec{n}/\|\vec{n}\|\\) suit la **règle de la main droite** par rapport au sens de parcours.
+- la direction de \\(\vec{n}/\\|\vec{n}\\|\\) suit la **règle de la main droite** par rapport au sens de parcours.
 
-Si \\(\|\vec{n}\| \approx 0\\), le polygone est dégénéré (colinéaire ou auto-recouvrant) — `newell_normal` renvoie alors `None`.
+Si \\(\\|\vec{n}\\| \approx 0\\), le polygone est dégénéré (colinéaire ou auto-recouvrant) — `newell_normal` renvoie alors `None`.
 
 ## Base orthonormée du plan (Gram-Schmidt)
 
@@ -87,9 +87,9 @@ Si \\(\|\vec{n}\| \approx 0\\), le polygone est dégénéré (colinéaire ou aut
 2. On orthogonalise par Gram-Schmidt :
 
    \\[
-   \vec{u}' = \vec{e} - (\vec{e} \cdot \hat{n})\\, \hat{n},
+   \vec{u}\' = \vec{e} - (\vec{e} \cdot \hat{n})\\, \hat{n},
    \qquad
-   \vec{u} = \frac{\vec{u}'}{\|\vec{u}'\|}
+   \vec{u} = \frac{\vec{u}\'}{\\|\vec{u}\'\\|}
    \\]
 
 3. On complète :
@@ -98,7 +98,7 @@ Si \\(\|\vec{n}\| \approx 0\\), le polygone est dégénéré (colinéaire ou aut
    \vec{v} = \hat{n} \times \vec{u}
    \\]
 
-Par construction \\( \|\vec{u}\| = \|\vec{v}\| = 1 \\), \\( \vec{u} \cdot \vec{v} = \vec{u} \cdot \hat{n} = \vec{v} \cdot \hat{n} = 0 \\), et \\( \vec{u} \times \vec{v} = \hat{n} \\) (triedre direct).
+Par construction \\( \\|\vec{u}\\| = \\|\vec{v}\\| = 1 \\), \\( \vec{u} \cdot \vec{v} = \vec{u} \cdot \hat{n} = \vec{v} \cdot \hat{n} = 0 \\), et \\( \vec{u} \times \vec{v} = \hat{n} \\) (triedre direct).
 
 ## Projection orthogonale et critère de planéité
 
@@ -150,7 +150,7 @@ Les fonctions du module `pyrucast::ops::mesh::triangulation` sont utilisables in
 
 ## Triangulation de Delaunay : la propriété du cercle vide
 
-Une triangulation \\(T\\) d'un nuage de points \\(\{P_0, \dots, P_{n-1}\}\\) est dite **de Delaunay** si, pour tout triangle \\((P_a, P_b, P_c) \in T\\), le disque circonscrit ne contient strictement aucun autre point du nuage.
+Une triangulation \\(T\\) d'un nuage de points \\(\\{P_0, \dots, P_{n-1}\\}\\) est dite **de Delaunay** si, pour tout triangle \\((P_a, P_b, P_c) \in T\\), le disque circonscrit ne contient strictement aucun autre point du nuage.
 
 Cette propriété équivaut à **maximiser l'angle minimum** sur l'ensemble des triangulations possibles — c'est pourquoi Delaunay est la triangulation de référence pour le FEM : elle évite naturellement les triangles très allongés.
 
@@ -231,10 +231,10 @@ L'algorithme de **Ruppert (1995)** raffine une CDT pour satisfaire deux critère
 
 ### Encroachment
 
-Une arête contrainte \\(AB\\) est dite **encroachée** par un point \\(p\\) si \\(p\\) est strictement à l'intérieur du **disque diamétral** de \\(AB\\) — c'est-à-dire le disque de centre \\(M = (A + B)/2\\) et de rayon \\(\|AB\|/2\\). Condition :
+Une arête contrainte \\(AB\\) est dite **encroachée** par un point \\(p\\) si \\(p\\) est strictement à l'intérieur du **disque diamétral** de \\(AB\\) — c'est-à-dire le disque de centre \\(M = (A + B)/2\\) et de rayon \\(\\|AB\\|/2\\). Condition :
 
 \\[
-\| p - M \|^2 < \frac{\| A - B \|^2}{4}
+\\| p - M \\|^2 < \frac{\\| A - B \\|^2}{4}
 \\]
 
 ### Boucle de Ruppert

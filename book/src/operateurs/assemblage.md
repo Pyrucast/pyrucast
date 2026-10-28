@@ -199,9 +199,9 @@ une arête `SEG2` plongée dans un `Coords` 2-D s'intègre comme une **ligne**
 la **normale** de la maille, versée dans toutes les lignes de déplacement de la
 cible à la fois (`f_x`, `f_y`, `f_z`) — le `PRES` de Cast3M :
 
-\[
-f_{ia} = \int_\Gamma \varphi_n\, n_a\, N_i\, d\Gamma .
-\]
+\\[
+f_{ia} = \int_\Gamma \varphi_n\\, n_a\\, N_i\\, d\Gamma .
+\\]
 
 La normale est celle de la configuration **active** : `(t_y, −t_x)` pour une
 arête de tangente `t`, qui sort de la matière quand le contour est parcouru dans

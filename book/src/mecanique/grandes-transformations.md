@@ -61,13 +61,13 @@ peu.
 La contrainte que rend la loi n'est pas celle que lit l'équilibre. Les efforts
 intérieurs sont le travail virtuel de `S` dans la variation de `E` :
 
-\[
-\delta E = \operatorname{sym}\!\left(F^{\mathsf T} \nabla_0 \delta u\right),
+\\[
+\delta E = \operatorname{sym}\\!\left(F^{\mathsf T} \nabla_0 \delta u\right),
 \qquad
-f_{ia} = \int_{\Omega_0} P_{ab}\, \frac{\partial N_i}{\partial X_b}\, dV_0,
+f_{ia} = \int_{\Omega_0} P_{ab}\\, \frac{\partial N_i}{\partial X_b}\\, dV_0,
 \qquad
-P = F\,S .
-\]
+P = F\\,S .
+\\]
 
 `δE` est la ligne du `B` en grandes transformations : `B` dépend de `F`, ce
 qui fait de `internal_forces` l'adjoint de `strain` au point `u`. Avec `F = I`,
@@ -100,13 +100,13 @@ noms ; la cible est nommée par la contrainte qu'on veut :
 Dans la base propre de `C = FᵀF = Σ c_a N_a⊗N_a` (le tilde), cette dérivée agit
 composante par composante :
 
-\[
-\tilde S_{ab} = \theta_{ab}\,\tilde T_{ab},
+\\[
+\tilde S_{ab} = \theta_{ab}\\,\tilde T_{ab},
 \qquad
 \theta_{aa} = \frac{1}{c_a},
 \qquad
 \theta_{ab} = \frac{\ln c_a - \ln c_b}{c_a - c_b} \quad (a \neq b),
-\]
+\\]
 
 la différence divisée du logarithme, qui tend vers `1/c` quand deux valeurs
 propres se confondent (calculée alors par son développement, sans perte de
@@ -197,9 +197,9 @@ le long de la direction de référence `t₀` de la maille : sur un segment, le
 gradient est tangentiel, `F t₀ = (x_B − x_A)/L` est la corde courante rapportée
 à la longueur au repos, et
 
-\[
-t_0 \cdot E\, t_0 = \tfrac12 (\lambda^2 - 1) = \frac{l^2 - L^2}{2L^2},
-\]
+\\[
+t_0 \cdot E\\, t_0 = \tfrac12 (\lambda^2 - 1) = \frac{l^2 - L^2}{2L^2},
+\\]
 
 exactement, quelle que soit la rotation. La loi écrit l'effort de
 Piola–Kirchhoff 2 axial `S_n = E A (t₀·E t₀)`. `stress_measure` reconnaît une

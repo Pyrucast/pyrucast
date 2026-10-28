@@ -55,10 +55,10 @@ Ces conventions sont cohérentes avec celles déjà imposées ailleurs dans le c
 
 ### Transformation géométrique de référence
 
-Soit un élément avec \\( n \\) nœuds, de coordonnées physiques \\( \mathbf{x}_1, \dots, \mathbf{x}_n \in \mathbb{R}^{d_s} \\) (avec \\( d_s \\) la dimension géométrique de la `Coords`). La **transformation géométrique** \\( \chi : \hat{K} \to K \\) qui envoie l'élément de référence \\( \hat{K} \\) sur l'élément physique \\( K \\) est interpolée par les mêmes fonctions de forme :
+Soit un élément avec \\( n \\) nœuds, de coordonnées physiques \\( \mathbf{x}\_1, \dots, \mathbf{x}\_n \in \mathbb{R}^{d_s} \\) (avec \\( d_s \\) la dimension géométrique de la `Coords`). La **transformation géométrique** \\( \chi : \hat{K} \to K \\) qui envoie l'élément de référence \\( \hat{K} \\) sur l'élément physique \\( K \\) est interpolée par les mêmes fonctions de forme :
 
 \\[
-\mathbf{x}(\xi) = \chi(\xi) = \sum_{i=1}^{n} N_i(\xi)\\, \mathbf{x}_i
+\mathbf{x}(\xi) = \chi(\xi) = \sum_{i=1}^{n} N_i(\xi)\\, \mathbf{x}\_i
 \\]
 
 C'est l'hypothèse **isoparamétrique** : la géométrie est interpolée exactement comme un champ scalaire. Avec une interpolation Lagrange-1, \\( \chi \\) est affine sur les simplexes (SEG2, TRI3, TET4) et tri-linéaire sur les tenseurs (QUA4, HEX8).
@@ -96,7 +96,7 @@ N_3 = \eta, \quad
 N_4 = \zeta
 \\]
 
-**HEX8** (tri-linéaire sur \\( [-1, +1]^3 \\)). Pour le nœud \\( i \\) de coordonnées de référence \\( (\xi_i, \eta_i, \zeta_i) \in \{-1, +1\}^3 \\),
+**HEX8** (tri-linéaire sur \\( [-1, +1]^3 \\)). Pour le nœud \\( i \\) de coordonnées de référence \\( (\xi_i, \eta_i, \zeta_i) \in \\{-1, +1\\}^3 \\),
 \\[
 N_i(\xi, \eta, \zeta) = \tfrac{1}{8}\\,
 (1 + \xi_i\\, \xi)\\,
@@ -134,7 +134,7 @@ Toutes vérifient Kronecker (\\( N_i(\xi_j)=\delta_{ij} \\)), partition de l'uni
 Les deux familles précédentes sont **C⁰** : le champ est continu d'un élément au
 suivant, sa dérivée ne l'est pas. Cela suffit à toute équation du second ordre,
 et à rien d'autre. Une poutre d'Euler-Bernoulli obéit à
-\\( (EIw'')'' = q \\), du **quatrième** ordre, dont la forme faible exige un
+\\( (EIw\'\')\'\' = q \\), du **quatrième** ordre, dont la forme faible exige un
 champ **C¹** — flèche *et* pente continues.
 
 C'est ce que fournit `Hermite3`, sur `SEG2` uniquement :
@@ -149,7 +149,7 @@ H_3 &= \tfrac14(2 + 3\xi - \xi^3), &\qquad H_4 &= \tfrac14(-1 - \xi + \xi^2 + \x
 La propriété de Kronecker y porte sur **deux** grandeurs à la fois : à chaque
 extrémité, une fonction vaut 1 et a une pente nulle, l'autre vaut 0 et a une
 pente 1, et les deux fonctions de l'extrémité opposée s'annulent dans les deux.
-D'où l'ordre des degrés de liberté, \\( [w_A,\ w'_A,\ w_B,\ w'_B] \\) — une
+D'où l'ordre des degrés de liberté, \\( [w_A,\ w\'\_A,\ w_B,\ w\'\_B] \\) — une
 valeur et une pente par nœud.
 
 #### Deux conséquences structurelles
@@ -341,11 +341,11 @@ La somme des poids vaut le volume de l'élément de référence : 2 pour SEG2/SE
 Le **Jacobien** de la transformation \\( \chi \\) est la matrice de dérivées
 \\[
 J_{a,k}(\xi) = \frac{\partial x_a}{\partial \xi_k}
-= \sum_{i=1}^{n} \mathbf{x}_{i,a}\\, \frac{\partial N_i}{\partial \xi_k}(\xi)
+= \sum_{i=1}^{n} \mathbf{x}\_{i,a}\\, \frac{\partial N_i}{\partial \xi_k}(\xi)
 \quad
 \text{de taille } d_s \times d_r
 \\]
-où \\( a \in \{0, \dots, d_s - 1\} \\) parcourt les directions physiques et \\( k \in \{0, \dots, d_r - 1\} \\) les directions de référence. Le buffer plat retourné par `SubFiniteElementSpace::jacobian(cell, g)` suit la convention row-major \\( \mathtt{J}[a \times d_r + k] = J_{a,k} \\).
+où \\( a \in \\{0, \dots, d_s - 1\\} \\) parcourt les directions physiques et \\( k \in \\{0, \dots, d_r - 1\\} \\) les directions de référence. Le buffer plat retourné par `SubFiniteElementSpace::jacobian(cell, g)` suit la convention row-major \\( \mathtt{J}[a \times d_r + k] = J_{a,k} \\).
 
 ### Cas standard : \\( d_s = d_r \\)
 
@@ -354,7 +354,7 @@ Quand le maillage et son espace ambiant ont la même dimension (par exemple TRI3
 La dérivation des fonctions de forme par rapport aux coordonnées physiques utilise l'inverse de \\( J \\) :
 \\[
 \frac{\partial N_i}{\partial x_a}
-= \sum_{k=1}^{d_r} (J^{-1})_{k, a} \\, \frac{\partial N_i}{\partial \xi_k}
+= \sum_{k=1}^{d_r} (J^{-1})\_{k, a} \\, \frac{\partial N_i}{\partial \xi_k}
 \quad \Longleftrightarrow \quad
 \nabla_x N_i = J^{-T}\\, \nabla_\xi N_i
 \\]
@@ -412,14 +412,14 @@ Le maillage support d'un `FiniteElementSpace` est topologiquement figé, mais se
 | Points de Gauss \\( \xi_g \\), poids \\( w_g \\) | non (référence pure) | **précalculés** dans le `SubFiniteElementSpace` |
 | \\( N_i(\xi_g) \\), \\( \partial N_i / \partial \xi_k(\xi_g) \\) | non (référence pure) | **précalculés** dans le `SubFiniteElementSpace` |
 | Jacobien \\( J(\xi_g) \\) sur chaque cellule | oui | **calculé à la volée** |
-| \\( |J|(\xi_g) \\), \\( \partial N_i / \partial x_a(\xi_g) \\) | oui | **calculé à la volée** |
+| \\( \lvert J\rvert(\xi_g) \\), \\( \partial N_i / \partial x_a(\xi_g) \\) | oui | **calculé à la volée** |
 
 Ce choix donne deux propriétés importantes :
 
 1. **Empreinte mémoire indépendante du nombre de cellules.** Un `SubFiniteElementSpace` ne stocke que de l'ordre de \\( n_g \times n_\text{nodes} \times d_r \\) flottants — quelques centaines au plus par sous-espace. À comparer aux GB qu'un précalcul des Jacobiens demanderait sur un maillage 3D fin.
 2. **Robustesse au déplacement.** Réécrire les coordonnées dans la `Coords` (par exemple via `Coords::set_position`) suffit à mettre à jour automatiquement toutes les évaluations de \\( J \\), \\( |J| \\) et \\( \partial N_i / \partial x_a \\) — pas d'invalidation à signaler, pas de cache à reconstruire.
 
-Le coût est CPU plutôt que mémoire : chaque appel à `jacobian(cell, g)` recalcule la somme \\( J = \sum_i \mathbf{x}_i\\, \nabla_\xi N_i \\). En pratique, l'assemblage matrice-élémentaire procède **cellule par cellule** : on calcule \\( J \\), \\( |J| \\), \\( \nabla_x N_i \\) une fois par couple (cellule, Gauss), puis on les réutilise pour tous les termes intégrés. Le surcoût reste donc proportionnel à \\( n_\text{cells} \times n_g \\) — soit le minimum incompressible — et non à \\( n_\text{cells} \times n_g \times n_\text{termes} \\).
+Le coût est CPU plutôt que mémoire : chaque appel à `jacobian(cell, g)` recalcule la somme \\( J = \sum_i \mathbf{x}\_i\\, \nabla_\xi N_i \\). En pratique, l'assemblage matrice-élémentaire procède **cellule par cellule** : on calcule \\( J \\), \\( |J| \\), \\( \nabla_x N_i \\) une fois par couple (cellule, Gauss), puis on les réutilise pour tous les termes intégrés. Le surcoût reste donc proportionnel à \\( n_\text{cells} \times n_g \\) — soit le minimum incompressible — et non à \\( n_\text{cells} \times n_g \times n_\text{termes} \\).
 
 Si une mesure montrait un jour que ce recalcul devient un goulot d'étranglement, un cache invalidé sur incrément d'un compteur de version du `Coords` pourrait être ajouté sans changer l'API publique — déclenché par la mesure, pas par anticipation.
 

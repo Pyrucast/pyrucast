@@ -21,7 +21,7 @@ central**. Contrairement à la [sérendipité QUA8](qua8.md), il porte le monôm
 ## Fonctions de forme
 
 Produit tensoriel des **fonctions de Lagrange quadratiques 1-D** sur
-\\( \{-1, 0, +1\} \\) :
+\\( \\{-1, 0, +1\\} \\) :
 
 \\[
 \ell_{-}(t) = \tfrac12 t(t-1), \qquad
@@ -36,12 +36,12 @@ nœud central est \\( N_8 = (1-\xi^2)(1-\eta^2) \\).
 ## Dérivées de référence
 
 \\[
-\frac{\partial N_i}{\partial \xi} = \ell_a'(\xi)\\,\ell_b(\eta), \qquad
-\frac{\partial N_i}{\partial \eta} = \ell_a(\xi)\\,\ell_b'(\eta),
+\frac{\partial N_i}{\partial \xi} = \ell_a\'(\xi)\\,\ell_b(\eta), \qquad
+\frac{\partial N_i}{\partial \eta} = \ell_a(\xi)\\,\ell_b\'(\eta),
 \\]
 
-avec \\( \ell_{-}'(t) = t - \tfrac12 \\), \\( \ell_0'(t) = -2t \\),
-\\( \ell_{+}'(t) = t + \tfrac12 \\).
+avec \\( \ell_{-}\'(t) = t - \tfrac12 \\), \\( \ell_0\'(t) = -2t \\),
+\\( \ell_{+}\'(t) = t + \tfrac12 \\).
 
 ## Quadrature (défaut)
 
@@ -50,6 +50,6 @@ Produit tensoriel **3×3** de Gauss-Legendre (9 points), exacte au degré
 
 ## Notes
 
-- Dimensions valides : \\( d_r = 2 \\), \\( d_s \in \{2, 3\} \\).
+- Dimensions valides : \\( d_r = 2 \\), \\( d_s \in \\{2, 3\\} \\).
 - Espace polynomial \\( Q2 \\) complet : reproduit exactement tout produit de
   polynômes de degré \\( \le 2 \\) par direction.

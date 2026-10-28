@@ -9,9 +9,9 @@ révolution maillé dans son plan méridien).
 Sur le domaine \\( \Omega \\), avec \\( b \\) les efforts volumiques :
 
 \\[
-\underbrace{\nabla\cdot\sigma + b = 0}_{\text{équilibre}}, \qquad
-\underbrace{\sigma = \mathbb{D} : \varepsilon}_{\text{loi de Hooke}}, \qquad
-\underbrace{\varepsilon = \tfrac12(\nabla u + \nabla u^\top)}_{\text{cinématique}}.
+\underbrace{\nabla\cdot\sigma + b = 0}\_{\text{équilibre}}, \qquad
+\underbrace{\sigma = \mathbb{D} : \varepsilon}\_{\text{loi de Hooke}}, \qquad
+\underbrace{\varepsilon = \tfrac12(\nabla u + \nabla u^\top)}\_{\text{cinématique}}.
 \\]
 
 La **forme faible** (multiplication par un déplacement virtuel \\( v \\),

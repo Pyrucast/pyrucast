@@ -18,7 +18,7 @@ milieu d'arête. Variante complète (avec nœud central) : [QUA9](qua9.md).
 
 ## Fonctions de forme
 
-**Sommets** (\\( (\xi_i, \eta_i) \in \{-1,+1\}^2 \\)) :
+**Sommets** (\\( (\xi_i, \eta_i) \in \\{-1,+1\\}^2 \\)) :
 
 \\[
 N_i = \tfrac14\\,(1 + \xi_i\xi)(1 + \eta_i\eta)\\,(\xi_i\xi + \eta_i\eta - 1).
@@ -46,7 +46,7 @@ Produit tensoriel **3×3** de Gauss-Legendre (9 points), exacte au degré
 
 ## Notes
 
-- Dimensions valides : \\( d_r = 2 \\), \\( d_s \in \{2, 3\} \\).
+- Dimensions valides : \\( d_r = 2 \\), \\( d_s \in \\{2, 3\\} \\).
 - Sérendipité : 8 nœuds au lieu de 9 pour QUA9 — une inconnue de moins par
   élément, mais l'espace polynomial n'est pas le \\( Q2 \\) complet (le monôme
   \\( \xi^2\eta^2 \\) manque).

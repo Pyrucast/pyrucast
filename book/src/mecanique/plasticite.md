@@ -41,7 +41,7 @@ expose :
 
 \\[
 K_t\\,\delta u = F_{\text{ext}} - F_{\text{int}}, \qquad
-F_{\text{int}} = \int_\Omega B^\top \sigma\\, d\Omega \\;(\text{`BSIG`}),
+F_{\text{int}} = \int_\Omega B^\top \sigma\\, d\Omega \\;(\texttt{BSIG}),
 \\]
 
 où la contrainte \\( \sigma \\) au point de Gauss sort du retour radial. La

@@ -45,8 +45,8 @@ La forme faible, après intégration par parties, s'écrit : trouver `c` tel que
 pour tout `δc` admissible,
 
 \\[
-\int_\Omega \varphi\\,\delta c\\,\dot c\\; d\Omega
-+ \int_\Omega \nabla \delta c \cdot \mathsf D\\,\nabla c\\; d\Omega
+\int_\Omega \varphi\\,\delta c\\,\dot c\\; d\Omega +
+\int_\Omega \nabla \delta c \cdot \mathsf D\\,\nabla c\\; d\Omega
 = -\int_{\partial\Omega} \delta c\\;\mathbf j\\!\cdot\\!\mathbf n\\; d\Gamma .
 \\]
 

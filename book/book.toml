@@ -8,6 +8,7 @@ src = "src"
 default-theme = "rust"
 preferred-dark-theme = "ayu"
 mathjax-support = true
+smart-punctuation = true
 additional-js = ["mermaid.min.js", "mermaid-init.js"]
 
 [preprocessor]

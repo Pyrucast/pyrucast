@@ -108,7 +108,7 @@ La rotation passe par le **tenseur d'ordre 4**, pas par une matrice de Bond
 `6×6` :
 
 \\[
-C'_{pqrs} = R_{pi}\\,R_{qj}\\,R_{rk}\\,R_{sl}\\;C_{ijkl},
+C\'\_{pqrs} = R_{pi}\\,R_{qj}\\,R_{rk}\\,R_{sl}\\;C_{ijkl},
 \qquad
 R = \big[\\,V_1\ \ V_2\ \ V_1 \times V_2\\,\big],
 \\]
