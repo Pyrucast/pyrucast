@@ -6,7 +6,7 @@ sans surcouche — mais avec des conventions de nommage strictes qui jouent le
 même rôle que la grammaire de Gibiane. Les connaître à l'avance évite de
 chercher à tâtons dans quel sous-module vit telle fonction.
 
-Détail complet : [Correspondance Rust ↔ Python](../correspondance-rust-python.md).
+Détail complet : [Correspondance Rust ↔ Python](../developper/correspondance-rust-python.md).
 
 ## Empaquetage
 

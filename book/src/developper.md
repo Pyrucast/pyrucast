@@ -9,6 +9,9 @@ plus courantes (ajouter une physique, ajouter un élément fini).
   chaque morceau (`containers/`, `ops/`, `models/`, `py/`, `viz/`…).
 - [Conventions & philosophie](conventions.md) — méthode vs fonction libre,
   erreurs, `Display`/`Debug`/`dump`, sérialisation, *Definition of Done*.
+- [Correspondance Rust ↔ Python](developper/correspondance-rust-python.md) — la
+  table complète des structures, des fonctions et des opérateurs, des deux
+  côtés.
 - [Documentation et tests](developper/documentation-et-tests.md) — les types de
   test et ce que chacun prouve, où vit un exemple, la règle « aucune page ne
   possède de code », et ce qui n'est pas vérifié.

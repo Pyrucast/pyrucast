@@ -21,7 +21,7 @@ pyrucast est une librairie **Rust** exposée à **Python**.
 Le binding est un **miroir 1:1** du Rust, sans logique propre : une méthode
 Rust reste une méthode, une fonction libre reste une fonction. La table de
 correspondance exhaustive est dans [Correspondance Rust ↔
-Python](correspondance-rust-python.md) ; la règle qui décide *méthode vs
+Python](developper/correspondance-rust-python.md) ; la règle qui décide *méthode vs
 fonction libre* est dans [Conventions](conventions.md).
 
 ```text

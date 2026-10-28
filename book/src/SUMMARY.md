@@ -1,7 +1,6 @@
 # Sommaire
 
 - [Introduction](introduction.md)
-- [Correspondance Rust ↔ Python](correspondance-rust-python.md)
 - [Installation et démarrage rapide](installation.md)
 - [Aspect informatique](aspect-informatique.md)
 - [Mailler une géométrie](mailler.md)
@@ -98,6 +97,7 @@
 - [Vue d'ensemble](developper.md)
   - [Arborescence](developper/arborescence.md)
   - [Conventions & philosophie](conventions.md)
+  - [Correspondance Rust ↔ Python](developper/correspondance-rust-python.md)
   - [Documentation et tests](developper/documentation-et-tests.md)
   - [Modèle mémoire](memory-model.md)
   - [Parallélisme](developper/parallelisme.md)

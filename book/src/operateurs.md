@@ -32,7 +32,7 @@ Le découpage est **par conteneur produit** : `gradient(field, fespace)` rend un
 `ElementField`, il vit donc dans `ops::element_field` à côté de `deformation`,
 et non avec `divergence` (qui rend un champ nodal). Une opération se range par
 sa sortie, jamais par son entrée. Le binding Python reste un miroir 1:1 — voir
-[Correspondance Rust ↔ Python](correspondance-rust-python.md).
+[Correspondance Rust ↔ Python](developper/correspondance-rust-python.md).
 
 La **fonction libre est la forme canonique** : c'est elle qui est documentée
 dans les chapitres qui suivent. La plupart de ces opérations sont **aussi**
