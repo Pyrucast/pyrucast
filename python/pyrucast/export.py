@@ -7,9 +7,8 @@ written in Python: they need the ``gmsh`` / ``medcoupling`` module, imported
 only when they run, never at ``import pyrucast``.
 """
 
-from ._gmsh import to_gmsh as to_gmsh
-from ._med import to_medcoupling as to_medcoupling
-from ._pyrucast import export_vtk as export_vtk
-from ._pyrucast import to_arrays as to_arrays
+from ._gmsh import to_gmsh
+from ._med import to_medcoupling
+from ._pyrucast import export_vtk, to_arrays
 
 __all__ = ["export_vtk", "to_arrays", "to_gmsh", "to_medcoupling"]

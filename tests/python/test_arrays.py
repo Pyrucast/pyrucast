@@ -5,9 +5,8 @@ They build the arrays by hand and need neither gmsh nor medcoupling, so they
 stay in the normal pass.
 """
 
-import pytest
-
 import pyrucast
+import pytest
 
 SQUARE_V2 = """\
 $MeshFormat

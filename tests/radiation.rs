@@ -30,10 +30,11 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::radiation::STEFAN_BOLTZMANN;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::Physics;
 use pyrucast::ops::element_field;
 use pyrucast::ops::model;
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 const EMIS: f64 = 0.8; // emissivity
@@ -149,7 +150,7 @@ fn radiation_answers_to_both_of_its_natures() -> Result<()> {
 fn radiation_without_a_conduction_is_rejected() -> Result<()> {
     let (fixture, _) = radiating_square()?;
     // A diffusion assembles `c_H2`/`j_H2`, not `T`/`q`.
-    let diffusion = model::fick(&fixture.boundary_fes, "H2")?;
+    let diffusion = model::fick(&fixture.boundary_fes, "H2", MaterialSymmetry::Isotropic)?;
     let err = model::radiation(&fixture.boundary_fes, &diffusion)
         .unwrap_err()
         .to_string();
@@ -194,14 +195,9 @@ fn a_slab_settles_at_the_imposed_temperature() -> Result<()> {
     // Radiation alone would be non-linear; here the imposed temperature fixes
     // every DOF of the boundary, so the linearised operator suffices to solve.
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&fixture.edge)?);
-    let multiplier = pyrucast::ops::mesh::barycenter(&imposed)?;
-    let model = fixture.radiation.union(&model::dirichlet(
-        &fixture.radiation,
-        "T",
-        &imposed,
-        &multiplier,
-        Default::default(),
-    )?)?;
+    let dirichlet = model::dirichlet(&imposed, &fixture.radiation, "T", Default::default())?;
+    let multiplier = dirichlet.multiplier_mesh()?;
+    let model = fixture.radiation.union(&dirichlet)?;
     let materials = element_field::material_field(&model, &[("emis", EMIS), ("T_inf", T_INF)])?;
 
     let mut rhs_sm = SubMesh::new(fixture.coords.clone(), ElementType::POI1);
@@ -215,9 +211,9 @@ fn a_slab_settles_at_the_imposed_temperature() -> Result<()> {
         }
     }
     let rhs_sm = Handle::new(rhs_sm);
-    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed_T".into()])?;
+    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed".into()])?;
     for id in &mults {
-        rhs.set_value(*id, "imposed_T", T_WALL)?;
+        rhs.set_value(*id, "imposed", T_WALL)?;
     }
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
@@ -254,7 +250,10 @@ fn radiating_square() -> Result<(Fixture, ElementField)> {
 
     let mut square = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     square.add_cell(&corners.iter().map(|n| n.id()).collect::<Vec<_>>())?;
-    let bulk = model::heat_conduction(&FiniteElementSpace::lagrange1(&square)?)?;
+    let bulk = model::heat_conduction(
+        &FiniteElementSpace::lagrange1(&square)?,
+        MaterialSymmetry::Isotropic,
+    )?;
 
     // The radiating edge x = 0, of unit length.
     let edge = vec![corners[0].clone(), corners[3].clone()];

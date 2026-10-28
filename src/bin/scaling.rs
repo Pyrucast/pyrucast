@@ -40,6 +40,7 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::element_field::StrainMeasure;
@@ -69,7 +70,13 @@ fn build(n: usize) -> (Model, ElementField, ElementField) {
         }
     }
     let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    let model = model::elasticity(&fes, Kinematics::PlaneStress).unwrap();
+    let model = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )
+    .unwrap();
     let materials = material_field(&model, &[("E", 210e9), ("nu", 0.3)]).unwrap();
 
     let support = Handle::new(SubMesh::poi1_from_node_ids(coords.clone(), &ids).unwrap());
@@ -190,7 +197,13 @@ fn build_cube(n: usize) -> (Model, ElementField, FiniteElementSpace) {
         }
     }
     let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    let model = model::elasticity(&fes, Kinematics::Full3D).unwrap();
+    let model = model::elasticity(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )
+    .unwrap();
     let materials = material_field(&model, &[("E", 210e9), ("nu", 0.3)]).unwrap();
     (model, materials, fes)
 }
@@ -226,7 +239,13 @@ fn union_chain(zones: usize) -> usize {
         let mut sm = SubMesh::new(coords.clone(), ElementType::TET4);
         sm.add_cell(&n).unwrap();
         let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-        let m = model::elasticity(&fes, Kinematics::Full3D).unwrap();
+        let m = model::elasticity(
+            &fes,
+            Kinematics::Full3D,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear,
+        )
+        .unwrap();
         fields.push(material_field(&m, &[("E", 210e9), ("nu", 0.3)]).unwrap());
     }
     let mut acc = ElementField::empty();

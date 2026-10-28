@@ -1198,6 +1198,91 @@ impl NodeField {
         Ok(self.node_ids().len())
     }
 
+    /// The field with its zones **added**: one zone over every node some zone
+    /// stores, holding per component the sum of what each zone stores there.
+    ///
+    /// What an assembly of nodal terms needs. Two zones on distinct supports
+    /// meeting at a node — the seam between two materials — each hold a
+    /// *partial* sum there; `+` combines zones support by support, so it would
+    /// leave them side by side, and a reader would see one of the two. A field
+    /// of one zone is returned as it is (the handle shared).
+    pub(crate) fn summed(&self) -> Result<NodeField> {
+        if self.len() <= 1 {
+            let mut same = NodeField::empty();
+            for h in self {
+                same.add_sub(h.clone())?;
+            }
+            return Ok(same);
+        }
+        // Every node and component, each once, in first-seen order.
+        let mut coords: Option<Handle<Coords>> = None;
+        let mut slot_of: std::collections::HashMap<NodeId, usize> =
+            std::collections::HashMap::new();
+        let mut nodes: Vec<NodeId> = Vec::new();
+        let mut components: Vec<String> = Vec::new();
+        for h in self {
+            let z = h.read();
+            let support = z.support();
+            let sm = support.read();
+            let c = sm.coords();
+            match &coords {
+                Some(first) if !first.same_object(&c) => {
+                    return Err(PyrucastError::Message(
+                        "NodeField: zones in different Coords cannot be added node by node".into(),
+                    ))
+                }
+                Some(_) => {}
+                None => coords = Some(c),
+            }
+            for &id in sm.connectivity() {
+                slot_of.entry(id).or_insert_with(|| {
+                    nodes.push(id);
+                    nodes.len() - 1
+                });
+            }
+            for name in z.components() {
+                if !components.contains(name) {
+                    components.push(name.clone());
+                }
+            }
+        }
+        let n_comp = components.len();
+        let mut values = vec![0.0_f64; nodes.len() * n_comp];
+        for h in self {
+            let z = h.read();
+            let support = z.support();
+            let sm = support.read();
+            // Where each of this zone's components lands, resolved once.
+            let to: Vec<usize> = z
+                .components()
+                .iter()
+                .map(|name| {
+                    components
+                        .iter()
+                        .position(|c| c == name)
+                        .expect("collected above")
+                })
+                .collect();
+            let stride = to.len();
+            for (row, id) in sm.connectivity().iter().enumerate() {
+                let base = slot_of[id] * n_comp;
+                for (k, &dst) in to.iter().enumerate() {
+                    values[base + dst] += z.values()[row * stride + k];
+                }
+            }
+        }
+        let coords = coords.expect("at least two zones");
+        let mut support = SubMesh::new(coords, ElementType::POI1);
+        for id in &nodes {
+            support.add_cell(&[*id])?;
+        }
+        let mut zone = SubNodeField::from_poi1(&Handle::new(support), components)?;
+        zone.values_mut().copy_from_slice(&values);
+        let mut out = NodeField::empty();
+        out.add_sub(Handle::new(zone))?;
+        Ok(out)
+    }
+
     /// Visualize this field alone, as a **coloured point cloud** over
     /// its support nodes — the POI1 support carries no connectivity, so
     /// no surface can be drawn; use `Mesh::plot_with_field` with the
@@ -1323,7 +1408,7 @@ impl NodeField {
     /// Read the values at `dofs` (`(node, component)` pairs) into a dense
     /// vector, in `dofs` order. Aggregate resolution: the first zone defining a
     /// pair wins. A DOF no zone defines reads as `0.0` — the natural neutral for
-    /// a right-hand side or a multiplied vector (see [`crate::ops::solver::lu::solve`]
+    /// a right-hand side or a multiplied vector (see [`crate::ops::solver::solve`]
     /// and [`Matrix::mul_field`](crate::containers::matrix::Matrix::mul_field)).
     ///
     /// ```

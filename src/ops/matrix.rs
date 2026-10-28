@@ -34,6 +34,7 @@ use crate::error::PyrucastError;
 use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::{Contribution, MatrixKind};
+use crate::ops::element_field::behavior::previous_state_names;
 
 /// Assemble the stiffness matrix `K` for `model`.
 ///
@@ -47,6 +48,7 @@ use crate::models::{Contribution, MatrixKind};
 /// The aggregate is finalized before being returned.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -61,13 +63,13 @@ use crate::models::{Contribution, MatrixKind};
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
 /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = model::heat_conduction(&fes).unwrap();
+/// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
 /// let k = matrix::stiffness(&model, &materials).unwrap();
 ///
 /// // Un SEG2 de longueur 1, k = 1 : K = [[1, -1], [-1, 1]].
 /// assert_eq!(k.n_rows().unwrap(), 2);
-/// assert_eq!(k.get(a.id(), "q", a.id(), "T"), 1.0);
+/// assert_eq!(k.get(a.id(), "q", a.id(), "T").unwrap(), 1.0);
 /// ```
 pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
     assemble_kind(
@@ -113,7 +115,13 @@ impl AssemblyInputs<'_> {
     ) -> Result<KernelInputs> {
         Ok(match self {
             Self::MaterialOnly => KernelInputs::MaterialOnly,
-            Self::State(sf) => KernelInputs::State(sf.sub_for_fespace(fespace)?),
+            Self::State(sf) => {
+                let reads = match sub.as_kind().as_domain() {
+                    Some(domain) => domain.element_state_reads(MatrixKind::Geometric),
+                    None => Vec::new(),
+                };
+                KernelInputs::State(sf.sub_for_fespace_reading(fespace, &reads)?)
+            }
             Self::Behavior {
                 deformation,
                 prev,
@@ -130,21 +138,19 @@ impl AssemblyInputs<'_> {
                         )))
                     }
                 };
-                let deformation = deformation.sub_for_fespace(fespace)?;
+                let law = sub.as_kind().as_behavior().ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "{}: a tangent needs a behaviour",
+                        sub.as_kind().label()
+                    ))
+                })?;
+                // Two laws sharing the subspace: each takes the zone it reads.
+                let deformation =
+                    deformation.sub_for_fespace_reading(fespace, &law.deformation_reads())?;
                 // Below this line, `prev` is always a real field.
                 let prev = match prev {
-                    Some(p) => p.sub_for_fespace(fespace)?,
-                    None => Handle::new(
-                        sub.as_kind()
-                            .as_behavior()
-                            .ok_or_else(|| {
-                                PyrucastError::Message(format!(
-                                    "{}: a tangent needs a behaviour",
-                                    sub.as_kind().label()
-                                ))
-                            })?
-                            .initial_state(&deformation.read())?,
-                    ),
+                    Some(p) => p.sub_for_fespace_reading(fespace, &previous_state_names(law))?,
+                    None => Handle::new(law.initial_state(&deformation.read())?),
                 };
                 KernelInputs::Behavior {
                     deformation,
@@ -171,6 +177,7 @@ impl AssemblyInputs<'_> {
 /// state-free kinds.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
@@ -190,7 +197,7 @@ impl AssemblyInputs<'_> {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap();
+/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let materiaux = element_field::material_field(&modele,
 /// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
 /// // A single machinery for the four kinds: `stiffness` and `mass` are only
@@ -249,15 +256,20 @@ pub fn assemble_kind(
                 }
                 None => None,
             };
+            let contributions = sub.as_kind().contributions(sub_kind, material.as_ref())?;
             // Resolve the sub-model's own state sub-field (stress / tangent) the
             // same way, when a state aggregate is supplied and the physics reads
-            // material on a cell fespace.
+            // material on a cell fespace. A sub-model with no block of this kind
+            // — a load asked for a geometric stiffness — reads nothing, and
+            // must not be asked for a state it never had.
             let kernel_inputs = match sub.material_fespace() {
-                Some(fespace) if !tangent_by_stiffness => inputs.for_sub(&sub, &fespace)?,
+                Some(fespace) if !tangent_by_stiffness && !contributions.is_empty() => {
+                    inputs.for_sub(&sub, &fespace)?
+                }
                 _ => KernelInputs::MaterialOnly,
             };
             let mut blocks = Vec::new();
-            for c in sub.as_kind().contributions(sub_kind, material.as_ref())? {
+            for c in contributions {
                 blocks.extend(build_contribution(
                     c,
                     sub_h,
@@ -296,29 +308,36 @@ pub fn assemble_kind(
 // crate, so `Matrix` gains the method without the container gaining the
 // dependency.
 impl Matrix {
-    /// Assemble (or re-assemble) this matrix **from its blocks alone** — no
-    /// `Model`.
+    /// Assemble this matrix **from its blocks alone** — no `Model` — on the
+    /// configuration active now.
     ///
-    /// The sparsity is rebuilt from the current blocks
+    /// A matrix is assembled once: one that already is keeps its values, and
+    /// this does nothing (as [`Matrix::finalize`]). The values of another
+    /// configuration come from a new matrix.
+    ///
+    /// The sparsity is built from the blocks
     /// ([`crate::ops::scatter::build_pattern`], self-contained: a computed
     /// block resolves its fill through its recipe, a literal block through its
-    /// COO) and the values are scattered into it. This is the composition path:
-    /// after adding a block of any provenance to an already assembled matrix —
-    /// which [`Matrix::finalize`] cannot handle once computed blocks are
-    /// present, and which [`stiffness`] cannot reach (it only knows a `Model`)
-    /// — call this to fold the new block in.
+    /// COO) and the values are scattered into it. This is the composition path,
+    /// for a matrix whose blocks were put together without their values:
+    /// `add_sub`, `|`, `filter`, `exclude` — which [`Matrix::finalize`] cannot
+    /// handle once computed blocks are present, and which [`stiffness`] cannot
+    /// reach (it only knows a `Model`).
     ///
     /// ```ignore
     /// let mut k = crate::ops::matrix::stiffness(&model, &materials)?;
     /// k.add_sub(Handle::new(some_block))?;   // invalidates the assembled state
-    /// k.assemble()?;                    // re-assembles, new block included
+    /// k.assemble()?;                    // assembles, new block included
     /// ```
     ///
     /// Unlike [`stiffness`], this does not consult the model's cached pattern
-    /// (there is no model here), so it rebuilds the sparsity each call — fine
+    /// (there is no model here), so it builds the sparsity each call — fine
     /// for the occasional composition; hot repeated assembly of a fixed model
     /// should keep going through [`stiffness`].
     pub fn assemble(&mut self) -> Result<()> {
+        if self.is_assembled() {
+            return Ok(());
+        }
         let pattern = crate::ops::scatter::build_pattern(self)?;
         let values = crate::ops::scatter::scatter_parallel(self, &pattern)?;
         let csr = pattern.assembled_csr(values);
@@ -404,6 +423,7 @@ fn build_contribution(
 /// like [`stiffness`].
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -418,7 +438,7 @@ fn build_contribution(
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
 /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = model::heat_conduction(&fes).unwrap();
+/// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// // A conduction's capacity matrix reads `rho` **and** `cp`: it is ρ·c_p
 /// // that multiplies ∫ Nᵀ N, not the density alone.
 /// let materials =
@@ -448,6 +468,8 @@ pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
 /// is still used to resolve each mechanical zone (its `E`/`nu`).
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -463,7 +485,7 @@ pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
 /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = model::elasticity(&fes, Kinematics::PlaneStress).unwrap();
+/// # let model = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear).unwrap();
 /// # let materials =
 /// #     element_field::material_field(&model, &[("E", 210.0), ("nu", 0.3)]).unwrap();
 /// # use pyrucast::aggregate::Aggregate;
@@ -500,6 +522,8 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 /// [`stiffness`].
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -515,7 +539,7 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
 /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = model::elasticity(&fes, Kinematics::PlaneStress).unwrap();
+/// # let model = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear).unwrap();
 /// # let materials =
 /// #     element_field::material_field(&model, &[("E", 210.0), ("nu", 0.3)]).unwrap();
 /// # use pyrucast::aggregate::Aggregate;
@@ -560,6 +584,7 @@ pub fn tangent(
 /// a new assembled [`Matrix`] with the same DOF layout; the input is untouched.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -574,7 +599,7 @@ pub fn tangent(
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
 /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = model::heat_conduction(&fes).unwrap();
+/// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let materials = element_field::material_field(
 /// #     &model, &[("k", 1.0), ("rho", 2.0), ("cp", 1.0)]).unwrap();
 /// let m = matrix::mass(&model, &materials).unwrap();
@@ -585,7 +610,7 @@ pub fn tangent(
 ///     x.dense().unwrap().iter().sum()
 /// };
 /// assert!((somme(&m) - somme(&diagonale)).abs() < 1e-12);
-/// assert_eq!(diagonale.get(a.id(), "q", b.id(), "T"), 0.0);
+/// assert_eq!(diagonale.get(a.id(), "q", b.id(), "T").unwrap(), 0.0);
 /// ```
 pub fn lump(m: &Matrix) -> Result<Matrix> {
     let (offsets, _, values) = m.csr_arrays()?;
@@ -616,25 +641,25 @@ pub fn lump(m: &Matrix) -> Result<Matrix> {
     Ok(out)
 }
 
-// ─── Méthodes de délégation ────────────────────────────────────────────────
+// ─── Delegation methods ─────────────────────────────────────────────────────
 //
-// Voir `CONVENTIONS.md` § « Le verbe exposé aussi en méthode ». Le nom change
+// See `CONVENTIONS.md` § "The verb also exposed as a method". The name changes
 // between the two forms: the free function gets its qualifier from its
-// module (`matrix::stiffness`), la méthode n'en a pas et doit le porter
+// module (`matrix::stiffness`), the method has none and must carry it
 // (`model.stiffness_matrix`).
 
 impl Model {
-    /// Voir [`matrix::stiffness`](fn@crate::ops::matrix::stiffness).
+    /// See [`matrix::stiffness`](fn@crate::ops::matrix::stiffness).
     pub fn stiffness_matrix(&self, materials: &ElementField) -> Result<Matrix> {
         stiffness(self, materials)
     }
 
-    /// Voir [`matrix::mass`](fn@crate::ops::matrix::mass).
+    /// See [`matrix::mass`](fn@crate::ops::matrix::mass).
     pub fn mass_matrix(&self, materials: &ElementField) -> Result<Matrix> {
         mass(self, materials)
     }
 
-    /// Voir [`matrix::geometric`](fn@crate::ops::matrix::geometric).
+    /// See [`matrix::geometric`](fn@crate::ops::matrix::geometric).
     pub fn geometric_matrix(
         &self,
         materials: &ElementField,
@@ -643,7 +668,7 @@ impl Model {
         geometric(self, materials, stress)
     }
 
-    /// Voir [`matrix::tangent`](fn@crate::ops::matrix::tangent).
+    /// See [`matrix::tangent`](fn@crate::ops::matrix::tangent).
     pub fn tangent_matrix(
         &self,
         materials: &ElementField,
@@ -656,7 +681,7 @@ impl Model {
 }
 
 impl Matrix {
-    /// Voir [`matrix::lump`](fn@crate::ops::matrix::lump).
+    /// See [`matrix::lump`](fn@crate::ops::matrix::lump).
     pub fn lump(&self) -> Result<Matrix> {
         lump(self)
     }
@@ -665,12 +690,15 @@ impl Matrix {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::atoms::{ElementType, Node};
+    use crate::atoms::{ElementType, Node, NodeId};
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::matrix::Symmetry;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
+    use crate::models::symmetry::MaterialSymmetry;
+    use crate::ops::coords::in_config;
     use crate::ops::element_field::material_field_per_sub_model;
+    use crate::ops::element_field::StrainMeasure;
 
     /// Assemble the stiffness the **literal** way: every sub-model fills its
     /// `SubMatrix` blocks eagerly and `finalize` scatters them. This is the
@@ -755,21 +783,21 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
-        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         model
             .add_sub(Handle::new(
-                SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
-                    .unwrap(),
+                SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap(),
             ))
             .unwrap();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(1).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(1).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
 
@@ -798,16 +826,15 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
-        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         model
             .add_sub(Handle::new(
-                SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
-                    .unwrap(),
+                SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap(),
             ))
             .unwrap();
 
@@ -881,9 +908,9 @@ mod tests {
         assert!(!sliced.symmetric(), "and the declaration follows");
     }
 
-    /// The same constraint declared twice: four blocks, one identity, two of
-    /// each member. The matrix is symmetric, and the count of members — rather
-    /// than of blocks — is what lets the aggregate see it.
+    /// The same constraint declared twice: four blocks, and since each
+    /// declaration mints its own multiplier nodes, two identities, each with
+    /// both its members. The matrix is symmetric, and the aggregate sees it.
     #[test]
     fn a_constraint_declared_twice_still_pairs_up() {
         let coords = Handle::new(Coords::new(1).unwrap());
@@ -898,19 +925,18 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
-        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
-        // Twice, on the same supports and the same variable: the two pairs hash
-        // alike, so all four blocks share one identity.
+        // Twice, on the same imposed node and the same variable: each pair on
+        // multiplier nodes of its own.
         for _ in 0..2 {
             model
                 .add_sub(Handle::new(
-                    SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
-                        .unwrap(),
+                    SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap(),
                 ))
                 .unwrap();
         }
@@ -925,7 +951,16 @@ mod tests {
             })
             .collect();
         assert_eq!(ids.len(), 4, "four halves");
-        assert!(ids.windows(2).all(|w| w[0] == w[1]), "one identity");
+        let mut distinct = ids.clone();
+        distinct.sort_unstable();
+        distinct.dedup();
+        assert_eq!(distinct.len(), 2, "one identity per declaration");
+        assert!(
+            distinct
+                .iter()
+                .all(|d| ids.iter().filter(|i| *i == d).count() == 2),
+            "each with both its members"
+        );
 
         assert!(csr_is_symmetric(&k));
         assert!(k.symmetric(), "two of each member is a complete pairing");
@@ -943,7 +978,8 @@ mod tests {
         host.add_cell(&corners.iter().map(|n| n.id()).collect::<Vec<_>>())
             .unwrap();
         let fes = FiniteElementSpace::lagrange1(&host).unwrap();
-        let physics = crate::ops::model::heat_conduction(&fes).unwrap();
+        let physics =
+            crate::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 
         let immersed = Node::create_in(coords, &[0.25, 0.25]).unwrap();
         let bar = Mesh::from_submesh(SubMesh::poi1_from_nodes(&[immersed]).unwrap());
@@ -952,7 +988,7 @@ mod tests {
         model.add_sub(physics.get(0).unwrap()).unwrap();
         model
             .add_sub(Handle::new(
-                SubModel::embedded(&physics, &bar, &host, vec!["T".into()], 1e-9).unwrap(),
+                SubModel::embedded(&bar, &host, &physics, vec!["T".into()], 1e-9).unwrap(),
             ))
             .unwrap();
         let materials = material_field_per_sub_model(&model, &[&[("k", 1.0)], &[]]).unwrap();
@@ -1023,13 +1059,17 @@ mod tests {
             SubMesh::poi1_from_nodes(&[upper[0].clone(), upper[1].clone()]).unwrap(),
         );
 
-        let elasticity =
-            crate::ops::model::elasticity(&fes, crate::models::tensor::Kinematics::PlaneStress)
-                .unwrap();
+        let elasticity = crate::ops::model::elasticity(
+            &fes,
+            crate::models::tensor::Kinematics::PlaneStress,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear,
+        )
+        .unwrap();
         let contact = crate::ops::model::contact(
-            &elasticity,
             &slave,
             &master,
+            &elasticity,
             vec!["u_x".into(), "u_y".into()],
         )
         .unwrap();
@@ -1073,8 +1113,11 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::shell(fes.get(0).unwrap(), crate::models::shell::ShellModel::Thick)
-                    .unwrap(),
+                SubModel::shell(
+                    fes.get(0).unwrap(),
+                    crate::models::shell::ShellFormulation::Thick,
+                )
+                .unwrap(),
             ))
             .unwrap();
         let materials =
@@ -1139,9 +1182,6 @@ mod tests {
         assert_eq!(values, values_ref);
     }
 
-    /// `SubMatrix::factor` scales every entry the **serial** scatter emits, on
-    /// both branches: the computed heat-conduction blocks and the literal
-    /// Dirichlet C/Cᵀ block (`assemble_computed_blocks` mixes both, per its doc).
     #[test]
     fn scatter_serial_applies_factor_to_computed_and_literal_blocks() {
         let (model, materials) = chain_heat_with_dirichlet(6);
@@ -1209,9 +1249,9 @@ mod tests {
             );
         }
 
-        // Re-assembling from the blocks computes `Σ (v · s)` where the scaling
+        // Assembling the scaled blocks computes `Σ (v · s)` where the scaling
         // computed `(Σ v) · s`: the same quantity, to within rounding.
-        let mut reassembled = &k * 2.5;
+        let mut reassembled = assemble_computed_blocks(&model, &materials) * 2.5;
         reassembled.assemble().unwrap();
         for (x, y) in reassembled
             .to_csr()
@@ -1235,6 +1275,160 @@ mod tests {
             unassembled.finalize().is_err(),
             "finalize must still refuse an unassembled computed block"
         );
+    }
+
+    /// A bar of two SEG2 of length 1 and conductivity 1, with a second
+    /// configuration where every length doubles; and its middle node.
+    fn bar_with_a_stretched_configuration() -> (Model, ElementField, Handle<Coords>, usize, NodeId)
+    {
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let nodes: Vec<Node> = [0.0, 1.0, 2.0]
+            .iter()
+            .map(|&x| Node::create_in(coords.clone(), &[x]).unwrap())
+            .collect();
+        let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+        sm.add_cell(&[nodes[0].id(), nodes[1].id()]).unwrap();
+        sm.add_cell(&[nodes[1].id(), nodes[2].id()]).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+        let model = crate::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
+        let materials = crate::ops::element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+        let stretched = coords.write().add_config("stretched");
+        in_config(&coords, stretched, || {
+            for (n, x) in nodes.iter().zip([0.0, 2.0, 4.0]) {
+                n.set_position(&[x])?;
+            }
+            Ok(())
+        })
+        .unwrap();
+        (model, materials, coords, stretched, nodes[1].id())
+    }
+
+    /// A sum adds the values each operand was assembled with, whatever
+    /// configuration is active when it is taken; and a matrix is assembled
+    /// once — neither another active configuration nor a second `assemble`
+    /// reaches its values.
+    #[test]
+    fn a_sum_adds_each_operand_as_it_was_assembled() {
+        let (model, materials, coords, stretched, middle) = bar_with_a_stretched_configuration();
+        let at_middle = |m: &Matrix| m.get(middle, "q", middle, "T").unwrap();
+        let close = |x: f64, y: f64| (x - y).abs() < 1e-12;
+
+        // Two conductances 1/ℓ meet at the middle node: 2 at rest, 1 stretched.
+        let on_reference = stiffness(&model, &materials).unwrap();
+        let on_stretched = in_config(&coords, stretched, || stiffness(&model, &materials)).unwrap();
+        assert!(close(at_middle(&on_reference), 2.0));
+        assert!(close(at_middle(&on_stretched), 1.0));
+
+        let mut sum = (&on_reference + &on_stretched).unwrap();
+        assert!(close(at_middle(&sum), 3.0), "{}", at_middle(&sum));
+        assert!(close(
+            at_middle(&(&on_reference - &on_stretched).unwrap()),
+            1.0
+        ));
+        in_config(&coords, stretched, || sum.assemble()).unwrap();
+        assert!(
+            close(at_middle(&sum), 3.0),
+            "assembled once: {}",
+            at_middle(&sum)
+        );
+    }
+
+    /// Operands on different degrees of freedom — a stiffness carrying a
+    /// Dirichlet's multiplier, a capacity without it — add over the union,
+    /// numbered and valued as the same blocks assembled together, with or
+    /// without a solver permutation; the sum stays symmetric entry for entry,
+    /// as the solver reads it.
+    #[test]
+    fn a_sum_over_different_dofs_equals_its_blocks_assembled_together() {
+        for permuted in [false, true] {
+            let (model, materials) = chain_heat_with_dirichlet(4);
+            if permuted {
+                let coords = model.multiplier_mesh().unwrap().coords().unwrap();
+                let capacity = coords.read().capacity();
+                let reversed: Vec<u32> = (0..capacity as u32).rev().collect();
+                coords.write().set_permutation(reversed).unwrap();
+            }
+            sum_over_different_dofs(&model, &materials);
+        }
+    }
+
+    fn sum_over_different_dofs(model: &Model, materials: &ElementField) {
+        let conduction = model.exclude(crate::models::Physics::Constraint);
+        let heat =
+            material_field_per_sub_model(&conduction, &[&[("k", 2.0), ("rho", 3.0), ("cp", 0.5)]])
+                .unwrap();
+        let k = stiffness(model, materials).unwrap();
+        let c = &mass(&conduction, &heat).unwrap() * 10.0;
+        assert_ne!(
+            c.row_dof_keys().unwrap().len(),
+            k.row_dof_keys().unwrap().len()
+        );
+
+        let sum = (&c + &k).unwrap();
+        let mut together = c.union(&k).unwrap();
+        together.assemble().unwrap();
+        let (rows, cols) = (together.row_dofs().unwrap(), together.col_dofs().unwrap());
+        assert_eq!(sum.row_dofs().unwrap(), rows);
+        assert_eq!(sum.col_dofs().unwrap(), cols);
+        for (rn, rv) in &rows {
+            for (cn, cv) in &cols {
+                let x = sum.get(*rn, rv, *cn, cv).unwrap();
+                let y = together.get(*rn, rv, *cn, cv).unwrap();
+                assert!(
+                    (x - y).abs() <= 1e-12 * (1.0 + y.abs()),
+                    "{rv}/{cv}: {x} vs {y}"
+                );
+            }
+        }
+        assert!(sum.symmetric());
+        let n = rows.len();
+        let dense = sum.dense().unwrap();
+        for i in 0..n {
+            for j in 0..n {
+                assert_eq!(dense[i * n + j], dense[j * n + i], "({i}, {j})");
+            }
+        }
+    }
+
+    /// A lumped mass holds values and no block: a sum keeps it.
+    #[test]
+    fn a_lumped_mass_survives_a_sum() {
+        let (model, materials) = chain_heat_with_dirichlet(3);
+        let conduction = model.exclude(crate::models::Physics::Constraint);
+        let heat =
+            material_field_per_sub_model(&conduction, &[&[("k", 2.0), ("rho", 1.0), ("cp", 1.0)]])
+                .unwrap();
+        let k = stiffness(&model, &materials).unwrap();
+        let lumped = lump(&mass(&conduction, &heat).unwrap()).unwrap();
+        let sum = (&k + &lumped).unwrap();
+        for (rn, rv) in sum.row_dofs().unwrap() {
+            for (cn, cv) in sum.col_dofs().unwrap() {
+                let expected =
+                    k.get(rn, &rv, cn, &cv).unwrap() + lumped.get(rn, &rv, cn, &cv).unwrap();
+                let x = sum.get(rn, &rv, cn, &cv).unwrap();
+                assert!((x - expected).abs() < 1e-12, "{rv}/{cv}: {x} vs {expected}");
+            }
+        }
+    }
+
+    /// Blocks put together without their values — `filter` here — have none to
+    /// add or read until assembled: an error, not a zero.
+    #[test]
+    fn values_never_assembled_are_an_error_to_add_or_read() {
+        let (model, materials) = chain_heat_with_dirichlet(2);
+        let k = stiffness(&model, &materials).unwrap();
+        let mut thermal = k.filter(crate::models::Physics::Thermal);
+        let a = k.row_dofs().unwrap()[0].0;
+        assert!((&thermal + &k).is_err());
+        assert!((&k - &thermal).is_err());
+        assert!(thermal.get(a, "q", a, "T").is_err());
+        let block = k.iter().find(|h| h.read().is_computed()).unwrap();
+        assert!(block.read().get(a, "q", a, "T").is_err());
+
+        thermal.assemble().unwrap();
+        let sum = (&thermal + &k).unwrap();
+        let expected = 2.0 * k.get(a, "q", a, "T").unwrap();
+        assert!((sum.get(a, "q", a, "T").unwrap() - expected).abs() < 1e-12);
     }
 
     /// The colouring is fixed and each colour's writes are disjoint, so the
@@ -1333,13 +1527,14 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
         let materials = material_field_per_sub_model(&model, &[&[("k", 1.0)]]).unwrap();
 
         let mut k = stiffness(&model, &materials).unwrap();
-        let before = k.get(a.id(), "q", a.id(), "T");
+        let before = k.get(a.id(), "q", a.id(), "T").unwrap();
 
         // A hand-built literal block (no model behind it) adding +10 at (a,q)×(a,T).
         let support = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
@@ -1358,7 +1553,7 @@ mod tests {
         assert!(k.finalize().is_err());
         k.assemble().unwrap();
 
-        let after = k.get(a.id(), "q", a.id(), "T");
+        let after = k.get(a.id(), "q", a.id(), "T").unwrap();
         assert!(
             (after - (before + 10.0)).abs() <= 1e-12 * (1.0 + before.abs()),
             "composition failed: before {before}, after {after}"
@@ -1429,7 +1624,8 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
         let materials = material_field_per_sub_model(&model, &[&[("k", 1.0)]]).unwrap();

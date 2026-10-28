@@ -18,8 +18,7 @@ NX, NY, L, H = 4, 2, 4.0, 1.0
 
 def _clamp(target, nodes, var):
     imposed = pyrucast.mesh.poi1_from_nodes(nodes)
-    multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.model.dirichlet(target, var, imposed, multiplier)
+    return pyrucast.model.dirichlet(imposed, target, var)
 
 
 def _bar():

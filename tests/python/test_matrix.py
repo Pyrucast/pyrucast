@@ -1,8 +1,7 @@
 """Python tests for the Matrix / SubMatrix containers."""
 
-import pytest
-
 import pyrucast
+import pytest
 
 
 def _poi1(c, ids):
@@ -462,6 +461,73 @@ def test_a_block_and_a_matrix_mix_in_a_sum():
         k + "not a matrix"
 
 
+def _bar_with_a_stretched_configuration():
+    """A bar of two SEG2 of length 1/2, conductivity 1, with a second
+    configuration where every length doubles; and its middle node."""
+    c = pyrucast.Coords(1)
+    nodes = [c.add_node([x]) for x in (0.0, 0.5, 1.0)]
+    mesh = pyrucast.Mesh(c, "SEG2")
+    mesh.unit().add_cell([nodes[0], nodes[1]])
+    mesh.unit().add_cell([nodes[1], nodes[2]])
+    model = pyrucast.model.heat_conduction(pyrucast.FiniteElementSpace(mesh))
+    materials = pyrucast.element_field.material_field(
+        model, [("k", 1.0), ("rho", 1.0), ("cp", 1.0)]
+    )
+    stretch = pyrucast.NodeField(mesh, ["u_x"])
+    for n, x in zip(nodes, (0.0, 0.5, 1.0), strict=True):
+        stretch[0].set_value(n, "u_x", x)
+    stretched = c.add_config("stretched")
+    pyrucast.coords.displace_from(stretch, c.active, stretched, ["u_x"])
+    return model, materials, c, stretched, nodes[1]
+
+
+def test_a_sum_adds_each_operand_as_it_was_assembled():
+    """A matrix holds the values of the configuration it was assembled on; a
+    sum adds them as they are, whatever configuration is active, and a
+    second `assemble` changes nothing."""
+    model, materials, coords, stretched, middle = _bar_with_a_stretched_configuration()
+    on_rest = pyrucast.matrix.stiffness(model, materials)
+    with coords.in_config(stretched):
+        on_stretched = pyrucast.matrix.stiffness(model, materials)
+    # Two conductances 1/ℓ meet at the middle node: 4 at rest, 2 stretched.
+    assert on_rest.get(middle, "q", middle, "T") == pytest.approx(4.0, abs=1e-12)
+    assert on_stretched.get(middle, "q", middle, "T") == pytest.approx(2.0, abs=1e-12)
+
+    total = on_rest + on_stretched
+    assert total.get(middle, "q", middle, "T") == pytest.approx(6.0, abs=1e-12)
+    with coords.in_config(stretched):
+        total.assemble()
+    assert total.get(middle, "q", middle, "T") == pytest.approx(6.0, abs=1e-12)
+
+
+def test_a_lumped_mass_survives_a_sum():
+    """A lumped mass holds values and no block: a sum keeps them."""
+    model, materials, _, _, middle = _bar_with_a_stretched_configuration()
+    k = pyrucast.matrix.stiffness(model, materials)
+    lumped = pyrucast.matrix.mass(model, materials).lump()
+    total = k + lumped
+    expected = k.get(middle, "q", middle, "T") + lumped.get(middle, "q", middle, "T")
+    assert lumped.get(middle, "q", middle, "T") > 0.0
+    assert total.get(middle, "q", middle, "T") == pytest.approx(expected, abs=1e-12)
+
+
+def test_values_never_assembled_raise_rather_than_read_zero():
+    """Blocks put together without their values — `filter` here — have none
+    to add or read until assembled."""
+    model, materials, _, _, middle = _bar_with_a_stretched_configuration()
+    k = pyrucast.matrix.stiffness(model, materials)
+    thermal = k.filter("thermal")
+    with pytest.raises(RuntimeError, match="never assembled"):
+        thermal + k
+    with pytest.raises(RuntimeError, match="computed block"):
+        thermal.get(middle, "q", middle, "T")
+    with pytest.raises(RuntimeError, match="computed block"):
+        k[0].get(middle, "q", middle, "T")
+    thermal.assemble()
+    total = thermal + k
+    assert total.get(middle, "q", middle, "T") == pytest.approx(8.0, abs=1e-12)
+
+
 def test_scaling_an_assembled_matrix_needs_no_reassembly():
     """Scaling carries the assembled CSR along, scaled: the result is usable
     without a second assembly — which would re-run every element kernel."""
@@ -499,7 +565,7 @@ def test_assemble_reassembles_scaled_mass_union_stiffness():
     mult_mesh = pyrucast.mesh.barycenter(imposed)
     mult = mult_mesh.node(0, 0, 0)
     conduction = pyrucast.model.heat_conduction(fes)
-    dirichlet = pyrucast.model.dirichlet(conduction, "T", imposed, mult_mesh)
+    dirichlet = pyrucast.model.dirichlet(imposed, conduction, "T")
     model = pyrucast.model.heat_conduction(fes) | dirichlet
     materials = pyrucast.element_field.material_field(
         model, [("k", 1.0), ("rho", 2.0), ("cp", 3.0)]

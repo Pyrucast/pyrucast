@@ -1,8 +1,8 @@
-//! Sparse direct linear solver: `A · x = b`.
+//! The sparse direct path of [`super::solve`]: `A · x = b`, the relations
+//! enforced by their multipliers as assembled.
 //!
 //! This module bridges the abstract [`Matrix`] / [`NodeField`] objects and the
-//! sparse linear algebra of [`faer`]. It exposes a single free function —
-//! [`solve`] — that:
+//! sparse linear algebra of [`faer`]. Its [`solve`]:
 //!
 //! 1. hands faer the assembled CSR **borrowed**: one counting-sort transpose
 //!    into column-major arrays, wrapped as a `SparseColMatRef`. The matrix is
@@ -26,6 +26,7 @@
 //! # Example
 //!
 //! ```
+//! # use pyrucast::models::symmetry::MaterialSymmetry;
 //! use pyrucast::containers::field::SubField;
 //! use pyrucast::aggregate::Aggregate;
 //! use pyrucast::coords::Coords;
@@ -37,8 +38,7 @@
 //! use pyrucast::atoms::Node;
 //! use pyrucast::containers::node_field::{NodeField, SubNodeField};
 //! use pyrucast::ops::matrix;
-//! use pyrucast::ops::mesh;
-//! use pyrucast::ops::solver::lu::solve;
+//! use pyrucast::ops::solver::solve;
 //! use pyrucast::handle::Handle;
 //!
 //! // 1-D Poisson on [0, 1] with one SEG2 element, k = 1.
@@ -56,29 +56,27 @@
 //!
 //! let mut model = Model::empty();
 //! model
-//!     .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
+//!     .add_sub(Handle::new(SubModel::heat_conduction(sub, MaterialSymmetry::Isotropic).unwrap()))
 //!     .unwrap();
-//! // Dirichlet at both ends: imposed POI1 meshes + colocated multiplier
-//! // supports minted by `barycenter`.
+//! // Dirichlet at both ends: each constraint mints its multiplier node
+//! // beside its imposed node.
 //! let imposed_a = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
 //! let imposed_b = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&b)).unwrap());
-//! let mult_mesh_a = mesh::barycenter(&imposed_a).unwrap();
-//! let mult_mesh_b = mesh::barycenter(&imposed_b).unwrap();
-//! let dir_a = SubModel::dirichlet(&model, "T", &imposed_a, &mult_mesh_a, Default::default()).unwrap();
-//! let dir_b = SubModel::dirichlet(&model, "T", &imposed_b, &mult_mesh_b, Default::default()).unwrap();
+//! let dir_a = SubModel::dirichlet(&imposed_a, &model, "T", Default::default()).unwrap();
+//! let dir_b = SubModel::dirichlet(&imposed_b, &model, "T", Default::default()).unwrap();
 //! let mult_a = dir_a.multiplier_nodes()[0];
 //! let mult_b = dir_b.multiplier_nodes()[0];
 //! model.add_sub(Handle::new(dir_a)).unwrap();
 //! model.add_sub(Handle::new(dir_b)).unwrap();
 //!
-//! // Load: imposed values T_a = 0, T_b = 1 at the multiplier nodes (slot "imposed_T").
+//! // Load: imposed values T_a = 0, T_b = 1 at the multiplier nodes (slot "imposed").
 //! let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
 //! load_sm.add_cell(&[mult_a]).unwrap();
 //! load_sm.add_cell(&[mult_b]).unwrap();
 //! let load_sm_h = Handle::new(load_sm);
-//! let mut rhs = SubNodeField::from_poi1(&load_sm_h, vec!["imposed_T".into()]).unwrap();
-//! rhs.set_value(mult_a, "imposed_T", 0.0).unwrap();
-//! rhs.set_value(mult_b, "imposed_T", 1.0).unwrap();
+//! let mut rhs = SubNodeField::from_poi1(&load_sm_h, vec!["imposed".into()]).unwrap();
+//! rhs.set_value(mult_a, "imposed", 0.0).unwrap();
+//! rhs.set_value(mult_b, "imposed", 1.0).unwrap();
 //! let rhs = NodeField::from_sub(rhs);
 //!
 //! let k = pyrucast::ops::matrix::stiffness(&model, &materials).unwrap();
@@ -91,7 +89,9 @@
 use crate::containers::matrix::{DofKey, Matrix};
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
-use crate::interrupt::{Cancel, NoCancel};
+use crate::interrupt::Cancel;
+
+use super::SolveOptions;
 use faer::linalg::solvers::Solve;
 use faer::sparse::linalg::LltError;
 use faer::sparse::{SparseColMatRef, SymbolicSparseColMatRef};
@@ -118,16 +118,17 @@ pub(crate) type SparseLlt = faer::sparse::linalg::solvers::Llt<usize, f64>;
 ///
 /// Both variants answer `solve_in_place` identically: faer implements
 /// `Solve` for anything that implements `SolveCore`.
+// faer's `Lu` is an order of magnitude wider than its `Llt` (344 bytes against
+// 32), and an enum is as wide as its widest variant. Here that costs nothing: a
+// factorization exists once per matrix, cached behind an `Arc`, never copied
+// nor stored in numbers — 312 bytes beside factors of megabytes. A box would
+// buy nothing back, and cost the reader an indirection to see through.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum Factored {
     /// `L·Lᵀ` — the matrix was symmetric positive definite.
     Cholesky(SparseLlt),
     /// `L·U` with partial pivoting — everything else.
-    ///
-    /// Boxed: faer's `Lu` is an order of magnitude wider than its `Llt` (344
-    /// bytes against 32), and an enum is as wide as its widest variant. The
-    /// indirection is paid once per solve, ahead of a triangular solve over the
-    /// whole factor — it does not register.
-    Lu(Box<SparseLu>),
+    Lu(SparseLu),
 }
 
 impl Factored {
@@ -255,7 +256,7 @@ pub(crate) fn factorize_csr(
         None => (offsets, cols, vals),
     };
     let out = match options.method {
-        SolveMethod::Lu => Factored::Lu(Box::new(lu_of(n, col_ptr, row_idx, values)?)),
+        SolveMethod::Lu => Factored::Lu(lu_of(n, col_ptr, row_idx, values)?),
         SolveMethod::Cholesky => {
             // faer cannot catch this one: a Cholesky reads a single triangle, so
             // on a non-symmetric matrix it does not fail — it quietly uses the
@@ -374,6 +375,7 @@ pub(crate) fn lu_solve_vec(lu: &SparseLu, b: &[f64]) -> Vec<f64> {
 /// room for an iterative back-end without changing the `solve` call sites.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::field::SubField;
@@ -393,28 +395,27 @@ pub(crate) fn lu_solve_vec(lu: &SparseLu, b: &[f64]) -> Vec<f64> {
 /// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = model::heat_conduction(&fes).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
+/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
+/// #     .union(&model::dirichlet(&impose, &cible, "T",
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
-/// # use pyrucast::ops::solver::lu::{SolveMethod, SolveOptions};
+/// # let charge = NodeField::from_submesh(&modele.multiplier_mesh().unwrap().get(0).unwrap(),
+/// #                                      vec!["imposed".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed", 100.0).unwrap();
+/// # use pyrucast::ops::solver::{SolveMethod, SolveOptions};
 /// # use pyrucast::ops::model;
 /// // The LU takes any square matrix, and is what a solve runs unless told
 /// // otherwise.
 /// assert_eq!(SolveMethod::default(), SolveMethod::Lu);
 /// let o = SolveOptions { method: SolveMethod::Lu, cache: false, ..Default::default() };
-/// assert!(solver::lu::solve_with_options(&k, &charge, &o).is_ok());
+/// assert!(solver::solve_with_options(&k, &charge, &o).is_ok());
 ///
 /// // This one is clamped by a Lagrange multiplier: symmetric, but **indefinite**.
 /// // Cholesky refuses it, and says where.
 /// let c = SolveOptions { method: SolveMethod::Cholesky, cache: false, ..Default::default() };
-/// let err = solver::lu::solve_with_options(&k, &charge, &c).unwrap_err().to_string();
+/// let err = solver::solve_with_options(&k, &charge, &c).unwrap_err().to_string();
 /// assert!(err.contains("positive definite"), "{err}");
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -430,7 +431,7 @@ pub enum SolveMethod {
     ///
     /// A non-positive pivot comes back as an error naming where it refused: a
     /// Lagrange saddle-point is symmetric but indefinite and will always refuse,
-    /// whereas the system an [elimination](crate::ops::solver::eliminate)
+    /// whereas the system an [elimination](crate::ops::solver::RelationMethod::Eliminate)
     /// reduces it to carries no multiplier DOF and usually accepts.
     Cholesky,
 }
@@ -444,7 +445,7 @@ pub enum SolveMethod {
 /// logging dependency.
 ///
 /// ```
-/// # use pyrucast::ops::solver::lu::Verbosity;
+/// # use pyrucast::ops::solver::Verbosity;
 /// # use pyrucast::named::Named;
 /// assert_eq!(Verbosity::default(), Verbosity::Silent);
 /// assert_eq!(Verbosity::parse("brief")?, Verbosity::Brief);
@@ -490,125 +491,11 @@ impl crate::named::Named for SolveMethod {
     }
 }
 
-/// Options for [`solve_with_options`]. Defaults: sparse LU, silent, with the
-/// reusable factorization cache enabled.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let n: Vec<Node> = (0..3)
-/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-/// #     .collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = model::heat_conduction(&fes).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
-/// #                              RelationSense::Equality).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
-/// # use pyrucast::ops::solver::lu::{SolveMethod, SolveOptions};
-/// # use pyrucast::ops::model;
-/// // By default, sparse LU with the factorization cache on: the first
-/// // `solve` factorizes, the next ones only run the substitutions.
-/// let d = SolveOptions::default();
-/// assert!(d.cache);
-/// assert!(k.cached_factorization::<solver::lu::Factorization>().is_none());
-/// solver::lu::solve_with_options(&k, &charge, &d)?;
-/// assert!(k.cached_factorization::<solver::lu::Factorization>().is_some());
-///
-/// // `cache: false` factorizes afresh and **does not touch** the cache.
-/// let sans = SolveOptions { method: SolveMethod::Lu, cache: false, ..Default::default() };
-/// solver::lu::solve_with_options(&k, &charge, &sans)?;
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-#[derive(Clone, Copy, Debug)]
-pub struct SolveOptions {
-    /// Direct method to use.
-    pub method: SolveMethod,
-    /// Reuse / populate the matrix's cached factorization. When `true` (default)
-    /// the first solve factorizes and caches; later solves on the **same**
-    /// matrix reuse the factors (descent/back-substitution only). When `false`,
-    /// factorize fresh and do not touch the cache.
-    pub cache: bool,
-    /// How much the solve says about what it did.
-    pub verbosity: Verbosity,
-}
-
-impl Default for SolveOptions {
-    fn default() -> Self {
-        Self {
-            method: SolveMethod::Lu,
-            cache: true,
-            verbosity: Verbosity::Silent,
-        }
-    }
-}
-
 /// A reusable sparse factorization of a [`Matrix`], plus the DOF layout
 /// needed to map a right-hand side in and a solution out. Cached transparently
 /// inside the `Matrix` (see [`SolveOptions::cache`]); derived, non-serialized
 /// state — never persisted.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let n: Vec<Node> = (0..3)
-/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-/// #     .collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = model::heat_conduction(&fes).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
-/// #                              RelationSense::Equality).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
-/// # use pyrucast::ops::solver::lu::Factorization;
-/// # use std::sync::Arc;
-/// # use pyrucast::ops::model;
-/// // A **derived** state, never persisted: it carries the LU and the DOF
-/// // layout that makes it usable. It is not called directly — `solve` drops
-/// // it in the matrix's cache and picks it up again at the next solve.
-/// k.store_factorization(Arc::new(Factorization::new(&k, &Default::default())?));
-/// assert!(k.cached_factorization::<Factorization>().is_some());
-/// let u = solver::lu::solve(&k, &charge)?;
-/// assert!(u.node_count()? > 0);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub struct Factorization {
+pub(super) struct Factorization {
     factored: Factored,
     /// The row numbering the factorization is valid for, in packed form: a
     /// materialised `(NodeId, String)` list would hold one heap allocation per
@@ -623,43 +510,7 @@ pub struct Factorization {
 impl Factorization {
     /// Factorize `matrix` (must be square and finalized) with the method
     /// `options` names.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::field::SubField;
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::Model;
-    /// # use pyrucast::containers::node_field::NodeField;
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::RelationSense;
-    /// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-    /// # use pyrucast::ops::model;
-    /// # let coords = Handle::new(Coords::new(1).unwrap());
-    /// # let n: Vec<Node> = (0..3)
-    /// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-    /// #     .collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-    /// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # let cible = model::heat_conduction(&fes).unwrap();
-    /// # let modele = model::heat_conduction(&fes).unwrap()
-    /// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
-    /// #                              RelationSense::Equality).unwrap()).unwrap();
-    /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-    /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-    /// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-    /// #                                      vec!["imposed_T".into()]).unwrap();
-    /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
-    /// // The matrix must be **square and finalized**.
-    /// assert!(solver::lu::Factorization::new(&k, &Default::default()).is_ok());
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn new(matrix: &Matrix, options: &SolveOptions) -> Result<Self> {
+    pub(super) fn new(matrix: &Matrix, options: &SolveOptions) -> Result<Self> {
         let vars = matrix.dof_vars();
         let row_keys = matrix.row_dof_keys()?;
         let n_cols = matrix.col_dof_keys()?.len();
@@ -704,229 +555,10 @@ impl Factorization {
     }
 }
 
-/// Solve `matrix · x = rhs` using the default options (sparse LU, cached).
-///
-/// `matrix` must be square (`n_rows == n_cols ≥ 1`). The `rhs` `NodeField` is
-/// read at every row DOF of the matrix, through the aggregate (first zone
-/// defining the pair wins); missing entries (no zone defines that
-/// `(node, component)`) default to `0.0`.
-///
-/// The returned `NodeField` has one zone per distinct **column support** of the
-/// matrix's blocks, each zone sharing that block's own POI1 support handle and
-/// carrying its primal variables (see [`Matrix::field_from_col_values`]) — no
-/// support submesh is rebuilt, and the output aligns by
-/// [`same_support`](crate::containers::field::SubField::same_support) with
-/// any other field on those supports. On a Lagrange-constrained model this
-/// includes a zone for the multipliers (the reactions).
-///
-/// Uninterruptible convenience form; see [`solve_cancellable`].
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-/// # use pyrucast::ops::model;
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let n: Vec<Node> = (0..3)
-/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-/// #     .collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = model::heat_conduction(&fes).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
-/// #                              RelationSense::Equality).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
-/// // A bar clamped on the left at 100 °C, with no other load: the whole bar
-/// // is at 100 °C. The solution also carries the **reaction** at the
-/// // multiplier node — hence two zones.
-/// let u = solver::lu::solve(&k, &charge)?;
-/// assert!((u.get(0)?.read().value(n[2].id(), "T")? - 100.0).abs() < 1e-9);
-/// // One zone per support of the model: the bar, the imposed nodes, and the
-/// // multiplier carrying the **reaction**.
-/// assert_eq!(u.len(), 3);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
-    solve_inner(matrix, rhs, &SolveOptions::default(), &NoCancel)
-}
-
-/// Like [`solve`] but with explicit [`SolveOptions`] (method / factorization
-/// cache).
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let n: Vec<Node> = (0..3)
-/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-/// #     .collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = model::heat_conduction(&fes).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
-/// #                              RelationSense::Equality).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
-/// # use pyrucast::ops::solver::lu::{SolveMethod, SolveOptions};
-/// # use pyrucast::ops::model;
-/// // La forme explicite : méthode et cache de factorisation.
-/// let o = SolveOptions { method: SolveMethod::Lu, cache: true, ..Default::default() };
-/// let u = solver::lu::solve_with_options(&k, &charge, &o)?;
-/// assert!((u.get(0)?.read().value(n[0].id(), "T")? - 100.0).abs() < 1e-9);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn solve_with_options(
-    matrix: &Matrix,
-    rhs: &NodeField,
-    options: &SolveOptions,
-) -> Result<NodeField> {
-    solve_inner(matrix, rhs, options, &NoCancel)
-}
-
-/// Like [`solve`], but polls `cancel` at each phase boundary so the call can be
-/// stopped early (returning [`PyrucastError::Interrupted`]).
-///
-/// **Granularity.** The sparse factorization (faer's `sp_lu` / `solve_in_place`)
-/// is a single library call with no cooperative checkpoint, so it is **not**
-/// interrupted mid-way: `cancel` is polled *around* the heavy steps (vector
-/// assembly, before factorization, result write-back). A `Ctrl+C` therefore
-/// lands at the next phase boundary, not inside the factorization itself. When
-/// the factorization is already cached, only the (cheap) substitution runs.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let n: Vec<Node> = (0..3)
-/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-/// #     .collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = model::heat_conduction(&fes).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
-/// #                              RelationSense::Equality).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
-/// # use std::sync::atomic::{AtomicBool, Ordering};
-/// # use pyrucast::ops::model;
-/// // The token is polled **around** the heavy stages: the sparse
-/// // factorization is a library call with no cooperative stopping point.
-/// let stop = AtomicBool::new(false);
-/// assert!(solver::lu::solve_cancellable(&k, &charge, &stop).is_ok());
-/// // Token armed in advance: the stop lands at the first phase boundary.
-/// stop.store(true, Ordering::Relaxed);
-/// assert!(solver::lu::solve_cancellable(&k, &charge, &stop).is_err());
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn solve_cancellable(
-    matrix: &Matrix,
-    rhs: &NodeField,
-    cancel: &dyn Cancel,
-) -> Result<NodeField> {
-    solve_inner(matrix, rhs, &SolveOptions::default(), cancel)
-}
-
-/// [`solve_cancellable`] with explicit [`SolveOptions`] — the full form the
-/// Python binding routes to.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::RelationSense;
-/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let n: Vec<Node> = (0..3)
-/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
-/// #     .collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = model::heat_conduction(&fes).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap()
-/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
-/// #                              RelationSense::Equality).unwrap()).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
-/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
-/// #                                      vec!["imposed_T".into()]).unwrap();
-/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
-/// # use pyrucast::ops::solver::lu::SolveOptions;
-/// # use std::sync::atomic::AtomicBool;
-/// # use pyrucast::ops::model;
-/// // The full form, the one the Python binding routes to.
-/// let stop = AtomicBool::new(false);
-/// let u = solver::lu::solve_cancellable_with_options(
-///     &k, &charge, &SolveOptions::default(), &stop)?;
-/// assert!(u.node_count()? > 0);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn solve_cancellable_with_options(
-    matrix: &Matrix,
-    rhs: &NodeField,
-    options: &SolveOptions,
-    cancel: &dyn Cancel,
-) -> Result<NodeField> {
-    solve_inner(matrix, rhs, options, cancel)
-}
-
-fn solve_inner(
+/// The LU path of [`super::solve`]: the factorization cached on the matrix
+/// (or made afresh), the substitution, and the solution wrapped on the
+/// blocks' column supports.
+pub(super) fn solve(
     matrix: &Matrix,
     rhs: &NodeField,
     options: &SolveOptions,
@@ -990,6 +622,7 @@ mod tests {
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
     use crate::handle::Handle;
+    use crate::models::symmetry::MaterialSymmetry;
 
     /// 1-D Poisson `-u'' = 0` on `[0, 1]` with `u(0) = 0` and `u(1) = 1`,
     /// discretized with `n` SEG2 elements. The analytical solution is
@@ -1022,50 +655,37 @@ mod tests {
         // Model.
         let mut model = Model::empty();
         model
-            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
+            .add_sub(Handle::new(
+                SubModel::heat_conduction(sub, MaterialSymmetry::Isotropic).unwrap(),
+            ))
             .unwrap();
         let imposed_left =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
         let imposed_right = Mesh::from_submesh(
             SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[n_elems])).unwrap(),
         );
-        let mult_mesh_left = crate::ops::mesh::barycenter(&imposed_left).unwrap();
-        let mult_mesh_right = crate::ops::mesh::barycenter(&imposed_right).unwrap();
-        let left_dir = SubModel::dirichlet(
-            &model,
-            "T",
-            &imposed_left,
-            &mult_mesh_left,
-            Default::default(),
-        )
-        .unwrap();
-        let right_dir = SubModel::dirichlet(
-            &model,
-            "T",
-            &imposed_right,
-            &mult_mesh_right,
-            Default::default(),
-        )
-        .unwrap();
+        let left_dir = SubModel::dirichlet(&imposed_left, &model, "T", Default::default()).unwrap();
+        let right_dir =
+            SubModel::dirichlet(&imposed_right, &model, "T", Default::default()).unwrap();
         let mult_left = left_dir.multiplier_nodes()[0];
         let mult_right = right_dir.multiplier_nodes()[0];
         model.add_sub(Handle::new(left_dir)).unwrap();
         model.add_sub(Handle::new(right_dir)).unwrap();
 
         // Build rhs: T_left = 0 at mult_left, T_right = 1 at mult_right
-        // (imposed value goes to the "imposed_T" slot).
+        // (imposed value goes to the "imposed" slot).
         let mut rhs_sm = SubMesh::new(coords.clone(), ElementType::POI1);
         rhs_sm.add_cell(&[mult_left]).unwrap();
         rhs_sm.add_cell(&[mult_right]).unwrap();
         let rhs_sm_h = Handle::new(rhs_sm);
-        let mut rhs = SubNodeField::from_poi1(&rhs_sm_h, vec!["imposed_T".into()]).unwrap();
-        rhs.set_value(mult_left, "imposed_T", 0.0).unwrap();
-        rhs.set_value(mult_right, "imposed_T", 1.0).unwrap();
+        let mut rhs = SubNodeField::from_poi1(&rhs_sm_h, vec!["imposed".into()]).unwrap();
+        rhs.set_value(mult_left, "imposed", 0.0).unwrap();
+        rhs.set_value(mult_right, "imposed", 1.0).unwrap();
         let rhs = NodeField::from_sub(rhs);
 
         // Assemble + solve.
         let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
-        let solution = solve(&k, &rhs).unwrap();
+        let solution = crate::ops::solver::solve(&k, &rhs).unwrap();
 
         // Verify T at every node equals its physical coordinate.
         let tol = 1e-10;
@@ -1078,8 +698,8 @@ mod tests {
             );
         }
         // Verify the boundary fluxes (Lagrange multipliers).
-        let lambda_left = solution.value(mult_left, "lambda_T").unwrap();
-        let lambda_right = solution.value(mult_right, "lambda_T").unwrap();
+        let lambda_left = solution.value(mult_left, "lambda").unwrap();
+        let lambda_right = solution.value(mult_right, "lambda").unwrap();
         assert!(
             (lambda_left - 1.0).abs() < tol,
             "lambda at left: got {lambda_left}, expected 1.0"
@@ -1108,7 +728,9 @@ mod tests {
         materials.add_sub(Handle::new(mat)).unwrap();
         let mut model = Model::empty();
         model
-            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
+            .add_sub(Handle::new(
+                SubModel::heat_conduction(sub, MaterialSymmetry::Isotropic).unwrap(),
+            ))
             .unwrap();
         let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
 
@@ -1120,7 +742,7 @@ mod tests {
         let rhs =
             NodeField::from_sub(SubNodeField::from_poi1(&rhs_sm_h, vec!["q".into()]).unwrap());
         // K is singular ⇒ solve must err.
-        assert!(solve(&k, &rhs).is_err());
+        assert!(crate::ops::solver::solve(&k, &rhs).is_err());
     }
 
     /// The solution's zones live on the matrix blocks' **own** column supports
@@ -1146,17 +768,18 @@ mod tests {
         materials.add_sub(Handle::new(mat)).unwrap();
         let mut model = Model::empty();
         model
-            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
+            .add_sub(Handle::new(
+                SubModel::heat_conduction(sub, MaterialSymmetry::Isotropic).unwrap(),
+            ))
             .unwrap();
         // Ground both ends so K-with-constraints is nonsingular.
         for end in [0usize, 2] {
             let imposed = Mesh::from_submesh(
                 SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[end])).unwrap(),
             );
-            let mult = crate::ops::mesh::barycenter(&imposed).unwrap();
             model
                 .add_sub(Handle::new(
-                    SubModel::dirichlet(&model, "T", &imposed, &mult, Default::default()).unwrap(),
+                    SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap(),
                 ))
                 .unwrap();
         }
@@ -1168,8 +791,8 @@ mod tests {
         };
         let rhs = NodeField::from_sub(SubNodeField::from_poi1(&rhs_sm, vec!["q".into()]).unwrap());
 
-        let sol_a = solve(&k, &rhs).unwrap();
-        let sol_b = solve(&k, &rhs).unwrap();
+        let sol_a = crate::ops::solver::solve(&k, &rhs).unwrap();
+        let sol_b = crate::ops::solver::solve(&k, &rhs).unwrap();
         sol_a.check().unwrap();
 
         // Each zone's support is one of the blocks' column supports.
@@ -1227,7 +850,7 @@ mod tests {
         let rhs = NodeField::from_sub(
             SubNodeField::from_poi1(&Handle::new(rhs_sm), vec!["q".into()]).unwrap(),
         );
-        assert!(solve(&m, &rhs).is_err());
+        assert!(crate::ops::solver::solve(&m, &rhs).is_err());
     }
 
     /// A solvable 1×1 system `2·T = b` and a rhs carrying `b` at the row DOF.
@@ -1379,12 +1002,13 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
+            .add_sub(Handle::new(
+                SubModel::heat_conduction(sub, MaterialSymmetry::Isotropic).unwrap(),
+            ))
             .unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
-        let mult = crate::ops::mesh::barycenter(&imposed).unwrap();
-        let dir = SubModel::dirichlet(&model, "T", &imposed, &mult, Default::default()).unwrap();
+        let dir = SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap();
         model.add_sub(Handle::new(dir)).unwrap();
 
         crate::ops::matrix::stiffness(&model, &materials).unwrap()
@@ -1419,8 +1043,9 @@ mod tests {
     fn both_methods_agree_on_a_matrix_that_admits_both() {
         let (m, rhs) = spd_grid(3);
         let node = m.row_mesh().unwrap().node(0, 0, 0).unwrap().id();
-        let by_lu = solve_with_options(&m, &rhs, &SolveOptions::default()).unwrap();
-        let by_llt = solve_with_options(&m, &rhs, &cholesky()).unwrap();
+        let by_lu =
+            crate::ops::solver::solve_with_options(&m, &rhs, &SolveOptions::default()).unwrap();
+        let by_llt = crate::ops::solver::solve_with_options(&m, &rhs, &cholesky()).unwrap();
         let (a, b) = (
             by_lu.value(node, "T").unwrap(),
             by_llt.value(node, "T").unwrap(),
@@ -1433,7 +1058,7 @@ mod tests {
         use std::sync::atomic::AtomicBool;
         let (m, rhs, _a) = tiny_system();
         let flag = AtomicBool::new(true);
-        let err = solve_cancellable(&m, &rhs, &flag).unwrap_err();
+        let err = crate::ops::solver::solve_cancellable(&m, &rhs, &flag).unwrap_err();
         assert!(matches!(err, PyrucastError::Interrupted));
     }
 
@@ -1442,7 +1067,7 @@ mod tests {
         use std::sync::atomic::AtomicBool;
         let (m, rhs, a) = tiny_system();
         let flag = AtomicBool::new(false);
-        let sol = solve_cancellable(&m, &rhs, &flag).unwrap();
+        let sol = crate::ops::solver::solve_cancellable(&m, &rhs, &flag).unwrap();
         // 2·T = 6 ⇒ T = 3.
         assert!((sol.value(a, "T").unwrap() - 3.0).abs() < 1e-12);
     }
@@ -1457,7 +1082,7 @@ mod tests {
         let rhs = NodeField::from_sub(
             SubNodeField::from_poi1(&Handle::new(sm), vec!["q".into()]).unwrap(),
         );
-        assert!(solve(&m, &rhs).is_err());
+        assert!(crate::ops::solver::solve(&m, &rhs).is_err());
     }
 
     #[test]
@@ -1469,12 +1094,12 @@ mod tests {
         assert!(m.cached_factorization::<Factorization>().is_none());
 
         // First solve factorizes + caches; 2·T = 6 ⇒ T = 3.
-        let s1 = solve(&m, &rhs).unwrap();
+        let s1 = crate::ops::solver::solve(&m, &rhs).unwrap();
         assert!((s1.value(a, "T").unwrap() - 3.0).abs() < 1e-12);
         assert!(m.cached_factorization::<Factorization>().is_some());
 
         // Second solve reuses the cached factorization: identical result.
-        let s2 = solve(&m, &rhs).unwrap();
+        let s2 = crate::ops::solver::solve(&m, &rhs).unwrap();
         assert_eq!(s1.value(a, "T").unwrap(), s2.value(a, "T").unwrap());
 
         // Mutating the matrix invalidates the cache.
@@ -1506,7 +1131,7 @@ mod tests {
             cache: false,
             ..Default::default()
         };
-        let s = solve_with_options(&m, &rhs, &opts).unwrap();
+        let s = crate::ops::solver::solve_with_options(&m, &rhs, &opts).unwrap();
         assert!((s.value(a, "T").unwrap() - 3.0).abs() < 1e-12);
         assert!(m.cached_factorization::<Factorization>().is_none());
     }

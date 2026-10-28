@@ -90,14 +90,12 @@ def resoudre_thermique(plaque, trou):
     modele_th = pc.model.heat_conduction(fes)
 
     trou_poi1 = pc.mesh.to_poi1(trou)
-    multiplicateur = pc.mesh.translate(trou_poi1, [0.0, 0.0])
-    modele_th = modele_th | pc.model.dirichlet(
-        modele_th, "T", trou_poi1, multiplicateur
-    )
+    blocage = pc.model.dirichlet(trou_poi1, modele_th, "T")
+    modele_th = modele_th | blocage
 
     materiaux_th = pc.element_field.material_field(modele_th, [("k", K_COND)])
-    temperature_imposee = pc.NodeField(multiplicateur, ["imposed_T"])
-    temperature_imposee[0].add_to_component("imposed_T", T_IMPOSEE)
+    temperature_imposee = pc.NodeField(blocage.multiplier_mesh(), ["imposed"])
+    temperature_imposee[0].add_to_component("imposed", T_IMPOSEE)
 
     K_th = pc.matrix.stiffness(modele_th, materiaux_th)
     return pc.solver.solve(K_th, temperature_imposee)
@@ -110,11 +108,10 @@ def main() -> None:
 
     # ANCHOR: modele_elastique
     encastrement = pc.mesh.to_poi1(gauche)
-    multiplicateur = pc.mesh.translate(encastrement, [0.0, 0.0])
 
     modele = pc.model.elasticity(fes, "plane_stress")
-    modele = modele | pc.model.dirichlet(modele, "u_x", encastrement, multiplicateur)
-    modele = modele | pc.model.dirichlet(modele, "u_y", encastrement, multiplicateur)
+    modele = modele | pc.model.dirichlet(encastrement, modele, "u_x")
+    modele = modele | pc.model.dirichlet(encastrement, modele, "u_y")
 
     # The hung mass's force, spread over the lower half of the hole —
     # analogue de FSUR 'MASS' / PRES 'MASS' (Cast3M section 6).

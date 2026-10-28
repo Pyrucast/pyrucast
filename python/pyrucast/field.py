@@ -12,18 +12,18 @@ champ (``f.filter_components([...])``, ``f.rename_component(a, b)``).
 """
 
 from ._pyrucast import (
-    abs as abs,
-    cos as cos,
-    cosh as cosh,
-    exp as exp,
-    log as log,
-    log10 as log10,
-    psca as psca,
-    sin as sin,
-    sinh as sinh,
-    sqrt as sqrt,
-    tan as tan,
-    tanh as tanh,
+    abs,
+    cos,
+    cosh,
+    exp,
+    log,
+    log10,
+    psca,
+    sin,
+    sinh,
+    sqrt,
+    tan,
+    tanh,
 )
 
 __all__ = [

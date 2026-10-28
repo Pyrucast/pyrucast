@@ -7,10 +7,10 @@ garde son rôle — `nalgebra` (primitives), `nalgebra-sparse`
 (assemblage/stockage/serde), `faer` (factorise & résout). Voir
 [Parallélisme](../developper/parallelisme.md).
 
-## `solve(matrix, rhs)` → `NodeField`
+## `solve(matrix, rhs, …)` → `NodeField`
 
-Résout `A x = b` où `A` est la [`Matrice`](../matrix.md) assemblée et `b` le
-`NodeField` de chargement. L'opération :
+Un seul point d'entrée. Résout `A x = b` où `A` est la [`Matrice`](../matrix.md)
+assemblée et `b` le `NodeField` de chargement. L'opération :
 
 1. obtient la **factorisation** de `A` (cache de la matrice, cf. ci-dessous) ;
 2. lit le `NodeField` de chargement à chacune des **lignes** de la matrice (les
@@ -44,6 +44,34 @@ nul ⇒ solution non finie ⇒ erreur explicite.
 {{#include ../../../tests/python/test_doc_ops_physiques.py:solve}}
 ```
 
+### La matrice se suffit
+
+`solve` ne prend **pas** de modèle : tout ce qu'il lui faut est dans la matrice.
+
+| ce que le solveur doit savoir | où il le lit |
+|---|---|
+| quelles lignes sont des relations | les lignes de nom `imposed`, le nom commun de toutes les contraintes |
+| leurs coefficients | la ligne elle-même |
+| leur multiplicateur | la colonne `lambda` du même nœud |
+| leur sens (`=`, `>=`, `<=`) | le bloc `C` qui les porte (`SubMatrix::row_sense`), posé par la contrainte à l'assemblage |
+
+Le sens voyage avec le bloc : une somme de matrices (`K + K_σ + M`) garde les
+blocs de ses opérandes, et l'archive les écrit. Rien ne peut donc contredire la
+matrice, et une matrice de contact ne peut pas être résolue comme si ses
+relations étaient des égalités.
+
+### Options
+
+| option | défaut | rôle |
+|---|---|---|
+| `relations` | `"lagrange"` | comment les relations sont imposées : multiplicateurs, ou élimination (`"eliminate"`) |
+| `method` | `"lu"` | factorisation directe ; `"cholesky"` exige un système symétrique défini positif |
+| `active_set` | `"schur"` | stratégie de l'ensemble actif, lue seulement si la matrice porte des inégalités |
+| `max_iter` | `100` | borne de la boucle de statut |
+| `tol` | `1e-10` | tolérance de signe sur `λ` et sur le jeu |
+| `cache` | `True` | réutiliser ce qui est rangé sur la matrice |
+| `verbosity` | `"silent"` | ce que la résolution raconte (`"brief"`, `"detailed"`) |
+
 ## Factorisation réutilisable (cache transparent)
 
 `solve` **factorise une fois, résout N fois** : la factorisation est mise en
@@ -55,35 +83,49 @@ multiples, itérations de Newton, transitoire à matrice constante). Le cache es
 **jamais l'inverse explicite** (dense, coûteux, instable) — seulement la
 factorisation.
 
-Options de `solve` :
+Le cache n'a qu'une place, et chaque voie y range son propre artefact : la
+factorisation, la condensation ou l'état de l'ensemble actif. La voie est
+décidée par la matrice elle-même, avant tout regard sur le cache : une matrice
+n'en emprunte qu'une, et ce qu'elle a rangé y reste.
 
-- `method` — méthode directe (`"lu"` par défaut ; l'énum laisse la place à
-  d'autres back-ends sans changer les appels) ;
-- `cache` — réutiliser/peupler le cache (`True` par défaut ; `False` factorise à
-  neuf sans toucher le cache).
-
-## `solve_eliminate(matrix, model, rhs)` → `NodeField`
+## L'élimination : `relations="eliminate"`
 
 Voie **alternative** pour un modèle contraint : au lieu de border le système par
-des multiplicateurs de Lagrange (ce que fait `solve` sur la matrice augmentée),
-on **élimine** les contraintes par condensation maître/esclave. Pour chaque
-relation `Σ aₖ·u(nœudₖ, varₖ) = g`, un terme *esclave* `s` est exprimé par les
-autres (*maîtres*) : `u_s = (g − Σ_{k≠s} aₖ·u_k)/a_s`. Le système se réduit à
-`K̂ û = f̂` avec `K̂ = Tᵀ K T`, résolu par le **même** LU creux (sur une matrice
-plus petite et définie, sans degré multiplicateur), puis prolongé `u = T·û + u₀`.
+des multiplicateurs de Lagrange, on **élimine** les contraintes par
+condensation maître/esclave. Pour chaque relation `Σ aₖ·u(nœudₖ, varₖ) = g`, un
+terme *esclave* `s` est exprimé par les autres (*maîtres*) :
+`u_s = (g − Σ_{k≠s} aₖ·u_k)/a_s`. Le système se réduit à `K̂ û = f̂` avec
+`K̂ = Tᵀ K T`, résolu par le **même** back-end (sur une matrice plus petite et
+définie, sans degré multiplicateur), puis prolongé `u = T·û + u₀`.
 
-- lit la structure des contraintes via le seam méthode-neutre
-  `Constraint::relations()` (partagé avec la voie Lagrange) ; le `K` physique est
-  extrait du bloc point-selle assemblé (nœuds multiplicateurs filtrés) ;
+- les relations sont lues dans la matrice, comme ci-dessus ; le `K` physique est
+  son bloc point-selle sans les nœuds multiplicateurs ;
 - récupère en post-traitement la **réaction** (équivalent du multiplicateur),
   `−(K·u − f)` à la ligne duale de chaque esclave (`= aₛ·λ`) ;
 - met en cache la **condensation** (`T`, `K̂` factorisé) sur la matrice, comme la
-  factorisation LU ; mêmes options `method` / `cache` ;
-- un modèle **sans contrainte** retombe sur un `solve` simple.
+  factorisation ;
+- une matrice **sans relation** retombe sur la factorisation simple.
 
-**Périmètre v1** : non chaîné, esclaves disjoints — chaque relation élimine un
+**Les inégalités ne s'éliminent pas.** Qu'une relation unilatérale tienne en
+égalité dépend de la solution : seules les égalités sont éliminées, et chaque
+inégalité `C_I·u ≥ g_I` reste une relation du système réduit, écrite sur les
+inconnues libres, avec son multiplicateur :
+
+```text
+⎡ Tᵀ K T   (C_I T)ᵀ ⎤ ⎡û⎤   ⎡Tᵀ(f − K·u₀)⎤
+⎣ C_I T       0     ⎦ ⎣λ⎦ = ⎣ g_I − C_I·u₀ ⎦
+```
+
+Les multiplicateurs des égalités ont disparu (`C_E·T = 0`) ; ceux des
+inégalités restent, et la même boucle d'[ensemble actif](#les-relations-unilatérales--lensemble-actif)
+décide lesquelles sont saturées. Le `λ` de chaque inégalité revient à son nœud
+multiplicateur, comme par la voie Lagrange ; la réaction de chaque esclave est
+sa part propre, celle des inégalités (`C_Iᵀλ`) ôtée.
+
+**Périmètre** : non chaîné, esclaves disjoints — chaque égalité élimine un
 esclave distinct, jamais réutilisé comme maître ni esclave ailleurs (couvre la
-périodicité ; erreur explicite sinon).
+périodicité ; erreur explicite sinon). Une inégalité peut porter sur un
+esclave : elle passe par `T` comme toute autre ligne.
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_physiques.py:eliminate}}
@@ -92,12 +134,13 @@ périodicité ; erreur explicite sinon).
 Voir l'exemple `examples/mpc_condensation.py` et la page
 [Contraintes](../contraintes.md).
 
-## `solve_unilateral(matrix, model, rhs)` → `NodeField`
+## Les relations unilatérales : l'ensemble actif
 
-Solveur **actif/inactif** (méthode du statut) pour un modèle portant des
-relations **unilatérales** (contraintes construites avec `sense=">="` /
-`"<="`) : chaque relation est soit *active* (imposée en égalité, `λ` = la
-réaction), soit *inactive* (`λ = 0`, le jeu reste du côté admissible).
+Dès que la matrice porte une relation **unilatérale** (contrainte construite
+avec `sense=">="` / `"<="`, ou un [contact](../contraintes/contact.md)),
+`solve` la résout par la méthode **actif/inactif** (méthode du statut) : chaque
+relation est soit *active* (imposée en égalité, `λ` = la réaction), soit
+*inactive* (`λ = 0`, le jeu reste du côté admissible).
 
 ### Conditions KKT et boucle de statut
 
@@ -123,14 +166,8 @@ f`, `C·u = g` : contre le multiplicateur KKT `μ ≥ 0` d'une contrainte `≥` 
 `λ = −μ`. Donc, dans le champ solution : `≥` active a `λ ≤ 0` (relâchée si `λ >
 tol`) ; `≤` active a `λ ≥ 0` (relâchée si `λ < −tol`).
 
-- les relations d'**égalité** du modèle sont imposées inconditionnellement,
-  comme par `solve` ; un modèle **sans inégalité** retombe sur un `solve`
-  simple ;
-- la structure des contraintes est lue via le seam méthode-neutre
-  `Constraint::relations()` (partagé avec les voies Lagrange et élimination) ;
-- options : `method` / `cache` (comme `solve`), `active_set` (stratégie de
-  factorisation, ci-dessous), `max_iter` (borne de la boucle de statut, `100`),
-  `tol` (tolérance de signe sur `λ` et sur le jeu, `1e-10`).
+Les relations d'**égalité** sont imposées inconditionnellement, comme sans
+inégalité.
 
 ### Deux stratégies de factorisation (`active_set`)
 
@@ -202,14 +239,14 @@ Sur un gros modèle, c'est la **factorisation** qui sature la mémoire, pas
 l'assemblage. Mesuré sur un cube de conduction thermique HEX8, face inférieure
 imposée :
 
-| DDL | assemblage | `solve` (Lagrange + LU) | `solve_eliminate` + `method="cholesky"` |
+| DDL | assemblage | `solve` (Lagrange + LU) | `relations="eliminate"` + `method="cholesky"` |
 |---|---|---|---|
 | 31 k | 28 Mo | 1,01 Go, 10,8 s | 0,28 Go, 1,8 s |
 | 135 k | 118 Mo | 10,6 Go, 330 s | 2,22 Go, 42 s |
 | 363 k | 348 Mo | — | 7,20 Go, 217 s |
 
 Premier levier, donc : quand le système éliminé est symétrique défini positif
-(thermique, élasticité), `solve_eliminate(…, method="cholesky")` divise le pic
+(thermique, élasticité), `solve(…, relations="eliminate", method="cholesky")` divise le pic
 par cinq et le temps par huit.
 
 Un cube est le pire cas du remplissage. Une pièce mince ou élancée s'en tient

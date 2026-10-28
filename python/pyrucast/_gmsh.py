@@ -106,7 +106,7 @@ def _views(gmsh):
                 kind, tags, data, time, ncomp = gmsh.view.getHomogeneousModelData(
                     tag, step
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001 — gmsh raises a bare `Exception`
                 warnings.warn(
                     f"from_gmsh: view {name!r} holds no model data: skipped",
                     stacklevel=3,

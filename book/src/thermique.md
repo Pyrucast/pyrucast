@@ -80,23 +80,22 @@ Le pipeline est toujours le même :
 4. **Matériau** — un `ElementField` portant la composante `"k"`, fabriqué
    commodément par `element_field::material_field(&model, &[("k", …)])` (les
    sous-modèles sans matériau, comme `Dirichlet`, sont ignorés).
-5. **`Model`** — `model::heat_conduction(&fes)`, composé par `|` (union) avec
-   les conditions limites.
+5. **`Model`** — `model::heat_conduction(&fes, MaterialSymmetry::Isotropic)`,
+   composé par `|` (union) avec les conditions limites.
 6. **Conditions limites :**
    - **Dirichlet** (`T` imposée) : un sous-modèle `model::dirichlet` qui impose
      la valeur via multiplicateurs de Lagrange. L'utilisateur fournit le
-     maillage des nœuds imposés et le maillage support des multiplicateurs —
-     typiquement fabriqué depuis le premier avec le mesher générique
-     [`barycenter`](operateurs/maillage.md) (nœuds neufs colocalisés). La valeur imposée
-     \\(u_d\\) s'écrit dans le chargement au slot **`imposed_T`** du
-     nœud-multiplicateur (cf. [Modèle physique](model.md)).
+     maillage des nœuds imposés ; la contrainte crée elle-même ses
+     nœuds-multiplicateurs, un par relation. La valeur imposée \\(u_d\\)
+     s'écrit dans le chargement au slot **`imposed`** du nœud-multiplicateur
+     (cf. [Dirichlet](contraintes/dirichlet.md)).
    - **Neumann / source** : une charge **ponctuelle** est une valeur du
      **chargement** sur la composante duale **`"q"`** au nœud concerné ; un
      **flux réparti** sur un bord (ou un volume) se transforme en charges
      nodales cohérentes par l'opérateur [`flux`](#exemple--un-carré) (analogue
      de `FLUX`/`PRES` de Cast3M).
 7. **Assemblage + résolution** — `matrix::stiffness` puis le solveur
-   `solver::lu::solve` (LU creuse directe, voir [Modèle physique](model.md)).
+   `solver::solve` (LU creuse directe, voir [Modèle physique](model.md)).
 
 ### Exemple : ligne chauffée
 
@@ -196,9 +195,10 @@ orthonormalisés en interne.
 {{#include ../../tests/python/test_doc_ops_physiques.py:orthotrope}}
 ```
 
-La conductivité isotrope reste lue **au point de Gauss**, donc variable à
-l'intérieur d'une maille ; les constantes orientées sont lues par maille, comme
-les modules mécaniques.
+Le matériau est lu **en chaque point de Gauss** — la conductivité isotrope, les
+constantes orientées et les axes matériau, comme la capacité `ρ·cp` — donc
+variable à l'intérieur d'une maille, comme les modules mécaniques : la matrice
+intègre ce que la loi lit.
 
 L'exemple Rust est un **test de patch**, qui est ce qu'appelle une conductivité
 orientée : un champ de température linéaire est harmonique pour *n'importe quel*

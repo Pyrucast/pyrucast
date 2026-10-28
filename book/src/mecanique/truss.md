@@ -37,6 +37,12 @@ retrouve `(EA/L)[[1,−1],[−1,1]]`.
 - **matériau** : `E` (module d'Young), `A` (section) ; `rho` **facultatif** (masse).
 - **comportement** (`COMP`) : effort axial `N = E·A·(cᵀ ε c)`, à partir de la
   déformation `ε` (op [`deformation`](../operateurs/champs.md)).
+- **mesure** : `strain_measure`, `"linear"` par défaut (`model.truss(fes)` en
+  Python, `model::truss(&fes, StrainMeasure::Linear)` en Rust). En grands
+  déplacements, `"green_lagrange"` : la loi lit `E_*` et écrit l'effort de
+  Piola–Kirchhoff 2 axial `S_n`, les forces internes lisent le vecteur effort
+  nominal `P_*` (cf. [Les barres et les
+  câbles](grandes-transformations.md#les-barres-et-les-câbles)).
 
 > ⚠️ Une barre n'a **aucune raideur transversale** : pour un système bien posé
 > il faut bloquer les DOFs transverses (treillis triangulé, appuis), sinon la
@@ -66,5 +72,8 @@ En plus de la rigidité, la barre assemble :
 
 - **masse consistante** `M = (ρAL/6)[[2,1],[1,2]]` sur chaque composante de
   translation (`rho` composante matériau optionnelle) — `pyrucast.matrix.mass` ;
-- **rigidité géométrique** `K_g = (N/L)·(I − c⊗c)` transverse, sous l'effort
-  axial `N` (sortie `n` du comportement) — `pyrucast.matrix.geometric`.
+- **rigidité géométrique** `K_g = (N/L)·[[I, −I], [−I, I]]`, sous l'effort
+  axial vrai `N` (composante `n`) — `pyrucast.matrix.geometric`. Toutes les
+  directions sont raidies, l'axiale comprise, comme le fait la rigidité
+  géométrique du milieu continu : c'est le terme de contrainte de la tangente
+  exacte de la barre.

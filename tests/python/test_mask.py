@@ -1,9 +1,8 @@
 """Python tests for `mask` (per-component 0/1 field) and the comparison
 sugar (`field >= x`, `> x`, `<= x`, `< x`) that builds masks."""
 
-import pytest
-
 import pyrucast
+import pytest
 
 
 def _poi1_field(values, components=("T",)):
@@ -100,5 +99,5 @@ def test_comparison_equivalent_to_mask():
 def test_equality_not_overridden():
     f, _ = _poi1_field([[1.0]])
     # `==` must keep Python identity semantics, not return a mask field.
-    assert (f == f) is True
+    assert (f == f) is True  # noqa: PLR0124 — the point: `==` on itself keeps identity
     assert (f == 5.0) is False

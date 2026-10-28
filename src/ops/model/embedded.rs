@@ -7,12 +7,19 @@ use crate::error::Result;
 
 /// Embedded (immersed) constraint `Model` (a single sub-model) tying each
 /// node of `immersed` to the interpolation of `host` at that node, for every
-/// `(variable, target_dual)` in `components`. Parent-level operator
+/// primal of `target` in `variables`. Parent-level operator
 /// — see [`SubModel::embedded`] and
 /// [`embedded::Embedded::new`](crate::models::embedded::Embedded::new) for the
 /// coupling weights, the per-component variable names and the errors.
 ///
+/// The supports come first — `immersed`, which carries the relations, then
+/// `host`, which interpolates — and the model they constrain after them.
+/// `tol` is the location tolerance, a gap in the host's **reference** element,
+/// without dimension; the Python face defaults it to
+/// [`DEFAULT_TOL`](crate::models::embedded::DEFAULT_TOL) (`1e-6`).
+///
 /// ```
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -34,7 +41,6 @@ use crate::error::Result;
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let mut barre = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # let p: Vec<_> = [[0.25, 0.25], [0.5, 0.25]].iter()
 /// #     .map(|q| Node::create_in(coords.clone(), q).unwrap()).collect();
@@ -42,19 +48,18 @@ use crate::error::Result;
 /// # let immergee = Mesh::from_submesh(barre);
 /// # let cible = pyrucast::ops::model::elasticity(
 /// #     &FiniteElementSpace::lagrange1(&maillage)?,
-/// #     pyrucast::models::tensor::Kinematics::PlaneStress)?;
-/// let m = model::embedded(&cible, &immergee, &maillage,
+/// #     pyrucast::models::tensor::Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
+/// let m = model::embedded(&immergee, &maillage, &cible,
 ///     vec!["u_x".into(), "u_y".into()], pyrucast::models::embedded::DEFAULT_TOL)?;
 /// assert_eq!(m.len(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-#[allow(clippy::too_many_arguments)]
 pub fn embedded(
-    target: &Model,
     immersed: &Mesh,
     host: &Mesh,
+    target: &Model,
     variables: Vec<String>,
     tol: f64,
 ) -> Result<Model> {
-    single(SubModel::embedded(target, immersed, host, variables, tol)?)
+    single(SubModel::embedded(immersed, host, target, variables, tol)?)
 }

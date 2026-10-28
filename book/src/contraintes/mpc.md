@@ -11,19 +11,23 @@ C'est une [contrainte](../contraintes.md) imposée par **multiplicateurs de
 Lagrange**, exactement comme [Dirichlet](dirichlet.md) — dont elle est la
 **généralisation** : Dirichlet est la relation à un seul terme `1·u = u_d`
 (coefficient 1), une MPC en a autant qu'on veut, avec des coefficients
-quelconques. Aucun matériau, aucune loi de comportement ; elle ne crée aucun
-nœud et ne mute jamais le `Coords`.
+quelconques. Aucun matériau, aucune loi de comportement ; les seuls nœuds
+qu'elle crée sont ses multiplicateurs, un par relation.
 
 Implémentation : `src/models/mpc.rs` ; opérateur `ops::model::mpc(…)`.
 
 ## Mise en donnée : un maillage par terme
 
-Chaque **terme** est un tuple `(maillage POI1, variable, dual, coefficient)`.
-Tous les terme-maillages et le `multiplier_mesh` sont **appariés
-élément-par-élément** : la relation `r` relie la `r`-ème cellule de *chaque*
-terme-maillage au `r`-ème nœud multiplicateur. Une périodicité entre deux
+Chaque **terme** est un tuple `(maillage POI1, variable, coefficient)`. Tous
+les terme-maillages sont **appariés cellule par cellule** : la relation `r`
+relie la `r`-ème cellule de *chaque* terme-maillage. Une périodicité entre deux
 surfaces de `N` nœuds est donc `N` relations d'un coup, **vectorisées** sur les
 cellules — sans boucle Python.
+
+Chaque relation reçoit un **nœud-multiplicateur à elle**, créé à la
+construction par [`barycenter`](../operateurs/maillage.md) sur le premier
+terme-maillage : un nœud neuf colocalisé avec le nœud du premier terme. On les
+retrouve avec `Model.multiplier_mesh()`.
 
 > **Contrat d'appariement.** L'ordre cohérent des maillages appariés est à la
 > charge de l'utilisateur : la cellule `r` de chaque terme-maillage doit
@@ -31,33 +35,32 @@ cellules — sans boucle Python.
 > périodique). Le modèle vérifie seulement que tout est POI1, partage un même
 > `Coords`, et a le même nombre de cellules par sous-maillage.
 
-Le `dual` de chaque terme (la ligne où atterrit la réaction `aₖ·λ`) se trouve
-facilement avec **`Model.dual_of(variable)`** — appariement positionnel
+La **cible** est **une** : le modèle contraint, qui donne à chaque variable sa
+duale (la ligne où atterrit la réaction `aₖ·λ`) — appariement positionnel
 `primal_vars[i] ↔ dual_vars[i]` de la physique qui déclare la variable
-(`"T" → "q"`, `"u_x" → "f_x"`, …).
+(`"T" → "q"`, `"u_x" → "f_x"`, …), lisible avec **`Model.dual_of(variable)`**.
+Une relation entre deux physiques se pose sur leur union.
 
-## Deux noms de variables
+## Les noms des variables
 
-L'MPC partage **une** paire de variables entre toutes ses relations, toutes deux
-**surchargeables** :
+Ceux de **toute** relation de contrainte (voir [Dirichlet](dirichlet.md)) :
 
-| rôle | nom | défaut |
-|---|---|---|
-| primale propre = multiplicateur `λ` (inconnue du système) | `multiplier` | `lambda_mpc` |
-| duale propre = ligne de contrainte + **slot** où l'utilisateur écrit `g` | `imposed_value` | `mpc_rhs` |
+| rôle | nom |
+|---|---|
+| primale propre = multiplicateur `λ` (inconnue du système) | `lambda` |
+| duale propre = ligne de contrainte + **slot** où l'utilisateur écrit `g` | `imposed` |
 
 Signature complète :
 
 ```text
-model.mpc(target, terms, multiplier_mesh, sense="=")
+model.mpc(terms, target, sense="=")
 # terms : [(maillage, variable, coefficient), …]
-# terms : liste de (mesh, variable, dual, coefficient)
 ```
 
 `sense` (`"="`, `">="`, `"<="`) rend les relations **unilatérales**
 (`Σₖ aₖ·uₖ ≥ g` : une liaison à jeu) — voir la section « Relations
-unilatérales » de la page [Contraintes](../contraintes.md) et le solveur
-`solve_unilateral`.
+unilatérales » de la page [Contraintes](../contraintes.md) et le
+[solveur](../operateurs/solveur.md), qui lit le sens dans la matrice.
 
 ## Les blocs `C` / `Cᵀ`
 
@@ -66,20 +69,20 @@ via le même code partagé que Dirichlet mais avec le coefficient `aₖ` au
 lieu de `1` (chaque bloc est marqué non-symétrique ; seule l'union `C ∪ Cᵀ`
 l'est — propriété **globale** du système point-selle) :
 
-- **bloc C** : `(multiplier_node, imposed_value) × (nœud_k, variable_k) = aₖ`
-- **bloc Cᵀ** : `(nœud_k, dual_k) × (multiplier_node, multiplier) = aₖ`
+- **bloc C** : `(multiplier_node, imposed) × (nœud_k, variable_k) = aₖ`
+- **bloc Cᵀ** : `(nœud_k, dual_k) × (multiplier_node, lambda) = aₖ`
 
 Tous les termes d'une relation partagent le **même nœud multiplicateur** et la
-**même ligne `imposed_value`** : c'est ce qui les additionne dans une seule
+**même ligne `imposed`** : c'est ce qui les additionne dans une seule
 équation `Σₖ aₖ uₖ = g`.
 
 ## Second membre et réaction
 
 - Le second membre `g` n'est **pas** stocké dans le SubModel : l'utilisateur
-  l'écrit dans le `NodeField` de **chargement**, au slot `mpc_rhs` du
+  l'écrit dans le `NodeField` de **chargement**, au slot `imposed` du
   nœud-multiplicateur (défaut `g = 0` — le cas homogène des égalités et
-  périodicités).
-- Le **multiplicateur** se retrouve dans la solution sous `lambda_mpc` au
+  périodicités). `constraint_rhs([(nœud d'un terme, g), …])` l'y range.
+- Le **multiplicateur** se retrouve dans la solution sous `lambda` au
   nœud-multiplicateur ; sa valeur **est** la force de réaction de la contrainte.
 
 ## Exemple : relation `T(1) − T(0) = 1`

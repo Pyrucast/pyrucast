@@ -27,7 +27,9 @@ use pyrucast::containers::finite_element_space::{FiniteElementSpace, Interpolati
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::model;
 use pyrucast::Result;
 
@@ -95,7 +97,12 @@ fn hex27_assembles_a_singular_stiffness() -> Result<()> {
     const NU: f64 = 0.3;
 
     let fes = cube()?;
-    let m = model::elasticity(&fes, Kinematics::Full3D)?;
+    let m = model::elasticity(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     let materials = pyrucast::ops::element_field::material_field(&m, &[("E", E), ("nu", NU)])?;
     let k = pyrucast::ops::matrix::stiffness(&m, &materials)?;
 

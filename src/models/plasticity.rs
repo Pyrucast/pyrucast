@@ -20,11 +20,12 @@
 //! strain `ε_p(A)`, the cumulated `p(A)` and the strain `ε(A)` — comes in as
 //! `prev` (the previous step's output, or the **rest state** on the first step,
 //! where A is the reference configuration). The elastic predictor is
-//! `σ_trial = σ(A) + C:Δε`
-//! with `Δε = ε(B) − ε(A)` — algebraically identical to `C:(ε(B) − ε_p(A))` in
-//! small strain, but the form that carries `σ(A)` explicitly, ready for a
-//! large-strain law. The output echoes the full-3-D `ε(B)` (and, in 2-D, the
-//! out-of-plane `σ_zz`) so it is a complete `prev` for the next step.
+//! `σ_trial = C:(ε(B) − ε_p(A))`, the moduli of B applied to the elastic strain
+//! — the convention of every law (see [`Behavior`]),
+//! which keeps the stress secant when the moduli depend on temperature. With
+//! constant moduli it is the incremental `σ(A) + C:Δε`. The output echoes the
+//! full-3-D `ε(B)` (and, in 2-D, the out-of-plane `σ_zz`) so it is a complete
+//! `prev` for the next step.
 //!
 //! State is always carried in **full 3-D** (six `eps_p_*` components) regardless
 //! of the 2-D/3-D kinematics, which keeps the radial return identical across plane
@@ -62,12 +63,16 @@ use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::continuum::Continuum;
 use crate::models::owned_components;
+use crate::models::symmetry::MaterialSymmetry;
+use crate::models::tensor::voigt_stress;
 use crate::models::tensor::Kinematics;
 use crate::models::tensor::{dual_name, primal_name};
-use crate::models::tensor::{stress_names, voigt_stress};
 use crate::models::ZoneLayout;
-use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{
+    Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
+};
 use crate::models::{ElementLayout, MatrixKind};
+use crate::ops::element_field::StrainMeasure;
 use law::{MatParams, PlasticLaw, PrevState, MAX_INTERNAL_VARS};
 use serde::{Deserialize, Serialize};
 
@@ -90,14 +95,19 @@ fn state_names() -> Vec<String> {
 }
 
 /// Extra state echoed for the incremental montage so the output is a **complete
-/// `prev`**: the full-3-D end-of-step strain `ε(B)` (six `eps_*`, so `ε(A)` is
-/// recoverable next step) and — in 2-D only — the out-of-plane stress `sigma_zz`
+/// `prev`**: the full-3-D end-of-step strain `ε(B)` (six components, so `ε(A)`
+/// is recoverable next step) and — in 2-D only — the out-of-plane stress `zz`
 /// that the Voigt dual omits (so `σ(A)` is fully recoverable). In 3-D the Voigt
-/// dual already carries all six stresses.
-fn echo_names(space_dim: usize, kinematics: Kinematics) -> Vec<String> {
-    let mut v: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect();
-    if echoes_sigma_zz(space_dim, kinematics) {
-        v.push("sigma_zz".into());
+/// dual already carries all six stresses. Each under the name of what it holds:
+/// the measure the law reads (`eps`, `E`, `H`) and its dual (`sigma`, `S`, `T`).
+fn echo_names(continuum: &Continuum) -> Vec<String> {
+    let strain = continuum.measure().prefix();
+    let mut v: Vec<String> = TENSOR_SUFFIXES
+        .iter()
+        .map(|s| format!("{strain}_{s}"))
+        .collect();
+    if echoes_sigma_zz(continuum.space_dim(), continuum.kinematics()) {
+        v.push(format!("{}_zz", continuum.stress_prefix()));
     }
     v
 }
@@ -110,10 +120,11 @@ fn echoes_sigma_zz(space_dim: usize, kinematics: Kinematics) -> bool {
     space_dim == 2 && !kinematics.is_axisymmetric()
 }
 
-/// Perfect von Mises plasticity on an FE subspace.
+/// Elastoplasticity on an FE subspace, under one yield law ([`PlasticLaw`]).
 ///
 /// Holds the same supports as [`crate::models::elasticity::Elasticity`];
-/// material (`E`, `nu`, `sigma_y`) is supplied at assembly / integration time.
+/// material (`E`, `nu` and what the law demands) is supplied at assembly /
+/// integration time.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -133,9 +144,11 @@ fn echoes_sigma_zz(space_dim: usize, kinematics: Kinematics) -> bool {
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::plasticity::Plasticity;
 /// # use pyrucast::models::plasticity::law::PlasticLaw;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// // A zone's elastoplastic physics: its law decides the material it
 /// // demands and the state it carries.
-/// let p = Plasticity::new(zone.clone(), Kinematics::PlaneStrain)?;
+/// let p = Plasticity::new(
+///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Perfect, StrainMeasure::Linear)?;
 /// assert!(p.material_components().contains(&"sigma_y".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -146,8 +159,11 @@ pub struct Plasticity {
 }
 
 impl Plasticity {
-    /// **Perfect** (non-hardening) von Mises plasticity on an FE subspace — the
-    /// default law, and the one this physics shipped with.
+    /// Elastoplasticity under the yield law `law`, on an FE subspace with the
+    /// given 2-D/3-D kinematics, the law reading `strain_measure`. Errors
+    /// if `kinematics` is inconsistent with the space dimension (same rule as
+    /// [`crate::models::elasticity::Elasticity::new`]), or if `strain_measure` is not
+    /// a law input.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -158,38 +174,7 @@ impl Plasticity {
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::Domain;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # use pyrucast::models::plasticity::Plasticity;
-    /// // **Perfect** von Mises: the default law, the one this physics was born
-    /// // with.
-    /// let p = Plasticity::new(zone.clone(), Kinematics::PlaneStrain)?;
-    /// assert_eq!(p.material_components().len(), 3); // E, nu, sigma_y
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn new(fespace: Handle<SubFiniteElementSpace>, kinematics: Kinematics) -> Result<Self> {
-        Self::with_law(fespace, kinematics, PlasticLaw::Perfect)
-    }
-
-    /// Elastoplasticity with an explicit yield law, on an FE subspace with the
-    /// given 2-D/3-D kinematics. Errors if `kinematics` is inconsistent with the space
-    /// dimension (same rule as
-    /// [`crate::models::elasticity::Elasticity::new`]).
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::tensor::Kinematics;
-    /// # use pyrucast::models::Domain;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -199,23 +184,28 @@ impl Plasticity {
     /// # let zone = fes.get(0).unwrap();
     /// # use pyrucast::models::plasticity::Plasticity;
     /// # use pyrucast::models::plasticity::law::PlasticLaw;
-    /// // The explicit law, and the coherence check between the kinematics and
-    /// // la dimension de l'espace.
-    /// let p = Plasticity::with_law(
-    ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Isotropic)?;
-    /// assert!(p.material_components().contains(&"H".to_string()));
+    /// // Perfect von Mises: `sigma_y` on top of elasticity.
+    /// let p = Plasticity::new(
+    ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Perfect, StrainMeasure::Linear)?;
+    /// assert_eq!(p.material_components().len(), 3); // E, nu, sigma_y
+    /// // The law declares the material it demands: isotropic hardening adds `H`.
+    /// let h = Plasticity::new(
+    ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Isotropic, StrainMeasure::Linear)?;
+    /// assert!(h.material_components().contains(&"H".to_string()));
     /// // A solid model on a 2-D zone is refused.
-    /// assert!(Plasticity::with_law(
-    ///     zone.clone(), Kinematics::Full3D, PlasticLaw::Perfect).is_err());
+    /// assert!(Plasticity::new(
+    ///     zone.clone(), Kinematics::Full3D, PlasticLaw::Perfect, StrainMeasure::Linear).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn with_law(
+    pub fn new(
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         law: PlasticLaw,
+        strain_measure: StrainMeasure,
     ) -> Result<Self> {
         Ok(Self {
-            continuum: Continuum::new(fespace, kinematics, "Plasticity")?,
+            continuum: Continuum::new(fespace, kinematics, "Plasticity")?
+                .with_measure(strain_measure, "Plasticity")?,
             law,
         })
     }
@@ -223,7 +213,7 @@ impl Plasticity {
 
 impl Plasticity {
     /// The preamble common to both point kernels: the matter read by
-    /// position, `ε(B)`, et l'état en A reconstruit en 3-D plein.
+    /// position, `ε(B)`, and the state at A rebuilt in full 3-D.
     ///
     /// Passed by closure because `PrevState` borrows a stack array — and generic,
     /// hence monomorphized: no virtual call gets in here.
@@ -433,13 +423,15 @@ impl Behavior for Plasticity {
         self.continuum.fespace()
     }
 
+    /// The isotropic `D` its elastic predictor uses, read from `E` and `nu`.
+    fn elastic_operator(&self) -> Option<(&Continuum, MaterialSymmetry)> {
+        Some((&self.continuum, MaterialSymmetry::Isotropic))
+    }
+
     fn behavior_output_components(&self) -> Vec<String> {
-        let mut comps = stress_names(self.continuum.space_dim(), self.continuum.kinematics());
+        let mut comps = self.continuum.stress_names();
         comps.extend(state_names());
-        comps.extend(echo_names(
-            self.continuum.space_dim(),
-            self.continuum.kinematics(),
-        ));
+        comps.extend(echo_names(&self.continuum));
         // The law's **own** internal variables (a back stress, a damage…), which
         // is how a law grows its state without any other file changing.
         comps.extend(self.law.internal_names());
@@ -490,6 +482,10 @@ impl Behavior for Plasticity {
         self.continuum.strain_reads()
     }
 
+    fn strain_operator(&self) -> StrainOperator {
+        StrainOperator::Deformation(self.continuum.measure())
+    }
+
     /// What the law reads back from the state at A: the echoed strain ε(A), the
     /// stress σ(A) (the Voigt dual plus the echoed `σ_zz` of the plane models),
     /// the plastic strain ε_p(A), the cumulated `p`, then the law's own
@@ -497,10 +493,14 @@ impl Behavior for Plasticity {
     /// missing one is a real inconsistency, caught once per zone.
     fn state_reads(&self) -> Vec<String> {
         let d = self.continuum.space_dim();
-        let mut v: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect();
-        v.extend(stress_names(d, self.continuum.kinematics()));
+        let strain = self.continuum.measure().prefix();
+        let mut v: Vec<String> = TENSOR_SUFFIXES
+            .iter()
+            .map(|s| format!("{strain}_{s}"))
+            .collect();
+        v.extend(self.continuum.stress_names());
         if echoes_sigma_zz(d, self.continuum.kinematics()) {
-            v.push("sigma_zz".into());
+            v.push(format!("{}_zz", self.continuum.stress_prefix()));
         }
         v.extend(state_names());
         v.extend(self.law.internal_names());
@@ -711,7 +711,13 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
         mesh.add_cell(&[a.id(), b.id(), c.id(), dd.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        Plasticity::new(fes.get(0).unwrap(), kinematics).unwrap()
+        Plasticity::new(
+            fes.get(0).unwrap(),
+            kinematics,
+            PlasticLaw::Perfect,
+            StrainMeasure::Linear,
+        )
+        .unwrap()
     }
 
     fn unit_hex() -> Plasticity {
@@ -731,7 +737,13 @@ mod tests {
         mesh.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())
             .unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        Plasticity::new(fes.get(0).unwrap(), Kinematics::Full3D).unwrap()
+        Plasticity::new(
+            fes.get(0).unwrap(),
+            Kinematics::Full3D,
+            PlasticLaw::Perfect,
+            StrainMeasure::Linear,
+        )
+        .unwrap()
     }
 
     fn material(pl: &Plasticity, e: f64, nu: f64, sy: f64) -> Handle<SubElementField> {
@@ -886,7 +898,7 @@ mod tests {
     /// Iso-result: on a **proportional** (monotone uniaxial) path, the
     /// incremental montage in N steps — threading `prev` — reproduces the
     /// single-step total-strain integration to round-off. Guards the whole
-    /// prev-threading + `σ(A) + C:Δε` predictor.
+    /// prev-threading + the elastic predictor.
     #[test]
     fn incremental_matches_single_step_on_proportional_path() {
         let pl = unit_hex();
@@ -977,8 +989,8 @@ mod tests {
             for &nj in &nodes {
                 for a in ["x", "y"] {
                     for b in ["x", "y"] {
-                        let lhs = k.get(ni, &format!("f_{a}"), nj, &format!("u_{b}"));
-                        let rhs = k.get(nj, &format!("f_{b}"), ni, &format!("u_{a}"));
+                        let lhs = k.get(ni, &format!("f_{a}"), nj, &format!("u_{b}")).unwrap();
+                        let rhs = k.get(nj, &format!("f_{b}"), ni, &format!("u_{a}")).unwrap();
                         assert!((lhs - rhs).abs() < 1e-9);
                     }
                 }

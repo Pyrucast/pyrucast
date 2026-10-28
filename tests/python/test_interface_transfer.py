@@ -38,7 +38,7 @@ def test_interface_declares_its_variables_and_material():
         square(right), "H2"
     )
     model = pyrucast.model.interface_transfer(
-        edge(left[1], left[2]), edge(right[0], right[3]), bodies, [("c_H2", "j_H2")]
+        edge(left[1], left[2]), edge(right[0], right[3]), bodies, ["c_H2"]
     )
     assert model[0].primal_vars() == ["c_H2"]
     assert model[0].dual_vars() == ["j_H2"]
@@ -53,7 +53,7 @@ def test_thermal_variant_is_a_contact_resistance():
         square(left)
     ) | pyrucast.model.heat_conduction(square(right))
     model = pyrucast.model.interface_transfer(
-        edge(left[1], left[2]), edge(right[0], right[3]), bodies, [("T", "q")]
+        edge(left[1], left[2]), edge(right[0], right[3]), bodies, ["T"]
     )
     assert model[0].primal_vars() == ["T"]
     assert model[0].dual_vars() == ["q"]
@@ -76,7 +76,7 @@ def test_a_mechanical_joint_transfers_several_quantities_at_once():
         edge(left[1], left[2]),
         edge(right[0], right[3]),
         bodies,
-        [("u_x", "f_x"), ("u_y", "f_y")],
+        ["u_x", "u_y"],
     )
     assert model[0].primal_vars() == ["u_x", "u_y"]
     assert model[0].dual_vars() == ["f_x", "f_y"]
@@ -98,28 +98,28 @@ def test_a_non_conforming_interface_is_rejected():
     # target is valid, so that it is the geometry being refused.
     target = pyrucast.model.fick(edge(a), "H2")
     try:
-        pyrucast.model.interface_transfer(edge(a), edge(b), target, [("c_H2", "j_H2")])
+        pyrucast.model.interface_transfer(edge(a), edge(b), target, ["c_H2"])
     except RuntimeError as exc:
         assert "not node-conforming" in str(exc)
     else:  # pragma: no cover - the constructor must refuse
         raise AssertionError("a non-conforming interface must raise")
 
 
-def test_a_pair_the_target_does_not_assemble_is_rejected():
-    """Coupled into a model that has no such rows, the law would tie nothing."""
+def test_a_variable_the_target_does_not_declare_is_rejected():
+    """Coupled into a model that has no such unknown, the law would tie nothing."""
     _c, left, right, square, edge = _two_squares()
     diffusion = pyrucast.model.fick(square(left), "H2")
     try:
         pyrucast.model.interface_transfer(
-            edge(left[1], left[2]), edge(right[0], right[3]), diffusion, [("T", "q")]
+            edge(left[1], left[2]), edge(right[0], right[3]), diffusion, ["T"]
         )
     except RuntimeError as exc:
-        assert "assembles no `T` paired with `q`" in str(exc)
+        assert "`T` is not an unknown" in str(exc)
     else:  # pragma: no cover
-        raise AssertionError("a pair the target does not assemble must raise")
+        raise AssertionError("a variable the target does not declare must raise")
 
 
-def test_pairs_of_two_natures_are_rejected():
+def test_variables_of_two_natures_are_rejected():
     """One interface carries one nature: build one per physics."""
     _c, left, right, square, edge = _two_squares()
     both = pyrucast.model.fick(square(left), "H2") | pyrucast.model.heat_conduction(
@@ -130,12 +130,12 @@ def test_pairs_of_two_natures_are_rejected():
             edge(left[1], left[2]),
             edge(right[0], right[3]),
             both,
-            [("c_H2", "j_H2"), ("T", "q")],
+            ["c_H2", "T"],
         )
     except RuntimeError as exc:
         assert "single nature" in str(exc)
     else:  # pragma: no cover
-        raise AssertionError("pairs of two natures must raise")
+        raise AssertionError("variables of two natures must raise")
 
 
 def test_transferring_nothing_is_rejected():
@@ -149,7 +149,7 @@ def test_transferring_nothing_is_rejected():
     except RuntimeError as exc:
         assert "nothing to transfer" in str(exc)
     else:  # pragma: no cover
-        raise AssertionError("an empty component list must raise")
+        raise AssertionError("an empty variable list must raise")
 
 
 def test_the_field_jumps_by_q_over_h():
@@ -160,7 +160,6 @@ def test_the_field_jumps_by_q_over_h():
     imposed = pyrucast.Mesh(c, "POI1")
     imposed.unit().add_cell([right[1]])
     imposed.unit().add_cell([right[2]])
-    multiplier = pyrucast.mesh.barycenter(imposed)
 
     modele_fick = pyrucast.model.fick(square(left), "H2") | pyrucast.model.fick(
         square(right), "H2"
@@ -171,9 +170,9 @@ def test_the_field_jumps_by_q_over_h():
             edge(left[1], left[2]),
             edge(right[0], right[3]),
             modele_fick,
-            [("c_H2", "j_H2")],
+            ["c_H2"],
         )
-        | pyrucast.model.dirichlet(modele_fick, "c_H2", imposed, multiplier)
+        | pyrucast.model.dirichlet(imposed, modele_fick, "c_H2")
     )
     # Uniform flux density on the far-left edge, as consistent nodal loads.
     inlet = pyrucast.Mesh(c, "SEG2")
@@ -192,9 +191,9 @@ def test_the_field_jumps_by_q_over_h():
     load = pyrucast.Mesh(c, "POI1")
     for m in mults:
         load.unit().add_cell([m])
-    imposed_field = pyrucast.NodeField(load, ["imposed_c_H2"])
+    imposed_field = pyrucast.NodeField(load, ["imposed"])
     for m in mults:
-        imposed_field[0].set_value(m, "imposed_c_H2", c_right)
+        imposed_field[0].set_value(m, "imposed", c_right)
 
     solution = pyrucast.solver.solve(
         pyrucast.matrix.stiffness(model, materials), rhs | imposed_field

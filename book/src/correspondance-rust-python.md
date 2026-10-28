@@ -168,33 +168,43 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `positions(mesh: &Mesh, components: Option<Vec<String>>) -> NodeField` | `positions(mesh, components=None) -> NodeField` |
 | `divergence(field: &ElementField, prefix: &str) -> NodeField` | `divergence(field, prefix) -> NodeField` |
 | `restrict(field: &NodeField, mesh: &Mesh) -> NodeField` | `restrict(field, mesh) -> NodeField` |
+| `project(field: &NodeField, mesh: &Mesh, target: &Mesh, tol: f64) -> NodeField` | `project(field, mesh, target, tol=1e-6) -> NodeField`, aussi méthode `field.project(mesh, target, tol=1e-6)` (interpolé par les mailles de `mesh` aux nœuds de `target`, 0 hors de `mesh`) |
 | `restrict_like(field: &NodeField, target: &NodeField) -> NodeField` | `restrict_like(field, target) -> NodeField` |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 | `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` |
 | `mask(field: &NodeField, band: &Band, …) -> NodeField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> NodeField` (champ `0/1` de même structure ; sucre `field >= x`). Accepte aussi un `SubNodeField` |
 | `internal_forces(model: &Model, state: &ElementField) -> NodeField` | `internal_forces(model, state) -> NodeField` |
 | `external_forces(model: &Model, materials: &ElementField) -> NodeField` | `external_forces(model, materials) -> NodeField` |
+| `sum_to_nodes(field: &ElementField) -> NodeField` | `sum_to_nodes(field) -> NodeField` (champ à un point par maille ; chaque nœud reçoit la somme des mailles qui le touchent) |
 
 `flux` et `internal_forces` (`BSIG`, `∫ Bᵀ σ`) sont des **assemblages**,
 mais leur résultat est un vecteur nodal et non un opérateur : on se range
 par la sortie.
 
-### `ops::coords` — écriture dans le magasin de coordonnées
+### `ops::coords` — écriture dans le magasin de coordonnées, calcul dans une configuration
 
 | Rust (`ops::coords::…`) | Python (`pyrucast.coords.…`) |
 |---|---|
 | `set(field: &NodeField, components: Option<Vec<String>>) -> ()` | `set(field, components=None) -> None` |
 | `displace(field: &NodeField, components: Option<Vec<String>>) -> ()` | `displace(field, components=None) -> None` |
+| `displace_from(field: &NodeField, reference: usize, target: usize, components: Option<Vec<String>>) -> ()` | `displace_from(field, reference, target, components=None) -> None` (pose la configuration `target` en `X + u`, en absolu ; la configuration active ne change pas) |
+| `in_config(coords: &Handle<Coords>, config: usize, f: impl FnOnce() -> Result<R>) -> Result<R>` | méthode `Coords.in_config(config) -> InConfig`, gestionnaire de contexte : `with coords.in_config(i):` (le bloc calcule sur la configuration `config`, celle d'avant revient à la sortie, même après une erreur). Chaque langage a sa forme idiomatique : fermeture en Rust, `with` en Python |
 
 ### `ops::element_field` — opérateurs produisant un champ aux points de Gauss
 
 | Rust (`ops::element_field::…`) | Python (`pyrucast.element_field.…`) |
 |---|---|
 | `gradient(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `gradient(field, fespace) -> ElementField` |
-| `deformation(u: &NodeField, fespace: &FiniteElementSpace, measure: StrainMeasure) -> ElementField` | `deformation(u, fespace, measure="linear") -> ElementField` (`StrainMeasure` passe par son nom : `"linear"`, `"gradient"`, `"green_lagrange"`, `"right_cauchy_green"`, `"left_cauchy_green"`, `"hencky"`, `"euler_almansi"`) |
+| `deformation(u: &NodeField, fespace: &FiniteElementSpace, measure: StrainMeasure) -> ElementField` | `deformation(u, fespace, measure="linear") -> ElementField` (`StrainMeasure` passe par son nom : `"linear"`, `"gradient"`, `"green_lagrange"`, `"right_cauchy_green"`, `"left_cauchy_green"`, `"hencky"`, `"euler_almansi"`, `"jacobian"`) |
 | `interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `interp_to_gauss(field, fespace) -> ElementField` |
-| `thermal_strain(temperature: &ElementField, material: &ElementField, fespace: &FiniteElementSpace, t_ref: f64) -> ElementField` | `thermal_strain(temperature, materials, fespace, t_ref) -> ElementField` |
-| `shell_deformation(field: &NodeField, fespace: &FiniteElementSpace, model: ShellModel) -> ElementField` | `shell_deformation(field, fespace, model) -> ElementField` |
+| `thermal_strain(temperature: &ElementField, material: &ElementField, fespace: &FiniteElementSpace, t_ref: f64, measure: StrainMeasure) -> ElementField` | `thermal_strain(temperature, materials, fespace, t_ref, measure="linear") -> ElementField` (la dilatation exacte dans la mesure de la loi) |
+| `strain(model: &Model, solution: &NodeField, materials: &ElementField) -> ElementField` | `strain(model, solution, materials) -> ElementField` (`EPSI` : l'entrée de chaque loi ; aussi `model.strain(…)`) |
+| `elastic_stress(model: &Model, strain: &ElementField, materials: &ElementField) -> ElementField` | `elastic_stress(model, strain, materials) -> ElementField` (`σ = D:ε` ; aussi `model.elastic_stress(…)`) |
+| `elastic_strain(model: &Model, stress: &ElementField, materials: &ElementField) -> ElementField` | `elastic_strain(model, stress, materials) -> ElementField` (`ε = D⁻¹:σ` ; aussi `model.elastic_strain(…)`) |
+| `stress_measure(stress: &ElementField, gradient: &ElementField, target: StressMeasure) -> ElementField` | `stress_measure(stress, gradient, target) -> ElementField` (`StressMeasure` par son nom : `"cauchy"`, `"kirchhoff"`, `"pk1"`, `"pk2"`, `"hencky"` ; pas de méthode : elle exige une contrainte et un gradient nommés) |
+| `rotate_frame(field: &ElementField, gradient: &ElementField) -> ElementField` | `rotate_frame(field, gradient) -> ElementField` (axes `V1*`, `V2*` tournés par la rotation `R` de `F = R U` ; pas de méthode : elle exige des axes et un gradient nommés) |
+| `cell_integral(field: &ElementField, target: &FiniteElementSpace) -> ElementField` | `cell_integral(field, target) -> ElementField` (`target` : un point par maille, quadrature `REDUCED`) |
+| `shell_deformation(field: &NodeField, fespace: &FiniteElementSpace, formulation: ShellFormulation) -> ElementField` | `shell_deformation(field, fespace, formulation) -> ElementField` |
 | `beam_deformation(field: &NodeField, fespace: &FiniteElementSpace, material: &ElementField) -> ElementField` | `beam_deformation(field, fespace, material) -> ElementField` (1-D, plan ou spatial selon le maillage ; le matériau est requis, l'interpolation dépendant de `Φ`) |
 | `consolidate(field: &ElementField) -> ElementField` | `consolidate(field) -> ElementField` (fusionne les zones d'une même fespace) |
 | `mask(field: &ElementField, band: &Band, …) -> ElementField` | `mask(field, ge=None, …) -> ElementField` ; accepte aussi un `SubElementField` |
@@ -238,34 +248,50 @@ un sujet qu'on transforme.
 
 | Rust (`ops::model::…`) | Python (`pyrucast.model.…`) |
 |---|---|
-| `heat_conduction(fes: &FiniteElementSpace) -> Model` | `heat_conduction(fespace, symmetry=None) -> Model` |
-| `heat_conduction_with_symmetry(fes, symmetry: MaterialSymmetry) -> Model` | *idem, via `symmetry=`* |
-| `fick(fes: &FiniteElementSpace, species: &str) -> Model` | `fick(fespace, species, symmetry=None) -> Model` |
-| `fick_with_symmetry(fes, symmetry: MaterialSymmetry, species: &str) -> Model` | *idem, via `symmetry=`* |
-| `radiation(fes: &FiniteElementSpace, target: &Model) -> Model` | `radiation(fespace, target) -> Model` |
-| `flux(fes: &FiniteElementSpace, target: &Model, dual: String) -> Model` | `flux(fespace, target, dual) -> Model` |
-| `boundary_transfer(fes, target: &Model, components: Vec<(String, String)>) -> Model` | `boundary_transfer(fespace, target, components) -> Model` |
-| `interface_transfer(side_a, side_b, target: &Model, components, tol: f64) -> Model` | `interface_transfer(side_a, side_b, target, components, tol=1e-9) -> Model` — défaut `interface_transfer::DEFAULT_TOL` |
-| `truss(fes: &FiniteElementSpace) -> Model` | `truss(fespace) -> Model` |
-| `elasticity(fes, model: ElasticityModel) -> Model` | `elasticity(fespace, model, symmetry=None) -> Model` |
-| `elasticity_with_symmetry(fes, model, symmetry: MaterialSymmetry) -> Model` | *idem, via `symmetry=`* |
-| `plasticity_perfect(fes, model: ElasticityModel) -> Model` | `plasticity_perfect(fespace, model) -> Model` |
-| `plasticity_with_law(fes, model, law: PlasticLaw) -> Model` | une fonction par loi : `plasticity_isotropic`, `drucker_prager`, `ottosen`, `creep_norton`, `creep_blackburn`, `creep_lemaitre`, `viscoplasticity_chaboche`, `viscoplasticity_lemaitre_chaboche`, `gurson` — toutes `(fespace, model) -> Model` |
-| `mazars(fes, model: ElasticityModel) -> Model` | `mazars(fespace, model) -> Model` |
-| `damage_with_law(fes, model, law: DamageLaw) -> Model` | une fonction par loi : `damage_tc`, `damage_sic_sic` — `(fespace, model) -> Model` |
-| `bernoulli(fes: &FiniteElementSpace) -> Model` | `bernoulli(fespace) -> Model` |
-| `timoshenko(fes: &FiniteElementSpace) -> Model` | `timoshenko(fespace) -> Model` |
-| `shell(fes, model: ShellModel) -> Model` | `shell(fespace, model) -> Model` |
-| `dirichlet(target: &Model, variable: &str, imposed_mesh, multiplier_mesh, sense: RelationSense) -> Model` | `dirichlet(target, variable, imposed_mesh, multiplier_mesh, sense=None) -> Model` |
-| `mpc(terms: Vec<MpcTerm>, multiplier_mesh, sense) -> Model` | `mpc(target, terms, multiplier_mesh, sense=None) -> Model` |
-| `embedded(target: &Model, immersed, host, variables: Vec<String>, tol) -> Model` | `embedded(target, immersed, host, variables, tol=None) -> Model` |
-| `contact(target: &Model, slave, master, variables: Vec<String>) -> Model` | `contact(target, slave, master, variables) -> Model` |
+| `heat_conduction(fespace: &FiniteElementSpace, symmetry: MaterialSymmetry) -> Model` | `heat_conduction(fespace, symmetry="isotropic") -> Model` |
+| `fick(fespace: &FiniteElementSpace, species: &str, symmetry: MaterialSymmetry) -> Model` | `fick(fespace, species, symmetry="isotropic") -> Model` |
+| `radiation(fespace: &FiniteElementSpace, target: &Model) -> Model` | `radiation(fespace, target) -> Model` |
+| `flux(fespace: &FiniteElementSpace, target: &Model, dual: &str) -> Model` | `flux(fespace, target, dual) -> Model` (`dual="n"` : le mode normal, une pression `phi_n` le long de la normale de la maille) |
+| `boundary_transfer(fespace: &FiniteElementSpace, target: &Model, variables: Vec<String>) -> Model` | `boundary_transfer(fespace, target, variables) -> Model` — la duale de chaque variable est lue dans `target` |
+| `interface_transfer(side_a: &FiniteElementSpace, side_b: &FiniteElementSpace, target: &Model, variables: Vec<String>, tol: f64) -> Model` | `interface_transfer(side_a, side_b, target, variables, tol=1e-9) -> Model` — `tol` est une **distance**, dans l'unité du maillage ; défaut `interface_transfer::DEFAULT_TOL` |
+| `truss(fespace: &FiniteElementSpace, strain_measure: StrainMeasure) -> Model` | `truss(fespace, strain_measure="linear") -> Model` |
+| `elasticity(fespace: &FiniteElementSpace, kinematics: Kinematics, symmetry: MaterialSymmetry, strain_measure: StrainMeasure) -> Model` | `elasticity(fespace, kinematics, symmetry="isotropic", strain_measure="linear") -> Model` |
+| `plasticity_perfect(fespace: &FiniteElementSpace, kinematics: Kinematics, strain_measure: StrainMeasure) -> Model` | `plasticity_perfect(fespace, kinematics, strain_measure="linear") -> Model` |
+| `plasticity(fespace: &FiniteElementSpace, kinematics: Kinematics, law: PlasticLaw, strain_measure: StrainMeasure) -> Model` | une fonction par loi : `plasticity_isotropic`, `drucker_prager`, `ottosen`, `creep_norton`, `creep_blackburn`, `creep_lemaitre`, `viscoplasticity_chaboche`, `viscoplasticity_lemaitre_chaboche`, `gurson` — toutes `(fespace, kinematics, strain_measure="linear") -> Model`, qui existent aussi en Rust, `(fespace, kinematics, strain_measure)` |
+| `mazars(fespace: &FiniteElementSpace, kinematics: Kinematics, strain_measure: StrainMeasure) -> Model` | `mazars(fespace, kinematics, strain_measure="linear") -> Model` |
+| `damage(fespace: &FiniteElementSpace, kinematics: Kinematics, law: DamageLaw, strain_measure: StrainMeasure) -> Model` | une fonction par loi : `damage_tc`, `damage_sic_sic` — `(fespace, kinematics, strain_measure="linear") -> Model`, qui existent aussi en Rust, `(fespace, kinematics, strain_measure)` |
+| `bernoulli(fespace: &FiniteElementSpace) -> Model` | `bernoulli(fespace) -> Model` |
+| `timoshenko(fespace: &FiniteElementSpace) -> Model` | `timoshenko(fespace) -> Model` |
+| `shell(fespace: &FiniteElementSpace, formulation: ShellFormulation) -> Model` | `shell(fespace, formulation) -> Model` (`"thick"` ou `"kirchhoff"`) |
+| `dirichlet(imposed_mesh: &Mesh, target: &Model, variable: &str, sense: RelationSense) -> Model` | `dirichlet(imposed_mesh, target, variable, sense="=") -> Model` |
+| `mpc(terms: &[(&Mesh, &str, f64)], target: &Model, sense: RelationSense) -> Model` | `mpc(terms, target, sense="=") -> Model` — `terms` : liste de `(mesh, variable, coefficient)` |
+| `embedded(immersed: &Mesh, host: &Mesh, target: &Model, variables: Vec<String>, tol: f64) -> Model` | `embedded(immersed, host, target, variables, tol=1e-6) -> Model` — `tol` est un jeu dans l'élément de **référence**, sans dimension ; défaut `embedded::DEFAULT_TOL` |
+| `contact(slave: &Mesh, master: &Mesh, target: &Model, variables: Vec<String>) -> Model` | `contact(slave, master, target, variables) -> Model` |
+| `update_contact(model: &Model, displacement: &NodeField) -> Model` | `update_contact(model, displacement) -> Model`, et la méthode `Model.update_contact(displacement)` |
 
-**Les deux plis du catalogue.** Rust nomme la symétrie et la loi par une
-**enum** (`MaterialSymmetry`, `ElasticLaw`, `PlasticLaw`, `DamageLaw`) ; Python n'expose pas
-ces enums, et replie donc la symétrie en mot-clé `symmetry=` et déplie les lois
-en une fonction chacune. Le catalogue est le même des deux côtés — les
-dérogations correspondantes sont enregistrées, avec leur raison, dans
+**Même ordre partout.** Le support d'abord — l'espace EF balayé, ou les
+maillages qui portent une contrainte, celui qui porte les relations en tête
+(`imposed_mesh`, `immersed`, `slave`, les termes d'une MPC) —, puis le modèle
+`target` auquel on se rattache, puis le reste. La duale d'une variable n'est
+jamais un argument : elle se lit dans `target` (`Model.dual_of`).
+
+**Les noms, en Rust.** Un nom seul s'emprunte (`&str`) ; une liste de noms se
+donne (`Vec<String>`), parce que le modèle la garde — comme les constructeurs
+de champs et de matrices. Les termes d'une MPC empruntent leurs maillages : ils
+restent à l'appelant.
+
+**Un argument, deux idiomes.** Un argument que Python prend en mot-clé avec
+valeur par défaut (`symmetry="isotropic"`, `strain_measure="linear"`), Rust le
+reçoit explicitement (`MaterialSymmetry::Isotropic`, `StrainMeasure::Linear`) :
+Rust n'a pas d'argument par défaut. Même nom, même ordre ; c'est
+`physics_operator!` qui écrit les deux faces. La documentation Rust de chaque
+fonction dit la valeur que Python prend par défaut, pour qu'un lecteur qui
+n'écrit que du Rust sache ce que l'autre obtient sans rien dire.
+
+**Le pli des lois.** Rust nomme la loi par une **enum** (`PlasticLaw`,
+`DamageLaw`) dans `plasticity` et `damage` ; Python déplie
+les lois en une fonction chacune, que Rust offre aussi. Les dérogations
+correspondantes sont enregistrées, avec leur raison, dans
 `tests/python/test_mirror_completeness.py`.
 
 ### `ops::matrix` — assemblage des matrices
@@ -282,9 +308,13 @@ dérogations correspondantes sont enregistrées, avec leur raison, dans
 
 | Rust (`ops::solver::…`) | Python (`pyrucast.solver.…`) |
 |---|---|
-| `lu::solve(matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve(matrix, rhs, method="lu", cache=True, verbosity="silent") -> NodeField` |
-| `eliminate::solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve_eliminate(matrix, model, rhs, method="lu", cache=True, verbosity="silent") -> NodeField` |
-| `unilateral::solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve_unilateral(matrix, model, rhs, method="lu", active_set=None, cache=True, max_iter=100, tol=1e-10, verbosity="silent") -> NodeField` |
+| `solve(matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve(matrix, rhs, method="lu", relations="lagrange", active_set="schur", cache=True, max_iter=100, tol=1e-10, verbosity="silent") -> NodeField` |
+| `solve_with_options(matrix: &Matrix, rhs: &NodeField, options: &SolveOptions) -> NodeField` | les options sont les arguments nommés de `solve` |
+
+La matrice se suffit : ses lignes de relation portent leur sens (`SubMatrix::row_sense`),
+aucun modèle n'est passé à la résolution. L'élimination est une option
+(`relations="eliminate"`), et l'ensemble actif s'enclenche de lui-même sur une
+matrice qui porte des inégalités.
 
 ### `ops::export` — export vers des formats externes
 

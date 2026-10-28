@@ -9,6 +9,7 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::model;
 use pyrucast::Result;
 
@@ -36,7 +37,7 @@ fn truss_consistent_mass_matches_closed_form() -> Result<()> {
     const RHO: f64 = 2.0;
     const AREA: f64 = 3.0;
     let (fes, a, b, len) = bar_2d(3.0, 4.0)?; // L = 5
-    let model = model::truss(&fes)?;
+    let model = model::truss(&fes, StrainMeasure::Linear)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", 1.0), ("A", AREA), ("rho", RHO)],
@@ -46,10 +47,10 @@ fn truss_consistent_mass_matches_closed_form() -> Result<()> {
     let tol = 1e-12;
     let base = RHO * AREA * len / 6.0; // ρAL/6
                                        // (ρAL/6)·[[2,1],[1,2]] on each translation component; block-diagonal.
-    assert!((m.get(a.id(), "f_x", a.id(), "u_x") - 2.0 * base).abs() < tol);
-    assert!((m.get(a.id(), "f_x", b.id(), "u_x") - base).abs() < tol);
-    assert!((m.get(a.id(), "f_y", a.id(), "u_y") - 2.0 * base).abs() < tol);
-    assert!(m.get(a.id(), "f_x", a.id(), "u_y").abs() < tol);
+    assert!((m.get(a.id(), "f_x", a.id(), "u_x").unwrap() - 2.0 * base).abs() < tol);
+    assert!((m.get(a.id(), "f_x", b.id(), "u_x").unwrap() - base).abs() < tol);
+    assert!((m.get(a.id(), "f_y", a.id(), "u_y").unwrap() - 2.0 * base).abs() < tol);
+    assert!(m.get(a.id(), "f_x", a.id(), "u_y").unwrap().abs() < tol);
 
     // Whole-matrix sum = space_dim · ρAL (each direction carries the full bar mass).
     let total: f64 = m.to_dmatrix()?.sum();
@@ -61,48 +62,49 @@ fn truss_consistent_mass_matches_closed_form() -> Result<()> {
 }
 
 #[test]
-fn truss_geometric_stiffens_transverse_only() -> Result<()> {
+fn truss_geometric_stiffens_every_direction() -> Result<()> {
     const N: f64 = 7.0;
     let (fes, a, b, _l) = bar_2d(1.0, 0.0)?; // axis = x, L = 1
-    let model = model::truss(&fes)?;
+    let model = model::truss(&fes, StrainMeasure::Linear)?;
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("A", 1.0)])?;
     let state = axial_force(&fes, N)?;
 
     let kg = pyrucast::ops::matrix::geometric(&model, &materials, &state)?;
     let tol = 1e-12;
-    // Axis is x ⇒ transverse is y: (N/L)[[1,-1],[-1,1]] on u_y, nothing on u_x.
-    assert!((kg.get(a.id(), "f_y", a.id(), "u_y") - N).abs() < tol);
-    assert!((kg.get(a.id(), "f_y", b.id(), "u_y") + N).abs() < tol);
-    assert!(kg.get(a.id(), "f_x", a.id(), "u_x").abs() < tol);
-    assert!(kg.get(a.id(), "f_x", a.id(), "u_y").abs() < tol);
+    // (N/L)[[1,-1],[-1,1]] on each of u_x and u_y — the axial one too, as the
+    // continuum's ∫ ∇N·σ∇N dv · I — and no coupling between them.
+    for (f, u) in [("f_x", "u_x"), ("f_y", "u_y")] {
+        assert!((kg.get(a.id(), f, a.id(), u).unwrap() - N).abs() < tol);
+        assert!((kg.get(a.id(), f, b.id(), u).unwrap() + N).abs() < tol);
+    }
+    assert!(kg.get(a.id(), "f_x", a.id(), "u_y").unwrap().abs() < tol);
     Ok(())
 }
 
 #[test]
-fn truss_geometric_inclined_transverse_projector() -> Result<()> {
+fn truss_geometric_inclined_is_isotropic() -> Result<()> {
     const N: f64 = 5.0;
     let (fes, a, _b, len) = bar_2d(3.0, 4.0)?; // c = (0.6, 0.8)
-    let model = model::truss(&fes)?;
+    let model = model::truss(&fes, StrainMeasure::Linear)?;
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("A", 1.0)])?;
     let state = axial_force(&fes, N)?;
 
     let kg = pyrucast::ops::matrix::geometric(&model, &materials, &state)?;
-    let (cx, cy) = (0.6, 0.8);
     let k = N / len;
     let tol = 1e-12;
-    // Diagonal block at A = (N/L)·(I − c⊗c).
-    assert!((kg.get(a.id(), "f_x", a.id(), "u_x") - k * (1.0 - cx * cx)).abs() < tol);
-    assert!((kg.get(a.id(), "f_x", a.id(), "u_y") - k * (-cx * cy)).abs() < tol);
-    assert!((kg.get(a.id(), "f_y", a.id(), "u_y") - k * (1.0 - cy * cy)).abs() < tol);
+    // Diagonal block at A = (N/L)·I, whatever the direction of the bar.
+    assert!((kg.get(a.id(), "f_x", a.id(), "u_x").unwrap() - k).abs() < tol);
+    assert!(kg.get(a.id(), "f_x", a.id(), "u_y").unwrap().abs() < tol);
+    assert!((kg.get(a.id(), "f_y", a.id(), "u_y").unwrap() - k).abs() < tol);
     Ok(())
 }
 
 #[test]
 fn truss_mass_requires_density() -> Result<()> {
     let (fes, _a, _b, _l) = bar_2d(1.0, 0.0)?;
-    let model = model::truss(&fes)?;
+    let model = model::truss(&fes, StrainMeasure::Linear)?;
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("A", 1.0)])?;
     assert!(pyrucast::ops::matrix::mass(&model, &materials).is_err());
@@ -136,27 +138,27 @@ fn frame_consistent_mass_matches_closed_form() -> Result<()> {
     let ma = RHO * AREA * len / 6.0; // ρAL/6
                                      // The **axial** direction still carries the linear field's mass, which is
                                      // exact for what it interpolates — a bar stretches linearly.
-    assert!((m.get(a.id(), "f_x", a.id(), "u_x") - 2.0 * ma).abs() < tol);
-    assert!((m.get(a.id(), "f_x", b.id(), "u_x") - ma).abs() < tol);
+    assert!((m.get(a.id(), "f_x", a.id(), "u_x").unwrap() - 2.0 * ma).abs() < tol);
+    assert!((m.get(a.id(), "f_x", b.id(), "u_x").unwrap() - ma).abs() < tol);
     // The **transverse** direction takes the exact element's mass: a rigid
     // translation still carries exactly ρAL, and w now couples to the rotation.
-    let total = m.get(a.id(), "f_y", a.id(), "u_y")
-        + m.get(a.id(), "f_y", b.id(), "u_y")
-        + m.get(b.id(), "f_y", a.id(), "u_y")
-        + m.get(b.id(), "f_y", b.id(), "u_y");
+    let total = m.get(a.id(), "f_y", a.id(), "u_y").unwrap()
+        + m.get(a.id(), "f_y", b.id(), "u_y").unwrap()
+        + m.get(b.id(), "f_y", a.id(), "u_y").unwrap()
+        + m.get(b.id(), "f_y", b.id(), "u_y").unwrap();
     assert!((total - RHO * AREA * len).abs() < 1e-10 * RHO * AREA * len);
-    assert!(m.get(a.id(), "f_y", a.id(), "r_z").abs() > 1e-6);
+    assert!(m.get(a.id(), "f_y", a.id(), "r_z").unwrap().abs() > 1e-6);
     // No translation ↔ rotation coupling.
-    assert!(m.get(a.id(), "f_x", a.id(), "r_z").abs() < tol);
+    assert!(m.get(a.id(), "f_x", a.id(), "r_z").unwrap().abs() < tol);
 
     // The x direction carries the member's mass too — the sum over the whole
     // matrix is *not* an invariant of the exact element (it mixes translations
     // with rotations, which have different units), so the check is made
     // direction by direction, where it means something.
-    let total_x = m.get(a.id(), "f_x", a.id(), "u_x")
-        + m.get(a.id(), "f_x", b.id(), "u_x")
-        + m.get(b.id(), "f_x", a.id(), "u_x")
-        + m.get(b.id(), "f_x", b.id(), "u_x");
+    let total_x = m.get(a.id(), "f_x", a.id(), "u_x").unwrap()
+        + m.get(a.id(), "f_x", b.id(), "u_x").unwrap()
+        + m.get(b.id(), "f_x", a.id(), "u_x").unwrap()
+        + m.get(b.id(), "f_x", b.id(), "u_x").unwrap();
     assert!((total_x - RHO * AREA * len).abs() < 1e-10 * RHO * AREA * len);
     Ok(())
 }
@@ -178,11 +180,11 @@ fn frame_geometric_stiffens_transverse_only() -> Result<()> {
     let kg = pyrucast::ops::matrix::geometric(&model, &materials, &state)?;
     let tol = 1e-12;
     let g = N / len;
-    assert!((kg.get(a.id(), "f_y", a.id(), "u_y") - g).abs() < tol);
-    assert!((kg.get(a.id(), "f_y", b.id(), "u_y") + g).abs() < tol);
+    assert!((kg.get(a.id(), "f_y", a.id(), "u_y").unwrap() - g).abs() < tol);
+    assert!((kg.get(a.id(), "f_y", b.id(), "u_y").unwrap() + g).abs() < tol);
     // Axial and rotation carry no geometric term.
-    assert!(kg.get(a.id(), "f_x", a.id(), "u_x").abs() < tol);
-    assert!(kg.get(a.id(), "m_z", a.id(), "r_z").abs() < tol);
+    assert!(kg.get(a.id(), "f_x", a.id(), "u_x").unwrap().abs() < tol);
+    assert!(kg.get(a.id(), "m_z", a.id(), "r_z").unwrap().abs() < tol);
     Ok(())
 }
 
@@ -220,10 +222,10 @@ fn timoshenko_consistent_mass_matches_closed_form() -> Result<()> {
     //
     // 1. A rigid translation carries exactly the mass of the member. Nothing an
     //    interpolation does may change that, whatever `Φ`.
-    let total = m.get(a.id(), "f_w", a.id(), "w")
-        + m.get(a.id(), "f_w", b.id(), "w")
-        + m.get(b.id(), "f_w", a.id(), "w")
-        + m.get(b.id(), "f_w", b.id(), "w");
+    let total = m.get(a.id(), "f_w", a.id(), "w").unwrap()
+        + m.get(a.id(), "f_w", b.id(), "w").unwrap()
+        + m.get(b.id(), "f_w", a.id(), "w").unwrap()
+        + m.get(b.id(), "f_w", b.id(), "w").unwrap();
     assert!(
         (total - RHO * AREA * L).abs() < 1e-10 * RHO * AREA * L,
         "rigid translation carries {total}, expected {}",
@@ -233,7 +235,7 @@ fn timoshenko_consistent_mass_matches_closed_form() -> Result<()> {
     //    mass had no such term, and that absence is exactly what made it
     //    inconsistent with an exact stiffness.
     assert!(
-        m.get(a.id(), "f_w", a.id(), "theta").abs() > 1e-6,
+        m.get(a.id(), "f_w", a.id(), "theta").unwrap().abs() > 1e-6,
         "the exact mass must couple w and theta"
     );
     Ok(())
@@ -288,15 +290,15 @@ fn frame3d_consistent_mass_matches_closed_form() -> Result<()> {
     let diag = |sec: f64| 2.0 * RHO * sec * L / 6.0;
     // Axial and torsion keep the linear field's mass — exact for what those two
     // degrees of freedom actually interpolate.
-    assert!((m.get(a.id(), "f_x", a.id(), "u_x") - diag(AREA)).abs() < tol); // u'
-    assert!((m.get(a.id(), "m_x", a.id(), "r_x") - diag(IY + IZ)).abs() < tol); // torsion I_p
-                                                                                // The two bending planes take the exact element's mass. Each still carries
-                                                                                // exactly the member's mass under a rigid translation…
+    assert!((m.get(a.id(), "f_x", a.id(), "u_x").unwrap() - diag(AREA)).abs() < tol); // u'
+    assert!((m.get(a.id(), "m_x", a.id(), "r_x").unwrap() - diag(IY + IZ)).abs() < tol); // torsion I_p
+                                                                                         // The two bending planes take the exact element's mass. Each still carries
+                                                                                         // exactly the member's mass under a rigid translation…
     for (dual, primal) in [("f_y", "u_y"), ("f_z", "u_z")] {
-        let total = m.get(a.id(), dual, a.id(), primal)
-            + m.get(a.id(), dual, b.id(), primal)
-            + m.get(b.id(), dual, a.id(), primal)
-            + m.get(b.id(), dual, b.id(), primal);
+        let total = m.get(a.id(), dual, a.id(), primal).unwrap()
+            + m.get(a.id(), dual, b.id(), primal).unwrap()
+            + m.get(b.id(), dual, a.id(), primal).unwrap()
+            + m.get(b.id(), dual, b.id(), primal).unwrap();
         assert!(
             (total - RHO * AREA * L).abs() < 1e-10 * RHO * AREA * L,
             "{dual}: {total} vs {}",
@@ -305,8 +307,8 @@ fn frame3d_consistent_mass_matches_closed_form() -> Result<()> {
     }
     // …and now couples the deflection to the rotation of its own plane, which
     // the linear mass never did.
-    assert!(m.get(a.id(), "f_y", a.id(), "r_z").abs() > 1e-6);
-    assert!(m.get(a.id(), "f_z", a.id(), "r_y").abs() > 1e-6);
+    assert!(m.get(a.id(), "f_y", a.id(), "r_z").unwrap().abs() > 1e-6);
+    assert!(m.get(a.id(), "f_z", a.id(), "r_y").unwrap().abs() > 1e-6);
     Ok(())
 }
 
@@ -325,11 +327,11 @@ fn frame3d_geometric_stiffens_both_transverse() -> Result<()> {
     let tol = 1e-12;
     let g = N / L;
     // Both transverse translations (u_y = v', u_z = w') are stiffened.
-    assert!((kg.get(a.id(), "f_y", a.id(), "u_y") - g).abs() < tol);
-    assert!((kg.get(a.id(), "f_y", b.id(), "u_y") + g).abs() < tol);
-    assert!((kg.get(a.id(), "f_z", a.id(), "u_z") - g).abs() < tol);
+    assert!((kg.get(a.id(), "f_y", a.id(), "u_y").unwrap() - g).abs() < tol);
+    assert!((kg.get(a.id(), "f_y", b.id(), "u_y").unwrap() + g).abs() < tol);
+    assert!((kg.get(a.id(), "f_z", a.id(), "u_z").unwrap() - g).abs() < tol);
     // Axial and torsion carry no geometric term.
-    assert!(kg.get(a.id(), "f_x", a.id(), "u_x").abs() < tol);
-    assert!(kg.get(a.id(), "m_x", a.id(), "r_x").abs() < tol);
+    assert!(kg.get(a.id(), "f_x", a.id(), "u_x").unwrap().abs() < tol);
+    assert!(kg.get(a.id(), "m_x", a.id(), "r_x").unwrap().abs() < tol);
     Ok(())
 }

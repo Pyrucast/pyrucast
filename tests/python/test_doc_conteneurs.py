@@ -304,22 +304,31 @@ fes = pyrucast.FiniteElementSpace(mesh)
 
 # Model: conduction (material supplied at assembly) + Dirichlet on the left.
 # Constructors at the parent level, composed with `|` — no SubModel by hand.
-# The multipliers' mesh is built from the imposed nodes.
+# The constraint mints its multipliers beside the imposed nodes.
 imposed = pyrucast.mesh.poi1_from_nodes([a])
-multiplier = pyrucast.mesh.barycenter(imposed)
 cible = pyrucast.model.heat_conduction(fes)
 
-model = cible | pyrucast.model.dirichlet(cible, "T", imposed, multiplier)
+model = cible | pyrucast.model.dirichlet(imposed, cible, "T")
 
 # Material k = 1 (the Dirichlet sub-models are skipped automatically).
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 
 K = pyrucast.matrix.stiffness(model, materials)
-print("primal_vars =", model.primal_vars())  # ['T', 'lambda_T']
-print("dual_vars =", model.dual_vars())  # ['q', 'imposed_T']
+print("primal_vars =", model.primal_vars())  # ['T', 'lambda']
+print("dual_vars =", model.dual_vars())  # ['q', 'imposed']
 print(K)  # Matrix: 3 row(s) × 3 col(s), …
+
+# The Dirichlet pins the temperature: it is a constraint, and thermal too.
+thermique = model.filter("thermal")  # conduction + Dirichlet
+conduction = thermique.exclude("constraint")  # conduction alone
+print(len(thermique), len(conduction))  # 2 1
+
+# The natures say what a sub-model pins, its label what it is.
+print([sub.label() for sub in model])  # ['HeatConduction', 'Dirichlet']
 # ANCHOR_END: model_api
 assert K.n_rows() == 3
+assert (len(thermique), len(conduction)) == (2, 1)
+assert [sub.label() for sub in model] == ["HeatConduction", "Dirichlet"]
 
 # ── Matrice ─────────────────────────────────────────────────────────────────
 

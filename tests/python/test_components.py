@@ -1,9 +1,8 @@
 """Python tests for `filter_components` (component extraction, Cast3M `EXCO`)
 and `rename_component` (metadata-only rename)."""
 
-import pytest
-
 import pyrucast
+import pytest
 
 
 def _poi1_field(values, components):

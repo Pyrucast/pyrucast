@@ -34,7 +34,7 @@ use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::kernel;
-use crate::models::ResidualContribution;
+use crate::models::{ResidualContribution, IMPOSED, MULTIPLIER};
 
 /// Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`
 /// (Cast3m `BSIG` for a continuum).
@@ -46,10 +46,14 @@ use crate::models::ResidualContribution;
 /// A behaviour-bearing domain
 /// pairs its state sub-field by FE subspace and integrates its `Bᵀ` kernel
 /// cell-by-cell; a sub-model with no term here declares none and is absent from
-/// the result. Returns a [`NodeField`] with one zone per contributing
-/// sub-model, in model order, its components that sub-model's dual variables.
+/// the result. Returns a [`NodeField`] whose components are the contributing
+/// sub-models' dual variables; where several terms load the same node — two
+/// zones meeting at a seam, a support and the body it holds — their values are
+/// **added**, in a single zone over every loaded node.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
@@ -74,7 +78,7 @@ use crate::models::ResidualContribution;
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
 /// // The form that goes through the **model**: every sub-model brings its own
 /// // operator there, a bar not having a continuum's Bᵀ.
-/// # let modele = model::elasticity(&fes, Kinematics::PlaneStress)?;
+/// # let modele = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
 /// # let mut s = ElementField::new(&fes,
 /// #     vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()])?;
 /// # s.get(0)?.write().set_uniform("sigma_xx", 100.0)?;
@@ -127,14 +131,16 @@ pub fn internal_forces(
                         // there is a law, the primal itself at the Gauss points
                         // when there is none. A boundary transfer is of the
                         // second kind — its `∫ h·a·N` reads `a`, not a stress.
+                        // Resolved once for the zone, before the parallel region.
+                        let names = kind.internal_force_reads();
                         let per_point = match kind.as_behavior() {
-                            Some(b) => state.sub_for_fespace(&b.behavior_fespace())?,
+                            Some(b) => {
+                                state.sub_for_fespace_reading(&b.behavior_fespace(), &names)?
+                            }
                             None => kind.residual_input(&layout.fespaces[0], solution)?,
                         };
                         let guard = per_point.read();
                         let mat_guard = material.read();
-                        // Resolved once for the zone, before the parallel region.
-                        let names = kind.internal_force_reads();
                         let refs: Vec<&str> = names.iter().map(String::as_str).collect();
                         let lay = guard.resolve_components(&refs, "state")?;
                         let mat_names = domain.material_components();
@@ -159,13 +165,14 @@ pub fn internal_forces(
             zones
         };
         for zone in built {
-            // `r = Σ rᵢ` is a **sum**, not a stack: two terms may load the same node in
-            // the same component, and an aggregate view would pick one instead of adding
-            // them.
             out = (&out + &zone)?;
         }
     }
-    Ok(out)
+    // `r = Σ rᵢ` is a **sum**, not a stack: two terms may load the same node in
+    // the same component — two materials meeting at a seam, a support and the
+    // body it holds — and `+` only adds zones that share a support. The rest is
+    // added node by node here, or a reader would see one partial sum.
+    out.summed()
 }
 
 /// A constraint's reaction, `Cᵀ λ`, spread over the constrained nodes: term `k`
@@ -184,28 +191,14 @@ fn reaction(kind: &dyn crate::models::SubModelKind, solution: &NodeField) -> Res
     })?;
     let view = solution.view()?;
     let relations = constraint.relations()?;
-    let primals = kind.primal_vars();
-    let duals = kind.dual_vars();
     let mut values: std::collections::HashMap<(NodeId, String), f64> =
         std::collections::HashMap::new();
     let mut nodes: Vec<NodeId> = Vec::new();
     for rel in &relations {
         // The multiplier is an unknown of the augmented system, so it is read
         // where every other unknown is: in the solution.
-        // The multiplier's own name: a constraint's primal, at the index of
-        // the dual this relation writes into.
-        let slot = duals
-            .iter()
-            .position(|d| *d == rel.imposed_value)
-            .ok_or_else(|| {
-                PyrucastError::Message(format!(
-                    "{}: relation writes `{}`, which is not one of its duals",
-                    kind.label(),
-                    rel.imposed_value
-                ))
-            })?;
         let lambda = view
-            .value_opt(rel.multiplier_node, &primals[slot])
+            .value_opt(rel.multiplier_node, MULTIPLIER)
             .unwrap_or(0.0);
         // `C·u` on the constraint's own row: its half of `C·u = g`, whose
         // other half is the imposed value, on the external side.
@@ -218,7 +211,7 @@ fn reaction(kind: &dyn crate::models::SubModelKind, solution: &NodeField) -> Res
             *values.entry(slot).or_insert(0.0) += term.coefficient * lambda;
             cu += term.coefficient * view.value_opt(term.node, &term.variable).unwrap_or(0.0);
         }
-        let row = (rel.multiplier_node, rel.imposed_value.clone());
+        let row = (rel.multiplier_node, IMPOSED.to_string());
         if !values.contains_key(&row) {
             nodes.push(rel.multiplier_node);
         }
@@ -262,10 +255,69 @@ mod tests {
     use crate::containers::model::SubModel;
     use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::coords::Coords;
+    use crate::models::symmetry::MaterialSymmetry;
     use crate::models::tensor::Kinematics;
     use crate::ops::element_field::behavior::integrate;
     use crate::ops::element_field::material_field;
     use crate::ops::element_field::{deformation, StrainMeasure};
+
+    /// Two QUA4 in two zones, side by side: the node on the seam receives from
+    /// both, and the internal forces must **add** them — as `K·u` does. A field
+    /// that kept the zones side by side gave the seam one zone's partial sum.
+    #[test]
+    fn a_seam_between_two_zones_receives_both() {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let n: Vec<Node> = [
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [2.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 1.0],
+            [2.0, 1.0],
+        ]
+        .iter()
+        .map(|p| Node::create_in(coords.clone(), p).unwrap())
+        .collect();
+        let mut left = SubMesh::new(coords.clone(), ElementType::QUA4);
+        left.add_cell(&[n[0].id(), n[1].id(), n[4].id(), n[3].id()])
+            .unwrap();
+        let mut right = SubMesh::new(coords.clone(), ElementType::QUA4);
+        right
+            .add_cell(&[n[1].id(), n[2].id(), n[5].id(), n[4].id()])
+            .unwrap();
+        let mut mesh = Mesh::from_submesh(left);
+        mesh.add_sub(Handle::new(right)).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let model = crate::ops::model::elasticity(
+            &fes,
+            Kinematics::PlaneStress,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear,
+        )
+        .unwrap();
+        let materials = material_field(&model, &[("E", 100.0), ("nu", 0.0)]).unwrap();
+
+        // u_x = 0.01·x²: σ_xx = 1 on the left cell, 3 on the right one.
+        let support = Handle::new(SubMesh::poi1_from_nodes(&n).unwrap());
+        let mut u = SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into()]).unwrap();
+        for node in &n {
+            let x = node.position().unwrap()[0];
+            u.set_value(node.id(), "u_x", 0.01 * x * x).unwrap();
+        }
+        let u = NodeField::from_sub(u);
+        let strain = deformation(&u, &fes, StrainMeasure::Linear).unwrap();
+        let stress = integrate(&model, &strain, None, &materials, None).unwrap();
+        let f_int = internal_forces(&model, &stress, &u, &materials).unwrap();
+        let ku = (&crate::ops::matrix::stiffness(&model, &materials).unwrap() * &u).unwrap();
+
+        let (fv, kv) = (f_int.view().unwrap(), ku.view().unwrap());
+        for node in [&n[1], &n[4]] {
+            let got = fv.value(node.id(), "f_x").unwrap();
+            // +½ from the left cell, −3·½ from the right one.
+            assert!((got + 1.0).abs() < 1e-12, "seam f_x = {got}, expected −1");
+            assert!((got - kv.value(node.id(), "f_x").unwrap()).abs() < 1e-12);
+        }
+    }
 
     /// Elasticity on a single TRI3: for a linear law the internal forces equal
     /// `K·u` applied to the (linear) displacement solution.
@@ -282,7 +334,13 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::elasticity(fes.get(0).unwrap(), Kinematics::PlaneStress).unwrap(),
+                SubModel::elasticity(
+                    fes.get(0).unwrap(),
+                    Kinematics::PlaneStress,
+                    MaterialSymmetry::Isotropic,
+                    StrainMeasure::Linear,
+                )
+                .unwrap(),
             ))
             .unwrap();
         let materials = material_field(&model, &[("E", 210.0), ("nu", 0.3)]).unwrap();
@@ -334,7 +392,13 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::elasticity(fes.get(0).unwrap(), Kinematics::PlaneStrain).unwrap(),
+                SubModel::elasticity(
+                    fes.get(0).unwrap(),
+                    Kinematics::PlaneStrain,
+                    MaterialSymmetry::Isotropic,
+                    StrainMeasure::Linear,
+                )
+                .unwrap(),
             ))
             .unwrap();
         let materials = material_field(&model, &[("E", 70.0), ("nu", 0.25)]).unwrap();
@@ -378,7 +442,13 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(Handle::new(SubModel::truss(fes.get(0).unwrap()).unwrap()))
+            .add_sub(Handle::new(
+                SubModel::truss(
+                    fes.get(0).unwrap(),
+                    crate::ops::element_field::StrainMeasure::Linear,
+                )
+                .unwrap(),
+            ))
             .unwrap();
         let materials = material_field(&model, &[("E", e), ("A", area)]).unwrap();
 

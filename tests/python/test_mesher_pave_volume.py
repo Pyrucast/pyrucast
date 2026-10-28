@@ -1,8 +1,7 @@
 """Python tests for `pyrucast.mesh.pave_volume`."""
 
-import pytest
-
 import pyrucast as pc
+import pytest
 
 
 def _box_skin(n=3):

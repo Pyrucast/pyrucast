@@ -156,9 +156,7 @@ impl fmt::Display for CoordinateFrame {
 #[derive(Serialize, Deserialize)]
 pub struct Coords {
     dim: u8,
-    /// Geometric hypothesis the coordinates obey. `#[serde(default)]` so a
-    /// `Coords` serialised before the frame existed reloads as Cartesian.
-    #[serde(default)]
+    /// Geometric hypothesis the coordinates obey.
     frame: CoordinateFrame,
     /// `configs[c][id * dim + k]` — each configuration holds `capacity * dim` values.
     configs: Vec<Vec<f64>>,
@@ -760,6 +758,75 @@ impl Coords {
             )));
         }
         self.active = config;
+        Ok(())
+    }
+
+    /// Lay configuration `target` at configuration `reference` displaced by
+    /// `increments` — `x = X + u`, in **absolute**: every node takes its
+    /// `reference` position, plus its increment when it has one (a node
+    /// absent from `increments` does not move). Repeated, it lands in the same
+    /// place, whatever was in `target` before: no increment accumulates.
+    /// Neither configuration needs to be the active one.
+    ///
+    /// Errors: an index out of range, `target == reference` (the reference
+    /// would be lost), a collected node, an increment of the wrong length, a
+    /// negative radius on a body of revolution.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// let id = c.add_node(&[1.0, 2.0]).unwrap();
+    /// let current = c.add_config("current");
+    /// c.displace_from(0, current, [(id, &[0.5, 0.0][..])]).unwrap();
+    /// c.displace_from(0, current, [(id, &[0.5, 0.0][..])]).unwrap();
+    /// // Laid from the reference both times: the increment counts once.
+    /// c.select(current).unwrap();
+    /// assert_eq!(c.position(id).unwrap(), &[1.5, 2.0]);
+    /// c.select(0).unwrap();
+    /// assert_eq!(c.position(id).unwrap(), &[1.0, 2.0]);
+    /// ```
+    pub fn displace_from<'a>(
+        &mut self,
+        reference: usize,
+        target: usize,
+        increments: impl IntoIterator<Item = (NodeId, &'a [f64])>,
+    ) -> Result<()> {
+        let n_configs = self.configs.len();
+        if reference >= n_configs || target >= n_configs {
+            return Err(PyrucastError::Message(format!(
+                "displace_from: configurations {reference} and {target}, of {n_configs}"
+            )));
+        }
+        if reference == target {
+            return Err(PyrucastError::Message(format!(
+                "displace_from: target {target} is the reference itself — it would be lost; \
+                 add a configuration (add_config) to lay the displaced one in"
+            )));
+        }
+        let d = self.dim as usize;
+        // Copied in place: the two sets are distinct, borrowed apart.
+        let (src, dst) = if reference < target {
+            let (low, high) = self.configs.split_at_mut(target);
+            (&low[reference], &mut high[0])
+        } else {
+            let (low, high) = self.configs.split_at_mut(reference);
+            (&high[0], &mut low[target])
+        };
+        dst.copy_from_slice(src);
+        for (id, inc) in increments {
+            self.ensure_alive(id)?;
+            if inc.len() != d {
+                return Err(PyrucastError::Message(format!(
+                    "displace_from: expected {d} increment(s), got {}",
+                    inc.len()
+                )));
+            }
+            let s = id.0 as usize * d;
+            for (x, du) in self.configs[target][s..s + d].iter_mut().zip(inc) {
+                *x += du;
+            }
+            self.check_radius("displace_from", &self.configs[target][s..s + d])?;
+        }
         Ok(())
     }
 

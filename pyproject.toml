@@ -51,6 +51,15 @@ target-version = "py311"
 # ruff, sinon il dériverait à chaque régénération.
 extend-exclude = ["python/pyrucast/_pyrucast/__init__.pyi"]
 
+[tool.ruff.lint]
+# ruff's default rules for the version CI pins (0.16.4, see
+# .github/workflows/release.yml); `ruff check` runs in script/check_format.sh.
+
+[tool.ruff.lint.per-file-ignores]
+# The book's examples come from these files, and an example shows its own
+# imports: a module imported again inside an anchor is deliberate.
+"tests/python/test_doc_*.py" = ["F811"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]
 # Les fichiers `test_doc_*.py` portent les exemples du book **au niveau

@@ -11,7 +11,7 @@ documentation. Pour le **simple usage en Python** (quatre commandes), voir
 |---|---|---|
 | Rust (via `rustup`) | ≥ 1.89 (`rust-version` du crate), édition 2024 | Compilation du cœur |
 | Python | ≥ 3.11 (3.13 testé) | API Python et `maturin` |
-| `ruff` | récent | Format du Python (`ruff format`), vérifié par `check_format` |
+| `ruff` | 0.16.4 (la version épinglée en CI) | Format et règles du Python (`ruff format`, `ruff check`), vérifiés par `check_format` |
 | `mdbook` | ≥ 0.4 | Génération de cette documentation |
 | `mdbook-mermaid` | ≥ 0.14 | Rendu des graphes (ex. [graphe des dépendances](developper/arborescence.md#graphe-des-dépendances-externes)) |
 
@@ -38,15 +38,18 @@ d'environnement cible à `maturin develop`.
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install --upgrade pip maturin pytest ruff
+pip install --upgrade pip maturin pytest ruff==0.16.4
 ```
+
+`ruff` est épinglé, comme en CI : ses règles par défaut et son formatage changent
+d'une version à l'autre, et `check_format` les vérifie tous deux.
 
 ### Windows (PowerShell)
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install --upgrade pip maturin pytest ruff
+pip install --upgrade pip maturin pytest ruff==0.16.4
 ```
 
 > **Important.** Pour les builds **avec l'API Python** (`maturin`, ou `cargo`
@@ -226,6 +229,7 @@ la recompilation.
 |---|---|---|--:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 | `cargo fmt --check` | le Rust est formaté | — | 1 s | ✓ | ✓ | | | | | ✓ | ✓ |
 | `ruff format --check .` | le Python est formaté | — | 1 s | ✓ | ✓ | | | | | ✓ | ✓ |
+| `ruff check .` | le Python passe les règles par défaut de ruff 0.16.4 (exceptions dans `pyproject.toml`, une par motif) | — | <1 s | ✓ | ✓ | | | | | ✓ | ✓ |
 | `cargo check --all-targets` | le build **Rust pur** compile encore | — | <1 s | ✓ | | ✓ | | | | ✓ | ✓ |
 | `cargo test --features viz` | 1036 tests + 893 doctests | `#[cfg(test)]` dans 123 fichiers de `src/`, 42 fichiers `tests/*.rs`, commentaires `///` et `//!` | 154 s | ✓ | | ✓ | | | | ✓ | ✓ |
 | `cargo build --features viz-interactive` | la fenêtre winit compile | aucun test — 960 lignes que rien n'exerce sans écran | 14 s | ✓ | | ✓ | | | | ✓ | ✓ |

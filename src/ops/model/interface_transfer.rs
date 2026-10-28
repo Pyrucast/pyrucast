@@ -8,15 +8,20 @@ use crate::handle::Handle;
 
 /// Interface-exchange `Model` between two conforming boundary FE spaces —
 /// one [`SubModel::InterfaceTransfer`] per subspace pair, taken in order —
-/// coupling into `target`, the model assembling the transferred pairs and
-/// giving the interface its nature. Parent-level operator; the coefficients
-/// `h_<primal>` are supplied at assembly time.
+/// coupling into `target`, the model declaring the transferred `variables`,
+/// which gives each its dual row and the interface its nature. Parent-level
+/// operator; the coefficients `h_<variable>` are supplied at assembly time.
 ///
 /// The two spaces must hold the **same number** of subspaces: an interface
 /// pairs zone with zone, and a mismatch is a modelling error, not something
 /// to resolve by convention.
 ///
+/// `tol` is a **distance**, in the length unit of the mesh, within which the
+/// paired nodes of the two sides must coincide. The Python face defaults it to
+/// [`DEFAULT_TOL`](crate::models::interface_transfer::DEFAULT_TOL) (`1e-9`).
+///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -35,9 +40,9 @@ use crate::handle::Handle;
 /// # bord.add_cell(&[n[0].id(), n[1].id()])?;
 /// # let fes_bord = FiniteElementSpace::lagrange1(&Mesh::from_submesh(bord))?;
 /// // A contact resistance: the conduction gives the interface's kind.
-/// let conduction = model::heat_conduction(&fes)?;
+/// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
 /// let m = model::interface_transfer(
-///     &fes_bord, &fes_bord, &conduction, vec![("T".into(), "q".into())], DEFAULT_TOL)?;
+///     &fes_bord, &fes_bord, &conduction, vec!["T".into()], DEFAULT_TOL)?;
 /// assert_eq!(m.len(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -45,7 +50,7 @@ pub fn interface_transfer(
     side_a: &FiniteElementSpace,
     side_b: &FiniteElementSpace,
     target: &Model,
-    components: Vec<(String, String)>,
+    variables: Vec<String>,
     tol: f64,
 ) -> Result<Model> {
     if side_a.len() != side_b.len() {
@@ -62,7 +67,7 @@ pub fn interface_transfer(
             a.clone(),
             b.clone(),
             target,
-            components.clone(),
+            variables.clone(),
             tol,
         )?))?;
     }

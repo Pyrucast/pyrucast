@@ -44,6 +44,7 @@ fn debug_montre_la_structure_display_le_resume() {
 
 // ANCHOR: serialisation
 use pyrucast::archive::Portable;
+use pyrucast::models::symmetry::MaterialSymmetry;
 
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
 struct Pt {
@@ -75,12 +76,11 @@ fn un_modele_se_declare_et_s_assemble() -> Result<()> {
     // Dirichlet on the left. Constructors at the parent level (they sweep
     // `fes`'s subspaces), composed with `union` — a `SubModel` is never built by
     // hand (see CONVENTIONS.md).
-    let hc = model::heat_conduction(&fes)?;
+    let hc = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     // Mesh of the imposed nodes + support of the multipliers (barycenter
     // co-locates fresh nodes). The model creates no node itself.
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&a))?;
-    let multiplier = mesh::barycenter(&imposed)?;
-    let dir = model::dirichlet(&hc, "T", &imposed, &multiplier, RelationSense::Equality)?;
+    let dir = model::dirichlet(&imposed, &hc, "T", RelationSense::Equality)?;
     let model = hc.union(&dir)?;
 
     // Material k = 1, applied to the sub-models that need it (Dirichlet is
@@ -101,16 +101,21 @@ fn filtrer_un_modele_et_sa_matrice_par_nature() -> Result<()> {
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     mesh.add_cell(&[a.id(), b.id()])?;
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
-    let model = model::heat_conduction(&fes)?;
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
+    let appui = mesh::poi1_from_nodes(std::slice::from_ref(&a))?;
+    let bloque = model::dirichlet(&appui, &conduction, "T", RelationSense::Equality)?;
+    let model = conduction.union(&bloque)?;
     let materials = element_field::material_field(&model, &[("k", 1.0)])?;
     let k = matrix::stiffness(&model, &materials)?;
 
-    let meca = model.filter(Physics::Mechanical); // sous-modèles au moins mécaniques
+    let thermique = model.filter(Physics::Thermal); // la conduction ET son Dirichlet
+    let seule = thermique.exclude(Physics::Constraint); // la conduction seule
     let k_meca = k.filter(Physics::Mechanical); // blocs au moins mécaniques (non assemblés)
-    let natures = k.physics(); // ex. [Thermal, Constraint]
+    let natures = k.physics(); // [Thermal, Constraint]
 
-    assert!(meca.is_empty() && k_meca.is_empty()); // ce modèle est thermique
-    assert!(natures.contains(&Physics::Thermal));
+    assert_eq!((thermique.len(), seule.len()), (2, 1));
+    assert!(k_meca.is_empty()); // ce modèle est thermique
+    assert!(natures.contains(&Physics::Thermal) && natures.contains(&Physics::Constraint));
     Ok(())
 }
 // ANCHOR_END: filtrer_par_nature

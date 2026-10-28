@@ -12,7 +12,7 @@ multiplier degree) and definite, `K̂ û = f̂` with `K̂ = Tᵀ K T`, then exte
 Two paths to the same result
 --------------------------------
 `solve(K, rhs)` solves the system augmented by Lagrange multipliers;
-`solve_eliminate(K, model, rhs)` condenses the constraints. Both produce the
+`solve(K, rhs, relations="eliminate")` condenses the constraints. Both produce the
 **same** field. The elimination recovers, as a bonus, the *reaction* (the
 multiplier's equivalent) in each slave's dual row.
 
@@ -49,17 +49,14 @@ def main():
 
     # Dirichlet T(node0) = 0 (esclave node0).
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-    mult0 = pyrucast.mesh.barycenter(imposed0)
-    dirichlet = pyrucast.model.dirichlet(base, "T", imposed0, mult0)
+    dirichlet = pyrucast.model.dirichlet(imposed0, base, "T")
 
     # MPC 2·T(node4) − 1·T(node2) = 1.5 (esclave node4, maître node2 — disjoints).
     mesh4 = pyrucast.mesh.poi1_from_nodes([nodes[4]])
     mesh2 = pyrucast.mesh.poi1_from_nodes([nodes[2]])
-    mult_mpc = pyrucast.mesh.barycenter(mesh4)
     mpc = pyrucast.model.mpc(
-        base,
         [(mesh4, "T", 2.0), (mesh2, "T", -1.0)],
-        mult_mpc,
+        base,
     )
 
     model = base | dirichlet | mpc
@@ -71,7 +68,7 @@ def main():
 
     k = pyrucast.matrix.stiffness(model, materials)
     lagrange = pyrucast.solver.solve(k, rhs)
-    elimination = pyrucast.solver.solve_eliminate(k, model, rhs)
+    elimination = pyrucast.solver.solve(k, rhs, relations="eliminate")
 
     print("x      T (Lagrange)  T (élimination)")
     for i, node in enumerate(nodes):

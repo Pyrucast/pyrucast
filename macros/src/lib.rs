@@ -133,7 +133,7 @@ pub fn py_op(attr: TokenStream, item: TokenStream) -> TokenStream {
     call_args.extend(forwarded.iter().map(|pat| quote! { #pat }));
 
     // The method inherits what the function carries: its documentation, and its
-    // lint waivers. `solver::solve_unilateral` proves it by example — nine
+    // lint waivers. `solver::solve` proves it by example — nine
     // arguments, an `#[allow(clippy::too_many_arguments)]` assumed on the
     // function, and a method with just as many, the receiver replacing the
     // subject. Without this copying, the waiver stopped at the function and the

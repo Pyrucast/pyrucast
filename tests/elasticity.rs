@@ -19,10 +19,11 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
-use pyrucast::ops::mesh;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::model;
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 #[test]
@@ -63,12 +64,16 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     // contraints s'y vérifient.
     let roller = |target: &Model, nodes: &[Node], var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-        let multiplier = mesh::barycenter(&imposed)?;
-        model::dirichlet(target, var, &imposed, &multiplier, Default::default())
+        model::dirichlet(&imposed, target, var, Default::default())
     };
     let left: Vec<Node> = (0..=N).map(|j| grid[idx(0, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=N).map(|i| grid[idx(i, 0)].clone()).collect();
-    let mut model = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let mut model = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     model = model.union(&roller(&model, &left, "u_x")?)?;
     model = model.union(&roller(&model, &bottom, "u_y")?)?;
 
@@ -80,7 +85,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
         right_edge.add_cell(&[grid[idx(N, j)].id(), grid[idx(N, j + 1)].id()])?;
     }
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
-    model = model.union(&model::flux(&right_fes, &model, "f_x".into())?)?;
+    model = model.union(&model::flux(&right_fes, &model, "f_x")?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,
@@ -110,8 +115,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
 fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-    let multiplier = mesh::barycenter(&imposed)?;
-    model::dirichlet(target, var, &imposed, &multiplier, Default::default())
+    model::dirichlet(&imposed, target, var, Default::default())
 }
 
 /// 3-D solid: uniaxial tension of a unit HEX8 cube. Symmetry rollers on the
@@ -143,7 +147,12 @@ fn elasticity_unit_cube_uniaxial_tension() -> Result<()> {
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
     let pick = |ids: &[usize]| ids.iter().map(|&i| nodes[i].clone()).collect::<Vec<_>>();
-    let mut model = model::elasticity(&fes, Kinematics::Full3D)?;
+    let mut model = model::elasticity(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     model = model.union(&clamp(&model, &pick(&[0, 3, 4, 7]), "u_x")?)?; // x = 0 face
     model = model.union(&clamp(&model, &pick(&[0, 1, 4, 5]), "u_y")?)?; // y = 0 face
     model = model.union(&clamp(&model, &pick(&[0, 1, 2, 3]), "u_z")?)?; // z = 0 face
@@ -152,7 +161,7 @@ fn elasticity_unit_cube_uniaxial_tension() -> Result<()> {
     let mut face = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    model = model.union(&model::flux(&face_fes, &model, "f_x".into())?)?;
+    model = model.union(&model::flux(&face_fes, &model, "f_x")?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,

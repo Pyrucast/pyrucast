@@ -53,9 +53,7 @@ def main():
     ends = [grid[idx(i, j)] for i in range(NR + 1) for j in (0, NZ)]
     imposed = pyrucast.mesh.poi1_from_nodes(ends)
     model = pyrucast.model.elasticity(fes, "axisymmetric")
-    model = model | pyrucast.model.dirichlet(
-        model, "u_y", imposed, pyrucast.mesh.barycenter(imposed)
-    )
+    model = model | pyrucast.model.dirichlet(imposed, model, "u_y")
 
     # ── Chargement : pression interne sur r = a ────────────────────────────
     # La géométrie étant axisymétrique, `flux` intègre ∫ 2πr N p et donne

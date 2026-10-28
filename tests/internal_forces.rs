@@ -16,6 +16,11 @@
 //! **witness**: it is the one structural element that already had a `Bᵀ`, so it
 //! must not move.
 //!
+//! The chain is the model's own, `B`, law, `Bᵀ`: `strain` asks each element
+//! for its strain operator, `integrate` applies the law, `internal_forces`
+//! scatters back — so this also checks that every structural law names the
+//! `B` its stiffness integrates.
+//!
 //! The mirror of `tests/tangent.rs`, which checks the consistent tangent against
 //! the finite-difference derivative of these same internal forces.
 
@@ -30,13 +35,11 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::models::shell::ShellModel;
-use pyrucast::ops::element_field::{
-    beam_deformation, behavior, deformation, material_field, shell_deformation, StrainMeasure,
-};
+use pyrucast::models::shell::ShellFormulation;
+use pyrucast::ops::element_field::{behavior, material_field, strain, StrainMeasure};
+use pyrucast::ops::model;
 use pyrucast::ops::node_field::internal_forces;
-use pyrucast::ops::solver::lu::solve;
-use pyrucast::ops::{mesh, model};
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 /// A chain of `SEG2` cells through `points`, and its FE space under
@@ -62,8 +65,7 @@ fn clamp(model: &Model, node: &Node) -> Result<Model> {
     let mut out = model.subset(0..model.len())?;
     for var in model.primal_vars() {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
-        let multiplier = mesh::barycenter(&imposed)?;
-        let bc = model::dirichlet(model, &var, &imposed, &multiplier, Default::default())?;
+        let bc = model::dirichlet(&imposed, model, &var, Default::default())?;
         out = out.union(&bc)?;
     }
     Ok(out)
@@ -124,7 +126,6 @@ fn residual_gap(k: &Matrix, f_int: &NodeField, u: &NodeField, nodes: &[Node]) ->
 /// `model` is the **bare** physics: the clamp is added for the solve alone, so
 /// the stiffness compared against carries no multiplier block.
 fn check_beam(
-    fes: &FiniteElementSpace,
     model: &Model,
     pairs: &[(&str, f64)],
     nodes: &[Node],
@@ -133,8 +134,9 @@ fn check_beam(
     let materials = material_field(model, pairs)?;
     let solution = solve_clamped(model, &materials, &nodes[0], nodes.last().unwrap(), loads)?;
     let u = primal_of(&solution, nodes, &model.primal_vars())?;
-    let strain = beam_deformation(&u, fes, &materials)?;
-    let state = behavior::integrate(model, &strain, None, &materials, None)?;
+    // The whole solution, multipliers included: each law reads its own unknowns.
+    let eps = strain(model, &solution, &materials)?;
+    let state = behavior::integrate(model, &eps, None, &materials, None)?;
     let f_int = internal_forces(model, &state, &u, &materials)?;
     let k = pyrucast::ops::matrix::stiffness(model, &materials)?;
     let gap = residual_gap(&k, &f_int, &u, nodes)?;
@@ -148,7 +150,6 @@ fn check_beam(
 fn bernoulli_planar_1d_internal_forces_match_k_times_u() -> Result<()> {
     let (fes, nodes) = chain(&[&[0.0], &[0.9], &[2.0]], Interpolation::Hermite3)?;
     check_beam(
-        &fes,
         &model::bernoulli(&fes)?,
         &[("E", 210_000.0), ("I", 1.0e-4)],
         &nodes,
@@ -165,7 +166,6 @@ fn bernoulli_frame_2d_internal_forces_match_k_times_u() -> Result<()> {
         Interpolation::Hermite3,
     )?;
     check_beam(
-        &fes,
         &model::bernoulli(&fes)?,
         &[("E", 210_000.0), ("A", 1.0e-2), ("I", 1.0e-4)],
         &nodes,
@@ -180,7 +180,6 @@ fn bernoulli_frame_3d_internal_forces_match_k_times_u() -> Result<()> {
         Interpolation::Hermite3,
     )?;
     check_beam(
-        &fes,
         &model::bernoulli(&fes)?,
         &[
             ("E", 210_000.0),
@@ -209,7 +208,6 @@ fn bernoulli_frame_3d_internal_forces_match_k_times_u() -> Result<()> {
 fn timoshenko_planar_1d_internal_forces_match_k_times_u() -> Result<()> {
     let (fes, nodes) = chain(&[&[0.0], &[0.9], &[2.0]], Interpolation::ModelEmbedded)?;
     check_beam(
-        &fes,
         &model::timoshenko(&fes)?,
         // Stocky: `Φ` weighs in, and a slender section would hide it.
         &[
@@ -230,7 +228,6 @@ fn timoshenko_frame_2d_internal_forces_match_k_times_u() -> Result<()> {
         Interpolation::ModelEmbedded,
     )?;
     check_beam(
-        &fes,
         &model::timoshenko(&fes)?,
         &[
             ("E", 210_000.0),
@@ -251,7 +248,6 @@ fn timoshenko_frame_3d_internal_forces_match_k_times_u() -> Result<()> {
         Interpolation::ModelEmbedded,
     )?;
     check_beam(
-        &fes,
         &model::timoshenko(&fes)?,
         // Both planes carry their **own** `Φ`: inertias and
         // different reduced sections set them apart, and a pairing
@@ -293,7 +289,7 @@ fn truss_internal_forces_still_match_k_times_u() -> Result<()> {
         &[&[0.0, 0.0], &[1.2, 0.9], &[2.4, 1.8]],
         Interpolation::Lagrange1,
     )?;
-    let model = model::truss(&fes)?;
+    let model = model::truss(&fes, StrainMeasure::Linear)?;
     let materials = material_field(&model, &[("E", 210_000.0), ("A", 1.0e-2)])?;
 
     let support = Handle::new(SubMesh::poi1_from_nodes(&nodes)?);
@@ -305,8 +301,8 @@ fn truss_internal_forces_still_match_k_times_u() -> Result<()> {
     }
     let u = NodeField::from_sub(imposed);
 
-    let strain = deformation(&u, &fes, StrainMeasure::Linear)?;
-    let state = behavior::integrate(&model, &strain, None, &materials, None)?;
+    let eps = strain(&model, &u, &materials)?;
+    let state = behavior::integrate(&model, &eps, None, &materials, None)?;
     let f_int = internal_forces(&model, &state, &u, &materials)?;
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let gap = residual_gap(&k, &f_int, &u, &nodes)?;
@@ -360,15 +356,15 @@ fn check_shell(
     kind: ElementType,
     plan: &[[f64; 2]],
     cells: &[&[usize]],
-    formulation: ShellModel,
+    formulation: ShellFormulation,
 ) -> Result<()> {
     let (fes, nodes) = plate(kind, plan, cells)?;
     let model = model::shell(&fes, formulation)?;
     let materials = material_field(&model, &[("E", 210_000.0), ("nu", 0.3), ("h", 0.02)])?;
     let u = imposed(&model, &nodes)?;
 
-    let strain = shell_deformation(&u, &fes, formulation)?;
-    let state = behavior::integrate(&model, &strain, None, &materials, None)?;
+    let eps = strain(&model, &u, &materials)?;
+    let state = behavior::integrate(&model, &eps, None, &materials, None)?;
     let f_int = internal_forces(&model, &state, &u, &materials)?;
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let gap = residual_gap(&k, &f_int, &u, &nodes)?;
@@ -385,7 +381,7 @@ fn thick_shell_tri3_internal_forces_match_k_times_u() -> Result<()> {
         ElementType::TRI3,
         &CORNERS,
         &[&[0, 1, 2], &[0, 2, 3]],
-        ShellModel::Thick,
+        ShellFormulation::Thick,
     )
 }
 
@@ -395,7 +391,7 @@ fn thick_shell_qua4_internal_forces_match_k_times_u() -> Result<()> {
         ElementType::QUA4,
         &CORNERS,
         &[&[0, 1, 2, 3]],
-        ShellModel::Thick,
+        ShellFormulation::Thick,
     )
 }
 
@@ -405,7 +401,7 @@ fn discrete_kirchhoff_tri3_internal_forces_match_k_times_u() -> Result<()> {
         ElementType::TRI3,
         &CORNERS,
         &[&[0, 1, 2], &[0, 2, 3]],
-        ShellModel::Kirchhoff,
+        ShellFormulation::Kirchhoff,
     )
 }
 
@@ -415,6 +411,6 @@ fn discrete_kirchhoff_qua4_internal_forces_match_k_times_u() -> Result<()> {
         ElementType::QUA4,
         &CORNERS,
         &[&[0, 1, 2, 3]],
-        ShellModel::Kirchhoff,
+        ShellFormulation::Kirchhoff,
     )
 }

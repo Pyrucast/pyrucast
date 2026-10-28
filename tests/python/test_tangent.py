@@ -5,9 +5,8 @@ that in a plastic regime it is symmetric and softened (the plastic diagonal is
 below the elastic one).
 """
 
-import pytest
-
 import pyrucast
+import pytest
 
 
 def _unit_quad():

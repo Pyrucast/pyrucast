@@ -239,7 +239,7 @@ def test_repr_and_str():
 
 
 def test_min_max_per_component():
-    c, mesh, fes = _tri3_subspace(n_cells=2)
+    _c, _mesh, fes = _tri3_subspace(n_cells=2)
     ef = pyrucast.ElementField(fes, ["k"])
     sub = ef[0]
     sub.set_cell_uniform(0, "k", 2.0)

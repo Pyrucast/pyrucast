@@ -7,7 +7,7 @@
 //! through the thickness. A shell has its own kernel, and its own kinematics.
 //!
 //! As everywhere else in this crate, the **formulation is an attribute**
-//! ([`ShellModel`]) rather than a physics of its own: the DOFs, the local frame,
+//! ([`ShellFormulation`]) rather than a physics of its own: the DOFs, the local frame,
 //! the membrane law and the rotation to the global axes are shared, and only the
 //! bending/shear treatment differs.
 //!
@@ -65,7 +65,9 @@ use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::owned_components;
 use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
-use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{
+    Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
+};
 use serde::{Deserialize, Serialize};
 
 /// Primal DOF names — three translations and three rotations, as for a space
@@ -129,15 +131,15 @@ const BEHAVIOR_NO_SHEAR: usize = SHEAR_ROW;
 /// Which shell formulation a [`Shell`] uses.
 ///
 /// ```
-/// # use pyrucast::models::shell::{self, ShellModel};
+/// # use pyrucast::models::shell::{self, ShellFormulation};
 /// // Reissner-Mindlin carries transverse shear as a DOF of its own; discrete
 /// // Kirchhoff cancels it at chosen points, which makes the thin limit exact
 /// // and removes any locking.
-/// assert!(ShellModel::Thick.has_transverse_shear());
-/// assert!(!ShellModel::Kirchhoff.has_transverse_shear());
+/// assert!(ShellFormulation::Thick.has_transverse_shear());
+/// assert!(!ShellFormulation::Kirchhoff.has_transverse_shear());
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ShellModel {
+pub enum ShellFormulation {
     /// Reissner-Mindlin: the transverse shear is a degree of freedom of its own,
     /// integrated **reduced** against locking. The general case.
     #[default]
@@ -150,15 +152,15 @@ pub enum ShellModel {
     Kirchhoff,
 }
 
-impl ShellModel {
+impl ShellFormulation {
     /// The lowercase name (the inverse of
     /// [`from_name`](crate::named::Named::from_name)).
     ///
     /// ```
-    /// # use pyrucast::models::shell::{self, ShellModel};
-    /// assert_eq!(ShellModel::Thick.name(), "thick");
+    /// # use pyrucast::models::shell::{self, ShellFormulation};
+    /// assert_eq!(ShellFormulation::Thick.name(), "thick");
     /// # use pyrucast::named::Named;
-    /// assert_eq!(ShellModel::from_name(ShellModel::Thick.name()), Some(ShellModel::Thick));
+    /// assert_eq!(ShellFormulation::from_name(ShellFormulation::Thick.name()), Some(ShellFormulation::Thick));
     /// ```
     pub fn name(self) -> &'static str {
         match self {
@@ -172,27 +174,27 @@ impl ShellModel {
     /// no shear force to report.
     ///
     /// ```
-    /// # use pyrucast::models::shell::{self, ShellModel};
+    /// # use pyrucast::models::shell::{self, ShellFormulation};
     /// // This is what decides whether a **second**, reduced quadrature is
     /// // needed to integrate the shear without locking.
-    /// assert!(ShellModel::Thick.has_transverse_shear());
-    /// assert!(!ShellModel::Kirchhoff.has_transverse_shear());
+    /// assert!(ShellFormulation::Thick.has_transverse_shear());
+    /// assert!(!ShellFormulation::Kirchhoff.has_transverse_shear());
     /// ```
     pub fn has_transverse_shear(self) -> bool {
         matches!(self, Self::Thick)
     }
 }
 
-impl crate::named::Named for ShellModel {
-    const LABEL: &'static str = "shell model";
+impl crate::named::Named for ShellFormulation {
+    const LABEL: &'static str = "shell formulation";
     const VALUES: &'static [Self] = &[Self::Thick, Self::Kirchhoff];
 
     fn name(self) -> &'static str {
-        ShellModel::name(self)
+        ShellFormulation::name(self)
     }
 }
 
-impl ShellModel {
+impl ShellFormulation {
     /// The **generalised strains** this formulation carries, in the row order of
     /// its `B` — and therefore in the order its section forces are conjugate to.
     ///
@@ -201,12 +203,12 @@ impl ShellModel {
     /// formulation without one simply stops after the seventh.
     ///
     /// ```
-    /// # use pyrucast::models::shell::{self, ShellModel};
-    /// assert_eq!(ShellModel::Thick.strains().len(), 9);
+    /// # use pyrucast::models::shell::{self, ShellFormulation};
+    /// assert_eq!(ShellFormulation::Thick.strains().len(), 9);
     /// // Discrete Kirchhoff has no transverse shear: its list stops where the
     /// // reduced quadrature used to begin.
-    /// assert_eq!(ShellModel::Kirchhoff.strains().len(), 7);
-    /// assert_eq!(ShellModel::Kirchhoff.strains()[6], "drill");
+    /// assert_eq!(ShellFormulation::Kirchhoff.strains().len(), 7);
+    /// assert_eq!(ShellFormulation::Kirchhoff.strains()[6], "drill");
     /// ```
     pub fn strains(self) -> &'static [&'static str] {
         &STRAINS[..if self.has_transverse_shear() {
@@ -217,7 +219,7 @@ impl ShellModel {
     }
 }
 
-impl std::fmt::Display for ShellModel {
+impl std::fmt::Display for ShellFormulation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.name())
     }
@@ -241,10 +243,10 @@ impl std::fmt::Display for ShellModel {
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # use pyrucast::models::shell::{Shell, ShellModel};
+/// # use pyrucast::models::shell::{Shell, ShellFormulation};
 /// // A shell lives on a surface embedded in 3-D and carries the thickness in
 /// // its material.
-/// let s = Shell::new(zone.clone(), ShellModel::Thick)?;
+/// let s = Shell::new(zone.clone(), ShellFormulation::Thick)?;
 /// assert!(s.material_components().contains(&"h".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -258,7 +260,7 @@ pub struct Shell {
     pub(crate) shear: Option<Handle<SubFiniteElementSpace>>,
     /// POI1 support over the unique nodes (row/col support).
     pub(crate) support: Handle<SubMesh>,
-    pub(crate) model: ShellModel,
+    pub(crate) formulation: ShellFormulation,
 }
 
 impl Shell {
@@ -281,14 +283,17 @@ impl Shell {
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # use pyrucast::models::shell::{Shell, ShellModel};
+    /// # use pyrucast::models::shell::{Shell, ShellFormulation};
     /// // A shell lives on a surface embedded in 3-D and carries the thickness
     /// // in its material.
-    /// let s = Shell::new(zone.clone(), ShellModel::Thick)?;
+    /// let s = Shell::new(zone.clone(), ShellFormulation::Thick)?;
     /// assert!(s.material_components().contains(&"h".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ShellModel) -> Result<Self> {
+    pub fn new(
+        fespace: Handle<SubFiniteElementSpace>,
+        formulation: ShellFormulation,
+    ) -> Result<Self> {
         let (submesh, space_dim, ref_dim, element) = {
             let s = fespace.read();
             let sm = s.submesh();
@@ -303,7 +308,7 @@ impl Shell {
         }
         if !matches!(element, ElementType::TRI3 | ElementType::QUA4) {
             return Err(PyrucastError::Message(format!(
-                "Shell ({model}): expected TRI3 or QUA4, got {element:?}"
+                "Shell ({formulation}): expected TRI3 or QUA4, got {element:?}"
             )));
         }
         // The shear subspace shares the mesh and differs only by quadrature. It
@@ -313,7 +318,7 @@ impl Shell {
         // validating. A discrete Kirchhoff element has no shear term at all, so
         // it declares none: a second subspace would be an integration the
         // formulation never does.
-        let shear = model.has_transverse_shear().then(|| {
+        let shear = formulation.has_transverse_shear().then(|| {
             SubFiniteElementSpace::new(
                 submesh.clone(),
                 Interpolation::Lagrange1,
@@ -330,7 +335,7 @@ impl Shell {
             fespace,
             shear,
             support,
-            model,
+            formulation,
         })
     }
 }
@@ -406,7 +411,7 @@ impl SubModelKind for Shell {
         let (n, cell) = (full.n_nodes, full.cell);
         let side = 6 * n;
         let frame = local_frame(full)?;
-        let setup = bending_setup(self.model, full, &frame)?;
+        let setup = bending_setup(self.formulation, full, &frame)?;
         // The forces accumulate in the **local** frame, the one `B` is written
         // in; the rotation to the global axes comes at the end, once.
         let mut b: ShellB = [[0.0; MAX_SHELL_DOFS]; SHELL_STRAINS];
@@ -466,7 +471,7 @@ impl SubModelKind for Shell {
         format!(
             "SubModel<Shell({})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
              support: {n} node(s)",
-            self.model
+            self.formulation
         )
     }
 }
@@ -484,9 +489,9 @@ impl Domain for Shell {
     /// (`5/6` by default, the value for a homogeneous rectangular section) —
     /// the latter only where there is a shear to correct.
     fn optional_material_components(&self) -> &'static [&'static str] {
-        match self.model {
-            ShellModel::Thick => &["rho", "k_s"],
-            ShellModel::Kirchhoff => &["rho"],
+        match self.formulation {
+            ShellFormulation::Thick => &["rho", "k_s"],
+            ShellFormulation::Kirchhoff => &["rho"],
         }
     }
 
@@ -497,9 +502,13 @@ impl Domain for Shell {
         lay: &ElementLayout,
         ke: &mut [f64],
     ) -> Result<()> {
-        match self.model {
-            ShellModel::Thick => thick::element_stiffness(&geoms[0], &geoms[1], material, lay, ke),
-            ShellModel::Kirchhoff => kirchhoff::element_stiffness(&geoms[0], material, lay, ke),
+        match self.formulation {
+            ShellFormulation::Thick => {
+                thick::element_stiffness(&geoms[0], &geoms[1], material, lay, ke)
+            }
+            ShellFormulation::Kirchhoff => {
+                kirchhoff::element_stiffness(&geoms[0], material, lay, ke)
+            }
         }
     }
 }
@@ -515,7 +524,7 @@ impl Behavior for Shell {
     /// of the moments, not a constitutive product — reporting it here would
     /// state a law that does not exist.
     fn behavior_output_components(&self) -> Vec<String> {
-        let n = if self.model.has_transverse_shear() {
+        let n = if self.formulation.has_transverse_shear() {
             BEHAVIOR.len()
         } else {
             BEHAVIOR_NO_SHEAR
@@ -529,7 +538,11 @@ impl Behavior for Shell {
     /// The strains come in as the components a shell-deformation operator would
     /// produce (`eps_xx`, `kappa_xx`, `gamma_xz`, …), all in the **local** frame.
     fn deformation_reads(&self) -> Vec<String> {
-        owned_components(self.model.strains())
+        owned_components(self.formulation.strains())
+    }
+
+    fn strain_operator(&self) -> StrainOperator {
+        StrainOperator::Shell(self.formulation)
     }
 
     fn integrate_point(
@@ -561,7 +574,7 @@ impl Behavior for Shell {
         // The drilling moment: `α·G·h·(θ_z − ω_z)`, the law of a stress whose
         // strain is a single number.
         out[DRILL_ROW] = drilling_law(e, nu, h) * d(DRILL_ROW);
-        if self.model.has_transverse_shear() {
+        if self.formulation.has_transverse_shear() {
             // `k_s` overrides the 5/6 of a homogeneous rectangular section; which
             // of the two applies is a fact of the zone, settled in the layout.
             let k_s = match lay.optional_material[1] {
@@ -741,13 +754,13 @@ pub(crate) enum BendingSetup {
 
 /// The per-cell setup a formulation needs, settled from the geometry alone.
 pub(crate) fn bending_setup(
-    model: ShellModel,
+    formulation: ShellFormulation,
     geom: &CellGeom,
     frame: &[[f64; 3]; 3],
 ) -> Result<BendingSetup> {
-    Ok(match model {
-        ShellModel::Thick => BendingSetup::Direct,
-        ShellModel::Kirchhoff => BendingSetup::Discrete(kirchhoff::Setup::new(geom, frame)?),
+    Ok(match formulation {
+        ShellFormulation::Thick => BendingSetup::Direct,
+        ShellFormulation::Kirchhoff => BendingSetup::Discrete(kirchhoff::Setup::new(geom, frame)?),
     })
 }
 
@@ -953,7 +966,7 @@ pub(crate) fn to_global(
 }
 
 crate::physics_operator! {
-    /// Shell `Model` spanning **every** subspace of a *surface* `fes`.
+    /// Shell `Model` spanning **every** subspace of a *surface* `fespace`.
     /// Parent-level operator; material is supplied at assembly time.
     ///
     /// ```
@@ -964,7 +977,7 @@ crate::physics_operator! {
     /// # use pyrucast::containers::model::Model;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::shell::ShellModel;
+    /// # use pyrucast::models::shell::ShellFormulation;
     /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(3).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
@@ -972,12 +985,12 @@ crate::physics_operator! {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
-    /// let m = model::shell(&fes, ShellModel::Thick)?;
+    /// let m = model::shell(&fes, ShellFormulation::Thick)?;
     /// assert_eq!(m.len(), fes.len());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn shell(fes, model: ShellModel) via SubModel::shell;
-    python: "`model.shell(fespace, model)` — a **shell**: a surface carrying membrane\nforces and bending moments, on a TRI3/QUA4 mesh in 3-D. Material `E`,\n`nu`, `h` (thickness), plus an optional `rho`.\n\n| `model` | transverse shear | when |\n|---|---|---|\n| `\"thick\"` | yes, integrated **reduced** | the general case |\n| `\"kirchhoff\"` | imposed zero at discrete points | thin shells |\n\nSix DOFs per node (`u_x…u_z, r_x…r_z`), as for `frame3d`, so a shell and\na space frame share nodes directly. The sixth — the **drilling** rotation\nabout the normal — is tied to the membrane's own in-plane rotation, which\nremoves the singularity a flat facet would otherwise have without\nresisting a rigid rotation of that facet.\n\n`\"thick\"` (Reissner-Mindlin) integrates the transverse shear at\n**reduced** quadrature: at full quadrature it would overwhelm the bending\nterm by `1/h²` as the shell thins and the element would refuse to bend at\nall (shear locking). It takes an optional `k_s`, the shear-correction\nfactor (`5/6` by default).\n\n`\"kirchhoff\"` (DKT on a triangle, DKQ on a quadrangle) has no transverse\nshear at all: `γ = 0` is imposed at the corners and along each side, so\nthe thin limit is exact by construction and there is nothing left to\nlock. It reports six generalised forces rather than eight — a thin plate\nhas no constitutive `Q`, only a reaction."
+    pub fn shell(fespace, formulation: ShellFormulation) via SubModel::shell;
+    python: "`model.shell(fespace, formulation)` — a **shell**: a surface carrying membrane\nforces and bending moments, on a TRI3/QUA4 mesh in 3-D. Material `E`,\n`nu`, `h` (thickness), plus an optional `rho`.\n\n| `formulation` | transverse shear | when |\n|---|---|---|\n| `\"thick\"` | yes, integrated **reduced** | the general case |\n| `\"kirchhoff\"` | imposed zero at discrete points | thin shells |\n\nSix DOFs per node (`u_x…u_z, r_x…r_z`), as for `frame3d`, so a shell and\na space frame share nodes directly. The sixth — the **drilling** rotation\nabout the normal — is tied to the membrane's own in-plane rotation, which\nremoves the singularity a flat facet would otherwise have without\nresisting a rigid rotation of that facet.\n\n`\"thick\"` (Reissner-Mindlin) integrates the transverse shear at\n**reduced** quadrature: at full quadrature it would overwhelm the bending\nterm by `1/h²` as the shell thins and the element would refuse to bend at\nall (shear locking). It takes an optional `k_s`, the shear-correction\nfactor (`5/6` by default).\n\n`\"kirchhoff\"` (DKT on a triangle, DKQ on a quadrangle) has no transverse\nshear at all: `γ = 0` is imposed at the corners and along each side, so\nthe thin limit is exact by construction and there is nothing left to\nlock. It reports six generalised forces rather than eight — a thin plate\nhas no constitutive `Q`, only a reaction."
 }
 
 // ─── Unit tests ──────────────────────────────────────────────────────────────

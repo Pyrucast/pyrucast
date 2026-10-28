@@ -250,6 +250,7 @@ crate::physics_operator! {
     /// hand-derived one could not be checked — is a central difference.
     ///
     /// ```
+    /// # use pyrucast::ops::element_field::StrainMeasure;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -264,10 +265,10 @@ crate::physics_operator! {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// let m = model::ottosen(&fes, Kinematics::PlaneStrain)?;
+    /// let m = model::ottosen(&fes, Kinematics::PlaneStrain, StrainMeasure::Linear)?;
     /// assert_eq!(m.primal_vars(), vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn ottosen(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::Ottosen;
+    pub fn ottosen(fespace, kinematics: Kinematics) = crate::ops::model::plasticity, PlasticLaw::Ottosen;
     python: "`model.ottosen(fespace, kinematics)` — Ottosen's four-parameter criterion for\nconcrete, whose strength depends on the pressure **and** on the Lode\nangle (so tension and compression differ). Material `E`, `nu`, `a`, `b`,\n`k_1`, `k_2`, `sigma_c`.\n\nIntegrated by a cutting-plane return with a numerically differentiated\nnormal: the criterion is exact, and the gradient — long enough that a\nhand-derived one could not be checked — is a central difference."
 }

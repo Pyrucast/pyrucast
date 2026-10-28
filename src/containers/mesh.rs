@@ -81,17 +81,13 @@ pub struct SubMesh {
     coords: Handle<Coords>,
     /// Flat connectivity: cell `i` occupies `[i*npc, (i+1)*npc)`.
     connectivity: Vec<NodeId>,
-    /// Face colour used by the viz layer. `serde(default)` keeps older
-    /// snapshots (without the field) readable.
-    #[serde(default)]
+    /// Face colour used by the viz layer.
     face_color: RgbColor,
     /// Once **sealed**, the connectivity is frozen: [`SubMesh::add_cell`] and
     /// [`SubMesh::add_cell_taking`] refuse to run. A submesh is sealed the
     /// first time a non-mesh consumer (finite-element space, field, matrix, …)
     /// captures its handle, so those consumers can never be left referencing
     /// stale cells. The seal is permanent for the object's lifetime.
-    /// `serde(default)` keeps older snapshots (without the field) readable.
-    #[serde(default)]
     sealed: bool,
     /// Lazily-built `NodeId → index` map over the **distinct** nodes of the
     /// connectivity, in first-appearance order. Consumers that need a node

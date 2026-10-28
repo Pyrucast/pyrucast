@@ -22,8 +22,7 @@ E, A, L, F = 210.0e9, 1.0e-4, 2.0, 1000.0
 
 def encastrement(target, node, var):
     imposed = pc.mesh.poi1_from_nodes([node])
-    multiplier = pc.mesh.barycenter(imposed)
-    return pc.model.dirichlet(target, var, imposed, multiplier)
+    return pc.model.dirichlet(imposed, target, var)
 
 
 def main() -> None:

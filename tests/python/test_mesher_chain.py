@@ -1,8 +1,7 @@
 """`chain`: putting a line's cells back in walking order."""
 
-import pytest
-
 import pyrucast
+import pytest
 
 
 def _nodes(n):

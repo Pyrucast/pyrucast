@@ -12,6 +12,7 @@ full traceback and a non-zero return code.
 
 import math
 import os
+import pathlib
 import tempfile
 import textwrap
 
@@ -73,6 +74,26 @@ print(line3.element_types())  # ['SEG3']
 assert line.cell_count() == 4
 assert surf.element_types() == ["QUA4"]
 assert line3.element_types() == ["SEG3"]
+
+# ── barycenter ─────────────────────────────────────────────
+
+# ANCHOR: barycenter
+c = pyrucast.Coords(dim=2)
+p, q = c.add_node([0.0, 0.0]), c.add_node([4.0, 0.0])
+
+# Two SEG2 sharing their middle node: one new node at the centre of each.
+centres = pyrucast.mesh.barycenter(pyrucast.mesh.line(p, q, 2))
+print(centres.node(0, 0, 0).position(), centres.node(0, 1, 0).position())
+# [1.0, 0.0] [3.0, 0.0]
+
+# On a POI1, a new node on each point: how a constraint mints its multipliers.
+multiplicateurs = pyrucast.mesh.barycenter(pyrucast.mesh.poi1_from_nodes([p, q]))
+print(multiplicateurs.node(0, 0, 0).position())  # [0.0, 0.0], a node other than p
+# ANCHOR_END: barycenter
+assert centres.element_types() == ["POI1"] and centres.cell_count() == 2
+assert centres.node(0, 1, 0).position() == [3.0, 0.0]
+assert multiplicateurs.node(0, 0, 0).position() == p.position()
+assert multiplicateurs.node(0, 0, 0).id != p.id
 
 # ── Sweep between two meshes ────────────────────────────────────────────────
 
@@ -508,9 +529,7 @@ conge = pyrucast.mesh.points_in_sphere(plaque, [1.0, 1.0], 0.2)
 mecanique = pyrucast.model.elasticity(
     pyrucast.FiniteElementSpace(plaque), "plane_stress"
 )
-blocage = pyrucast.model.dirichlet(
-    mecanique, "u_x", gauche, pyrucast.mesh.barycenter(gauche)
-)
+blocage = pyrucast.model.dirichlet(gauche, mecanique, "u_x")
 
 # The POI1 output is an ordinary mesh: it plugs back into the other operators,
 # here to go back up to the elements carried by the selection.
@@ -750,7 +769,7 @@ _MSH = textwrap.dedent(
 _TMP = tempfile.TemporaryDirectory()
 _CWD = os.getcwd()
 os.chdir(_TMP.name)
-open("piece.msh", "w").write(_MSH)
+pathlib.Path("piece.msh").write_text(_MSH)
 
 # ANCHOR: read_gmsh
 import pyrucast

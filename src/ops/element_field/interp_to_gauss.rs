@@ -9,10 +9,10 @@
 //! [`crate::ops::element_field::thermal_strain`](fn@crate::ops::element_field::thermal_strain)).
 
 use crate::aggregate::Aggregate;
-use crate::containers::element_field::ElementField;
+use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::Field;
-use crate::containers::finite_element_space::FiniteElementSpace;
-use crate::containers::node_field::NodeField;
+use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+use crate::containers::node_field::{NodeField, NodeFieldView};
 use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::kernel;
@@ -68,32 +68,41 @@ pub fn interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> Resul
     let view = field.view()?;
     let mut out = ElementField::empty();
     for sub in fespace {
-        // This operator interpolates: it needs a field basis, and that is a fact of
-        // the zone, settled here rather than at every Gauss point.
-        kernel::require_field_basis(sub, "shape values")?;
-        // Point kernel: value at Gauss g = Σ_i N_i(g) · f_i, per component.
-        let nc = components.len();
-        let sf = kernel::nodal_pointwise(
-            sub,
-            &view,
-            &components,
-            components.clone(),
-            |geom, g, dofs, out| {
-                let mut n_buf = [0.0_f64; MAX_CELL_DOFS];
-                let shape = geom.field_n_at_g(g, &mut n_buf);
-                for (c, o) in out.iter_mut().enumerate().take(nc) {
-                    let mut v = 0.0;
-                    for i in 0..geom.n_nodes {
-                        v += shape[i] * dofs[i * nc + c];
-                    }
-                    *o = v;
-                }
-                Ok(())
-            },
-        )?;
-        out.add_sub(Handle::new(sf))?;
+        out.add_sub(Handle::new(interp_to_gauss_zone(sub, &view, &components)?))?;
     }
     Ok(out)
+}
+
+/// [`interp_to_gauss`] of the named `components` on one zone — the per-zone
+/// body shared with [`strain`](fn@crate::ops::element_field::strain).
+pub(crate) fn interp_to_gauss_zone(
+    sub: &Handle<SubFiniteElementSpace>,
+    view: &NodeFieldView,
+    components: &[String],
+) -> Result<SubElementField> {
+    // This operator interpolates: it needs a field basis, and that is a fact of
+    // the zone, settled here rather than at every Gauss point.
+    kernel::require_field_basis(sub, "shape values")?;
+    // Point kernel: value at Gauss g = Σ_i N_i(g) · f_i, per component.
+    let nc = components.len();
+    kernel::nodal_pointwise(
+        sub,
+        view,
+        components,
+        components.to_vec(),
+        |geom, g, dofs, out| {
+            let mut n_buf = [0.0_f64; MAX_CELL_DOFS];
+            let shape = geom.field_n_at_g(g, &mut n_buf);
+            for (c, o) in out.iter_mut().enumerate().take(nc) {
+                let mut v = 0.0;
+                for i in 0..geom.n_nodes {
+                    v += shape[i] * dofs[i * nc + c];
+                }
+                *o = v;
+            }
+            Ok(())
+        },
+    )
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────

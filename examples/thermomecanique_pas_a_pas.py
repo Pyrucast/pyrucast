@@ -1,6 +1,6 @@
 """**Step-by-step** thermo-mechanics above the high-level Python layer.
 
-End-to-end demo of :func:`pyrucast.thermomechanics.step_by_step`: a flat plate is heated
+End-to-end demo of :func:`pyrucast.stepping.step_by_step`: a flat plate is heated
 progressivement (histoire de température) et se dilate librement (appuis simples).
 At every instant, ``step_by_step`` solves the thermics (steady) then the
 mécanique non linéaire (Newton modifié + accélération d'Anderson), le couplage
@@ -29,9 +29,9 @@ E, NU, ALPHA = 210_000.0, 0.3, 1e-5
 K_COND = 1.0
 T_REF, T_HOT = 20.0, 220.0  # ΔT final = 200
 LENGTH, HEIGHT = 4.0, 1.0
-NX = int(os.environ.get("PYRUCAST_NX", 8))
-NY = int(os.environ.get("PYRUCAST_NY", 3))
-NSTEPS = int(os.environ.get("PYRUCAST_NSTEPS", 5))
+NX = int(os.environ.get("PYRUCAST_NX", "8"))
+NY = int(os.environ.get("PYRUCAST_NY", "3"))
+NSTEPS = int(os.environ.get("PYRUCAST_NSTEPS", "5"))
 
 
 def main():
@@ -68,20 +68,21 @@ def main():
 
     def clamp(target, nodes, var):
         imposed = pc.mesh.poi1_from_nodes(nodes)
-        return pc.model.dirichlet(target, var, imposed, pc.mesh.barycenter(imposed))
+        return pc.model.dirichlet(imposed, target, var)
 
     # ── Modèle : conduction + élasticité (contraintes planes) + Dirichlet ────
     # Thermics: imposed temperature on the left/right edges (one multiplier per
     # node ⇒ a uniform field). Mechanics: simple supports (u_x=0 on the left,
     # u_y=0 at the bottom) ⇒ free expansion, without stress.
     th_imposed = pc.mesh.poi1_from_nodes(left + right)
-    th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
     thermal = pc.model.heat_conduction(fes)
     mecanique = pc.model.elasticity(fes, "plane_stress")
+    held_t = pc.model.dirichlet(th_imposed, thermal, "T")
+    th_mult = held_t.multiplier_mesh()
     model = (
         thermal
         | mecanique
-        | pc.model.dirichlet(thermal, "T", th_imposed, th_mult)
+        | held_t
         | clamp(mecanique, left, "u_x")
         | clamp(mecanique, bottom, "u_y")
     )
@@ -90,10 +91,10 @@ def main():
     )
 
     # ── Temperature history: an Evolution with a FIELD value (t ∈ [0, 1]) ────
-    cold = pc.NodeField(th_mult, ["imposed_T"])
-    cold[0].add_to_component("imposed_T", T_REF)
-    hot = pc.NodeField(th_mult, ["imposed_T"])
-    hot[0].add_to_component("imposed_T", T_HOT)
+    cold = pc.NodeField(th_mult, ["imposed"])
+    cold[0].add_to_component("imposed", T_REF)
+    hot = pc.NodeField(th_mult, ["imposed"])
+    hot[0].add_to_component("imposed", T_HOT)
     loads = pc.Evolution([(0.0, cold), (1.0, hot)], out_of_range="clamp")
 
     # ── Setup: a single dictionary (fespace + mesh deduced from the
@@ -107,7 +108,7 @@ def main():
     }
 
     # ── Step-by-step computation ────────────────────────────────────────────
-    pc.thermomechanics.step_by_step(data)
+    pc.stepping.step_by_step(data)
 
     # ── Résultats ───────────────────────────────────────────────────────────
     tip = grid[idx(NX, NY)]
@@ -116,8 +117,8 @@ def main():
         t_mean = r["temperature"].value(tip, "T")
         ux = r["displacement"].value(tip, "u_x")
         print(
-            f"{r['time']:>6.2f} {t_mean:>10.3f} {r['mech_iters']:>6} "
-            f"{r['mech_anderson']:>6} {ux:>14.6e}"
+            f"{r['time']:>6.2f} {t_mean:>10.3f} {r['iterations']:>6} "
+            f"{r['accelerations']:>6} {ux:>14.6e}"
         )
 
     # Check: free expansion ⇒ u_x = α·ΔT·L at the end.

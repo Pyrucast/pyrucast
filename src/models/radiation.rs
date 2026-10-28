@@ -64,7 +64,9 @@ use crate::models::owned_components;
 use crate::models::transfer::target_physics;
 use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
-use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{
+    Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
+};
 use serde::{Deserialize, Serialize};
 
 /// Column DOF name (temperature) — shared with heat conduction.
@@ -122,6 +124,7 @@ const OUTPUT_FLUX: &str = "flux";
 /// Radiation to infinity on a boundary FE subspace.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Interpolation, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -141,7 +144,7 @@ const OUTPUT_FLUX: &str = "flux";
 /// # use pyrucast::ops::model;
 /// // Radiation to infinity, on a border. Same DOFs as the conduction, hence
 /// // a direct coupling in its stiffness.
-/// let conduction = model::heat_conduction(&fes)?;
+/// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
 /// let r = Radiation::new(zone, &conduction)?;
 /// assert_eq!(r.primal_vars(), vec!["T".to_string()]);
 /// assert!(r.material_components().contains(&"emis".to_string()));
@@ -165,6 +168,7 @@ impl Radiation {
     /// Errors otherwise.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Interpolation, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -184,12 +188,12 @@ impl Radiation {
     /// # use pyrucast::ops::model;
     /// // Radiation to infinity, on a border. Same DOFs as the conduction, hence
     /// // a direct coupling in its stiffness.
-    /// let conduction = model::heat_conduction(&fes)?;
+    /// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     /// let r = Radiation::new(zone.clone(), &conduction)?;
     /// assert_eq!(r.primal_vars(), vec!["T".to_string()]);
     /// assert!(r.material_components().contains(&"emis".to_string()));
     /// // Without conduction underneath, the `q` row is assembled by nobody.
-    /// assert!(Radiation::new(zone, &model::fick(&fes, "H2")?).is_err());
+    /// assert!(Radiation::new(zone, &model::fick(&fes, "H2", MaterialSymmetry::Isotropic)?).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, target: &Model) -> Result<Self> {
@@ -343,6 +347,10 @@ impl Behavior for Radiation {
         vec![INPUT_COMPONENT.to_string()]
     }
 
+    fn strain_operator(&self) -> StrainOperator {
+        StrainOperator::Value
+    }
+
     fn integrate_point(
         &self,
         _geom: &CellGeom,
@@ -450,11 +458,12 @@ fn surface_mass(geom: &CellGeom, ke: &mut [f64], coeff: impl Fn(usize) -> f64) -
 
 crate::physics_operator! {
     /// Radiation-to-infinity `Model` spanning **every** subspace of a *boundary*
-    /// `fes`, cooling `target`, which must assemble `T` paired with `q`.
+    /// `fespace`, cooling `target`, which must assemble `T` paired with `q`.
     /// Parent-level operator; the emissivity and far-field temperature are
     /// supplied at assembly time.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -470,11 +479,11 @@ crate::physics_operator! {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// // The radiation unites with the conduction it cools: same DOFs, hence the
     /// // same blocks.
-    /// let conduction = model::heat_conduction(&fes)?;
+    /// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     /// let m = conduction.union(&model::radiation(&fes, &conduction)?)?;
     /// assert_eq!(m.primal_vars(), vec!["T".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn radiation(fes, target) via SubModel::radiation;
+    pub fn radiation(fespace, target) via SubModel::radiation;
     python: "`model.radiation(fespace, target)` — radiation to infinity on a\n*boundary* `fespace`: `q·n = σε(T⁴ − T_∞⁴)`, cooling the model `target`.\nSame DOFs (`\"T\"`/`\"q\"`) as `heat_conduction`, which `target` must\nassemble — a radiating boundary with no conduction beneath it raises —, so\nit composes with `|`:\n`conduction = model.heat_conduction(bulk)`\n`model = conduction | model.radiation(boundary, conduction)`.\n\nMaterial: `emis` (emissivity) and `T_inf` (far-field temperature), plus an\noptional `sigma` overriding the SI Stefan-Boltzmann constant. With the\ndefault `sigma`, `T` is an **absolute** temperature — a fourth power has\nno invariance to shift an origin through.\n\nUnlike convection this law is non-linear, so it contributes three terms:\nthe linearised film `4σεT_∞³∫NᵢNⱼ` as stiffness, the exact residual\n`∫Nᵢσε(T⁴ − T_∞⁴)` through `internal_forces`, and the consistent tangent\n`4σεT³∫NᵢNⱼ` through `matrix.tangent(...)`. Its natures are `\"thermal\"`\n**and** `\"radiation\"`."
 }

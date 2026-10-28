@@ -62,10 +62,10 @@ def main():
     # ── Parameters (steel material, geometry, loading) ──────────────────────
     young, nu, sigma_y = 210_000.0, 0.3, 250.0
     length, height = 10.0, 1.0
-    nx = int(os.environ.get("PYRUCAST_NX", 24))
-    ny = int(os.environ.get("PYRUCAST_NY", 6))
-    nsteps = int(os.environ.get("PYRUCAST_NSTEPS", 10))
-    p_max_load = float(os.environ.get("PYRUCAST_PMAX", 5.0))
+    nx = int(os.environ.get("PYRUCAST_NX", "24"))
+    ny = int(os.environ.get("PYRUCAST_NY", "6"))
+    nsteps = int(os.environ.get("PYRUCAST_NSTEPS", "10"))
+    p_max_load = float(os.environ.get("PYRUCAST_PMAX", "5.0"))
 
     print(
         f"Plastic cantilever beam: {nx}×{ny} QUA4  (L={length}, H={height}), "
@@ -90,12 +90,11 @@ def main():
     coords_field = pyrucast.node_field.positions(mesh, ["X"])
     free_mesh = pyrucast.mesh.select(coords_field, ge=length / nx / 2.0)
     imposed_mesh = pyrucast.mesh.to_poi1(left_edge)
-    multiplier = pyrucast.mesh.translate(imposed_mesh, [0.0, 0.0])
 
     # ── Model: plasticity (plane stress) + clamped end (Dirichlet) ──────────
     model = pyrucast.model.plasticity_perfect(fes, "plane_stress")
-    model = model | pyrucast.model.dirichlet(model, "u_x", imposed_mesh, multiplier)
-    model = model | pyrucast.model.dirichlet(model, "u_y", imposed_mesh, multiplier)
+    model = model | pyrucast.model.dirichlet(imposed_mesh, model, "u_x")
+    model = model | pyrucast.model.dirichlet(imposed_mesh, model, "u_y")
 
     # ── Reference load: unit shear (density −1) on the right face, as consistent
     #    nodal forces. It is a term of the model: it joins the model, and its

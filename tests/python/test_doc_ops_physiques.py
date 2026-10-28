@@ -11,6 +11,8 @@ at **collection** time; an example that breaks is a collection error, with a
 full traceback and a non-zero exit code.
 """
 
+import itertools
+
 import pyrucast
 
 
@@ -23,7 +25,7 @@ def _barre_thermique(n_elements=2, dim=1):
         p[0] = i / n_elements
         noeuds.append(c.add_node(p))
     mesh = pyrucast.Mesh(c, "SEG2")
-    for a, b in zip(noeuds, noeuds[1:]):
+    for a, b in itertools.pairwise(noeuds):
         mesh.unit().add_cell([a, b])
     return c, mesh, pyrucast.FiniteElementSpace(mesh), noeuds
 
@@ -31,16 +33,17 @@ def _barre_thermique(n_elements=2, dim=1):
 def _modele_dirichlet(fes, noeud):
     """Conduction + one imposed temperature, and the multiplier node."""
     imposed = pyrucast.mesh.poi1_from_nodes([noeud])
-    mult = pyrucast.mesh.barycenter(imposed)
     cible = pyrucast.model.heat_conduction(fes)
+    appui = pyrucast.model.dirichlet(imposed, cible, "T")
+    mult = appui.multiplier_mesh()
 
-    model = cible | pyrucast.model.dirichlet(cible, "T", imposed, mult)
+    model = cible | appui
     return model, mult, mult.node(0, 0, 0)
 
 
 def _chargement(mult_mesh, mult_node, valeur=1.0):
-    rhs = pyrucast.NodeField(mult_mesh, ["imposed_T"])
-    rhs[0].set_value(mult_node, "imposed_T", valeur)
+    rhs = pyrucast.NodeField(mult_mesh, ["imposed"])
+    rhs[0].set_value(mult_node, "imposed", valeur)
     return rhs
 
 
@@ -98,7 +101,7 @@ rhs = _chargement(mult_mesh, mult_node, 1.0)
 # ANCHOR: eliminate
 K = pyrucast.matrix.stiffness(model, materials)
 lagrange = pyrucast.solver.solve(K, rhs)  # système augmenté
-condense = pyrucast.solver.solve_eliminate(K, model, rhs)  # reduced system — same field
+condense = pyrucast.solver.solve(K, rhs, relations="eliminate")  # reduced system
 # ANCHOR_END: eliminate
 assert abs(lagrange.value(noeuds[0], "T") - condense.value(noeuds[0], "T")) < 1e-9
 
@@ -106,20 +109,21 @@ assert abs(lagrange.value(noeuds[0], "T") - condense.value(noeuds[0], "T")) < 1e
 
 _, _, fes, noeuds = _barre_thermique()
 imposed = pyrucast.mesh.poi1_from_nodes([noeuds[0]])
-mult = pyrucast.mesh.barycenter(imposed)
-mult_node = mult.node(0, 0, 0)
 cible = pyrucast.model.heat_conduction(fes)
+butee = pyrucast.model.dirichlet(imposed, cible, "T", sense=">=")
+mult = butee.multiplier_mesh()
+mult_node = mult.node(0, 0, 0)
 
-model = cible | pyrucast.model.dirichlet(cible, "T", imposed, mult, sense=">=")
+model = cible | butee
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 rhs = _chargement(mult, mult_node, 1.0)
 # ANCHOR: unilateral
 K = pyrucast.matrix.stiffness(model, materials)  # model with sense=">="
-solution = pyrucast.solver.solve_unilateral(K, model, rhs)  # "schur" by default
-reaction = solution.value(mult_node, "lambda_T")  # 0 if the stop is released
+solution = pyrucast.solver.solve(K, rhs)  # the matrix carries the ">="
+reaction = solution.value(mult_node, "lambda")  # 0 if the stop is released
 
 # Forcing the old method (refactorization at every step):
-sol2 = pyrucast.solver.solve_unilateral(K, model, rhs, active_set="refactorize")
+sol2 = pyrucast.solver.solve(K, rhs, active_set="refactorize")
 # ANCHOR_END: unilateral
 assert abs(solution.value(noeuds[0], "T") - sol2.value(noeuds[0], "T")) < 1e-9
 
@@ -138,10 +142,10 @@ nsteps = 2
 # ANCHOR: pas_a_pas
 state = None  # VAR0 = prev; None at the first step
 for step in range(1, nsteps + 1):
-    ...  # the step's load → Newton loop on u
+    # the step's load → Newton loop on u
     eps = pyrucast.element_field.deformation(u, fes)  # ε(B)
     out = pyrucast.element_field.integrate_behavior(model, eps, materials, prev=state)
-    ...  # F_int (BSIG), résidu, correction de u
+    # F_int (BSIG), résidu, correction de u
     state = out  # commit: prev ← VAR1 for the next step
 # ANCHOR_END: pas_a_pas
 assert len(state) == 1
@@ -263,7 +267,7 @@ assert len(materials) == 1
 _, _, bord_fes, _ = _barre_thermique()
 # ANCHOR: boundary_transfer
 conduction = pyrucast.model.heat_conduction(bord_fes)
-film = pyrucast.model.boundary_transfer(bord_fes, conduction, [("T", "q")])
+film = pyrucast.model.boundary_transfer(bord_fes, conduction, ["T"])
 # ANCHOR_END: boundary_transfer
 assert film[0].physics() == ["thermal"]
 
@@ -287,7 +291,7 @@ assert len(model.filter("thermal")) == 1
 
 def _plaque_et_bord():
     """A QUA4 plate and the FE space of its left edge."""
-    c, mesh, fes, n = _plaque_2d()
+    c, _mesh, fes, n = _plaque_2d()
     bord_mesh = pyrucast.Mesh(c, "SEG2")
     bord_mesh.unit().add_cell([n[0], n[3]])
     return fes, pyrucast.FiniteElementSpace(bord_mesh), c, n
@@ -331,7 +335,7 @@ gauche, droite, face_gauche, face_droite = _deux_corps_en_vis_a_vis()
 # ANCHOR: interface_transfer
 corps = pyrucast.model.fick(gauche, "H2") | pyrucast.model.fick(droite, "H2")
 model = corps | pyrucast.model.interface_transfer(
-    face_gauche, face_droite, corps, [("c_H2", "j_H2")]
+    face_gauche, face_droite, corps, ["c_H2"]
 )
 materials = pyrucast.element_field.material_field(
     model, [("D_H2", 2.0), ("h_c_H2", 5.0)]
@@ -348,20 +352,18 @@ semelle = peau
 # Thermal film: enters the stiffness of the conduction it cools, and
 # en prend la nature.
 conduction = pyrucast.model.heat_conduction(fes)
-model = conduction | pyrucast.model.boundary_transfer(peau, conduction, [("T", "q")])
+model = conduction | pyrucast.model.boundary_transfer(peau, conduction, ["T"])
 materials = pyrucast.element_field.material_field(
     model, [("k", 5.0), ("h_T", 12.0), ("a_ext_T", 20.0)]
 )
 
 # Contact resistance between two meshes.
 corps = pyrucast.model.heat_conduction(gauche) | pyrucast.model.heat_conduction(droite)
-joint = pyrucast.model.interface_transfer(face_gauche, face_droite, corps, [("T", "q")])
+joint = pyrucast.model.interface_transfer(face_gauche, face_droite, corps, ["T"])
 
 # Elastic foundation: the same law, on displacements.
 plaque = pyrucast.model.elasticity(fes, "plane_stress")
-appui = pyrucast.model.boundary_transfer(
-    semelle, plaque, [("u_x", "f_x"), ("u_y", "f_y")]
-)
+appui = pyrucast.model.boundary_transfer(semelle, plaque, ["u_x", "u_y"])
 
 # No kind in argument: each took its target's own.
 joint[0].physics()  # ["thermal"]

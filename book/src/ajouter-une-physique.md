@@ -46,7 +46,7 @@ n'implémente que celui qui la concerne) :
 │                 element_matrix & consorts (tous fournis) }
 ├── Behavior: Domain
 │              { behavior_fespace, behavior_output_components,
-│                deformation_reads, integrate_point,
+│                deformation_reads, strain_operator, integrate_point,
 │                zone_layout, integrate_behavior, element_tangent (fournis) }
 └── Constraint  { multiplier_mesh, relations }
 ```
@@ -71,19 +71,27 @@ de `src/lib.rs` (le module `_pyrucast` est plat).
 attribut de stub, le déballage des enveloppes Python : `physics_operator!` les
 émet. Un auteur de physique n'ouvre jamais `src/py/`.
 
+**Un argument peut porter une valeur par défaut**, `arg: T = défaut`, comme la
+mesure de la barre ci-dessous. Rust n'en a pas : son appelant passe
+l'argument ; la face Python le prend en mot-clé, avec cette valeur. Même nom,
+l'idiome de chaque langage. La macro écrit cette valeur dans la documentation
+Rust, pour qu'un lecteur qui n'écrit que du Rust sache ce que Python obtient
+sans rien dire.
+
 ```rust
 {{#include ../../src/models/truss.rs:operator}}
 ```
 
 **Un terme qui écrit dans les lignes d'une autre physique** — une charge
 répartie (`flux`), un échange de bord (`boundary_transfer`), un rayonnement
-(`radiation`) — déclare la forme `(fes, target, …)`. Il a besoin du modèle qu'il
-charge ou refroidit : pour y vérifier que ses lignes sont assemblées, et, quand
-ses noms de variables sont libres, pour en hériter la nature. La macro fait
-suivre la cible au constructeur de chaque zone et l'ajoute à la face Python ;
-l'auteur appelle `transfer::target_physics` (couples primale/duale) ou
-`transfer::owner_physics` (une ligne seule) dans son `new`, une fois, à la
-construction.
+(`radiation`) — déclare la forme `(fespace, target, …)`. Il a besoin du modèle
+qu'il charge ou refroidit : pour y vérifier que ses lignes sont assemblées, y
+lire la duale de chaque variable et, quand ses noms de variables sont libres, en
+hériter la nature. La macro fait suivre la cible au constructeur de chaque zone
+et l'ajoute à la face Python ; l'auteur appelle `transfer::target_pairs` (des
+variables, dont la cible donne les duales), `transfer::target_physics` (un
+couple primale/duale fixé, comme le rayonnement) ou `transfer::owner_physics`
+(une ligne seule) dans son `new`, une fois, à la construction.
 
 **Deux blocs de documentation, et c'est voulu** : le Rust porte son `///` et son
 doctest, le Python un littéral qui atterrit dans le `.pyi`. Les partager
@@ -96,8 +104,6 @@ main, chacun avec sa raison :
 
 - les **contraintes** (`dirichlet`, `mpc`, `embedded`, `contact`), portées par
   des maillages fournis par l'utilisateur et non par un espace EF ;
-- les variantes **à symétrie** (`heat_conduction`, `fick`, `elasticity`), dont
-  la face Python replie la symétrie en `symmetry=None` ;
 - `interface_transfer`, qui apparie deux espaces avec un contrôle de longueur.
 
 ### Ajouter une loi plutôt qu'une physique
@@ -209,6 +215,9 @@ pub trait Domain: Sync {
     fn behavior_output_components(&self) -> Vec<String>;
     // Ce que le noyau lit, dans l'ordre de ses indices :
     fn deformation_reads(&self) -> Vec<String>;
+    // Et le `B` qui le produit depuis la solution — `Deformation(mesure)`,
+    // `Gradient`, `Value`, `Beam`, `Shell(f)` ; requis, `strain` l'exécute :
+    fn strain_operator(&self) -> StrainOperator;
     fn state_reads(&self) -> Vec<String> { Vec::new() }
     // L'état au repos, et la question « cette loi exige-t-elle un pas de
     // temps ? » — posées une fois, pas au point de Gauss :
@@ -282,12 +291,21 @@ sous-trait **et** redéfinir le seam correspondant pour rendre `Some(self)` :
   genre donné, voire aucune.
 - **Comportement** (une loi au point) : `impl Behavior` + `as_behavior()`.
   Déclarer `behavior_fespace()` + `behavior_output_components()` +
-  `deformation_reads()` + `integrate_point(...)`, la loi de constitution **en un
-  point de Gauss**. `integrate_behavior` est **fourni** : il résout la zone, puis
+  `deformation_reads()` + `strain_operator()` (quel producteur géométrique
+  fabrique cette entrée depuis la solution : c'est ce qu'exécute
+  `element_field::strain`) + `integrate_point(...)`, la loi de constitution **en
+  un point de Gauss**. `integrate_behavior` est **fourni** : il résout la zone, puis
   pilote ce noyau en parallèle sur toutes les cellules. Un élément linéaire en a
   bien une, simplement triviale (`N = E·A·ε`) ; un transfert de bord, lui, n'en a
   pas — son `h·a` est le coefficient de son propre opérateur appliqué en un
   point, et son résidu suit de l'opérateur.
+
+  **Une convention fixe la forme de la loi** : la contrainte en B est le
+  matériau de B appliqué à la déformation élastique de B,
+  `σ(B) = C(B) : ε_e(B)` — jamais `σ(A) + C:Δε`. C'est ce qui la garde juste
+  quand le matériau dépend de la température, sans que le pas-à-pas ait à
+  corriger quoi que ce soit (détail dans
+  [comportement](operateurs/comportement.md)).
 
   **Deux invariants tiennent dans ce noyau**, et ils décident de la forme du
   reste : aucun test que l'amont a déjà tranché — présence d'une composante,
@@ -484,18 +502,20 @@ cisaillement à intégrer.
 ### Une contrainte : les relations, forme neutre
 
 `Constraint::relations()` rend une `Relation` par nœud multiplicateur : son
-`multiplier_node`, la composante duale `imposed_value` où l'utilisateur écrira le
-second membre `g`, la liste des termes `(node, variable, target_dual,
-coefficient)`, et un `sense` (`RelationSense::Equality` par défaut,
+`multiplier_node` (créé par la contrainte, un par relation), la liste des termes
+`(node, variable, target_dual, coefficient)`, et un `sense` (`RelationSense::Equality` par défaut,
 `GreaterEqual` / `LessEqual` pour l'unilatéral, cf.
 [Contact](contraintes/contact.md)).
 
-C'est la **source unique de vérité**, indépendante de la méthode d'imposition :
-la voie Lagrange (`contributions()`) en tire ses blocs C / Cᵀ — via le helper
-partagé `constraint_block_pair` — et la voie par **élimination**
-(`ops::solver::eliminate`) lit les mêmes relations. Ni l'une ni l'autre ne
-re-parse le maillage-par-terme fourni par l'utilisateur. Une nouvelle contrainte
-n'a donc à décrire ses relations **qu'une fois**.
+C'est la **source unique de vérité** : `contributions()` en tire les blocs
+C / Cᵀ — via le helper partagé `constraint_block_pair`, qui pose aussi le sens
+des relations sur le bloc C (`SubMatrix::set_row_sense`) — et les forces
+internes (`Cᵀλ`, `C·u`) les appliquent. La **résolution**, elle, ne lit plus
+que la matrice : la ligne `imposed` est la relation, ses coefficients sont la
+ligne, son sens est celui du bloc ; multiplicateurs, ensemble actif ou
+élimination s'en servent tous trois. Une nouvelle contrainte n'a donc à décrire
+ses relations **qu'une fois**, et à poser leur sens sur son bloc C si elles
+sont unilatérales.
 
 ### Le comportement : le montage incrémental A → B
 

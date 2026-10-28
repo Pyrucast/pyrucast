@@ -6,8 +6,9 @@ use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
 use crate::models::damage::law::DamageLaw;
 use crate::models::tensor::Kinematics;
+use crate::ops::element_field::StrainMeasure;
 
-/// Damage `Model` spanning **every** subspace of `fes`, with an explicit
+/// Damage `Model` spanning **every** subspace of `fespace`, with an explicit
 /// law. Parent-level operator; the material each law needs is
 /// supplied at assembly / integration time.
 ///
@@ -33,16 +34,20 @@ use crate::models::tensor::Kinematics;
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::damage::law::DamageLaw;
-/// let m = model::damage_with_law(&fes, Kinematics::PlaneStress, DamageLaw::Mazars)?;
+/// # use pyrucast::ops::element_field::StrainMeasure;
+/// let m = model::damage(
+///     &fes, Kinematics::PlaneStress, DamageLaw::Mazars, StrainMeasure::Linear)?;
 /// assert_eq!(m.len(), fes.len());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn damage_with_law(
-    fes: &FiniteElementSpace,
+pub fn damage(
+    fespace: &FiniteElementSpace,
     kinematics: Kinematics,
     law: DamageLaw,
+    strain_measure: StrainMeasure,
 ) -> Result<Model> {
-    spanning(fes, |zone| SubModel::damage_with_law(zone, kinematics, law))
+    spanning(fespace, |zone| {
+        SubModel::damage(zone, kinematics, law, strain_measure)
+    })
 }

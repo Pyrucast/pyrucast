@@ -73,7 +73,7 @@
 //! assert_eq!(k.n_rows(), 2);
 //! assert_eq!(k.n_cols(), 2);
 //! assert!(k.is_symmetric());
-//! assert_eq!(k.get(a.id(), "q", a.id(), "T"), 2.0);
+//! assert_eq!(k.get(a.id(), "q", a.id(), "T").unwrap(), 2.0);
 //! ```
 
 use crate::aggregate::Aggregate;
@@ -87,7 +87,7 @@ use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::handle::{Handle, ReadGuard};
-use crate::models::{MatrixKind, Physics};
+use crate::models::{MatrixKind, Physics, RelationSense, IMPOSED};
 use crate::parallel::*;
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
@@ -335,6 +335,7 @@ pub enum KernelInputs {
 /// empty, correctly-sized placeholder, so structural queries still work).
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
@@ -355,7 +356,7 @@ pub enum KernelInputs {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap();
+/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let mat = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// // A **computed** block materializes no value: it carries the recipe
 /// // that the global assembler unwinds cell by cell, straight into the CSR.
@@ -393,25 +394,15 @@ pub struct ComputedRecipe {
     /// Which element matrix this recipe produces — the discriminant the scatter
     /// dispatches on to pick the sub-model's kernel
     /// ([`SubModelKind::matrix_element`](crate::models::SubModelKind::matrix_element)).
-    /// Defaults to [`MatrixKind::Stiffness`] for backward-compatible deserialization.
-    #[serde(default)]
     pub kind: MatrixKind,
     /// What this kind's kernel reads **besides** the material — see
     /// [`KernelInputs`].
-    #[serde(default)]
     pub inputs: KernelInputs,
     /// FE subspaces carrying the **columns** when this block couples two meshes
     /// (an interface exchange law). **Empty** — the overwhelming case — means
     /// rows and columns live on the same mesh and `fespaces` drives both; the
     /// scatter routes on exactly that emptiness.
-    #[serde(default)]
     pub col_fespaces: Vec<Handle<SubFiniteElementSpace>>,
-}
-
-/// Default value of [`SubMatrix::factor`] for pre-existing serialized data
-/// that predates the field.
-fn default_factor() -> f64 {
-    1.0
 }
 
 /// Identity of a symmetric **pair** of blocks — see [`Symmetry::Half`].
@@ -556,7 +547,7 @@ impl crate::named::Named for Symmetry {
 /// // dual and primal, and its entries. Nothing lives in the aggregate.
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (2, 2));
 /// assert_eq!(bloc.dual_vars(), &["q".to_string()]);
-/// assert_eq!(bloc.get(a.id(), "q", a.id(), "T"), 2.0);
+/// assert_eq!(bloc.get(a.id(), "q", a.id(), "T").unwrap(), 2.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Serialize, Deserialize)]
@@ -581,7 +572,6 @@ pub struct SubMatrix {
     /// the contribution is produced on the fly by the global assembler from this
     /// recipe. `None` ⇒ **literal** block, `coo` holds the values (the historical
     /// behaviour, unchanged).
-    #[serde(default)]
     recipe: Option<ComputedRecipe>,
     /// The set of [`Physics`] natures of the sub-model that produced this block,
     /// set by the assembler ([`crate::ops::matrix`]) for **both** the computed
@@ -589,7 +579,6 @@ pub struct SubMatrix {
     /// for a block built directly, outside assembly (the « rien » case), or
     /// carrying several natures for a coupled physics. Consumed by
     /// [`Matrix::filter`](Matrix::filter).
-    #[serde(default)]
     physics: Vec<Physics>,
     /// Lazy scalar scale applied to every value this block emits — at direct
     /// accessors (`get`, `dense`, …) and at global assembly (`build_global_triplets`,
@@ -599,8 +588,13 @@ pub struct SubMatrix {
     /// values don't exist until assembly evaluates the recipe). Never touches
     /// `local_coo_arrays`/`local_triplets`, which stay raw — every consumer of
     /// those applies the factor itself.
-    #[serde(default = "default_factor")]
     factor: f64,
+    /// The sense of the **relation rows** of this block — its rows named
+    /// [`IMPOSED`], one per constraint relation.
+    /// `Equality` unless the constraint that built it is unilateral; the solver
+    /// reads it to know which rows are inequalities, the coefficients being
+    /// the row itself. Meaningless on any other row.
+    row_sense: RelationSense,
 }
 
 impl SubMatrix {
@@ -665,6 +659,7 @@ impl SubMatrix {
             recipe: None,
             physics: Vec::new(),
             factor: 1.0,
+            row_sense: RelationSense::Equality,
         }
     }
 
@@ -675,6 +670,7 @@ impl SubMatrix {
     /// `recipe.fespace` and scatters straight into the global matrix.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::element_field::ElementField;
@@ -695,7 +691,7 @@ impl SubMatrix {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # let modele = model::heat_conduction(&fes).unwrap();
+    /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let mat = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
     /// // The same seen from the constructor: a sized, empty template,
     /// // whose values will come from the sub-model's kernel.
@@ -740,6 +736,7 @@ impl SubMatrix {
             recipe: Some(recipe),
             physics: Vec::new(),
             factor: 1.0,
+            row_sense: RelationSense::Equality,
         }
     }
 
@@ -784,7 +781,7 @@ impl SubMatrix {
     /// let z = SubMatrix::from_coo(
     ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
     ///     DofOrdering::NodesThenVars, Symmetry::Full, coo)?;
-    /// assert_eq!(z.get(a.id(), "q", a.id(), "T"), 2.0);
+    /// assert_eq!(z.get(a.id(), "q", a.id(), "T").unwrap(), 2.0);
     /// // Indices are **local** to the block, and its size must match.
     /// assert!(SubMatrix::from_coo(
     ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
@@ -827,6 +824,7 @@ impl SubMatrix {
             recipe: None,
             physics: Vec::new(),
             factor: 1.0,
+            row_sense: RelationSense::Equality,
         })
     }
 
@@ -959,6 +957,73 @@ impl SubMatrix {
     /// ```
     pub fn set_physics(&mut self, physics: Vec<Physics>) {
         self.physics = physics;
+    }
+
+    /// The sense of this block's relation rows (those named
+    /// [`IMPOSED`]): `Equality` unless a unilateral
+    /// constraint built it. The solver reads it to tell an inequality row from
+    /// an equation; the relation's coefficients are the row itself.
+    ///
+    /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::RelationSense;
+    /// # use pyrucast::ops::{element_field, matrix, mesh, model};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let n: Vec<Node> = (0..2)
+    /// #     .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let appui = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// let barre = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
+    /// let plancher = model::dirichlet(&appui, &barre, "T", RelationSense::GreaterEqual)?;
+    /// let modele = barre.union(&plancher)?;
+    /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)])?;
+    /// let k = matrix::stiffness(&modele, &materiaux)?;
+    /// // The block of the relation row carries the sense of the constraint that
+    /// // built it; the conduction's block keeps the default.
+    /// let senses: Vec<RelationSense> = k.iter().map(|b| b.read().row_sense()).collect();
+    /// assert!(senses.contains(&RelationSense::GreaterEqual));
+    /// assert!(senses.contains(&RelationSense::Equality));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn row_sense(&self) -> RelationSense {
+        self.row_sense
+    }
+
+    /// Declare the sense of this block's relation rows — what a unilateral
+    /// constraint does on its `C` block when it builds it.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
+    /// # use pyrucast::containers::mesh::SubMesh;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{RelationSense, IMPOSED};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let support = {
+    /// #     let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+    /// #     sm.add_cell(&[a.id()]).unwrap();
+    /// #     Handle::new(sm)
+    /// # };
+    /// let mut c = SubMatrix::new(
+    ///     support.clone(), support.clone(), vec![IMPOSED.into()], vec!["T".into()],
+    ///     DofOrdering::NodesThenVars, Symmetry::None);
+    /// assert_eq!(c.row_sense(), RelationSense::Equality);
+    /// c.set_row_sense(RelationSense::LessEqual);
+    /// assert_eq!(c.row_sense(), RelationSense::LessEqual);
+    /// ```
+    pub fn set_row_sense(&mut self, sense: RelationSense) {
+        self.row_sense = sense;
     }
 
     /// The scalar factor applied to every value this block emits (`1.0` unless
@@ -1542,7 +1607,7 @@ impl SubMatrix {
     /// // assembly pour cell by cell without reading anything back.
     /// z.add_entry(a.id(), "q", a.id(), "T", 1.0)?;
     /// z.add_entry(a.id(), "q", a.id(), "T", 1.0)?;
-    /// assert_eq!(z.get(a.id(), "q", a.id(), "T"), 2.0);
+    /// assert_eq!(z.get(a.id(), "q", a.id(), "T").unwrap(), 2.0);
     /// // A node outside the support, or an undeclared variable, is an error.
     /// assert!(z.add_entry(a.id(), "f_x", a.id(), "T", 1.0).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1736,6 +1801,9 @@ impl SubMatrix {
     /// Sum of all entries at `(row_node, row_var) × (col_node, col_var)`.
     /// Returns `0.0` if the DOF pair is unknown or has no entry.
     ///
+    /// **Errors**: a computed block holds no value — its values exist only in
+    /// the assembled [`Matrix`] it belongs to.
+    ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
@@ -1754,21 +1822,35 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// assert_eq!(bloc.get(a.id(), "q", b.id(), "T"), -1.0);
+    /// assert_eq!(bloc.get(a.id(), "q", b.id(), "T")?, -1.0);
     /// // An absent coordinate returns **zero**, not an error: reading
     /// // a sparse block does not tell "zero" from "outside the pattern".
-    /// assert_eq!(bloc.get(a.id(), "q", a.id(), "absente"), 0.0);
+    /// assert_eq!(bloc.get(a.id(), "q", a.id(), "absente")?, 0.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn get(&self, row_node: NodeId, row_var: &str, col_node: NodeId, col_var: &str) -> f64 {
+    pub fn get(
+        &self,
+        row_node: NodeId,
+        row_var: &str,
+        col_node: NodeId,
+        col_var: &str,
+    ) -> Result<f64> {
+        if self.recipe.is_some() {
+            return Err(PyrucastError::Message(
+                "SubMatrix::get: a computed block holds no value; read the \
+                 assembled Matrix it belongs to"
+                    .into(),
+            ));
+        }
         let (row_g, col_g) = self.support_guards();
-        self.get_with(
+        Ok(self.get_with(
             &row_g,
             col_g.as_deref().unwrap_or(&row_g),
             row_node,
             row_var,
             col_node,
             col_var,
-        )
+        ))
     }
 
     /// Read guards on both supports, taking a **single** one when rows and
@@ -2416,6 +2498,136 @@ struct AssembledData {
     csr: AssembledCsr,
 }
 
+impl AssembledData {
+    /// `self + other`, value for value, over the union of their DOFs — the
+    /// values of a sum of matrices, each taken as it was assembled.
+    ///
+    /// Two operands assembled on one pattern (two matrices of the same model)
+    /// share its numbering and sparsity: their values add slot for slot, and
+    /// the result shares the pattern too. Otherwise the DOFs are numbered as the
+    /// blocks of both assembled together would be: `self`'s, then those only
+    /// `other` has, in `other`'s order — sorted by the solver permutation `perm`
+    /// when the coordinates carry one, as [`Matrix::finalize`] does, and as
+    /// conjugate pairs when the sum is `conjugate` (symmetric). A DOF and its
+    /// conjugate are both new or both known, so each side keeps its
+    /// rank-for-rank conjugacy.
+    fn sum(&self, other: &AssembledData, perm: Option<&[u32]>, conjugate: bool) -> AssembledData {
+        use std::sync::Arc;
+        if Arc::ptr_eq(&self.row_keys, &other.row_keys)
+            && Arc::ptr_eq(&self.col_keys, &other.col_keys)
+            && Arc::ptr_eq(&self.csr.row_offsets, &other.csr.row_offsets)
+            && Arc::ptr_eq(&self.csr.col_indices, &other.csr.col_indices)
+            && self.vars == other.vars
+        {
+            let values = self
+                .csr
+                .values
+                .iter()
+                .zip(&other.csr.values)
+                .map(|(a, b)| a + b);
+            return AssembledData {
+                vars: self.vars.clone(),
+                row_keys: self.row_keys.clone(),
+                col_keys: self.col_keys.clone(),
+                csr: AssembledCsr {
+                    row_offsets: self.csr.row_offsets.clone(),
+                    col_indices: self.csr.col_indices.clone(),
+                    values: values.collect(),
+                    ncols: self.csr.ncols,
+                },
+            };
+        }
+        // `other`'s names in the merged table: `self`'s first, then the new ones.
+        let mut vars = (*self.vars).clone();
+        let slot: Vec<u32> = other
+            .vars
+            .iter()
+            .map(|name| match vars.iter().position(|v| v == name) {
+                Some(i) => i as u32,
+                None => {
+                    vars.push(name.clone());
+                    (vars.len() - 1) as u32
+                }
+            })
+            .collect();
+        let rekey = |k: DofKey| dof_key(dof_node(k), slot[dof_var(k) as usize]);
+        let (rows, other_rows) = merged_order(&self.row_keys, &other.row_keys, rekey);
+        let (cols, other_cols) = merged_order(&self.col_keys, &other.col_keys, rekey);
+        // Where each merged rank lands once sorted by the permutation (stable,
+        // so a node's variables keep their order), for both sides at once on a
+        // symmetric sum: the conjugate shares the row's node.
+        let sorted = |keys: &[DofKey], perm: &[u32]| -> Vec<usize> {
+            let mut order: Vec<usize> = (0..keys.len()).collect();
+            order.par_sort_by_key(|&i| perm[dof_node(keys[i]).0 as usize]);
+            order
+        };
+        let (row_order, col_order): (Vec<usize>, Vec<usize>) = match perm {
+            None => ((0..rows.len()).collect(), (0..cols.len()).collect()),
+            Some(perm) if conjugate => {
+                let order = sorted(&rows, perm);
+                (order.clone(), order)
+            }
+            Some(perm) => (sorted(&rows, perm), sorted(&cols, perm)),
+        };
+        let landing = |order: &[usize]| -> Vec<usize> {
+            let mut at = vec![0; order.len()];
+            for (rank, &merged) in order.iter().enumerate() {
+                at[merged] = rank;
+            }
+            at
+        };
+        let (row_at, col_at) = (landing(&row_order), landing(&col_order));
+        let triplets: Vec<(usize, usize, f64)> = self
+            .csr
+            .triplets()
+            .map(|(r, c, v)| (row_at[r], col_at[c], v))
+            .chain(
+                other
+                    .csr
+                    .triplets()
+                    .map(|(r, c, v)| (row_at[other_rows[r]], col_at[other_cols[c]], v)),
+            )
+            .collect();
+        let row_keys: Vec<DofKey> = row_order.iter().map(|&i| rows[i]).collect();
+        let col_keys: Vec<DofKey> = col_order.iter().map(|&i| cols[i]).collect();
+        let (row_offsets, col_indices, values) =
+            csr_from_triplets_parallel(row_keys.len(), col_keys.len(), triplets);
+        AssembledData {
+            vars: Arc::new(vars),
+            csr: AssembledCsr {
+                row_offsets: Arc::new(row_offsets),
+                col_indices: Arc::new(col_indices),
+                values,
+                ncols: col_keys.len(),
+            },
+            row_keys: Arc::new(row_keys),
+            col_keys: Arc::new(col_keys),
+        }
+    }
+}
+
+/// `first`, then the keys of `second` (put through `rekey`) it lacks — and,
+/// for each key of `second`, its rank in that order.
+fn merged_order(
+    first: &[DofKey],
+    second: &[DofKey],
+    rekey: impl Fn(DofKey) -> DofKey,
+) -> (Vec<DofKey>, Vec<usize>) {
+    let mut rank: HashMap<DofKey, usize> = first.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+    let mut order = first.to_vec();
+    let landed = second
+        .iter()
+        .map(|&k| {
+            let k = rekey(k);
+            *rank.entry(k).or_insert_with(|| {
+                order.push(k);
+                order.len() - 1
+            })
+        })
+        .collect();
+    (order, landed)
+}
+
 /// Aggregate of [`SubMatrix`] blocks.
 ///
 /// Call [`Matrix::finalize`] before passing to a solver. Solver-facing methods
@@ -2555,6 +2767,7 @@ pub type DofKey = u64;
 /// own for as long as it needs it, so they are reference-counted.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -2571,7 +2784,7 @@ pub type DofKey = u64;
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
 /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = model::heat_conduction(&fes).unwrap();
+/// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&model, &materials).unwrap();
 /// // It numbers the rows: one entry per row of the assembled CSR.
@@ -2671,7 +2884,7 @@ impl DofSeen {
     }
 }
 
-/// Spell a packed key for an error message — `"node 9 · imposed_T"`.
+/// Spell a packed key for an error message — `"node 9 · imposed"`.
 fn dof_text(key: DofKey, vars: &[String]) -> String {
     format!("node {} · {}", dof_node(key).0, vars[dof_var(key) as usize])
 }
@@ -2974,6 +3187,7 @@ impl AssemblyPattern {
     /// belongs at an API edge, never inside an assembly.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -2989,7 +3203,7 @@ impl AssemblyPattern {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// # let motif = scatter::build_pattern(&k)?;
@@ -3006,6 +3220,7 @@ impl AssemblyPattern {
     /// [`row_dofs`](Self::row_dofs).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -3021,7 +3236,7 @@ impl AssemblyPattern {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// # let motif = scatter::build_pattern(&k)?;
@@ -3238,6 +3453,12 @@ impl Matrix {
             col_keys,
             csr,
         });
+    }
+
+    /// Whether the values are there: assembled by an assembler, finalized, or
+    /// added by a sum.
+    pub(crate) fn is_assembled(&self) -> bool {
+        self.assembled.is_some()
     }
 
     fn assembled_or_err(&self) -> Result<&AssembledData> {
@@ -3646,6 +3867,7 @@ impl Matrix {
     /// once when a matrix is about to be solved, never inside a loop.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -3662,7 +3884,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // A Galerkin stiffness is symmetric, and its Dirichlet's two rectangular
@@ -3725,8 +3947,8 @@ impl Matrix {
                 let b = g.read();
                 // Only the **supports** cross. The variable names do not: the
                 // transpose swaps the dual and primal *roles*, and a constraint
-                // gives those roles different names on each side (`imposed_T`
-                // against `lambda_T` at the multiplier). There is nothing to
+                // gives those roles different names on each side (`imposed`
+                // against `lambda` at the multiplier). There is nothing to
                 // compare there.
                 Handle::same_object(a.row_support(), b.col_support())
                     && Handle::same_object(a.col_support(), b.row_support())
@@ -3734,10 +3956,38 @@ impl Matrix {
         })
     }
 
+    /// Whether a block declares inequality relation rows
+    /// ([`SubMatrix::row_sense`]) — what sends a solve down the active-set
+    /// path. Read off the blocks, no assembly needed.
+    pub(crate) fn has_inequality(&self) -> bool {
+        self.iter().any(|h| {
+            let b = h.read();
+            b.row_sense != RelationSense::Equality && b.dual_vars.iter().any(|v| v == IMPOSED)
+        })
+    }
+
+    /// The sense of every **inequality** relation row, keyed by its multiplier
+    /// node — the row `(node, imposed)`. A relation row absent from the map is
+    /// an equation.
+    pub(crate) fn inequality_senses(&self) -> HashMap<NodeId, RelationSense> {
+        let mut senses = HashMap::new();
+        for h in self {
+            let b = h.read();
+            if b.row_sense == RelationSense::Equality || !b.dual_vars.iter().any(|v| v == IMPOSED) {
+                continue;
+            }
+            for &node in b.row_support.read().connectivity() {
+                senses.insert(node, b.row_sense);
+            }
+        }
+        senses
+    }
+
     /// Union of all row DOFs across blocks, in first-seen order.
     /// If finalized, returns the cached order (consistent with the CSR).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -3754,7 +4004,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Un DDL de ligne : (nœud, variable **duale**).
@@ -3771,6 +4021,7 @@ impl Matrix {
     /// If finalized, returns the cached order (consistent with the CSR).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -3787,7 +4038,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Un DDL de colonne : (nœud, variable **primale**).
@@ -3802,6 +4053,7 @@ impl Matrix {
     /// indexes. Interned once, rows and columns together.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -3818,7 +4070,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // The compact form and the named form say the same thing: names are
@@ -3841,6 +4093,7 @@ impl Matrix {
     /// assembler and the solver index with.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -3857,7 +4110,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // The compact form of a row DOF: the node, and the index of the
@@ -3892,6 +4145,7 @@ impl Matrix {
     /// of [`row_dof_keys`](Self::row_dof_keys).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -3908,7 +4162,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Same shape on the column side, over the **primal** variables.
@@ -3927,6 +4181,7 @@ impl Matrix {
     /// Union of all field names (dual + primal) across blocks.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -3943,7 +4198,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // interned once only, rows and columns together.
@@ -3952,6 +4207,7 @@ impl Matrix {
     /// ```
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -3968,7 +4224,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // interned once only, rows and columns together.
@@ -3990,6 +4246,7 @@ impl Matrix {
     /// Number of distinct row DOFs.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4006,7 +4263,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// assert_eq!(k.n_rows().unwrap(), 2); // two nodes, one dual variable
@@ -4018,6 +4275,7 @@ impl Matrix {
     /// Number of distinct column DOFs.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4034,7 +4292,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// assert_eq!(k.n_cols().unwrap(), 2);
@@ -4046,6 +4304,7 @@ impl Matrix {
     /// Total COO entries stored across all blocks (counting duplicates).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4062,7 +4321,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Counts the entries **stored** in the blocks. A *computed* block — what
@@ -4093,6 +4352,7 @@ impl Matrix {
     /// factors private, so it is out of reach here.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -4105,7 +4365,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// let k = matrix::stiffness(&model, &materials)?;
     /// // At least an index and a value per non-zero, counted independently on
@@ -4130,7 +4390,11 @@ impl Matrix {
 
     /// Sum of contributions at `(row, col)` across every block.
     ///
+    /// **Errors**: an unassembled matrix carrying a computed block — its values
+    /// do not exist until it is assembled.
+    ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4147,16 +4411,23 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Un SEG2 de longueur 1, k = 1 : K = [[1, -1], [-1, 1]].
-    /// assert_eq!(k.get(a.id(), "q", a.id(), "T"), 1.0);
-    /// assert_eq!(k.get(a.id(), "q", b.id(), "T"), -1.0);
+    /// assert_eq!(k.get(a.id(), "q", a.id(), "T")?, 1.0);
+    /// assert_eq!(k.get(a.id(), "q", b.id(), "T")?, -1.0);
     /// // A coordinate absent from the pattern is zero: reading does not raise.
-    /// assert_eq!(k.get(a.id(), "q", a.id(), "absente"), 0.0);
+    /// assert_eq!(k.get(a.id(), "q", a.id(), "absente")?, 0.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn get(&self, row_node: NodeId, row_field: &str, col_node: NodeId, col_field: &str) -> f64 {
+    pub fn get(
+        &self,
+        row_node: NodeId,
+        row_field: &str,
+        col_node: NodeId,
+        col_field: &str,
+    ) -> Result<f64> {
         // When assembled, the CSR is the source of truth — and the only place a
         // *computed* block's values live (its COO is empty). Fall back to the
         // per-block COO sum only for an unassembled (literal) matrix.
@@ -4167,21 +4438,30 @@ impl Matrix {
             };
             let r = find(&a.row_keys, row_node, row_field);
             let c = find(&a.col_keys, col_node, col_field);
-            return match (r, c) {
+            return Ok(match (r, c) {
                 (Some(r), Some(c)) => a.csr.slot(r, c).map_or(0.0, |k| a.csr.values[k]),
                 _ => 0.0,
-            };
+            });
+        }
+        if self.iter().any(|h| h.read().is_computed()) {
+            return Err(PyrucastError::Message(
+                "Matrix::get: this matrix carries a computed block that was never \
+                 assembled, so its values do not exist yet; assemble it first \
+                 (m.assemble())"
+                    .into(),
+            ));
         }
         let mut total = 0.0;
         for h in self {
-            total += h.read().get(row_node, row_field, col_node, col_field);
+            total += h.read().get(row_node, row_field, col_node, col_field)?;
         }
-        total
+        Ok(total)
     }
 
     /// All COO entries across every block, in block-insertion order.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4198,7 +4478,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // One 5-tuple per entry: row node, dual var, column node,
@@ -4226,6 +4506,7 @@ impl Matrix {
     /// read the assembled matrix, [`csr_arrays`](Self::csr_arrays) borrows it.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4242,7 +4523,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // The CSR **is** the assembled state: borrowed, not rebuilt.
@@ -4258,6 +4539,7 @@ impl Matrix {
     /// The reading form of [`to_csr`](Self::to_csr), copying nothing.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4274,7 +4556,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // The CSR's three arrays, borrowed — nothing is copied.
@@ -4292,6 +4574,7 @@ impl Matrix {
     /// Assembled dense matrix. Requires [`finalize`](Self::finalize).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4308,7 +4591,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // A nalgebra view (column-major), ready for LU or Cholesky.
@@ -4329,6 +4612,7 @@ impl Matrix {
     /// Row-major dense buffer. Requires [`finalize`](Self::finalize).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4345,7 +4629,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Vue dense ligne-major, longueur n_rows × n_cols.
@@ -4367,6 +4651,7 @@ impl Matrix {
     /// Assembled COO (rebuilt from the CSR). Requires [`finalize`](Self::finalize).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4383,7 +4668,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// assert_eq!(k.to_coo().unwrap().nnz(), 4);
@@ -4400,6 +4685,7 @@ impl Matrix {
     /// Assembled CSC. Requires [`finalize`](Self::finalize).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4416,7 +4702,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// assert_eq!(k.to_csc().unwrap().ncols(), 2);
@@ -4428,6 +4714,7 @@ impl Matrix {
     /// `y = A · x` (dense). Requires [`finalize`](Self::finalize).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4444,7 +4731,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // K · [1, 1] = 0: the rigid mode of a conduction.
@@ -4487,6 +4774,7 @@ impl Matrix {
     /// [`finalize`](Self::finalize) (the supports are structural).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4503,7 +4791,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Le support **ligne** : la cible de projection d'un second membre.
@@ -4519,6 +4807,7 @@ impl Matrix {
     /// field onto the exact supports of the solution before combining.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4535,7 +4824,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // The **column** support: that of a field being multiplied.
@@ -4558,6 +4847,7 @@ impl Matrix {
     /// call [`Matrix::assemble`] before handing it to a solver.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4573,7 +4863,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// # use pyrucast::models::Physics;
@@ -4584,13 +4874,57 @@ impl Matrix {
     /// assert!(k.filter(Physics::Mechanical).is_empty());
     /// ```
     pub fn filter(&self, physics: Physics) -> Matrix {
+        self.keep(|natures| natures.contains(&physics))
+    }
+
+    /// The complement of [`filter`](Self::filter): a fresh [`Matrix`] holding
+    /// only the blocks **whose nature set does not contain** the given
+    /// [`Physics`] — the matrix-side twin of
+    /// [`Model::exclude`](crate::containers::model::Model::exclude). The two
+    /// compose: a constraint's blocks carry the nature of the physics they pin,
+    /// so `filter(Thermal).exclude(Constraint)` keeps the conduction blocks
+    /// alone. Not assembled, like `filter`; an untagged block is never excluded.
+    ///
+    /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Physics, RelationSense};
+    /// # use pyrucast::ops::{element_field, matrix, mesh, model};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut maillage = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # maillage.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let appui = mesh::poi1_from_nodes(&[a.clone()]).unwrap();
+    /// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
+    /// let m = conduction.union(&model::dirichlet(&appui, &conduction, "T", RelationSense::Equality)?)?;
+    /// let materiaux = element_field::material_field(&m, &[("k", 1.0)])?;
+    /// let k = matrix::stiffness(&m, &materiaux)?;
+    /// // The conduction block plus the Dirichlet's C / Cᵀ pair, all thermal…
+    /// assert_eq!(k.filter(Physics::Thermal).len(), 3);
+    /// // …and the conduction block alone once the constraint is excluded.
+    /// assert_eq!(k.filter(Physics::Thermal).exclude(Physics::Constraint).len(), 1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn exclude(&self, physics: Physics) -> Matrix {
+        self.keep(|natures| !natures.contains(&physics))
+    }
+
+    /// The blocks whose nature set passes `keep`, handles shared.
+    fn keep(&self, keep: impl Fn(&[Physics]) -> bool) -> Matrix {
         // Built block by block rather than through `subset`: that one is
         // fallible on an out-of-range index, which selecting by predicate
         // cannot produce — and `Matrix` is the one aggregate with no
         // `check_push`, so appending never fails either.
         let mut out = Matrix::empty();
         for h in self {
-            if h.read().physics().contains(&physics) {
+            if keep(h.read().physics()) {
                 out.push(h.clone());
             }
         }
@@ -4604,6 +4938,7 @@ impl Matrix {
     /// a heat model with a Dirichlet → `[Thermal, Constraint]`).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4619,7 +4954,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// # use pyrucast::models::Physics;
@@ -4848,7 +5183,7 @@ impl Matrix {
     /// Columns carry the **primal** variables and rows the **dual** ones
     /// (`K · u = f`), so this maps a *primal* field (e.g. `"T"`, `"u"`) to a
     /// *dual* one (e.g. `"q"`). That is the exact mirror of
-    /// [`crate::ops::solver::lu::solve`], which reads a *dual* right-hand side at the
+    /// [`crate::ops::solver::solve`], which reads a *dual* right-hand side at the
     /// rows and produces a *primal* solution at the columns. Both use
     /// [`NodeField::gather`] / [`NodeField::from_dof_values`] to bridge the
     /// abstract field and the flat DOF vector. Requires
@@ -4984,23 +5319,71 @@ impl Matrix {
         *self.factorization.get_mut() = None;
     }
 
-    /// A fresh [`Matrix`] holding `self`'s blocks then `other`'s, **shared** and
-    /// deliberately **not** deduplicated — the engine behind `Add`/`Sub`.
+    /// `self + other`: the values each operand was assembled with, added over
+    /// the union of their DOFs, and the blocks of both, **shared** and
+    /// deliberately **not** deduplicated, to describe the result — the engine
+    /// behind `Add`/`Sub`.
+    ///
+    /// Nothing is evaluated again. A matrix is assembled once, on the
+    /// configuration active at that moment; a sum adds those values, whatever
+    /// configuration is active when it is taken. So a matrix assembled on the
+    /// reference and one assembled on the deformed shape add as they are.
     ///
     /// This is what parts `+` from `|`: [`Aggregate::union`] drops a block whose
-    /// slot it already holds, so `k | k` is `k`, whereas a sum must count a
-    /// contribution as many times as it is handed over — `k + k` is `2k`. The
-    /// assembler sums whatever lands on the same global `(row, col)` and walks
-    /// blocks by position, so a block present twice simply contributes twice.
+    /// slot it already holds, so `k | k` is `k`, whereas a sum counts a
+    /// contribution as many times as it is handed over — `k + k` is `2k`.
     ///
-    /// Like [`filter`](Self::filter), the result is **not assembled**.
-    fn concat(&self, other: &Matrix) -> Matrix {
+    /// **Errors**: an operand that carries a computed block and was never
+    /// assembled — its values do not exist yet. A literal-only operand is
+    /// finalized on the way.
+    fn added(&self, other: &Matrix) -> Result<Matrix> {
+        let (own_a, own_b);
+        let a = match &self.assembled {
+            Some(a) => a,
+            None => {
+                own_a = self.literal_values()?;
+                &own_a
+            }
+        };
+        let b = match &other.assembled {
+            Some(b) => b,
+            None => {
+                own_b = other.literal_values()?;
+                &own_b
+            }
+        };
         let mut out = Matrix::empty();
         for h in self.iter().chain(other.iter()) {
             out.push(h.clone());
         }
         out.post_push();
-        out
+        let coords = out.iter().next().map(|h| h.read().coords());
+        let coords = coords.as_ref().map(|c| c.read());
+        let perm = coords.as_ref().and_then(|c| c.permutation());
+        let values = a.sum(b, perm, out.symmetric());
+        drop(coords);
+        out.assembled = Some(values);
+        Ok(out)
+    }
+
+    /// The values of an unassembled operand of a sum, which only literal blocks
+    /// hold.
+    fn literal_values(&self) -> Result<AssembledData> {
+        if self.iter().any(|h| h.read().is_computed()) {
+            return Err(PyrucastError::Message(
+                "matrix sum: an operand carries a computed block that was never \
+                 assembled, so its values do not exist yet; assemble it first \
+                 (m.assemble()), on the configuration it belongs to"
+                    .into(),
+            ));
+        }
+        let mut literal = Matrix::empty();
+        for h in self {
+            literal.push(h.clone());
+        }
+        literal.post_push();
+        literal.finalize()?;
+        Ok(literal.assembled.take().expect("finalize assembles"))
     }
 }
 
@@ -5095,20 +5478,20 @@ impl std::ops::Neg for Matrix {
 
 // ─── Matrix algebra: `a + b`, `a - b` ───────────────────────────────────────
 //
-// A sum is **structural**: the result holds the blocks of both operands, shared
-// and not deduplicated, and the assembler does the adding — it already sums
-// whatever lands on the same global `(row, col)`. So `M/dt + K` costs a handful
-// of refcount bumps, no value is touched, and a computed block stays computed.
-// Like `filter`, the result is not assembled: `assemble()` before solving.
+// A sum adds **values**: each operand as it was assembled, on the configuration
+// active at that moment, added over the union of their DOFs. The result is
+// assembled and ready to solve; its blocks, both operands', shared and not
+// deduplicated, describe it. Nothing is evaluated again, so a matrix built on
+// the reference and one built on the deformed shape add as they are.
 //
 // This is where `+` parts from `|`. `union` drops a block it already holds, so
-// `k | k` is `k` — right for composing an operator out of distinct pieces,
-// wrong for a sum, which must count a contribution once per handing over.
-// `k + k` is `2k`. Reach for `|` to assemble one operator from its parts, for
-// `+` to add two operators.
+// `k | k` is `k` — a set of blocks, not assembled, that `assemble()` evaluates
+// on the configuration active then. A sum counts a contribution once per
+// handing over: `k + k` is `2k`.
 //
-// `a - b` negates `b`'s blocks, which copies them (the factor lives in the
-// block); `a + b` copies nothing.
+// **Fallible**: an operand that carries a computed block and was never
+// assembled has no values to add (`(&a + &b)?`). `a - b` adds `-b`, which
+// scales `b`'s values and copies its blocks (the factor lives in the block).
 
 impl SubMatrix {
     /// This block alone in a fresh one-block [`Matrix`], copied into a new store
@@ -5132,20 +5515,20 @@ impl SubMatrix {
 macro_rules! forward_ref_binop {
     ($trait:ident, $method:ident, $lhs:ty, $rhs:ty) => {
         impl std::ops::$trait<$rhs> for &$lhs {
-            type Output = Matrix;
-            fn $method(self, rhs: $rhs) -> Matrix {
+            type Output = Result<Matrix>;
+            fn $method(self, rhs: $rhs) -> Result<Matrix> {
                 std::ops::$trait::$method(self, &rhs)
             }
         }
         impl std::ops::$trait<&$rhs> for $lhs {
-            type Output = Matrix;
-            fn $method(self, rhs: &$rhs) -> Matrix {
+            type Output = Result<Matrix>;
+            fn $method(self, rhs: &$rhs) -> Result<Matrix> {
                 std::ops::$trait::$method(&self, rhs)
             }
         }
         impl std::ops::$trait<$rhs> for $lhs {
-            type Output = Matrix;
-            fn $method(self, rhs: $rhs) -> Matrix {
+            type Output = Result<Matrix>;
+            fn $method(self, rhs: $rhs) -> Result<Matrix> {
                 std::ops::$trait::$method(&self, &rhs)
             }
         }
@@ -5153,58 +5536,58 @@ macro_rules! forward_ref_binop {
 }
 
 impl std::ops::Add<&Matrix> for &Matrix {
-    type Output = Matrix;
-    fn add(self, rhs: &Matrix) -> Matrix {
-        self.concat(rhs)
+    type Output = Result<Matrix>;
+    fn add(self, rhs: &Matrix) -> Result<Matrix> {
+        self.added(rhs)
     }
 }
 
 impl std::ops::Sub<&Matrix> for &Matrix {
-    type Output = Matrix;
-    fn sub(self, rhs: &Matrix) -> Matrix {
-        self.concat(&rhs.map_blocks(|b| -b))
+    type Output = Result<Matrix>;
+    fn sub(self, rhs: &Matrix) -> Result<Matrix> {
+        self.added(&-rhs)
     }
 }
 
 impl std::ops::Add<&SubMatrix> for &Matrix {
-    type Output = Matrix;
-    fn add(self, rhs: &SubMatrix) -> Matrix {
-        self.concat(&rhs.as_matrix())
+    type Output = Result<Matrix>;
+    fn add(self, rhs: &SubMatrix) -> Result<Matrix> {
+        self.added(&rhs.as_matrix())
     }
 }
 
 impl std::ops::Sub<&SubMatrix> for &Matrix {
-    type Output = Matrix;
-    fn sub(self, rhs: &SubMatrix) -> Matrix {
-        self.concat(&rhs.as_negated_matrix())
+    type Output = Result<Matrix>;
+    fn sub(self, rhs: &SubMatrix) -> Result<Matrix> {
+        self.added(&rhs.as_negated_matrix())
     }
 }
 
 impl std::ops::Add<&Matrix> for &SubMatrix {
-    type Output = Matrix;
-    fn add(self, rhs: &Matrix) -> Matrix {
-        self.as_matrix().concat(rhs)
+    type Output = Result<Matrix>;
+    fn add(self, rhs: &Matrix) -> Result<Matrix> {
+        self.as_matrix().added(rhs)
     }
 }
 
 impl std::ops::Sub<&Matrix> for &SubMatrix {
-    type Output = Matrix;
-    fn sub(self, rhs: &Matrix) -> Matrix {
-        self.as_matrix().concat(&rhs.map_blocks(|b| -b))
+    type Output = Result<Matrix>;
+    fn sub(self, rhs: &Matrix) -> Result<Matrix> {
+        self.as_matrix().added(&-rhs)
     }
 }
 
 impl std::ops::Add<&SubMatrix> for &SubMatrix {
-    type Output = Matrix;
-    fn add(self, rhs: &SubMatrix) -> Matrix {
-        self.as_matrix().concat(&rhs.as_matrix())
+    type Output = Result<Matrix>;
+    fn add(self, rhs: &SubMatrix) -> Result<Matrix> {
+        self.as_matrix().added(&rhs.as_matrix())
     }
 }
 
 impl std::ops::Sub<&SubMatrix> for &SubMatrix {
-    type Output = Matrix;
-    fn sub(self, rhs: &SubMatrix) -> Matrix {
-        self.as_matrix().concat(&rhs.as_negated_matrix())
+    type Output = Result<Matrix>;
+    fn sub(self, rhs: &SubMatrix) -> Result<Matrix> {
+        self.as_matrix().added(&rhs.as_negated_matrix())
     }
 }
 
@@ -5438,7 +5821,7 @@ mod tests {
         let c = SubMatrix::new(
             sup_m.clone(),
             sup_a.clone(),
-            vec!["imposed_T".into()],
+            vec!["imposed".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Half(id_c),
@@ -5447,7 +5830,7 @@ mod tests {
             sup_a,
             sup_m,
             vec!["T".into()],
-            vec!["imposed_T".into()],
+            vec!["imposed".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Half(id_ct),
         );
@@ -5497,7 +5880,7 @@ mod tests {
             Symmetry::None,
         );
         // unknown field → 0.0
-        assert_eq!(m.get(nodes[0].id(), "x", nodes[0].id(), "y"), 0.0);
+        assert_eq!(m.get(nodes[0].id(), "x", nodes[0].id(), "y").unwrap(), 0.0);
     }
 
     #[test]
@@ -5515,7 +5898,7 @@ mod tests {
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", a, "T", 1.5).unwrap();
         m.add_entry(a, "q", a, "T", -0.5).unwrap();
-        assert_eq!(m.get(a, "q", a, "T"), 3.0);
+        assert_eq!(m.get(a, "q", a, "T").unwrap(), 3.0);
     }
 
     #[test]
@@ -5671,11 +6054,11 @@ mod tests {
         // Reference version clones, leaving `m` untouched.
         let scaled = &m * 3.0;
         assert_eq!(scaled.factor(), 3.0);
-        assert_eq!(scaled.get(a, "q", a, "T"), 6.0);
+        assert_eq!(scaled.get(a, "q", a, "T").unwrap(), 6.0);
         assert_eq!(scaled.dense(), vec![6.0]);
         assert_eq!(scaled.iter_entries()[0].4, 6.0);
         assert_eq!(
-            m.get(a, "q", a, "T"),
+            m.get(a, "q", a, "T").unwrap(),
             2.0,
             "reference Mul must not mutate m"
         );
@@ -5683,7 +6066,7 @@ mod tests {
         // Consuming version chains: ×3 then ÷2 ⇒ factor 1.5.
         let halved = scaled / 2.0;
         assert_eq!(halved.factor(), 1.5);
-        assert_eq!(halved.get(a, "q", a, "T"), 3.0);
+        assert_eq!(halved.get(a, "q", a, "T").unwrap(), 3.0);
         assert_eq!(halved.to_coo().values(), &[3.0]);
         assert_eq!(halved.to_csr().values(), &[3.0]);
         assert_eq!(halved.to_csc().values(), &[3.0]);
@@ -5783,10 +6166,10 @@ mod tests {
         m.add_entry(a, "p", c, "u", 1.0).unwrap();
         m.add_entry(b, "p", d, "v", 2.0).unwrap();
         m.add_entry(a, "q", c, "v", 3.0).unwrap();
-        assert_eq!(m.get(a, "p", c, "u"), 1.0);
-        assert_eq!(m.get(b, "p", d, "v"), 2.0);
-        assert_eq!(m.get(a, "q", c, "v"), 3.0);
-        assert_eq!(m.get(b, "q", d, "u"), 0.0);
+        assert_eq!(m.get(a, "p", c, "u").unwrap(), 1.0);
+        assert_eq!(m.get(b, "p", d, "v").unwrap(), 2.0);
+        assert_eq!(m.get(a, "q", c, "v").unwrap(), 3.0);
+        assert_eq!(m.get(b, "q", d, "u").unwrap(), 0.0);
 
         // row_dofs in VarsThenNodes order: (p,a),(p,b),(q,a),(q,b)
         let rdofs = m.row_dofs();
@@ -5813,7 +6196,7 @@ mod tests {
         // With NodesThenVars: row 0 = (node_a, p), row 1 = (node_a, q),
         //                     row 2 = (node_b, p), row 3 = (node_b, q)
         m.add_entry(a, "p", c, "u", 7.0).unwrap();
-        assert_eq!(m.get(a, "p", c, "u"), 7.0);
+        assert_eq!(m.get(a, "p", c, "u").unwrap(), 7.0);
 
         let rdofs = m.row_dofs();
         assert_eq!(rdofs[0], (a, "p".to_string()));
@@ -5942,16 +6325,16 @@ mod tests {
         assert!(!orig_h.same_object(scaled_h));
 
         // Values diverge accordingly: the source is untouched.
-        assert_eq!(orig.get(a, "q", a, "T"), 2.0);
-        assert_eq!(orig.get(b, "q", b, "T"), 3.0);
-        assert_eq!(scaled.get(a, "q", a, "T"), 20.0);
-        assert_eq!(scaled.get(b, "q", b, "T"), 30.0);
+        assert_eq!(orig.get(a, "q", a, "T").unwrap(), 2.0);
+        assert_eq!(orig.get(b, "q", b, "T").unwrap(), 3.0);
+        assert_eq!(scaled.get(a, "q", a, "T").unwrap(), 20.0);
+        assert_eq!(scaled.get(b, "q", b, "T").unwrap(), 30.0);
 
         // `/` divides the factor, chaining from the already-scaled matrix.
         let halved = &scaled / 2.0;
-        assert_eq!(halved.get(a, "q", a, "T"), 10.0);
+        assert_eq!(halved.get(a, "q", a, "T").unwrap(), 10.0);
         assert_eq!(
-            scaled.get(a, "q", a, "T"),
+            scaled.get(a, "q", a, "T").unwrap(),
             20.0,
             "/ must not mutate its source either"
         );
@@ -5991,7 +6374,7 @@ mod tests {
 
         // Assembled on arrival: no `finalize()` / `assemble()` in between.
         assert_eq!(scaled.to_csr().unwrap().values(), &[6.0, 6.0]);
-        assert_eq!(scaled.get(a, "q", a, "T"), 6.0);
+        assert_eq!(scaled.get(a, "q", a, "T").unwrap(), 6.0);
         // The sparsity is untouched, so the index arrays are *shared*, not copied.
         let (ka, sa) = (
             k.assembled.as_ref().unwrap(),
@@ -6028,7 +6411,7 @@ mod tests {
             slot,
             "sole owner: in place"
         );
-        assert_eq!(scaled.get(a, "q", a, "T"), 6.0);
+        assert_eq!(scaled.get(a, "q", a, "T").unwrap(), 6.0);
 
         // Now with a second holder of the same block.
         let shared = diag(&sup, &[a], 2.0);
@@ -6036,9 +6419,9 @@ mod tests {
         let slot = shared.iter().next().unwrap().id();
         let scaled = shared * 3.0;
         assert_ne!(scaled.iter().next().unwrap().id(), slot, "shared: rebuilt");
-        assert_eq!(scaled.get(a, "q", a, "T"), 6.0);
+        assert_eq!(scaled.get(a, "q", a, "T").unwrap(), 6.0);
         assert_eq!(
-            alias.get(a, "q", a, "T"),
+            alias.get(a, "q", a, "T").unwrap(),
             2.0,
             "the aliasing matrix is spared"
         );
@@ -6052,15 +6435,14 @@ mod tests {
         let a = nodes[0].id();
         let k = diag(&sup, &[a], 2.0);
 
-        let mut sum = &k + &k;
-        sum.finalize().unwrap();
+        let sum = (&k + &k).unwrap();
         assert_eq!(sum.len(), 2);
-        assert_eq!(sum.get(a, "q", a, "T"), 4.0, "k + k is 2k");
+        assert_eq!(sum.get(a, "q", a, "T").unwrap(), 4.0, "k + k is 2k");
 
         let mut union = k.union(&k).unwrap();
         union.finalize().unwrap();
         assert_eq!(union.len(), 1);
-        assert_eq!(union.get(a, "q", a, "T"), 2.0, "k | k is k");
+        assert_eq!(union.get(a, "q", a, "T").unwrap(), 2.0, "k | k is k");
 
         // The sum shares its operands' blocks — nothing is copied.
         assert!(sum
@@ -6069,10 +6451,10 @@ mod tests {
             .unwrap()
             .same_object(k.iter().next().unwrap()));
         // …and leaves the source alone.
-        assert_eq!(k.get(a, "q", a, "T"), 2.0);
+        assert_eq!(k.get(a, "q", a, "T").unwrap(), 2.0);
     }
 
-    /// `a - b` negates the right-hand side's blocks, which copies them; `a + b`
+    /// `a - b` adds the negated right-hand side, whose blocks are copies; `a + b`
     /// copies nothing. Both leave their operands alone.
     #[test]
     fn difference_negates_only_the_right_hand_side() {
@@ -6081,20 +6463,22 @@ mod tests {
         let x = diag(&sup, &[a], 5.0);
         let y = diag(&sup, &[a], 2.0);
 
-        let mut d = &x - &y;
-        d.finalize().unwrap();
-        assert_eq!(d.get(a, "q", a, "T"), 3.0);
-        assert_eq!(y.get(a, "q", a, "T"), 2.0, "the subtrahend is untouched");
+        let d = (&x - &y).unwrap();
+        assert_eq!(d.get(a, "q", a, "T").unwrap(), 3.0);
+        assert_eq!(
+            y.get(a, "q", a, "T").unwrap(),
+            2.0,
+            "the subtrahend is untouched"
+        );
         assert!(!d
             .iter()
             .nth(1)
             .unwrap()
             .same_object(y.iter().next().unwrap()));
 
-        // A matrix minus itself is zero — the structural sum, then the assembler.
-        let mut z = &x - &x;
-        z.finalize().unwrap();
-        assert_eq!(z.get(a, "q", a, "T"), 0.0);
+        // A matrix minus itself is zero.
+        let z = (&x - &x).unwrap();
+        assert_eq!(z.get(a, "q", a, "T").unwrap(), 0.0);
     }
 
     /// The scalar reads on either side, and the unary minus agrees with `× -1`.
@@ -6104,9 +6488,12 @@ mod tests {
         let a = nodes[0].id();
         let k = diag(&sup, &[a], 2.0);
 
-        assert_eq!((2.0 * &k).get(a, "q", a, "T"), 4.0);
-        assert_eq!((-&k).get(a, "q", a, "T"), -2.0);
-        assert_eq!((-&k).get(a, "q", a, "T"), (&k * -1.0).get(a, "q", a, "T"));
+        assert_eq!((2.0 * &k).get(a, "q", a, "T").unwrap(), 4.0);
+        assert_eq!((-&k).get(a, "q", a, "T").unwrap(), -2.0);
+        assert_eq!(
+            (-&k).get(a, "q", a, "T").unwrap(),
+            (&k * -1.0).get(a, "q", a, "T").unwrap()
+        );
 
         // On a block too.
         let blk = (*k.iter().next().unwrap().read()).clone();
@@ -6122,18 +6509,15 @@ mod tests {
         let k = diag(&sup, &[a], 2.0);
         let blk = (*k.iter().next().unwrap().read()).clone();
 
-        for mut s in [&k + &blk, &blk + &k] {
-            s.finalize().unwrap();
+        for s in [(&k + &blk).unwrap(), (&blk + &k).unwrap()] {
             assert_eq!(s.len(), 2);
-            assert_eq!(s.get(a, "q", a, "T"), 4.0);
+            assert_eq!(s.get(a, "q", a, "T").unwrap(), 4.0);
         }
-        let mut two_blocks = &blk + &blk;
-        two_blocks.finalize().unwrap();
-        assert_eq!(two_blocks.get(a, "q", a, "T"), 4.0);
+        let two_blocks = (&blk + &blk).unwrap();
+        assert_eq!(two_blocks.get(a, "q", a, "T").unwrap(), 4.0);
 
-        let mut d = &k - &blk;
-        d.finalize().unwrap();
-        assert_eq!(d.get(a, "q", a, "T"), 0.0);
+        let d = (&k - &blk).unwrap();
+        assert_eq!(d.get(a, "q", a, "T").unwrap(), 0.0);
     }
 
     /// A divisor no matrix survives is refused at the operator, not left to
@@ -6211,12 +6595,12 @@ mod tests {
 
         assert_eq!(sys.n_rows().unwrap(), 3);
         assert_eq!(sys.n_cols().unwrap(), 3);
-        assert_eq!(sys.get(a, "q", a, "T"), 2.0 + 8.0);
-        assert_eq!(sys.get(a, "q", b, "T"), -1.0);
-        assert_eq!(sys.get(b, "q", a, "T"), -1.0);
-        assert_eq!(sys.get(b, "q", b, "T"), 2.0 + 8.0);
+        assert_eq!(sys.get(a, "q", a, "T").unwrap(), 2.0 + 8.0);
+        assert_eq!(sys.get(a, "q", b, "T").unwrap(), -1.0);
+        assert_eq!(sys.get(b, "q", a, "T").unwrap(), -1.0);
+        assert_eq!(sys.get(b, "q", b, "T").unwrap(), 2.0 + 8.0);
         // Untouched by M (which doesn't carry the c DOF at all).
-        assert_eq!(sys.get(c, "q", c, "T"), 5.0);
+        assert_eq!(sys.get(c, "q", c, "T").unwrap(), 5.0);
     }
 
     #[test]
@@ -6540,22 +6924,22 @@ mod tests {
         let mut c = SubMatrix::new(
             mult.clone(),
             phys.clone(),
-            vec!["imposed_T".into()],
+            vec!["imposed".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
         );
-        c.add_entry(mult_node.id(), "imposed_T", phys_nodes[0].id(), "T", 1.0)
+        c.add_entry(mult_node.id(), "imposed", phys_nodes[0].id(), "T", 1.0)
             .unwrap();
         let mut ct = SubMatrix::new(
             phys.clone(),
             mult.clone(),
             vec!["q".into()],
-            vec!["lambda_T".into()],
+            vec!["lambda".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
         );
-        ct.add_entry(phys_nodes[0].id(), "q", mult_node.id(), "lambda_T", 1.0)
+        ct.add_entry(phys_nodes[0].id(), "q", mult_node.id(), "lambda", 1.0)
             .unwrap();
 
         let mut m = Matrix::empty();
@@ -6673,13 +7057,12 @@ mod tests {
         let mut c = SubMatrix::new(
             mult.clone(),
             phys.clone(),
-            vec!["imposed_T".into()],
+            vec!["imposed".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
         );
-        c.add_entry(nm.id(), "imposed_T", n0.id(), "T", 1.0)
-            .unwrap();
+        c.add_entry(nm.id(), "imposed", n0.id(), "T", 1.0).unwrap();
         let mut m = Matrix::empty();
         m.add_sub(Handle::new(k)).unwrap();
         m.add_sub(Handle::new(c)).unwrap();
@@ -6729,21 +7112,21 @@ mod tests {
         }
 
         // Zone-aligned residual: q combines (not passthrough) on phys.
-        // K·x: q = 2 at n0 and n1; C·x contributes imposed_T = 1 at nm.
+        // K·x: q = 2 at n0 and n1; C·x contributes imposed = 1 at nm.
         let r = (&f_ext_r - &f_int).unwrap();
         assert_eq!(r.value(n0.id(), "q").unwrap(), 3.0); // 5 − 2 ⇒ aligned
         assert_eq!(r.value(n1.id(), "q").unwrap(), 3.0);
-        // `imposed_T` exists on the f_int side only (restrict carries the
+        // `imposed` exists on the f_int side only (restrict carries the
         // source field's components) ⇒ union semantics pass it through RAW
         // (+1, not −1) — the documented `merge_components` behaviour.
-        assert_eq!(r.value(nm.id(), "imposed_T").unwrap(), 1.0);
+        assert_eq!(r.value(nm.id(), "imposed").unwrap(), 1.0);
 
         // Strict residual (every component subtracted, missing read as 0):
         // reproject onto f_int's exact supports AND components.
         let f_ext_like = crate::ops::node_field::restrict_like(&f_ext, &f_int).unwrap();
         let r2 = (&f_ext_like - &f_int).unwrap();
         assert_eq!(r2.value(n0.id(), "q").unwrap(), 3.0);
-        assert_eq!(r2.value(nm.id(), "imposed_T").unwrap(), -1.0); // 0 − 1
+        assert_eq!(r2.value(nm.id(), "imposed").unwrap(), -1.0); // 0 − 1
     }
 
     /// Row-side twin: zones on the blocks' row supports, dual variables.

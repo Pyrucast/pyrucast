@@ -25,22 +25,23 @@
 //!
 //! ## What is exchanged is the caller's to say
 //!
-//! The sub-model is given `(primal, dual)` pairs and derives everything from
+//! The sub-model is given the exchanged variables and derives everything from
 //! them — the DOF names it couples into, the coefficient `h_<primal>` it reads,
-//! the flux `flux_<primal>` it reports. Passing `("T", "q")` reproduces the
-//! classical thermal film; passing the three displacement pairs gives an elastic
+//! the flux `flux_<primal>` it reports. Passing `["T"]` reproduces the
+//! classical thermal film; passing the displacements gives an elastic
 //! foundation, with a stiffness per direction. The names being those of the bulk
 //! physics is what makes the boundary term **couple straight into** it, exactly
 //! as it always did for conduction.
 //!
-//! ## The nature comes from the target
+//! ## The dual and the nature come from the target
 //!
-//! The pairs name rows of a physics that already exists, so the exchange is
-//! built **against** it: the model it couples into is passed as `target`, and
-//! every pair must be one that model assembles. That is the proof the term
-//! lands somewhere — a mistyped name used to build an exchange coupled to
-//! nothing — and it gives the nature for free: `("T", "q")` does not say it is
-//! thermal, the conduction that assembles it does.
+//! The variables are unknowns of a physics that already exists, so the
+//! exchange is built **against** it: the model it couples into is passed as
+//! `target`, every variable must be one of its unknowns, and the row each one
+//! couples into is the dual that model pairs it with. That is the proof the
+//! term lands somewhere — a mistyped name used to build an exchange coupled to
+//! nothing — and it gives the nature for free: `"T"` does not say it is
+//! thermal, the conduction that declares it does.
 //!
 //! **No normal is needed.** The normal is already consumed in passing from `q·n`
 //! to `h·(a − a_ext)`; what remains under the integral is a scalar times the
@@ -59,8 +60,7 @@ use crate::dump::DumpOptions;
 use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::transfer::{
-    ambient_name, coefficient_name, exchange_matrix, material_contract, physics_slice,
-    target_physics,
+    ambient_name, coefficient_name, exchange_matrix, material_contract, physics_slice, target_pairs,
 };
 use crate::models::ElementLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
@@ -73,6 +73,7 @@ use serde::{Deserialize, Serialize};
 /// the boundary cells of the material field.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -91,8 +92,8 @@ use serde::{Deserialize, Serialize};
 /// # let zone = fes.get(0).unwrap();
 /// // The surface exchange, against the conduction it cools: naming its DOFs
 /// // is what makes the term couple to it.
-/// let conduction = model::heat_conduction(&fes)?;
-/// let b = BoundaryTransfer::new(zone, &conduction, vec![("T".into(), "q".into())])?;
+/// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
+/// let b = BoundaryTransfer::new(zone, &conduction, vec!["T".into()])?;
 /// assert_eq!(b.primal_vars(), vec!["T".to_string()]);
 /// assert_eq!(b.material_components(), vec!["h_T".to_string(), "a_ext_T".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -104,7 +105,8 @@ pub struct BoundaryTransfer {
     /// once at construction. Reused as the row/col support of every assembled
     /// film block — no per-assembly rebuild.
     pub(crate) support: Handle<SubMesh>,
-    /// The transferred quantities, as `(primal, dual)` pairs.
+    /// The transferred quantities, as `(primal, dual)` pairs — the duals read
+    /// from the target at construction.
     pub(crate) components: Vec<(String, String)>,
     /// The physics nature this exchange belongs to — what `model.filter(…)`
     /// selects it by. The variable names are free and cannot imply it, so it
@@ -117,16 +119,18 @@ impl BoundaryTransfer {
     /// surface mesh in 3-D), coupling into `target`.
     ///
     /// `target` is the model whose unknowns the exchange acts on. Every
-    /// `(primal, dual)` pair must be one it assembles — `primal` among its
-    /// unknowns, paired with the row `dual` — and all must belong to one
-    /// nature, which the exchange then carries.
+    /// variable must be one of its unknowns, the row it couples into is the
+    /// dual `target` pairs it with, and all must belong to one nature, which
+    /// the exchange then carries.
     ///
     /// Builds the stable POI1 [`SubMesh`] covering the subspace's unique nodes
     /// (reused as the row/col support of every assembled block). Errors on an
-    /// empty `components`, on a pair `target` does not assemble, and on pairs
-    /// of two natures.
+    /// empty `variables`, on a variable `target` does not declare, and on
+    /// variables of two natures.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -144,19 +148,17 @@ impl BoundaryTransfer {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// let conduction = model::heat_conduction(&fes)?;
-    /// // The kind is not an argument: it comes from the conduction, which
-    /// // assemble `T` et `q`.
-    /// let film = BoundaryTransfer::new(zone.clone(), &conduction, vec![("T".into(), "q".into())])?;
+    /// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
+    /// // Neither the dual nor the kind is an argument: both come from the
+    /// // conduction, which pairs `T` with `q`.
+    /// let film = BoundaryTransfer::new(zone.clone(), &conduction, vec!["T".into()])?;
     /// assert_eq!(film.physics(), &[Physics::Thermal]);
-    /// // A pair the target does not assemble would couple to nothing: refused.
-    /// assert!(BoundaryTransfer::new(zone.clone(), &conduction, vec![("u_x".into(), "f_x".into())])
-    ///     .is_err());
+    /// assert_eq!(film.dual_vars(), vec!["q".to_string()]);
+    /// // A variable the target does not declare would couple to nothing: refused.
+    /// assert!(BoundaryTransfer::new(zone.clone(), &conduction, vec!["u_x".into()]).is_err());
     /// // An exchange carries one kind: thermal and mechanical mixed, refused.
-    /// let deux = conduction.union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
-    /// assert!(BoundaryTransfer::new(
-    ///     zone.clone(), &deux, vec![("T".into(), "q".into()), ("u_x".into(), "f_x".into())])
-    ///     .is_err());
+    /// let deux = conduction.union(&model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?)?;
+    /// assert!(BoundaryTransfer::new(zone.clone(), &deux, vec!["T".into(), "u_x".into()]).is_err());
     /// // Une liste vide n'a ni matrice ni coefficient : refusée.
     /// assert!(BoundaryTransfer::new(zone, &conduction, vec![]).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -164,10 +166,10 @@ impl BoundaryTransfer {
     pub fn new(
         fespace: Handle<SubFiniteElementSpace>,
         target: &Model,
-        components: Vec<(String, String)>,
+        variables: Vec<String>,
     ) -> Result<Self> {
-        material_contract("BoundaryTransfer", &components)?;
-        let physics = target_physics("BoundaryTransfer", target, &components)?;
+        material_contract("BoundaryTransfer", &variables)?;
+        let (components, physics) = target_pairs("BoundaryTransfer", target, &variables)?;
         let submesh = fespace.read().submesh();
         let support = submesh.read().to_poi1()?;
         Ok(Self {
@@ -368,18 +370,19 @@ impl BoundaryTransfer {
 
 crate::physics_operator! {
     /// Surface exchange `Model` spanning **every** subspace of a *boundary*
-    /// `fes` — one [`SubModel::BoundaryTransfer`] per
+    /// `fespace` — one [`SubModel::BoundaryTransfer`] per
     /// [`SubFiniteElementSpace`].
     /// Parent-level operator; the coefficients `h_<primal>` and the ambients
     /// `a_ext_<primal>` are supplied at assembly time. Couples into `target`,
     /// the bulk physics whose DOFs it names and whose nature it takes:
     ///
     /// ```text
-    /// let conduction = model::heat_conduction(&bulk)?;
-    /// conduction.union(&model::boundary_transfer(&skin, &conduction, vec![("T".into(), "q".into())])?)?
+    /// let conduction = model::heat_conduction(&bulk, MaterialSymmetry::Isotropic)?;
+    /// conduction.union(&model::boundary_transfer(&skin, &conduction, vec!["T".into()])?)?
     /// ```
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -397,14 +400,15 @@ crate::physics_operator! {
     /// # let mut bord = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # bord.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let fes_bord = FiniteElementSpace::lagrange1(&Mesh::from_submesh(bord))?;
-    /// let conduction = model::heat_conduction(&fes)?;
-    /// let film = model::boundary_transfer(&fes_bord, &conduction, vec![("T".into(), "q".into())])?;
+    /// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
+    /// let film = model::boundary_transfer(&fes_bord, &conduction, vec!["T".into()])?;
     /// assert_eq!(film.primal_vars(), vec!["T".to_string()]);
+    /// assert_eq!(film.dual_vars(), vec!["q".to_string()]);
     /// // United with the conduction, it files under the same kind as it.
     /// let m = conduction.union(&film)?;
     /// assert_eq!(m.filter(Physics::Thermal).len(), 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn boundary_transfer(fes, target, components: Vec<(String, String)>) via SubModel::boundary_transfer;
-    python: "`model.boundary_transfer(fespace, target, components)` — surface\nexchange with an **imposed ambient** (Robin / film) spanning every\nsubspace of a *boundary* `fespace` (edge mesh in 2-D, surface mesh in\n3-D), coupling into the model `target`.\n\n`components` is a list of `(primal, dual)` pairs, each one that `target`\nassembles — naming the bulk physics' own DOFs is what makes the boundary\nterm couple into it:\n\n| `target` | `components` | you get |\n|---|---|---|\n| `heat_conduction` | `[(\"T\", \"q\")]` | Newton's law of cooling |\n| `fick(..., \"H2\")` | `[(\"c_H2\", \"j_H2\")]` | a surface mass-transfer law |\n| `elasticity` | `[(\"u_x\", \"f_x\"), (\"u_y\", \"f_y\")]` | a Winkler elastic foundation |\n\nThe nature (`\"thermal\"`, `\"diffusion\"`, `\"mechanical\"`) is not an\nargument: it is the one of the sub-model of `target` assembling the pairs.\nA pair `target` does not assemble, or pairs of two natures, raise.\n\nMaterial, per pair: the coefficient `h_<primal>` and the ambient\n`a_ext_<primal>`. The film `h∫NᵢNⱼ` goes into the stiffness, the ambient\nterm `h·a_ext·∫Nᵢ dΓ` comes out of `node_field.external_forces(...)`.\nCompose with `|`:\n`conduction = model.heat_conduction(bulk)`\n`model = conduction | model.boundary_transfer(skin, conduction, [(\"T\", \"q\")])`."
+    pub fn boundary_transfer(fespace, target, variables: Vec<String>) via SubModel::boundary_transfer;
+    python: "`model.boundary_transfer(fespace, target, variables)` — surface\nexchange with an **imposed ambient** (Robin / film) spanning every\nsubspace of a *boundary* `fespace` (edge mesh in 2-D, surface mesh in\n3-D), coupling into the model `target`.\n\n`variables` lists the exchanged unknowns of `target`; each couples into\nthe dual row `target` pairs it with — naming the bulk physics' own DOFs is\nwhat makes the boundary term couple into it:\n\n| `target` | `variables` | you get |\n|---|---|---|\n| `heat_conduction` | `[\"T\"]` | Newton's law of cooling |\n| `fick(..., \"H2\")` | `[\"c_H2\"]` | a surface mass-transfer law |\n| `elasticity` | `[\"u_x\", \"u_y\"]` | a Winkler elastic foundation |\n\nNeither the dual row nor the nature (`\"thermal\"`, `\"diffusion\"`,\n`\"mechanical\"`) is an argument: both are read from `target`. A variable\n`target` does not declare, or variables of two natures, raise.\n\nMaterial, per variable: the coefficient `h_<variable>` and the ambient\n`a_ext_<variable>`. The film `h∫NᵢNⱼ` goes into the stiffness, the ambient\nterm `h·a_ext·∫Nᵢ dΓ` comes out of `node_field.external_forces(...)`.\nCompose with `|`:\n`conduction = model.heat_conduction(bulk)`\n`model = conduction | model.boundary_transfer(skin, conduction, [\"T\"])`."
 }

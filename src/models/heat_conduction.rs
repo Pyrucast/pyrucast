@@ -11,6 +11,7 @@ use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::matrix::Symmetry;
 use crate::containers::mesh::SubMesh;
+use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
 use crate::error::Result;
 use crate::handle::Handle;
@@ -19,7 +20,9 @@ use crate::models::owned_components;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
-use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{
+    Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
+};
 use serde::{Deserialize, Serialize};
 
 /// Column DOF name (temperature).
@@ -192,7 +195,8 @@ fn flux_components(space_dim: usize) -> Vec<String> {
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::heat_conduction::{self, HeatConduction};
-/// let hc = HeatConduction::new(zone.clone())?;
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// let hc = HeatConduction::new(zone.clone(), MaterialSymmetry::Isotropic)?;
 /// assert_eq!(hc.primal_vars(), vec![heat_conduction::PRIMAL_VAR.to_string()]);
 /// assert_eq!(hc.dual_vars(), vec![heat_conduction::DUAL_VAR.to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -209,20 +213,19 @@ pub struct HeatConduction {
 }
 
 impl HeatConduction {
-    /// **Isotropic** heat-conduction physics on an FE subspace. Builds the stable
+    /// Heat conduction on an FE subspace, with the given material symmetry. An
+    /// orthotropic or anisotropic conductivity carries its material axes through
+    /// the material field (see [`crate::models::symmetry`]). Builds the stable
     /// POI1 [`SubMesh`] covering the subspace's unique nodes (reused as the
     /// row/col support of every assembled block).
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::element_field::SubElementField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::{DofOrdering};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::kernel::assemble_block;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -231,58 +234,16 @@ impl HeatConduction {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
-    /// #     zone.clone(), vec!["k".into()], &[2.0]).unwrap());
     /// # use pyrucast::models::heat_conduction::HeatConduction;
     /// # use pyrucast::models::Domain;
-    /// // Builds the stable POI1 of the zone's nodes, reused as the row and column
-    /// // support of **every** assembled block.
-    /// let hc = HeatConduction::new(zone.clone())?;
+    /// let hc = HeatConduction::new(zone.clone(), MaterialSymmetry::Isotropic)?;
     /// assert_eq!(hc.material_components(), vec!["k".to_string()]);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
-        Self::with_symmetry(fespace, MaterialSymmetry::Isotropic)
-    }
-
-    /// Heat conduction with an explicit material symmetry — the general
-    /// constructor, of which [`new`](Self::new) is the isotropic case. An
-    /// orthotropic or anisotropic conductivity carries its material axes through
-    /// the material field (see [`crate::models::symmetry`]).
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::element_field::SubElementField;
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::{DofOrdering};
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::kernel::assemble_block;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
-    /// #     zone.clone(), vec!["k".into()], &[2.0]).unwrap());
-    /// # use pyrucast::models::heat_conduction::HeatConduction;
-    /// # use pyrucast::models::Domain;
-    /// // The general constructor, of which `new` is the isotropic case.
-    /// let ortho = HeatConduction::with_symmetry(zone.clone(), MaterialSymmetry::Orthotropic)?;
+    /// // An orthotropic conductivity reads its principal values and its axes.
+    /// let ortho = HeatConduction::new(zone.clone(), MaterialSymmetry::Orthotropic)?;
     /// assert!(ortho.material_components().len() > 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn with_symmetry(
-        fespace: Handle<SubFiniteElementSpace>,
-        symmetry: MaterialSymmetry,
-    ) -> Result<Self> {
+    pub fn new(fespace: Handle<SubFiniteElementSpace>, symmetry: MaterialSymmetry) -> Result<Self> {
         let (submesh, space_dim) = {
             let s = fespace.read();
             (s.submesh(), s.space_dim())
@@ -447,6 +408,10 @@ impl Behavior for HeatConduction {
         deformation_components(self.space_dim)
     }
 
+    fn strain_operator(&self) -> StrainOperator {
+        StrainOperator::Gradient
+    }
+
     fn integrate_point(
         &self,
         geom: &CellGeom,
@@ -528,30 +493,29 @@ pub fn element_stiffness(
 ) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let space_dim = geom.space_dim;
-    let cell_row = material.row(geom.cell, 0);
-    // An oriented conductivity is built **once per cell** — its constants and its
-    // material axes are cell-wise. Isotropy keeps reading its scalar at each
-    // Gauss point, so a conductivity varying inside a cell still works.
-    let tensor = if symmetry.has_frame() {
-        Some(symmetry::transport_tensor_by(
-            cell_row,
-            cell_row,
-            &lay.material,
-            symmetry,
-            space_dim,
-        )?)
-    } else {
-        None
-    };
+    // Everything is read at the Gauss point — the constants and the material
+    // axes of an oriented conductivity as much as an isotropic scalar: a
+    // material field may vary inside a cell, and the law reads it there.
+    let oriented = symmetry.has_frame();
     let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
     for g in 0..geom.n_gauss {
         let dn = &mut dn_buf[..n_nodes * geom.space_dim];
         geom.dn_dx(g, dn)?;
         let det_j_w = geom.det_j_w(g);
+        let row = material.row(geom.cell, g);
+        let tensor = if oriented {
+            Some(symmetry::transport_tensor_from(
+                |k| row[lay.material[k] as usize],
+                symmetry,
+                space_dim,
+            )?)
+        } else {
+            None
+        };
         match &tensor {
             None => {
                 // The scalar conductivity, by the index the zone resolved.
-                let k = material.row(geom.cell, g)[lay.material[0] as usize];
+                let k = row[lay.material[0] as usize];
                 for i in 0..n_nodes {
                     for j in 0..n_nodes {
                         let mut grad_dot = 0.0;
@@ -584,7 +548,8 @@ pub fn element_stiffness(
 /// Element kernel: local **heat-capacity** (mass) matrix of one cell,
 ///   `C_local[i, j] = Σ_g ρ·cp · N_i N_j · |J|_g · w_g`,
 /// written into `ke` (flat row-major, side `n_nodes`, `ke[i * n_nodes + j]`).
-/// Density `rho` and specific heat `cp` are read per cell. Pure and sequential.
+/// Density `rho` and specific heat `cp` are read at every Gauss point. Pure and
+/// sequential.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -636,20 +601,20 @@ pub fn element_capacity(
     // `rho` and `cp` are the two optional components of the conduction contract
     // (`CAPACITY_COMPONENTS`): the conductivity assembly never asks for them,
     // the capacity cannot do without.
-    let row = material.row(geom.cell, 0);
-    let read = |slot: usize, what: &str| -> Result<f64> {
+    let slot = |slot: usize, what: &str| -> Result<usize> {
         match lay.optional_material[slot] {
             ABSENT_COMPONENT => Err(crate::error::PyrucastError::Message(format!(
                 "HeatConduction capacity matrix: material component `{}` ({what}) is required",
                 CAPACITY_COMPONENTS[slot]
             ))),
-            i => Ok(row[i as usize]),
+            i => Ok(i as usize),
         }
     };
-    let rho_cp = read(0, "density")? * read(1, "specific heat")?;
+    let (rho, cp) = (slot(0, "density")?, slot(1, "specific heat")?);
     for g in 0..geom.n_gauss {
         let n = geom.n_at_g(g);
-        let w = geom.det_j_w(g) * rho_cp;
+        let row = material.row(geom.cell, g);
+        let w = geom.det_j_w(g) * row[rho] * row[cp];
         for i in 0..n_nodes {
             for j in 0..n_nodes {
                 ke[i * n_nodes + j] += n[i] * n[j] * w;
@@ -686,7 +651,7 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        HeatConduction::new(fes.get(0).unwrap()).unwrap()
+        HeatConduction::new(fes.get(0).unwrap(), MaterialSymmetry::Isotropic).unwrap()
     }
 
     #[test]
@@ -724,4 +689,48 @@ mod tests {
             assert!((flux.value(0, g, "flux_x").unwrap() - expected).abs() < 1e-12);
         }
     }
+}
+
+crate::physics_operator! {
+    /// Heat-conduction `Model` spanning **every** subspace of `fespace` — one
+    /// [`SubModel::HeatConduction`] per [`SubFiniteElementSpace`].
+    ///
+    /// This is the parent-level operator (see `CONVENTIONS.md`): it consumes the
+    /// FE-space *parent* and returns a `Model`, so the caller never builds a
+    /// `SubModel` by hand. A single-subspace `fespace` yields the unit case; several
+    /// subspaces yield one zone each. Compose heterogeneous physics with `union`
+    /// (Python `|`).
+    ///
+    /// `symmetry` selects the conductivity the material field must carry: the
+    /// scalar `k`, the principal `k_1…` (orthotropic) or the symmetric tensor
+    /// `k_11…` (anisotropic), the two oriented ones with the material axes. It
+    /// is supplied at assembly time.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// // One sub-model per subspace: the model covers the **whole** FE space.
+    /// let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
+    /// assert_eq!(m.len(), fes.len());
+    /// assert_eq!(m.primal_vars(), vec!["T".to_string()]);
+    /// // An oriented conductivity reads its constants and its axes.
+    /// let ortho = model::heat_conduction(&fes, MaterialSymmetry::Orthotropic)?;
+    /// let reads = ortho.get(0).unwrap().read().material_components().unwrap();
+    /// assert!(reads.contains(&"V1X".to_string()));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn heat_conduction(fespace, symmetry: MaterialSymmetry = MaterialSymmetry::Isotropic) via SubModel::heat_conduction;
+    python: "`model.heat_conduction(fespace, symmetry=\"isotropic\")` — heat-conduction\nmodel spanning **every** subspace of `fespace` (one zone per subspace). A\nsingle-subspace space gives the unit case; several give one zone each. Compose\nheterogeneous physics with `|`: `model.heat_conduction(fes) | model.dirichlet(...)`.\n\n`symmetry` is `\"isotropic\"` (the default), `\"orthotropic\"` or\n`\"anisotropic\"`, and selects which conductivity the material field must\ncarry: the scalar `k`, the principal `k_1, k_2, k_3`, or the symmetric\ntensor `k_11 … k_33`. The two oriented ones also require the material\naxes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z` in 3-D."
 }

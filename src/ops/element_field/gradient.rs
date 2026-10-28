@@ -6,10 +6,10 @@
 //! [`crate::ops::element_field::deformation`](fn@crate::ops::element_field::deformation) (the symmetric gradient).
 
 use crate::aggregate::Aggregate;
-use crate::containers::element_field::ElementField;
+use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::Field;
-use crate::containers::finite_element_space::FiniteElementSpace;
-use crate::containers::node_field::NodeField;
+use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+use crate::containers::node_field::{NodeField, NodeFieldView};
 use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::kernel;
@@ -72,37 +72,46 @@ pub fn gradient(field: &NodeField, fespace: &FiniteElementSpace) -> Result<Eleme
     let view = field.view()?;
     let mut out = ElementField::empty();
     for sub in fespace {
-        let space_dim = sub.read().space_dim();
-        let mut names = Vec::with_capacity(components.len() * space_dim);
-        for comp in &components {
-            for a in 0..space_dim {
-                names.push(format!("grad_{comp}_{}", AXES[a]));
-            }
-        }
-        // Point kernel: ∂(comp)/∂x_a = Σ_i f_i · ∂N_i/∂x_a, laid out
-        // component-major then axis (grad_<comp>_x, grad_<comp>_y, …).
-        let nc = components.len();
-        let sf = kernel::nodal_pointwise(sub, &view, &components, names, |geom, g, dofs, out| {
-            let sd = geom.space_dim;
-            let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
-            let dn_dx = &mut dn_buf[..geom.n_nodes * sd];
-            geom.dn_dx(g, dn_dx)?;
-            let mut oc = 0;
-            for c in 0..nc {
-                for a in 0..sd {
-                    let mut grad = 0.0;
-                    for i in 0..geom.n_nodes {
-                        grad += dofs[i * nc + c] * dn_dx[i * sd + a];
-                    }
-                    out[oc] = grad;
-                    oc += 1;
-                }
-            }
-            Ok(())
-        })?;
-        out.add_sub(Handle::new(sf))?;
+        out.add_sub(Handle::new(gradient_zone(sub, &view, &components)?))?;
     }
     Ok(out)
+}
+
+/// [`gradient`] of the named `components` on one zone — the per-zone body
+/// shared with [`strain`](fn@crate::ops::element_field::strain).
+pub(crate) fn gradient_zone(
+    sub: &Handle<SubFiniteElementSpace>,
+    view: &NodeFieldView,
+    components: &[String],
+) -> Result<SubElementField> {
+    let space_dim = sub.read().space_dim();
+    let mut names = Vec::with_capacity(components.len() * space_dim);
+    for comp in components {
+        for a in 0..space_dim {
+            names.push(format!("grad_{comp}_{}", AXES[a]));
+        }
+    }
+    // Point kernel: ∂(comp)/∂x_a = Σ_i f_i · ∂N_i/∂x_a, laid out
+    // component-major then axis (grad_<comp>_x, grad_<comp>_y, …).
+    let nc = components.len();
+    kernel::nodal_pointwise(sub, view, components, names, |geom, g, dofs, out| {
+        let sd = geom.space_dim;
+        let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
+        let dn_dx = &mut dn_buf[..geom.n_nodes * sd];
+        geom.dn_dx(g, dn_dx)?;
+        let mut oc = 0;
+        for c in 0..nc {
+            for a in 0..sd {
+                let mut grad = 0.0;
+                for i in 0..geom.n_nodes {
+                    grad += dofs[i * nc + c] * dn_dx[i * sd + a];
+                }
+                out[oc] = grad;
+                oc += 1;
+            }
+        }
+        Ok(())
+    })
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────

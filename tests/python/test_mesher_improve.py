@@ -2,9 +2,8 @@
 
 import math
 
-import pytest
-
 import pyrucast as pc
+import pytest
 
 
 def _circle(n=60, size=0.05):

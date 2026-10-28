@@ -58,6 +58,28 @@ fn une_seconde_configuration_clone_la_courante() {
 }
 // ANCHOR_END: configurations
 
+// ANCHOR: in_config
+#[test]
+fn calculer_dans_une_autre_configuration() -> pyrucast::Result<()> {
+    use pyrucast::atoms::Node;
+    use pyrucast::handle::Handle;
+    use pyrucast::ops::coords as ops_coords;
+
+    let coords = Handle::new(Coords::new(2)?);
+    let n = Node::create_in(coords.clone(), &[1.0, 0.0])?;
+    let deformee = coords.write().add_config("deformed");
+
+    // Le bloc voit `deformee` ; la configuration d'avant revient à la sortie,
+    // même si le bloc échoue ou panique.
+    ops_coords::in_config(&coords, deformee, || n.set_position(&[1.5, 0.0]))?;
+    let x = ops_coords::in_config(&coords, deformee, || n.position())?;
+
+    assert_eq!(x, vec![1.5, 0.0]);
+    assert_eq!(n.position()?, vec![1.0, 0.0]); // la référence, de nouveau active
+    Ok(())
+}
+// ANCHOR_END: in_config
+
 // ANCHOR: permutation
 #[test]
 fn une_permutation_renumerote_pour_le_solveur() {

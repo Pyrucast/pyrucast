@@ -6,11 +6,16 @@ use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
 use crate::models::RelationSense;
 
-/// Dirichlet `Model` (a single sub-model) constraining `imposed_variable`
-/// on the nodes of `imposed_mesh` via Lagrange multipliers carried by
-/// `multiplier_mesh`. Parent-level operator — see
-/// [`SubModel::dirichlet`] for the semantics of the four variable names
-/// and the two meshes.
+/// Dirichlet `Model` (a single sub-model) constraining `variable`, a primal of
+/// `target`, on the nodes of `imposed_mesh` via Lagrange multipliers, one per
+/// node on a node of its own. Parent-level operator — see
+/// [`SubModel::dirichlet`] and
+/// [`Dirichlet::new`](crate::models::dirichlet::Dirichlet::new) for the
+/// variable names and the errors.
+///
+/// The support comes first, then the model it constrains, as for every
+/// operator of [`crate::ops::model`]. The Python face defaults `sense` to
+/// `RelationSense::Equality`.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -34,28 +39,18 @@ use crate::models::RelationSense;
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
-/// // Le modèle complet d'un problème thermique : la physique, puis l'appui.
-/// let m = model::heat_conduction(&fes)?.union(
-///     &model::dirichlet(&cible, "T", &impose, &mult,
-///                       RelationSense::Equality)?)?;
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
+/// // The whole model of a thermal problem: the physics, then the support.
+/// let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?.union(
+///     &model::dirichlet(&impose, &cible, "T", RelationSense::Equality)?)?;
 /// assert_eq!(m.len(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-#[allow(clippy::too_many_arguments)]
 pub fn dirichlet(
+    imposed_mesh: &Mesh,
     target: &Model,
     variable: &str,
-    imposed_mesh: &Mesh,
-    multiplier_mesh: &Mesh,
     sense: RelationSense,
 ) -> Result<Model> {
-    single(SubModel::dirichlet(
-        target,
-        variable,
-        imposed_mesh,
-        multiplier_mesh,
-        sense,
-    )?)
+    single(SubModel::dirichlet(imposed_mesh, target, variable, sense)?)
 }

@@ -78,11 +78,11 @@ use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::element_field::{deformation, StrainMeasure};
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::select_nodes;
-use pyrucast::ops::mesh::{line, sweep, to_poi1, translate};
+use pyrucast::ops::mesh::{line, sweep, to_poi1};
 use pyrucast::ops::model;
 use pyrucast::ops::node_field::{external_forces, internal_forces};
 use pyrucast::ops::node_field::{positions, restrict, restrict_like};
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 /// Depth of the Anderson history (number of `(u, g)` pairs kept).
@@ -171,32 +171,26 @@ fn main() -> Result<()> {
 
     // ── Model: plasticity (plane stress) + clamped end (Dirichlet) ──────────
     println!("▸ Model: J2 plasticity (plane stress) + clamped end…");
-    let mut model = model::plasticity_perfect(&fes, Kinematics::PlaneStress)?;
+    let mut model =
+        model::plasticity_perfect(&fes, Kinematics::PlaneStress, StrainMeasure::Linear)?;
     let imposed_mesh = to_poi1(&left_edge)?;
-    let multiplier = translate(&imposed_mesh, &[0., 0.])?;
     model = model.union(&model::dirichlet(
+        &imposed_mesh,
         &model,
         "u_x",
-        &imposed_mesh,
-        &multiplier,
         Default::default(),
     )?)?;
     model = model.union(&model::dirichlet(
+        &imposed_mesh,
         &model,
         "u_y",
-        &imposed_mesh,
-        &multiplier,
         Default::default(),
     )?)?;
 
     // The reference load is a term of the model: it joins the model, and its
     // density joins the material.
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
-    let model = model.union(&pyrucast::ops::model::flux(
-        &right_fes,
-        &model,
-        "f_y".into(),
-    )?)?;
+    let model = model.union(&pyrucast::ops::model::flux(&right_fes, &model, "f_y")?)?;
     let materials = material_field(
         &model,
         &[

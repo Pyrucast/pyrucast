@@ -51,6 +51,7 @@ use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::matrix::Symmetry;
 use crate::containers::mesh::SubMesh;
+use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
@@ -58,7 +59,9 @@ use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
-use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{
+    Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
+};
 use serde::{Deserialize, Serialize};
 
 /// Column DOF name of a species — `c_H2`.
@@ -218,8 +221,9 @@ fn flux_components(space_dim: usize, species: &str) -> Vec<String> {
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::fick::{self, Fick};
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// // The species names everything: the concentration, the flux, the diffusivity.
-/// let f = Fick::new(zone.clone(), "H2")?;
+/// let f = Fick::new(zone.clone(), "H2", MaterialSymmetry::Isotropic)?;
 /// assert_eq!(f.primal_vars(), vec![fick::primal_var("H2")]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -235,41 +239,8 @@ pub struct Fick {
 }
 
 impl Fick {
-    /// **Isotropic** Fickian diffusion of `species` on an FE subspace.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::element_field::SubElementField;
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::{DofOrdering};
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::kernel::assemble_block;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
-    /// #     zone.clone(), vec!["D_H2".into()], &[2.0]).unwrap());
-    /// # use pyrucast::models::fick::Fick;
-    /// # use pyrucast::models::SubModelKind;
-    /// let f = Fick::new(zone.clone(), "H2")?;
-    /// assert_eq!(f.primal_vars(), vec!["c_H2".to_string()]);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn new(fespace: Handle<SubFiniteElementSpace>, species: &str) -> Result<Self> {
-        Self::with_symmetry(fespace, MaterialSymmetry::Isotropic, species)
-    }
-
-    /// Fickian diffusion with an explicit material symmetry — the general
-    /// constructor, of which [`new`](Self::new) is the isotropic case.
+    /// Fickian diffusion of `species` on an FE subspace, with the given
+    /// material symmetry.
     ///
     /// The species names the concentration, the flux and the diffusivity; an
     /// empty one is refused, since it would give back the bare `c`/`j` the
@@ -278,13 +249,10 @@ impl Fick {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::element_field::SubElementField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::{DofOrdering};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::kernel::assemble_block;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -293,22 +261,20 @@ impl Fick {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
-    /// #     zone.clone(), vec!["D_H2".into()], &[2.0]).unwrap());
     /// # use pyrucast::models::fick::Fick;
     /// # use pyrucast::models::SubModelKind;
-    /// let f = Fick::with_symmetry(zone.clone(), MaterialSymmetry::Isotropic, "H2")?;
+    /// let f = Fick::new(zone.clone(), "H2", MaterialSymmetry::Isotropic)?;
+    /// assert_eq!(f.primal_vars(), vec!["c_H2".to_string()]);
     /// assert_eq!(f.dual_vars(), vec!["j_H2".to_string()]);
     /// // An empty species is refused: it would give back the bare `c`/`j` the
     /// // suffix exists precisely to avoid.
-    /// assert!(Fick::with_symmetry(zone.clone(), MaterialSymmetry::Isotropic, "").is_err());
+    /// assert!(Fick::new(zone.clone(), "", MaterialSymmetry::Isotropic).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn with_symmetry(
+    pub fn new(
         fespace: Handle<SubFiniteElementSpace>,
-        symmetry: MaterialSymmetry,
         species: &str,
+        symmetry: MaterialSymmetry,
     ) -> Result<Self> {
         if species.is_empty() {
             return Err(PyrucastError::Message(
@@ -481,6 +447,10 @@ impl Behavior for Fick {
         gradient_components(self.space_dim, &self.species)
     }
 
+    fn strain_operator(&self) -> StrainOperator {
+        StrainOperator::Gradient
+    }
+
     fn integrate_point(
         &self,
         geom: &CellGeom,
@@ -560,30 +530,29 @@ pub fn element_stiffness(
 ) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let space_dim = geom.space_dim;
-    let cell_row = material.row(geom.cell, 0);
-    // An oriented diffusivity is built once per cell; the isotropic scalar is
-    // read at each Gauss point, so it may vary inside a cell. The species no
-    // longer travels down here: naming `D_<species>` is the zone's business,
-    // and it did it once — this reads `lay.material` and never a name.
-    let tensor = if symmetry.has_frame() {
-        Some(symmetry::transport_tensor_by(
-            cell_row,
-            cell_row,
-            &lay.material,
-            symmetry,
-            space_dim,
-        )?)
-    } else {
-        None
-    };
+    // Everything is read at the Gauss point, the axes of an oriented
+    // diffusivity included: a material field may vary inside a cell. The
+    // species no longer travels down here: naming `D_<species>` is the zone's
+    // business, and it did it once — this reads `lay.material` and never a name.
+    let oriented = symmetry.has_frame();
     let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
     for g in 0..geom.n_gauss {
         let dn = &mut dn_buf[..n_nodes * geom.space_dim];
         geom.dn_dx(g, dn)?;
         let det_j_w = geom.det_j_w(g);
+        let row = material.row(geom.cell, g);
+        let tensor = if oriented {
+            Some(symmetry::transport_tensor_from(
+                |k| row[lay.material[k] as usize],
+                symmetry,
+                space_dim,
+            )?)
+        } else {
+            None
+        };
         match &tensor {
             None => {
-                let d = material.row(geom.cell, g)[lay.material[0] as usize];
+                let d = row[lay.material[0] as usize];
                 for i in 0..n_nodes {
                     for j in 0..n_nodes {
                         let mut grad_dot = 0.0;
@@ -669,16 +638,54 @@ pub fn element_storage(
                 "Fick storage matrix: material component `poro` (storage coefficient) is required"
                     .into(),
             )),
-            i => material.row(geom.cell, 0)[i as usize],
+            i => i as usize,
         };
     for g in 0..geom.n_gauss {
         let n = geom.n_at_g(g);
-        let det_j_w = geom.det_j_w(g);
+        // Read at the point: a storage coefficient may vary inside a cell.
+        let det_j_w = geom.det_j_w(g) * material.row(geom.cell, g)[poro];
         for i in 0..n_nodes {
             for j in 0..n_nodes {
-                ke[i * n_nodes + j] += poro * n[i] * n[j] * det_j_w;
+                ke[i * n_nodes + j] += n[i] * n[j] * det_j_w;
             }
         }
     }
     Ok(())
+}
+
+crate::physics_operator! {
+    /// Fickian-diffusion `Model` of one named `species`, spanning **every**
+    /// subspace of `fespace` — one [`SubModel::Fick`] per [`SubFiniteElementSpace`].
+    /// Parent-level operator.
+    ///
+    /// Every name carries the species: DOFs `c_<species>` / `j_<species>`, the
+    /// diffusivity `D_<species>`. `symmetry` selects the diffusivity the
+    /// material field must carry: `D_<species>`, the principal `D_1_<species>…`
+    /// (orthotropic) or the symmetric tensor `D_11_<species>…` (anisotropic),
+    /// the two oriented ones with the material axes. It is supplied at assembly
+    /// time.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// let m = model::fick(&fes, "H2", MaterialSymmetry::Isotropic)?;
+    /// assert_eq!(m.primal_vars(), vec!["c_H2".to_string()]);
+    /// let ortho = model::fick(&fes, "H2", MaterialSymmetry::Orthotropic)?;
+    /// assert_eq!(ortho.dual_vars(), vec!["j_H2".to_string()]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn fick(fespace, species: &str, symmetry: MaterialSymmetry = MaterialSymmetry::Isotropic) via SubModel::fick;
+    python: "`model.fick(fespace, species, symmetry=\"isotropic\")` — Fickian diffusion of\none named **species**, spanning every subspace of `fespace`.\n\nEvery name carries the species: DOFs are `c_<species>` (primal) and\n`j_<species>` (dual), the diffusivity is `D_<species>`, the reported flux\n`j_<species>_x…`. Two species therefore share a mesh without colliding —\nand no bare `c` can be mistaken for anything else. Its physics nature is\n`\"diffusion\"`, so `model.filter(\"diffusion\")` isolates it from a thermal\nor mechanical model it is composed with.\n\n`symmetry` is `\"isotropic\"` (the default), `\"orthotropic\"` or\n`\"anisotropic\"`, selecting the diffusivity the material field must carry:\n`D_<species>`, `D_1_<species> …`, or the symmetric `D_11_<species> …` —\nthe oriented ones plus the material axes `V1X, V1Y, …`. Those axes and\nthe optional storage `poro` keep **bare** names: they belong to the\nmedium, not to what diffuses through it."
 }

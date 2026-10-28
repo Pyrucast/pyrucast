@@ -130,6 +130,20 @@ impl PyCoords {
         self.handle.read().names().to_vec()
     }
 
+    /// `with coords.in_config(config):` — the block runs with configuration
+    /// `config` active; the configuration active on entry is active again
+    /// after it, after an exception too. Everything the block computes on the
+    /// geometry (matrices, normals, measures) sees `config`. The lock is taken
+    /// on entry and on exit only, so the block may nest another `in_config`.
+    /// An index out of range raises on entry, before the block runs.
+    fn in_config(&self, config: usize) -> PyInConfig {
+        PyInConfig {
+            handle: self.handle.clone(),
+            config,
+            previous: Vec::new(),
+        }
+    }
+
     /// Current node permutation (a renumbering), or `None` if unset.
     fn permutation(&self) -> Option<Vec<u32>> {
         self.handle.read().permutation().map(|s| s.to_vec())
@@ -148,3 +162,43 @@ impl PyCoords {
 }
 
 crate::impl_dump_pymethod!(handle PyCoords, handle);
+
+/// The context `Coords.in_config(config)` returns: entering makes `config`
+/// active, leaving makes the configuration found on entry active again.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(name = "InConfig")]
+pub struct PyInConfig {
+    handle: Handle<Coords>,
+    config: usize,
+    /// The configurations found on entry, innermost last: the same context
+    /// may be entered again inside itself.
+    previous: Vec<usize>,
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyInConfig {
+    /// Make the configuration active, remembering the one found.
+    fn __enter__(&mut self) -> PyResult<()> {
+        let mut c = self.handle.write();
+        let previous = c.active();
+        c.select(self.config)?;
+        self.previous.push(previous);
+        Ok(())
+    }
+
+    /// Make the configuration found on entry active again; an exception
+    /// raised in the block goes on.
+    fn __exit__(
+        &mut self,
+        _exc_type: &Bound<'_, PyAny>,
+        _exc_value: &Bound<'_, PyAny>,
+        _traceback: &Bound<'_, PyAny>,
+    ) -> PyResult<bool> {
+        let previous = self.previous.pop().ok_or_else(|| {
+            pyo3::exceptions::PyRuntimeError::new_err("in_config: left without being entered")
+        })?;
+        self.handle.write().select(previous)?;
+        Ok(false)
+    }
+}

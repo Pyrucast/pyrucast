@@ -17,9 +17,9 @@
 //!              before/after reference
 //!   thermal-lu        n×n×n HEX8 heat conduction, bottom face held by
 //!                     Lagrange multipliers, through the public
-//!                     `solver::lu::solve` — the path a user's script takes
+//!                     `solver::solve` — the path a user's script takes
 //!   thermal-cholesky  the same cube, constraints eliminated, then Cholesky
-//!                     (`solver::eliminate`) — the SPD path
+//!                     (`relations: Eliminate`) — the SPD path
 //!   n          grid size → n×n×n HEX8 cells, 3-D elasticity (default 20)
 //! ```
 //!
@@ -33,7 +33,7 @@
 //! so running two paths in one process would report the worse of the two for
 //! both.
 //!
-//! The solve modes mirror `ops::solver::lu` rather than calling it: its entry
+//! The solve modes mirror the LU path of `ops::solver` rather than calling it: its entry
 //! points are `pub(crate)`, and a binary is a separate crate. They are kept
 //! faithful to it by hand — if that module's handover to faer changes, they
 //! change with it.
@@ -59,8 +59,10 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::material_field;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::{matrix, model};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -206,12 +208,18 @@ fn build_cube(n: usize) -> (Model, ElementField) {
         }
     }
     let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    let model = model::elasticity(&fes, Kinematics::Full3D).unwrap();
+    let model = model::elasticity(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )
+    .unwrap();
     let materials = material_field(&model, &[("E", 210e9), ("nu", 0.3)]).unwrap();
     (model, materials)
 }
 
-/// CSR → CSC by counting sort, as `ops::solver::lu::transpose_to_csc` does.
+/// CSR → CSC by counting sort, as the LU path of `ops::solver` does.
 fn transpose_to_csc(
     n: usize,
     offsets: &[usize],
@@ -250,7 +258,7 @@ fn thermal(n: usize, eliminate: bool) {
     use pyrucast::aggregate::Aggregate;
     use pyrucast::containers::node_field::NodeField;
     use pyrucast::models::RelationSense;
-    use pyrucast::ops::solver::lu::{SolveMethod, SolveOptions};
+    use pyrucast::ops::solver::{RelationMethod, SolveMethod, SolveOptions};
     use pyrucast::ops::{mesh, solver};
 
     let path = if eliminate {
@@ -293,14 +301,10 @@ fn thermal(n: usize, eliminate: bool) {
         }
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let bottom = mesh::poi1_from_nodes(&nodes[..side * side]).unwrap();
-        let mult = mesh::barycenter(&bottom).unwrap();
-        let conduction = model::heat_conduction(&fes).unwrap();
-        let m = conduction
-            .union(
-                &model::dirichlet(&conduction, "T", &bottom, &mult, RelationSense::Equality)
-                    .unwrap(),
-            )
-            .unwrap();
+        let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
+        let clamp = model::dirichlet(&bottom, &conduction, "T", RelationSense::Equality).unwrap();
+        let mult = clamp.multiplier_mesh().unwrap();
+        let m = conduction.union(&clamp).unwrap();
         let materials = material_field(&m, &[("k", 1.0)]).unwrap();
         (m, materials, nodes, mult)
     });
@@ -313,14 +317,14 @@ fn thermal(n: usize, eliminate: bool) {
         bytes(nnz * 16 + (ndof + 1) * 8),
         nnz as f64 / ndof as f64
     );
-    let rhs = NodeField::from_submesh(&mult.get(0).unwrap(), vec!["imposed_T".into()]).unwrap();
+    let rhs = NodeField::from_submesh(&mult.get(0).unwrap(), vec!["imposed".into()]).unwrap();
     {
         let zone = rhs.get(0).unwrap();
         let mut guard = zone.write();
         let sm = mult.get(0).unwrap();
         let ids: Vec<NodeId> = sm.read().node_index().keys().copied().collect();
         for id in ids {
-            guard.set_value(id, "imposed_T", 1.0).unwrap();
+            guard.set_value(id, "imposed", 1.0).unwrap();
         }
     }
     let options = SolveOptions {
@@ -329,15 +333,16 @@ fn thermal(n: usize, eliminate: bool) {
         } else {
             SolveMethod::Lu
         },
+        relations: if eliminate {
+            RelationMethod::Eliminate
+        } else {
+            RelationMethod::Lagrange
+        },
         cache: false,
         ..Default::default()
     };
     let (u, anon, file) = stage_peaks("solve (factorize + substitute)", || {
-        if eliminate {
-            solver::eliminate::solve_with_options(&k, &m, &rhs, &options).unwrap()
-        } else {
-            solver::lu::solve_with_options(&k, &rhs, &options).unwrap()
-        }
+        solver::solve_with_options(&k, &rhs, &options).unwrap()
     });
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     let mut counted = 0usize;
@@ -371,7 +376,7 @@ fn thermal(n: usize, eliminate: bool) {
 }
 
 /// A constrained thermal bar of `n` SEG2, solved through the public
-/// `solver::lu::solve`, reported as a hash of the **bit patterns** of its
+/// `solver::solve`, reported as a hash of the **bit patterns** of its
 /// solution.
 ///
 /// The acceptance check for any change to the handover to faer: what reaches
@@ -394,25 +399,22 @@ fn solve_fingerprint(n: usize) -> (usize, u64) {
     let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap();
-    let mult = mesh::barycenter(&imposed).unwrap();
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
+    let clamp = model::dirichlet(&imposed, &conduction, "T", RelationSense::Equality).unwrap();
+    let mult = clamp.multiplier_mesh().unwrap();
     let mult_node = mult.node(0, 0, 0).unwrap();
-    let conduction = model::heat_conduction(&fes).unwrap();
-    let m = conduction
-        .union(
-            &model::dirichlet(&conduction, "T", &imposed, &mult, RelationSense::Equality).unwrap(),
-        )
-        .unwrap();
+    let m = conduction.union(&clamp).unwrap();
     let materials = material_field(&m, &[("k", 1.0)]).unwrap();
     let k = matrix::stiffness(&m, &materials).unwrap();
 
-    let rhs = NodeField::from_submesh(&mult.get(0).unwrap(), vec!["imposed_T".into()]).unwrap();
+    let rhs = NodeField::from_submesh(&mult.get(0).unwrap(), vec!["imposed".into()]).unwrap();
     rhs.get(0)
         .unwrap()
         .write()
-        .set_value(mult_node.id(), "imposed_T", 1.0)
+        .set_value(mult_node.id(), "imposed", 1.0)
         .unwrap();
 
-    let u = solver::lu::solve(&k, &rhs).unwrap();
+    let u = solver::solve(&k, &rhs).unwrap();
     // FNV-1a over each value's raw bits, in node order — deterministic, and
     // sensitive to the last bit.
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;

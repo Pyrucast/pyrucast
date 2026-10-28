@@ -1,9 +1,6 @@
 """Python tests for FiniteElementSpace + SubFiniteElementSpace (Phase 2 step 5)."""
 
-import math
-
 import pyrucast
-
 
 # ─── Structural acceptance / rejection ──────────────────────────────────────
 

@@ -354,7 +354,7 @@ impl Cube {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::HEX8));
         mesh.add_cell(&nodes.iter().map(|n| n.id()).collect::<Vec<_>>())?;
         let fes = FiniteElementSpace::lagrange1(&mesh)?;
-        let model = model::plasticity_with_law(&fes, Kinematics::Full3D, law)?;
+        let model = model::plasticity(&fes, Kinematics::Full3D, law, StrainMeasure::Linear)?;
         let materials = material_field(&model, material)?;
         Ok(Self {
             nodes,
@@ -450,7 +450,7 @@ impl Cube {
                     &format!("f_{}", AXES[ia]),
                     self.nodes[jn].id(),
                     &format!("u_{}", AXES[ja]),
-                );
+                )?;
                 if (fd - analytic).abs() > tol * (analytic.abs() + 1.0) {
                     return Err(pyrucast::PyrucastError::Message(format!(
                         "K_t[{i},{j}] analytic {analytic} vs symmetrised finite difference {fd}"

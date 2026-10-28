@@ -1,5 +1,5 @@
 //! Node-to-surface contact exercised end-to-end through the public API —
-//! the `Contact` sub-model + the active-set solver.
+//! the `Contact` sub-model + the active-set loop of `solve`.
 //!
 //! **Patch test** (2-D, plane stress, `ν = 0`): two elastic blocks stacked in
 //! `y` with an initial gap `g₀`, every `u_x` blocked (uniaxial column). A
@@ -14,12 +14,15 @@ use pyrucast::atoms::{ElementType, Node, NodeId};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
+use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
-use pyrucast::ops::mesh;
+use pyrucast::models::Constraint;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::model;
-use pyrucast::ops::solver::unilateral;
+use pyrucast::ops::solver;
 use pyrucast::Result;
 
 const E: f64 = 100.0;
@@ -58,13 +61,12 @@ fn block(coords: &Handle<Coords>, y0: f64) -> Result<(Vec<Node>, SubMesh)> {
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
 fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-    let multiplier = mesh::barycenter(&imposed)?;
-    model::dirichlet(target, var, &imposed, &multiplier, Default::default())
+    model::dirichlet(&imposed, target, var, Default::default())
 }
 
 /// The full two-block setup. Returns the two node grids, the assembled model
-/// (elasticity + rollers + contact), the contact model object (for
-/// `contact_gaps` / multiplier reads) and the material field.
+/// (elasticity + rollers + contact), the contact model object (for its gap and
+/// multiplier reads) and the material field.
 struct TwoBlocks {
     bottom: Vec<Node>,
     top: Vec<Node>,
@@ -93,11 +95,16 @@ fn two_blocks() -> Result<TwoBlocks> {
     let slave_nodes_v: Vec<Node> = (0..=N).map(|i| top[idx(i, 0)].clone()).collect();
     let slave = Mesh::from_submesh(SubMesh::poi1_from_nodes(&slave_nodes_v)?);
 
-    let elasticite = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let elasticite = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     let contact = model::contact(
-        &elasticite,
         &slave,
         &master,
+        &elasticite,
         vec!["u_x".into(), "u_y".into()],
     )?;
 
@@ -105,7 +112,12 @@ fn two_blocks() -> Result<TwoBlocks> {
     let all_nodes: Vec<Node> = bottom.iter().chain(top.iter()).cloned().collect();
     let bottom_edge: Vec<Node> = (0..=N).map(|i| bottom[idx(i, 0)].clone()).collect();
 
-    let mut model = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let mut model = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     model = model.union(&clamp(&model, &all_nodes, "u_x")?)?;
     model = model.union(&clamp(&model, &bottom_edge, "u_y")?)?;
     model = model.union(&contact)?;
@@ -138,18 +150,16 @@ fn patch_test_uniform_pressure_through_contact() -> Result<()> {
     let top_fes = FiniteElementSpace::lagrange1(&top_edge)?;
     // The pressure is a term of the model: it joins it, its density joins
     // the material, and we ask it for its contribution.
-    let model = tb
-        .model
-        .union(&model::flux(&top_fes, &tb.model, "f_y".into())?)?;
+    let model = tb.model.union(&model::flux(&top_fes, &tb.model, "f_y")?)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", E), ("nu", 0.0), ("phi_f_y", -S)],
     )?;
-    let traction = pyrucast::ops::node_field::external_forces(&model, &materials)?;
-    let rhs = traction.union(&model.contact_gaps()?)?;
+    // The pressure and the contact's own gap: every load the model carries.
+    let rhs = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
-    let solution = unilateral::solve(&k, &model, &rhs)?;
+    let solution = solver::solve(&k, &rhs)?;
 
     // Bottom block: u_y = −(S/E)·y; top block: −(S/E)·y shifted by the closed
     // gap (its own coordinates start at 1 + g₀ but its base lands at the
@@ -183,7 +193,7 @@ fn patch_test_uniform_pressure_through_contact() -> Result<()> {
     };
     let mut total = 0.0;
     for (r, m) in mults.iter().enumerate() {
-        let lambda = solution.value(*m, "lambda_contact")?;
+        let lambda = solution.value(*m, "lambda")?;
         assert!(
             lambda <= TOL,
             "active ≥ relation {r} must carry λ ≤ 0, got {lambda}"
@@ -218,10 +228,12 @@ fn separation_releases_every_pair() -> Result<()> {
                 .map(|n| (n.id(), lift))
                 .collect::<Vec<_>>(),
         )?
-        .union(&model.contact_gaps()?)?;
+        .union(&pyrucast::ops::node_field::external_forces(
+            &model, &materials,
+        )?)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
-    let solution = unilateral::solve(&k, &model, &rhs)?;
+    let solution = solver::solve(&k, &rhs)?;
 
     // Top block translates rigidly; bottom block stays put.
     for j in 0..=N {
@@ -241,7 +253,7 @@ fn separation_releases_every_pair() -> Result<()> {
         v
     };
     for m in &mults {
-        let lambda = solution.value(*m, "lambda_contact")?;
+        let lambda = solution.value(*m, "lambda")?;
         assert!(lambda.abs() < TOL, "released pair must carry λ = 0");
     }
     // And the slave nodes moved away from the master (gap opened).
@@ -294,17 +306,27 @@ fn contact_3d_two_cubes() -> Result<()> {
     let slave_nodes: Vec<Node> = top[0..4].to_vec();
     let slave = Mesh::from_submesh(SubMesh::poi1_from_nodes(&slave_nodes)?);
 
-    let elasticite = model::elasticity(&fes, Kinematics::Full3D)?;
+    let elasticite = model::elasticity(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     let contact = model::contact(
-        &elasticite,
         &slave,
         &master,
+        &elasticite,
         vec!["u_x".into(), "u_y".into(), "u_z".into()],
     )?;
 
     // Uniaxial column: u_x = u_y = 0 everywhere, u_z = 0 at the base.
     let all_nodes: Vec<Node> = bottom.iter().chain(top.iter()).cloned().collect();
-    let mut model = model::elasticity(&fes, Kinematics::Full3D)?;
+    let mut model = model::elasticity(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     model = model.union(&clamp(&model, &all_nodes, "u_x")?)?;
     model = model.union(&clamp(&model, &all_nodes, "u_y")?)?;
     model = model.union(&clamp(&model, &bottom[0..4], "u_z")?)?;
@@ -313,17 +335,17 @@ fn contact_3d_two_cubes() -> Result<()> {
     let mut face = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     face.add_cell(&[top[4].id(), top[5].id(), top[6].id(), top[7].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let model = model.union(&model::flux(&face_fes, &model, "f_z".into())?)?;
+    let model = model.union(&model::flux(&face_fes, &model, "f_z")?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", E), ("nu", 0.0), ("phi_f_z", -S)],
     )?;
-    let traction = pyrucast::ops::node_field::external_forces(&model, &materials)?;
-    let rhs = traction.union(&model.contact_gaps()?)?;
+    // The pressure and the contact's own gap: every load the model carries.
+    let rhs = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
-    let solution = unilateral::solve(&k, &model, &rhs)?;
+    let solution = solver::solve(&k, &rhs)?;
 
     // u_z = −(S/E)·z on both cubes (touching: no gap offset).
     for (nodes, z0) in [(&bottom, 0.0), (&top, 1.0)] {
@@ -347,8 +369,245 @@ fn contact_3d_two_cubes() -> Result<()> {
     };
     let total: f64 = mults
         .iter()
-        .map(|m| -solution.value(*m, "lambda_contact").unwrap())
+        .map(|m| -solution.value(*m, "lambda").unwrap())
         .sum();
     assert!((total - S).abs() < TOL);
+    Ok(())
+}
+
+/// The contact's right-hand side is a load it carries: on its own,
+/// `external_forces` gives back `−g₀` at each multiplier node — the two blocks
+/// stand `G0` apart.
+#[test]
+fn the_contact_carries_its_gap() -> Result<()> {
+    let tb = two_blocks()?;
+    let materials =
+        pyrucast::ops::element_field::material_field(&tb.model, &[("E", E), ("nu", 0.0)])?;
+    let gaps = pyrucast::ops::node_field::external_forces(&tb.contact, &materials)?;
+    let mult = tb.contact.multiplier_mesh()?;
+    for r in 0..=N {
+        let m = mult.node(0, r, 0)?.id();
+        assert!((gaps.value(m, "imposed")? + G0).abs() < TOL);
+    }
+    Ok(())
+}
+
+// ─── Updating the contact to a displaced configuration ──────────────────────
+
+/// A master polyline whose facets turn — A(0,0), B(1,0), C(2,0.5), D(3,1.5),
+/// run right to left so the normals point up — two slave nodes above it, and
+/// the bar model the contact couples into. Returns the nodes (A, B, C, D, then
+/// the slaves) and the contact model.
+fn turning_floor() -> Result<(Vec<Node>, Model)> {
+    let coords = Handle::new(Coords::new(2)?);
+    let at = |x: f64, y: f64| Node::create_in(coords.clone(), &[x, y]);
+    let nodes = vec![
+        at(0.0, 0.0)?,
+        at(1.0, 0.0)?,
+        at(2.0, 0.5)?,
+        at(3.0, 1.5)?,
+        at(0.6, 0.8)?,
+        at(1.4, 0.9)?,
+    ];
+    let mut floor = SubMesh::new(coords.clone(), ElementType::SEG2);
+    for i in (0..3).rev() {
+        floor.add_cell(&[nodes[i + 1].id(), nodes[i].id()])?;
+    }
+    let master = Mesh::from_submesh(floor);
+    let slave = Mesh::from_submesh(SubMesh::poi1_from_nodes(&nodes[4..])?);
+    let mut bars = SubMesh::new(coords, ElementType::SEG2);
+    bars.add_cell(&[nodes[4].id(), nodes[5].id()])?;
+    let target = model::truss(
+        &FiniteElementSpace::lagrange1(&Mesh::from_submesh(bars))?,
+        StrainMeasure::Linear,
+    )?;
+    let contact = model::contact(&slave, &master, &target, vec!["u_x".into(), "u_y".into()])?;
+    Ok((nodes, contact))
+}
+
+/// The relations and gaps of the one contact sub-model of `m`.
+fn relations_and_gaps(m: &Model) -> Result<(Vec<pyrucast::models::Relation>, Vec<f64>)> {
+    let h = m.get(0)?;
+    let sub = h.read();
+    let pyrucast::containers::model::SubModel::Contact(c) = &*sub else {
+        panic!("a contact sub-model");
+    };
+    Ok((c.relations()?, c.gaps()))
+}
+
+/// At `u = 0`, updating gives back the contact as it was built: same terms,
+/// same coefficients, same gaps, the same multiplier nodes (the same handles).
+#[test]
+fn updating_at_rest_gives_the_contact_back() -> Result<()> {
+    let (_, contact) = turning_floor()?;
+    let rest = model::update_contact(&contact, &NodeField::empty());
+    let (built, g0) = relations_and_gaps(&contact)?;
+    let (again, g) = relations_and_gaps(&rest)?;
+    assert_eq!(g, g0);
+    for (a, b) in built.iter().zip(&again) {
+        assert_eq!(a.multiplier_node, b.multiplier_node);
+        let coefficients = |r: &pyrucast::models::Relation| -> Vec<_> {
+            r.terms
+                .iter()
+                .map(|t| (t.node, t.variable.clone(), t.coefficient))
+                .collect()
+        };
+        assert_eq!(coefficients(a), coefficients(b));
+    }
+    assert!(Handle::same_object(
+        &contact.multiplier_mesh()?.get(0)?,
+        &rest.multiplier_mesh()?.get(0)?
+    ));
+    Ok(())
+}
+
+/// The independent oracle: lay the positions `X + u` in a configuration of
+/// their own and project there. For any `u` — not a rigid motion — the updated
+/// relation must carry the normal and the weights of that projection, and its
+/// gap must be the one measured there: `g̃ + C·u = g(X + u)`.
+#[test]
+fn the_updated_relation_is_the_gap_linearised_at_x_plus_u() -> Result<()> {
+    let (nodes, contact) = turning_floor()?;
+    let support = Mesh::from_submesh(SubMesh::poi1_from_nodes(&nodes)?);
+    let u = NodeField::new(&support, vec!["u_x".into(), "u_y".into()])?;
+    let shifts = [
+        (0.02, -0.01),
+        (-0.03, 0.04),
+        (0.05, 0.10),
+        (0.00, -0.02),
+        (0.55, -0.45),
+        (0.30, -0.20),
+    ];
+    for (node, (ux, uy)) in nodes.iter().zip(shifts) {
+        u.get(0)?.write().set_value(node.id(), "u_x", ux)?;
+        u.get(0)?.write().set_value(node.id(), "u_y", uy)?;
+    }
+    let updated = model::update_contact(&contact, &u);
+    let (relations, gaps) = relations_and_gaps(&updated)?;
+
+    // The oracle: the projection on a configuration laid at X + u.
+    let coords = nodes[0].coords();
+    let displaced = coords.write().add_config("displaced");
+    pyrucast::ops::coords::displace_from(&u, 0, displaced, Some(vec!["u_x".into(), "u_y".into()]))?;
+    let master = {
+        let mut floor = SubMesh::new(coords.clone(), ElementType::SEG2);
+        for i in (0..3).rev() {
+            floor.add_cell(&[nodes[i + 1].id(), nodes[i].id()])?;
+        }
+        Mesh::from_submesh(floor)
+    };
+    let projections = pyrucast::ops::coords::in_config(&coords, displaced, || {
+        let points: Vec<Vec<f64>> = nodes[4..]
+            .iter()
+            .map(|n| coords.read().position(n.id()).map(|p| p.to_vec()))
+            .collect::<Result<_>>()?;
+        pyrucast::ops::geom::project_points(&master, &points)
+    })?;
+
+    for ((relation, &g), p) in relations.iter().zip(&gaps).zip(&projections) {
+        // C·u, from the relation's own terms.
+        let mut cu = 0.0;
+        for t in &relation.terms {
+            cu += t.coefficient * u.value_opt(t.node, &t.variable).unwrap_or(0.0);
+        }
+        assert!(
+            (g + cu - p.gap).abs() < 1e-12,
+            "g̃ + C·u = {} vs {}",
+            g + cu,
+            p.gap
+        );
+        // The slave carries +n, each master node −Nᵢ·n.
+        let slave = relation.terms[0].node;
+        for (a, variable) in ["u_x", "u_y"].iter().enumerate() {
+            let on = |node| -> f64 {
+                relation
+                    .terms
+                    .iter()
+                    .filter(|t| t.node == node && t.variable == *variable)
+                    .map(|t| t.coefficient)
+                    .sum()
+            };
+            assert!((on(slave) - p.normal[a]).abs() < 1e-12);
+            for (&m, &w) in p.nodes.iter().zip(&p.weights) {
+                assert!((on(m) + w * p.normal[a]).abs() < 1e-12);
+            }
+        }
+    }
+    // Not vacuous: the second slave changed facet, and its gap changed.
+    let (_, g0) = relations_and_gaps(&contact)?;
+    assert!((gaps[1] - g0[1]).abs() > 1e-3);
+    Ok(())
+}
+
+/// A slave that slides past the end of its facet is paired with the next one —
+/// nodes and weights computed by hand — and keeps its multiplier node.
+#[test]
+fn a_sliding_slave_moves_to_the_next_facet() -> Result<()> {
+    let (nodes, contact) = turning_floor()?;
+    let support = Mesh::from_submesh(SubMesh::poi1_from_nodes(&nodes[4..5])?);
+    let u = NodeField::new(&support, vec!["u_x".into(), "u_y".into()])?;
+    // The first slave, at (0.6, 0.8) above A–B, slides to (1.2, 0.3): its
+    // closest point is now on B–C.
+    u.get(0)?.write().set_value(nodes[4].id(), "u_x", 0.6)?;
+    u.get(0)?.write().set_value(nodes[4].id(), "u_y", -0.5)?;
+    let updated = model::update_contact(&contact, &u);
+    let (before, _) = relations_and_gaps(&contact)?;
+    let (after, _) = relations_and_gaps(&updated)?;
+    let masters = |r: &pyrucast::models::Relation| -> Vec<NodeId> {
+        let slave = r.terms[0].node;
+        let mut m: Vec<NodeId> = r
+            .terms
+            .iter()
+            .map(|t| t.node)
+            .filter(|&n| n != slave)
+            .collect();
+        m.sort();
+        m.dedup();
+        m
+    };
+    let (a, b, c) = (nodes[0].id(), nodes[1].id(), nodes[2].id());
+    assert_eq!(masters(&before[0]), {
+        let mut v = vec![b, a];
+        v.sort();
+        v
+    });
+    assert_eq!(masters(&after[0]), {
+        let mut v = vec![c, b];
+        v.sort();
+        v
+    });
+    assert_eq!(after[0].multiplier_node, before[0].multiplier_node);
+    // By hand: B–C runs along t = (1, 0.5)/√1.25; the point (1.2, 0.3) projects
+    // at s = (0.2·1 + 0.3·0.5)/1.25 = 0.28 of the way from B, so N_B = 0.72,
+    // N_C = 0.28, and the normal is (−0.5, 1)/√1.25.
+    let norm = 1.25f64.sqrt();
+    let (n_x, n_y) = (-0.5 / norm, 1.0 / norm);
+    let on = |node, variable: &str| -> f64 {
+        after[0]
+            .terms
+            .iter()
+            .filter(|t| t.node == node && t.variable == variable)
+            .map(|t| t.coefficient)
+            .sum()
+    };
+    assert!((on(b, "u_y") + 0.72 * n_y).abs() < 1e-9);
+    assert!((on(c, "u_y") + 0.28 * n_y).abs() < 1e-9);
+    assert!((on(c, "u_x") + 0.28 * n_x).abs() < 1e-9);
+    Ok(())
+}
+
+/// A model without contact comes back as it was: the same sub-models.
+#[test]
+fn a_model_without_contact_is_unchanged() -> Result<()> {
+    let (nodes, _) = turning_floor()?;
+    let mut bars = SubMesh::new(nodes[0].coords(), ElementType::SEG2);
+    bars.add_cell(&[nodes[4].id(), nodes[5].id()])?;
+    let bar = model::truss(
+        &FiniteElementSpace::lagrange1(&Mesh::from_submesh(bars))?,
+        StrainMeasure::Linear,
+    )?;
+    let same = model::update_contact(&bar, &NodeField::empty());
+    assert_eq!(same.len(), bar.len());
+    assert!(Handle::same_object(&same.get(0)?, &bar.get(0)?));
     Ok(())
 }

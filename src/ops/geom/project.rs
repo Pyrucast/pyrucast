@@ -138,6 +138,29 @@ pub struct Projection {
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn project_points(surface: &Mesh, points: &[Vec<f64>]) -> Result<Vec<Projection>> {
+    let projections = project_points_at(surface, points, |c, n| Ok(c.position(n)?.to_vec()))?;
+    // A facet collapsed to a point has no normal: on a surface the caller hands
+    // over, that is an error to report.
+    if projections
+        .iter()
+        .any(|p| p.normal.iter().any(|v| !v.is_finite()))
+    {
+        return Err(PyrucastError::Message(
+            "project_points: degenerate facet (zero normal)".into(),
+        ));
+    }
+    Ok(projections)
+}
+
+/// [`project_points`] on positions given node by node: each facet is laid where
+/// `position` puts its nodes (from the `Coords` of its submesh). A facet
+/// collapsed to a point yields a non-finite normal instead of an error — on a
+/// displaced surface, a collapsed mesh is not the projection's to detect.
+pub(crate) fn project_points_at(
+    surface: &Mesh,
+    points: &[Vec<f64>],
+    position: impl Fn(&crate::coords::Coords, NodeId) -> Result<Vec<f64>>,
+) -> Result<Vec<Projection>> {
     // Snapshot every facet once (same pattern as `locate_points`): no Coords
     // guard is held during the Gauss–Newton solves.
     struct Facet {
@@ -172,7 +195,7 @@ pub fn project_points(surface: &Mesh, points: &[Vec<f64>]) -> Result<Vec<Project
             let ids = &conn[cell * npc..(cell + 1) * npc];
             let coords: Vec<Vec<f64>> = ids
                 .iter()
-                .map(|&n| Ok(c.position(n)?.to_vec()))
+                .map(|&n| position(&c, n))
                 .collect::<Result<_>>()?;
             let mut lo = coords[0].clone();
             let mut hi = coords[0].clone();
@@ -366,12 +389,9 @@ fn facet_normal(
         ],
         _ => unreachable!("facet dimensions validated at snapshot time"),
     };
+    // A collapsed facet divides by zero: its normal is non-finite, and the
+    // caller decides what that means.
     let norm = n.iter().map(|v| v * v).sum::<f64>().sqrt();
-    if norm < 1e-300 {
-        return Err(PyrucastError::Message(
-            "project_points: degenerate facet (zero normal)".into(),
-        ));
-    }
     for v in &mut n {
         *v /= norm;
     }

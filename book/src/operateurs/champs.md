@@ -3,7 +3,8 @@
 Les modules `ops::node_field`, `ops::element_field`, `ops::coords`,
 `ops::measure` et `ops::field` **dérivent et transforment** les
 [champs](../field.md) — chacun nommé d'après ce qu'il produit :
-coordonnées, restriction, fusion, et dérivations géométriques vers les points
+coordonnées, restriction, projection sur un autre maillage, fusion, et
+dérivations géométriques vers les points
 de Gauss. Ces opérateurs croisent des conteneurs (maillage + champ, espace EF
 + champ) — ce sont donc des **fonctions libres**. L'arithmétique scalaire et
 par composante, elle, reste **sur les types de champ** (cf. [Champ](../field.md)).
@@ -19,10 +20,15 @@ chargement réparti `flux`), [Comportement](comportement.md), [Solveur](solveur.
 | `positions(mesh, components=None)` | un `NodeField` portant les coordonnées des nœuds (`"X"`, `"Y"`, `"Z"`), une zone par sous-maillage. `None` ⇒ tous les axes présents dans la dimension du `Coords`. |
 | `coords.set(field, components=None)` | **écrit** les coordonnées du `Coords` actif depuis un champ `"X"/"Y"/"Z"`. |
 | `displace(field, components=None)` | **ajoute** un champ de déplacement aux coordonnées (chaque nœud distinct traité **une seule fois**). |
+| `coords.displace_from(field, reference, target, components=None)` | **pose** la configuration `target` en `X + u`, en absolu à partir de la configuration `reference` : rappelée, elle repart de `X`, rien ne s'accumule. La configuration active ne change pas (Cast3M `FORM`). |
+| `Coords.in_config(config)` (méthode) | `with coords.in_config(i):` le bloc calcule sur la configuration `config` ; celle d'avant redevient active à la sortie, même après une exception. Voir [Coords](../coords.md#plusieurs-configurations). |
 
 `positions` est le pont géométrie → champ : on en tire un `NodeField` qu'on
 peut tracer, dériver, ou réinjecter après calcul (`displace` pour passer à la
-configuration déformée).
+configuration déformée). En grandes transformations, la configuration courante
+vit dans un jeu à part du même `Coords`, posé par `displace_from` et rendu
+actif le temps d'un calcul par `in_config` : voir
+[Grandes transformations](../mecanique/grandes-transformations.md).
 
 ## Restriction, fusion, consolidation
 
@@ -45,6 +51,28 @@ les sous-champs d'une même `FiniteElementSpace` fusionnent en une zone portant
 l'union de leurs composantes — utile pour réunir des zones matériau bâties par
 physique sur une fespace partagée (`k` thermique + `E`/`nu`/`alpha` mécanique) en
 un champ matériau unique lu par chaque physique.
+
+## Projection sur un autre maillage
+
+`project(field, mesh, target, tol=1e-6)` (aussi `field.project(mesh, target)`)
+porte un champ nodal aux nœuds de `target` en l'interpolant par les **mailles
+de `mesh`** : un nœud de `target` situé dans une maille de `mesh` reçoit
+`Σ Nᵢ(ξ) f(nœudᵢ)`, les fonctions de forme de cette maille en ses coordonnées
+de référence (une maille quadratique interpole quadratiquement), pour toutes
+les composantes. C'est le `PROI` de Cast3M sur une géométrie. Un champ nodal ne
+porte pas de mailles, d'où l'argument `mesh`, qui doit être sur le même
+`Coords` que le champ ; `target` peut vivre dans un autre `Coords`, pour porter
+un champ sur une pièce remaillée.
+
+Un nœud de `target` **hors** de `mesh` — au-delà de `tol` hors de l'élément de
+référence de chaque maille, un jeu sans unité — reçoit **0**, comme un champ
+nodal lit un nœud qu'il ne définit pas : on projette ainsi un patch sur un
+maillage plus grand. Le résultat a une zone par sous-maillage de `target`,
+comme `positions`. Les nœuds de `target` sont localisés une seule fois.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_champs.py:projection}}
+```
 
 ## Bande de valeurs (`ge` / `gt` / `le` / `lt`)
 
@@ -184,7 +212,9 @@ passe directement.
 
 Ces opérateurs ne dépendent **que** de l'espace EF et du champ — aucune
 physique. Ils produisent l'`ElementField` que le
-[comportement](comportement.md) (`integrate_behavior`) consomme ensuite. Ils
+[comportement](comportement.md) (`integrate_behavior`) consomme ensuite ; au
+niveau d'un modèle, [`strain`](#le-b-du-modèle--strainmodel-solution-materials--elementfield)
+choisit pour chaque loi celui qui la nourrit. Ils
 partagent tous le même moteur parallèle : le driver `nodal_pointwise`
 (déterministe bit-à-bit, cf. [Parallélisme](../developper/parallelisme.md)),
 pendant nodal de `element_pointwise`.
@@ -227,6 +257,7 @@ x, y, z). On note \\(H = \nabla u\\) et \\(F = I + H\\) :
 | `"left_cauchy_green"` (`"b"`) | \\(b = F F^\top\\) | `b_xx`, … |
 | `"hencky"` (`"log"`) | \\(\tfrac12 \ln C\\) | `H_xx`, … |
 | `"euler_almansi"` (`"almansi"`) | \\(e = \tfrac12(I - b^{-1})\\) | `e_xx`, … |
+| `"jacobian"` (`"J"`) | \\(J = \det F\\), le rapport des volumes | `J` seul |
 
 Chaque mesure a son **préfixe** : on ne peut pas en lire une à la place d'une
 autre. Une mesure symétrique produit une composante `<préfixe>_<ai><aj>` par
@@ -249,11 +280,18 @@ peut pas exprimer : `eps_zz = u_r / r`, `F_zz = 1 + u_r / r`… (cf.
 Une transformation dégénérée (\\(\det F = 0\\)) donne des valeurs non
 finies pour Hencky et Almansi : rien n'est vérifié au point de Gauss.
 
+`"jacobian"` rend le seul scalaire `J`, entrée orthoradiale comprise sur un
+sous-espace axisymétrique. Une maille **retournée** a `J ≤ 0` en un de ses
+points : c'est ce que le [pas à pas](../pas-a-pas.md#grands-déplacements)
+vérifie à chaque itéré en grands déplacements. Aucune autre mesure ne le voit :
+`C = FᵀF` reste défini positif quand `F` change de signe, si bien que
+Green–Lagrange et Hencky se calculent sans broncher sur une maille retournée.
+
 ```python
 {{#include ../../../tests/python/test_doc_ops_champs.py:mesures}}
 ```
 
-### `thermal_strain(temperature, materials, fespace, t_ref)` → `ElementField`
+### `thermal_strain(temperature, materials, fespace, t_ref, measure="linear")` → `ElementField`
 
 Déformation thermique de libre dilatation (Cast3M `EPTH`), pour la
 thermomécanique **non couplée** :
@@ -275,6 +313,78 @@ l'utilisateur compose la charge thermique et la contrainte réelle
 `σ = D:(ε − ε_th)` à partir des briques (`integrate_behavior`,
 `internal_forces`) — cf. l'[exemple thermomécanique](../mecanique/elasticite.md#thermomécanique-non-couplée).
 
+`measure` est la mesure que lit la loi : la même dilatation y est donnée
+exactement, `½((1 + αΔT)² − 1)` en Green–Lagrange (`E_*`), `ln(1 + αΔT)` en
+Hencky (`H_*`) — cf. [Grandes transformations](../mecanique/grandes-transformations.md).
+
+### `elastic_stress(model, strain, materials)` / `elastic_strain(model, stress, materials)` → `ElementField`
+
+L'**opérateur élastique** d'un modèle aux points de Gauss, dans les deux sens
+(Cast3M `ELAS`) :
+
+\[
+\sigma = \mathbb D : \varepsilon
+\qquad\text{et}\qquad
+\varepsilon = \mathbb D^{-1} : \sigma .
+\]
+
+`D` est l'opérateur avec lequel chaque loi **prédit** — pas la réponse de la
+loi elle-même : la matrice de Hooke d'une élasticité dans sa symétrie
+(isotrope, orthotrope, anisotrope), le `D` isotrope du prédicteur élastique
+d'une plasticité, le `D` **non endommagé** que dégrade une loi
+d'endommagement. Le matériau n'a besoin que des constantes élastiques (`E`,
+`nu` en isotrope) : le `sigma_y` d'une plasticité n'y joue aucun rôle. C'est ce
+dont un solveur incrémental a besoin pour transformer un incrément de
+déformation imposé (thermique, donné) en la contrainte qu'il causerait si rien
+ne plastifiait — la pseudo-force `F* = ∫ Bᵀ D Δε*` — ou pour ramener une
+contrainte à la déformation élastique qui la porte sous d'autres modules
+(`(D⁻¹ₙ₊₁ − D⁻¹ₙ) σₙ` quand le matériau varie avec la température).
+
+L'entrée et la sortie en déformation sont en convention **tensorielle**,
+disposition de `deformation` et `thermal_strain` ; en contraintes planes,
+`elastic_strain` n'écrit pas `eps_zz`, que la loi plane ne lit pas. Une zone par
+sous-modèle continu ; un sous-modèle sans opérateur élastique (conduction,
+barre, poutre, contrainte) n'en produit pas. `elastic_strain` échoue là où `D`
+est singulier (un module nul).
+
+Deux fonctions plutôt qu'une qui lirait le sens sur les noms des composantes :
+les deux sens ne font pas la même opération, et l'état que rend
+`integrate_behavior` porte **à la fois** des `sigma_*` et des `eps_*`.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_champs.py:elastique}}
+```
+
+### `stress_measure(stress, gradient, target)` → `ElementField`
+
+Une contrainte convertie, point par point, d'une mesure à l'autre, avec le
+gradient de la transformation `F` (`deformation(u, fespace, "gradient")`) :
+Cauchy `sigma_*`, Kirchhoff `tau_*`, Piola–Kirchhoff 1 `P_*` (non symétrique)
+et 2 `S_*`, duale de Hencky `T_*`. La mesure d'entrée se reconnaît à ses noms,
+une par zone ; `target` nomme celle qu'on veut (`"cauchy"`, `"kirchhoff"`,
+`"pk1"`, `"pk2"`, `"hencky"`). C'est
+ainsi que la contrainte lagrangienne d'une loi en grandes transformations
+devient la `P` que lisent les forces internes, ou la Cauchy des résultats —
+la moitié « contraintes » de Cast3M `CONF`. Une **barre** se reconnaît à son
+effort de Piola–Kirchhoff 2 axial `S_n` : `"pk1"` en fait le vecteur effort
+nominal `P_x, P_y(, P_z) = S_n F t₀`, `"cauchy"` l'effort vrai `n = λ S_n`
+(`t₀` sa direction sur la configuration active, la référence, comme `F`).
+Formules et exemples :
+[Grandes transformations](../mecanique/grandes-transformations.md).
+
+### `rotate_frame(field, gradient)` → `ElementField`
+
+Un champ de matériau dont les axes (`V1X, V1Y` en 2D, `V1X…V2Z` en 3D) tournent
+avec la pièce, point par point, de la rotation `R` de la décomposition polaire
+`F = R U` : `v = R v₀`, d'où `k = R k₀ Rᵀ`. `F` est lu dans `gradient`, que
+produit `deformation(u, fespace, "gradient")` **sur la référence**. Les autres
+composantes sont recopiées telles quelles : la matière est la même, seuls ses
+axes suivent la rotation. Une zone sans axes (matériau isotrope) revient
+partagée, sans copie ; une zone qui n'en porte qu'une partie est une erreur.
+C'est ce que lit une conduction ou une diffusion calculée sur la pièce
+déformée. Pas de méthode : elle exige des axes et un gradient nommés. Exemple :
+[Grandes transformations](../mecanique/grandes-transformations.md#la-conduction).
+
 ### `divergence(field)` → `NodeField`
 
 Divergence **faible** (consistante) d'un champ vectoriel par éléments — l'adjoint
@@ -286,10 +396,36 @@ d_i = \int_\Omega \nabla N_i \cdot F\\, d\Omega
 \\]
 
 accumulé par nœud. C'est l'opérateur `Bᵀ`, transposé du gradient : il vérifie
-`⟨∇f, F⟩ = ⟨f, div F⟩`. Le champ d'entrée doit porter exactement `space_dim`
-composantes (`F_x, F_y, F_z`) ; chaque sous-espace donne une zone de sortie à
-une composante `"div"`. Ce sont des **quantités intégrées**, pas les valeurs
+`⟨∇f, F⟩ = ⟨f, div F⟩`. Un tenseur se lit à ses noms : symétrique
+(`A_xx, A_xy, A_yy`), ou **plein** s'il porte aussi `A_yx` — comme la
+contrainte nominale `P` des grandes transformations. Le champ d'entrée doit porter exactement `space_dim`
+composantes (`F_x, F_y, F_z`) ; la sortie porte une composante `"div"`, et un
+nœud partagé par plusieurs sous-espaces reçoit la **somme** de leurs
+contributions. Ce sont des **quantités intégrées**, pas les valeurs
 ponctuelles de `∇·F` (pas de projection L²).
+
+### `cell_integral(field, target)` → `ElementField` et `sum_to_nodes(field)` → `NodeField`
+
+Deux briques par maille (Cast3M `INTG 'ELEM'` et `CHAN 'CHPO' 'SOMM'`) :
+
+- `element_field.cell_integral` intègre chaque composante **maille par maille**,
+  avec la quadrature du champ d'entrée :
+  `v_e = Σ_g f(g)·|J|_g·w_g` (le `2πr` inclus en axisymétrique). Le résultat vit
+  sur `target`, un espace **à un point par maille** du même maillage —
+  `FiniteElementSpace(mesh, quadrature="REDUCED")`, un seul point au barycentre,
+  le support `'GRAVITE'` de Cast3M ;
+- `node_field.sum_to_nodes` rassemble un tel champ aux nœuds par **somme** :
+  chaque nœud reçoit `Σ_{e ∋ i} v_e`, la somme des valeurs des mailles qui le
+  touchent, zones confondues. Ce n'est pas un lissage : ni moyenne ni poids.
+
+Intégrer `1` donne la mesure de chaque maille ; la sommer aux nœuds donne le
+volume que représente chaque nœud — le poids d'un solveur incrémental pour
+mettre ses résidus à une échelle comparable (l'accélération d'Anderson pondère
+par `(Σ_e |Ω_e|)^{-1/2}`).
+
+```python
+{{#include ../../../tests/python/test_doc_ops_champs.py:par_maille}}
+```
 
 ### `beam_deformation(field, fespace, material)` → `ElementField`
 
@@ -317,10 +453,10 @@ signifie `Φ = 0`, si bien que le même opérateur sert les deux théories sans
 qu'on ait à lui dire laquelle. Le résultat se donne au
 [comportement](comportement.md) pour obtenir les efforts de section.
 
-### `shell_deformation(field, fespace, model)` → `ElementField`
+### `shell_deformation(field, fespace, formulation)` → `ElementField`
 
 Déformations généralisées d'une [coque](../mecanique/coques.md), depuis les six
-DDL `u_x…u_z, r_x…r_z`. `model` est la formulation, `"thick"` ou
+DDL `u_x…u_z, r_x…r_z`. `formulation` vaut `"thick"` ou
 `"kirchhoff"` : les lignes de membrane, de vrillage et de cisaillement sont
 partagées, mais celles de **flexion** sont toute la différence entre les deux.
 
@@ -338,6 +474,84 @@ réduit — le point même où la rigidité l'intègre. Ce n'est pas une
 simplification : c'est l'intégration réduite qui empêche une coque mince de
 bloquer, lue de l'autre côté. L'échantillonner ailleurs rapporterait une
 déformation que l'élément ne porte pas.
+
+## Le `B` du modèle : `strain(model, solution, materials)` → `ElementField`
+
+Les producteurs ci-dessus connaissent un espace EF, pas une loi. `strain` est
+leur pendant au niveau du **modèle** : il demande à chaque loi quel producteur
+la nourrit, l'applique à **ses** inconnues sur **son** espace, et rend l'entrée
+de toutes les lois du modèle — le `EPSI` de Cast3M, étendu à toutes les
+physiques. Aussi en méthode : `model.strain(solution, materials)`.
+
+| sous-modèle | producteur | zone rendue |
+|---|---|---|
+| élasticité, plasticité, endommagement, barre | `deformation` | `eps_*`, ou la mesure de la loi (`E_*`, `H_*`) |
+| conduction, Fick | `gradient` | `grad_T_*`, `grad_c_<espèce>_*` |
+| rayonnement | `interp_to_gauss` | `T` aux points |
+| poutres Bernoulli, Timoshenko | `beam_deformation` | `eps`, `kappa*`, `gamma*`, `torsion` |
+| coque | `shell_deformation` | `eps_*`, `kappa_*`, `drill`, `gamma_*` |
+
+Chaque loi lit **ses** inconnues de `solution` par leur nom : une même solution
+— déplacement, température, multiplicateurs — sert tout le modèle, et une
+inconnue absente vaut zéro. Les sous-modèles sans loi (contraintes, charges,
+échanges) ne produisent rien. `materials` n'est lu que par les poutres, dont la
+répartition flexion / cisaillement dépend de `Φ = 12EI/(G·A_s·L²)`. Ce que la
+loi déclare, c'est son producteur (`Behavior::strain_operator`, méthode
+**requise** : une physique nouvelle ne peut pas l'oublier) ; l'opérateur tient
+la vue de la solution une fois pour toutes les lois.
+
+**`strain` et `internal_forces` sont transposés.** Les éléments finis portent
+deux couples de variables duales : déplacement / force aux nœuds,
+déformation / contrainte aux points de Gauss. Le travail se mesure des deux
+côtés — `f·u` aux nœuds, `Σ_g w_g |J_g| σ:ε` aux points — et `Bᵀ W` est
+l'adjoint de `B` pour ces deux produits :
+
+\[
+\sigma \cdot W (B u) = (B^\mathsf{T} W \sigma) \cdot u
+\qquad \forall\, u,\ \sigma ,
+\]
+
+le principe des travaux virtuels écrit au niveau discret :
+
+```text
+   nœuds                         points de Gauss
+   u      ───── strain (B) ─────▶  ε
+                                   │  integrate_behavior (la loi)
+   f_int  ◀── internal_forces ───  σ
+                (Bᵀ W)
+```
+
+D'où `K = Bᵀ W D B`, symétrique si et seulement si `D` l'est, et, pour une loi
+linéaire, `internal_forces(integrate_behavior(strain(u))) = K·u` à l'arrondi
+près — ce que vérifie l'exemple. [`divergence`](#divergencefield--nodefield) est
+le cas scalaire du même `Bᵀ`, et l'adjoint de `gradient`. En grandes
+transformations, la transposition lie la *variation* `δE = sym(Fᵀ∇₀δu)` aux
+efforts : `internal_forces` lit alors la contrainte nominale `P = F S`
+(cf. [Grandes transformations](../mecanique/grandes-transformations.md)), et la
+tangente gagne la rigidité géométrique. Elle ne tient plus pour un terme non
+variationnel (advection, pression suiveuse, relation non associée), ni dès que
+les deux côtés n'utilisent pas les mêmes points : c'est pourquoi
+`shell_deformation` lit le cisaillement au point réduit où la rigidité
+l'intègre.
+
+**Un modèle couplé se passe de `consolidate`.** Deux lois sur un même maillage
+(thermique et mécanique) donnent deux zones sur un même espace. Chaque
+consommateur — `integrate_behavior` (entrée et état précédent),
+`internal_forces`, `tangent`, `geometric` — prend la zone qui porte ce qu'il lit,
+comme le matériau est déjà résolu par ses composantes.
+
+**Pourquoi `strain` et pas `deformation`.** En anglais, *deformation* désigne la
+transformation elle-même (`F`, et les tenseurs `C`, `b`, qui valent `I` en
+mouvement rigide) ; *strain* en est une **mesure**, qui s'annule en mouvement
+rigide (`ε`, `E`, `ln U`), et le mot consacré pour les déformations
+généralisées des poutres et coques. L'opérateur géométrique, qui produit les
+deux, garde donc `deformation` ; ce que lit une loi est un *strain*. Le
+gradient thermique en est un abus assumé, comme les `internal_forces` d'un
+problème thermique.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_champs.py:strain_modele}}
+```
 
 ## Maths élément par élément
 

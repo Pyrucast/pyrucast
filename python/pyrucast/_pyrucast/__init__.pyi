@@ -13,6 +13,7 @@ __all__ = [
     "ElementField",
     "Evolution",
     "FiniteElementSpace",
+    "InConfig",
     "Matrix",
     "Mesh",
     "Model",
@@ -32,6 +33,7 @@ __all__ = [
     "bernoulli",
     "border",
     "boundary_transfer",
+    "cell_integral",
     "chain",
     "circle",
     "cleanup",
@@ -51,8 +53,11 @@ __all__ = [
     "deformation",
     "dirichlet",
     "displace",
+    "displace_from",
     "divergence",
     "drucker_prager",
+    "elastic_strain",
+    "elastic_stress",
     "elasticity",
     "element_type_from_gmsh",
     "elements_on",
@@ -113,6 +118,7 @@ __all__ = [
     "points_on_sphere",
     "points_on_torus",
     "positions",
+    "project",
     "psca",
     "radiation",
     "read_gmsh",
@@ -122,6 +128,7 @@ __all__ = [
     "restrict_like",
     "revolve",
     "rotate",
+    "rotate_frame",
     "save",
     "select",
     "set_positions",
@@ -131,12 +138,13 @@ __all__ = [
     "sinh",
     "skin",
     "solve",
-    "solve_eliminate",
-    "solve_unilateral",
     "spill_stats",
     "sqrt",
     "stiffness",
+    "strain",
+    "stress_measure",
     "sub_material_field",
+    "sum_to_nodes",
     "sweep",
     "sweep_solid",
     "symmetry_line",
@@ -155,6 +163,7 @@ __all__ = [
     "triangulate_surface",
     "triangulate_volume",
     "truss",
+    "update_contact",
     "viscoplasticity_chaboche",
     "viscoplasticity_lemaitre_chaboche",
     "xtx",
@@ -327,6 +336,15 @@ class Coords:
     def names(self) -> builtins.list[builtins.str]:
         r"""
         Names of the configurations, by index.
+        """
+    def in_config(self, config: builtins.int) -> InConfig:
+        r"""
+        `with coords.in_config(config):` — the block runs with configuration
+        `config` active; the configuration active on entry is active again
+        after it, after an exception too. Everything the block computes on the
+        geometry (matrices, normals, measures) sees `config`. The lock is taken
+        on entry and on exit only, so the block may nest another `in_config`.
+        An index out of range raises on entry, before the block runs.
         """
     def permutation(self) -> typing.Optional[builtins.list[builtins.int]]:
         r"""
@@ -653,6 +671,16 @@ class ElementField:
         zones must agree value by value, else it errors. `field` itself is left
         untouched.
         """
+    def cell_integral(self, target: FiniteElementSpace) -> ElementField:
+        r"""
+        Integral of every component of `field` over **each cell** (Cast3M
+        `INTG 'ELEM'`), with the field's own quadrature: `Σ_g f(g)·|J|·w_g`, the
+        `2πr` included on a body of revolution. The result lives on `target`, a
+        space of the same mesh with **one point per cell** —
+        `FiniteElementSpace(mesh, quadrature="REDUCED")`, a single point at each
+        centroid. Integrating `1` gives every cell's measure. Raises when `target`
+        has several points per cell or does not cover the field's mesh.
+        """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> ElementField:
         r"""
         Per-component 0/1 **mask** of this field against a value band — same
@@ -743,7 +771,17 @@ class ElementField:
         tensor case is the internal forces of a continuum when the quantity is a
         Cauchy stress — `divergence(stress, "sigma")` is Cast3m `BSIG` — but the
         operator knows nothing of mechanics: it needs only the geometry and the
-        names. One zone per subspace.
+        names. A node shared by several subspaces receives the sum of their
+        contributions.
+        """
+    def sum_to_nodes(self) -> NodeField:
+        r"""
+        A field carrying **one point per cell** gathered at the nodes by
+        **summation** (Cast3M `CHAN 'CHPO' 'SOMM'`): each node receives, per
+        component, the sum of the values of the cells it belongs to — across zones
+        too. Not a smoothing: no average, no weight. Applied to the cell measures of
+        `cell_integral`, it gives the volume each node stands for. Raises on a zone
+        with more than one point per cell (build it on a `REDUCED` space).
         """
 
 @typing.final
@@ -768,22 +806,26 @@ class Evolution:
         The tabulated values as whole fields, one per shared abscissa: a
         `list[NodeField]` or a `list[ElementField]`. Raises for scalars.
         """
-    def __new__(cls, steps: typing.Sequence[tuple[builtins.float, typing.Any]], out_of_range: typing.Optional[builtins.str] = None, abscissa_type: typing.Optional[builtins.str] = None, ordinate_type: typing.Optional[builtins.str] = None) -> Evolution:
+    def __new__(cls, steps: typing.Sequence[tuple[typing.Any, typing.Any]], out_of_range: typing.Optional[builtins.str] = None, abscissa_type: typing.Optional[typing.Any] = None, ordinate_type: typing.Optional[builtins.str] = None) -> Evolution:
         r"""
         `Evolution(steps, out_of_range="error")` — build from whole values
         (`out_of_range` defaults to `"error"`)
         tabulated at each abscissa. `steps` is a list of `(abscissa, value)`
         where `value` is a float, a `NodeField` or an `ElementField`; the kind
         is taken from the first step. Whole fields are transposed into one
-        curve per zone.
+        curve per zone. The abscissa is a float, or a tuple of floats for a
+        table of several variables (`((T, phi), value)`), read hierarchically
+        — see `SubEvolution`; `abscissa_type` is then a tuple of names.
         """
     def out_of_range(self) -> builtins.str:
         r"""
         The stored out-of-range policy name.
         """
-    def abscissa_type(self) -> typing.Optional[builtins.str]:
+    def abscissa_type(self) -> typing.Any:
         r"""
-        The abscissa's physical type, or `None`.
+        The abscissa types of the first curve: a name for a curve, a tuple of
+        names for a table, or `None`. Each curve keeps its own — `E(T)` beside
+        `sigma_y(T, phi)` — see `SubEvolution.abscissa_type`.
         """
     def ordinate_type(self) -> typing.Optional[builtins.str]:
         r"""
@@ -793,12 +835,15 @@ class Evolution:
         r"""
         Interpolate at `x`.
         
-        - `x` a **float** → every curve interpolated and regrouped: a
-          `list[float]` for scalars, a `NodeField` / `ElementField` for fields;
+        - `x` a **float** (curves) or a **tuple of floats** (tables) → every
+          curve interpolated and regrouped: a `list[float]` for scalars, a
+          `NodeField` / `ElementField` for fields;
         - `x` a **`NodeField`** or **`ElementField`** → that field mapped
-          through the (single, scalar) curve as a transfer function: each entry
-          of the input's `abscissa_type` component is looked up, yielding a field
-          of one component (named after `ordinate_type`) on the same support.
+          through every **scalar** curve, like `cos` through a field: each curve
+          reads the input's components named like its `abscissa_type` and
+          writes one component, named after its `ordinate_type`, on the same
+          support — material laws `E(T)`, `sigma_y(T, phi)` evaluated at the
+          state in one call.
         
         `out_of_range` overrides the stored policy for this query.
         """
@@ -971,6 +1016,22 @@ class FiniteElementSpace:
     def __len__(self) -> builtins.int: ...
 
 @typing.final
+class InConfig:
+    r"""
+    The context `Coords.in_config(config)` returns: entering makes `config`
+    active, leaving makes the configuration found on entry active again.
+    """
+    def __enter__(self) -> None:
+        r"""
+        Make the configuration active, remembering the one found.
+        """
+    def __exit__(self, _exc_type: typing.Any, _exc_value: typing.Any, _traceback: typing.Any) -> builtins.bool:
+        r"""
+        Make the configuration found on entry active again; an exception
+        raised in the block goes on.
+        """
+
+@typing.final
 class Matrix:
     r"""
     A global finite-element matrix, assembled from rectangular blocks
@@ -1004,16 +1065,16 @@ class Matrix:
         """
     def assemble(self) -> None:
         r"""
-        Re-assemble this matrix **from its blocks alone** — no `Model` —
-        mutating it in place. The composition path: after combining blocks of
-        any provenance (via `+`/`-`, `|` union, `add_sub`, `filter`, …),
-        including *computed* ones (which `finalize()` refuses — the element
-        kernel lives outside `containers`), call this to fold everything into
-        one CSR. Needed, for instance, to solve `(M/dt + K) u = …` :
-        `sys = m / dt + k; sys.assemble(); pyrucast.solver.solve(sys, rhs)`.
+        Assemble this matrix **from its blocks alone** — no `Model` — on the
+        configuration active now, mutating it in place. A matrix is assembled
+        once: on one that already is, this does nothing.
         
-        Not needed after a bare `matrix * scalar`: scaling carries the assembled
-        CSR along, scaled.
+        The composition path, for blocks put together without their values
+        (`|` union, `add_sub`, `filter`, `exclude`), including *computed* ones
+        (which `finalize()` refuses — the element kernel lives outside
+        `containers`). Not needed after `matrix * scalar` nor after a sum: both
+        carry the assembled values along — `pyrucast.solver.solve(m / dt + k,
+        rhs)`.
         """
     def finalize(self) -> None:
         r"""
@@ -1027,6 +1088,14 @@ class Matrix:
         `"constraint"`, `"other"`, `"diffusion"`, `"radiation"`). The result is
         **not** finalized — call `assemble` (or `finalize` for literal-only
         blocks) before solving.
+        """
+    def exclude(self, physics: builtins.str) -> Matrix:
+        r"""
+        `Matrix.exclude(physics)` — the complement of `filter`: a new `Matrix`
+        holding only the blocks **whose nature set does not contain** the given
+        physics. Composes with `filter`: `k.filter("thermal").exclude("constraint")`
+        keeps the conduction blocks without the Dirichlet pair. Not finalized,
+        like `filter`.
         """
     def physics(self) -> builtins.list[builtins.str]:
         r"""
@@ -1070,6 +1139,8 @@ class Matrix:
     def get(self, row_node: Node, row_field: builtins.str, col_node: Node, col_field: builtins.str) -> builtins.float:
         r"""
         Value at row `(row_node, row_field)`, column `(col_node, col_field)`.
+        Raises on an unassembled matrix carrying a computed block, whose values
+        do not exist yet.
         """
     def dense(self) -> builtins.list[builtins.float]:
         r"""
@@ -1109,21 +1180,21 @@ class Matrix:
     @typing.overload
     def __mul__(self, rhs: float) -> Matrix:
         r"""
-        `matrix * scalar` → a fresh `Matrix` whose blocks carry the scaled
-        `factor` (lazy — no value is rewritten). **Not** finalized: call
-        `finalize()` (or `assemble` for computed blocks) before solving.
+        `matrix * scalar` → a fresh `Matrix`, its assembled values scaled
+        and its blocks carrying the scaled `factor`.
         """
     def __add__(self, rhs: Matrix  |  SubMatrix) -> Matrix:
         r"""
-        `matrix + other` → a fresh `Matrix` holding the blocks of both,
-        shared and **not** deduplicated: `k + k` is `2k` where `k | k` is `k`.
-        Reach for `|` to compose one operator out of distinct parts, for `+` to
-        add two operators. **Not** finalized: call `assemble()` before solving.
+        `matrix + other` → the values each operand was assembled with,
+        added over the union of their DOFs: ready to solve. Nothing is
+        evaluated again, so a matrix built on one configuration and one built
+        on another add as they are. A block handed over twice counts twice:
+        `k + k` is `2k` where `k | k` is `k`. Raises if an operand carries a
+        computed block that was never assembled.
         """
     def __sub__(self, rhs: Matrix  |  SubMatrix) -> Matrix:
         r"""
-        `matrix - other` → as `+`, with the right-hand side's blocks
-        negated (which copies them, the factor living in the block).
+        `matrix - other` → as `+`, with the right-hand side negated.
         """
     @typing.overload
     def __getitem__(self, key: int) -> SubMatrix:
@@ -1185,86 +1256,54 @@ class Matrix:
         (Cast3M `LUMP`). Applied to a consistent mass / capacity matrix it yields the
         diagonal (lumped) mass, conserving the total mass.
         """
-    def solve(self, rhs: NodeField, method: builtins.str = 'lu', cache: builtins.bool = True, verbosity: builtins.str = 'silent') -> NodeField:
+    def solve(self, rhs: NodeField, method: builtins.str = 'lu', relations: builtins.str = 'lagrange', active_set: builtins.str = 'schur', cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10, verbosity: builtins.str = 'silent') -> NodeField:
         r"""
         Solve the linear system `A·x = b` for `x` (sparse direct, faer).
         
-        `matrix` is the finalized system `A`; `rhs` is the right-hand side `b`
-        as a `NodeField` (read through the aggregate, zones resolved per DOF).
-        Returns the solution `x` as a single-zone `NodeField` over the
-        column-DOF nodes.
+        `matrix` is the assembled system `A`; `rhs` is the right-hand side `b` as a
+        `NodeField`, read at every row DOF of the matrix (a DOF no zone defines
+        reads zero). The imposed value of a constraint relation lives at its
+        multiplier node, component `imposed`. The matrix carries everything the
+        solve needs: its relation rows, their coefficients and their sense (`=`,
+        `>=`, `<=`), declared by the constraints that built them — no model is
+        passed alongside.
+        
+        `relations` says how the constraint relations are enforced:
+        
+        - `"lagrange"` (default) — by their multipliers, the saddle-point solved as
+          assembled; the multipliers come back in the solution as the reactions.
+          As soon as the matrix carries an inequality, the **active-set** loop
+          decides which relations are saturated: an active relation holds as an
+          equation (its `lambda` is `<= 0` for `>=`, `>= 0` for `<=`), an inactive
+          one reports `lambda = 0`;
+        - `"eliminate"` — each equality relation eliminates one unknown, and the
+          smaller system left, without multipliers, is solved; each eliminated
+          unknown's reaction is returned in its dual row. An inequality is not
+          eliminated: it stays on the reduced system, resolved by the same
+          active-set loop, its `lambda` returned at its multiplier node. Scope:
+          non-chained, disjoint slaves.
         
         `method` selects the factorization: `"lu"` (default) works on any square
-        matrix, `"cholesky"` is half the factors and no pivot search but asks that the
-        matrix be symmetric **and** positive definite. A Lagrange saddle-point — what
-        any multiplier boundary condition assembles — is symmetric and *indefinite*,
-        and comes back as an error naming the pivot that refused; solve it with the
-        LU, or eliminate the constraints first (`solve_eliminate`).
+        matrix, `"cholesky"` asks that the system be symmetric **and** positive
+        definite — never a Lagrange saddle-point, usually a system reduced by
+        elimination. The active-set loop factorizes by LU whatever is asked.
         
-        `verbosity` says how much the solve reports on stdout: `"silent"` (default),
-        `"brief"` (one line: size, non-zeros, method) or `"detailed"` (plus timings).
-        
-        `cache` (default `True`) reuses a factorization stored transparently on the
-        matrix: the first solve factorizes, later solves on the same matrix reuse the
-        factors (much cheaper). The cache is cleared automatically when the matrix
-        changes.
-        
-        A `Ctrl+C` is honoured at the solver's phase boundaries. The factorization
-        itself is a single library call and is not interrupted mid-way; when it is
-        already cached, only the (cheap) substitution runs.
-        """
-    def solve_eliminate(self, model: Model, rhs: NodeField, method: builtins.str = 'lu', cache: builtins.bool = True, verbosity: builtins.str = 'silent') -> NodeField:
-        r"""
-        Solve `model`'s constrained system by **master/slave elimination**
-        (condensation) — the alternative to the Lagrange-multiplier path of
-        [`solve`].
-        
-        `model` is the constrained model; `matrix` is its assembled (saddle-point)
-        stiffness; `rhs` is the load field (its right-hand sides `g` live at the
-        multiplier nodes' imposed-value slots). Each linear relation eliminates one
-        slave DOF, so the system solved is smaller and definite (no multiplier DOFs).
-        The solution carries the primal field at every physics node plus each slave's
-        reaction (the multiplier equivalent) in its dual row.
-        
-        A model with no constraint falls back to a plain [`solve`]. v1 scope:
-        non-chained, disjoint slaves (a slave DOF may not appear in another relation).
-        
-        `method` selects the factorization of the reduced system: `"lu"` (default) or
-        `"cholesky"`. Unlike the saddle-point it replaces, the reduced system carries
-        no multiplier DOF and is usually positive definite, so this is the path where
-        a Cholesky stands a real chance. `verbosity` (`"silent"`, `"brief"`,
-        `"detailed"`) says how much it reports. `cache` (default `True`) reuses the
-        condensation stored transparently on the matrix, cleared when the matrix
-        changes. `Ctrl+C` is honoured at phase boundaries.
-        """
-    def solve_unilateral(self, model: Model, rhs: NodeField, method: builtins.str = 'lu', active_set: typing.Optional[builtins.str] = None, cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10, verbosity: builtins.str = 'silent') -> NodeField:
-        r"""
-        Solve `model`'s system with **unilateral** (inequality) constraints by the
-        active-set (status) method — the operator for constraints built with
-        `sense=">="` / `"<="` (Dirichlet, MPC).
-        
-        `model` is the constrained model; `matrix` is its assembled (saddle-point)
-        stiffness; `rhs` is the load field (the right-hand sides `g` live at the
-        multiplier nodes' imposed-value slots). The status loop starts with every
-        inequality active (or from the previous converged status when `cache` is
-        on — a warm start), solves, releases the relations whose reaction pulls,
-        activates the relations whose gap penetrates, and repeats until the status
-        is stable. Inactive relations report `λ = 0` in the solution.
-        
-        A model with no inequality relation falls back to a plain `solve`.
-        
-        `method` selects the factorization of each iteration — `"lu"` (default); a
-        `"cholesky"` is refused here, blanking a row breaking the symmetry
-        structurally. `verbosity` (`"silent"`, `"brief"`, `"detailed"`) says how much
-        each iteration reports. `active_set` selects how each status's system is
-        factorized:
+        `active_set` selects how each status of the active-set loop is factorized:
         `"schur"` (default) factorizes the inequality-free base once and updates it
-        per status (falling back to refactorization when that base is singular),
-        `"refactorize"` refactorizes the full system at each status change. `cache`
-        (default `True`) stores the active-set state transparently on the matrix
-        (cleared when the matrix changes). `max_iter` (default `100`) bounds the
-        status loop; `tol` (default `1e-10`) is the sign tolerance on the multiplier
-        and the gap. `Ctrl+C` is honoured at each iteration boundary.
+        per status (falling back when that base is singular), `"refactorize"`
+        refactorizes the full system at each status change. `max_iter` (default
+        `100`) bounds the status loop; `tol` (default `1e-10`) is its sign
+        tolerance on the multiplier and on the gap.
+        
+        `cache` (default `True`) reuses what is stored transparently on the matrix —
+        the factorization, the condensation, the active-set state and its last
+        status — cleared automatically when the matrix changes. `verbosity` says
+        how much the solve reports on stdout: `"silent"` (default), `"brief"` or
+        `"detailed"`.
+        
+        A `Ctrl+C` is honoured at the solver's phase boundaries and at each status
+        iteration; a factorization itself is a single library call and is not
+        interrupted mid-way.
         """
 
 @typing.final
@@ -2038,15 +2077,6 @@ class Model:
         r"""
         `Model()` — an empty model; add physics with `|`.
         """
-    def contact_gaps(self) -> NodeField:
-        r"""
-        `Model.contact_gaps()` — the contact right-hand side `−g₀`: a
-        `NodeField` carrying, at each contact multiplier node's `imposed_value`
-        slot, minus the initial signed gap of its relation, so that
-        non-penetration reads `g₀ + C·u ≥ 0`. Merge it into the global load
-        with `|`. The model must hold exactly one contact sub-model; omitting
-        this helper treats every pair as initially touching (`g₀ = 0`).
-        """
     def primal_vars(self) -> builtins.list[builtins.str]:
         r"""
         Names of the primal (primary) variables across the whole model.
@@ -2080,13 +2110,21 @@ class Model:
         each of its filters — a radiation boundary is both `"thermal"` and
         `"radiation"`.
         """
+    def exclude(self, physics: builtins.str) -> Model:
+        r"""
+        `Model.exclude(physics)` — the complement of `filter`: a new `Model`
+        holding only the sub-models **whose nature set does not contain** the
+        given physics. The two compose, one condition each: a constraint also
+        carries the nature of the physics it pins, so
+        `model.filter("mechanical")` is the mechanics **with** its supports and
+        `model.filter("mechanical").exclude("constraint")` the mechanics alone.
+        """
     def multiplier_mesh(self) -> Mesh:
         r"""
         `Model.multiplier_mesh()` — POI1 `Mesh` of the constraint multiplier
-        nodes across the model (empty for a model with no constraint). The handle
-        to the multiplier nodes of an `embedded` / `dirichlet` / `mpc` model whose
-        multipliers it minted itself: read them via `mesh.node(0, i, 0)` or build
-        a load `SubNodeField` on `mesh[0]`.
+        nodes across the model (empty for a model with no constraint). Each
+        constraint mints its own, one per relation: read them via
+        `mesh.node(0, i, 0)` or build a load `SubNodeField` on `mesh[0]`.
         """
     def constraint_rhs(self, imposed: typing.Sequence[tuple[Node, builtins.float]]) -> NodeField:
         r"""
@@ -2097,8 +2135,7 @@ class Model:
         belongs to** (for `dirichlet` the constrained node itself, for `mpc` any
         of the relation's term nodes), and `value` is the right-hand side `g`.
         Returns a fresh `NodeField` over the multiplier nodes, carrying the
-        constraint's imposed-value component (its dual, e.g. `imposed_T` /
-        `mpc_rhs`), with `g` at each cited relation and `0` elsewhere. Union it
+        `imposed` component, with `g` at each cited relation and `0` elsewhere. Union it
         into the global load with `|`, e.g. `load | model.constraint_rhs([...])`.
         
         The model must hold exactly one constraint sub-model (the `dirichlet` /
@@ -2170,6 +2207,48 @@ class Model:
         structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
+    def elastic_stress(self, strain: ElementField, materials: ElementField) -> ElementField:
+        r"""
+        Elastic stress `σ = D:ε` of a strain field at the Gauss points of every
+        continuum sub-model of `model` — Cast3M `ELAS` applied to a strain.
+        
+        `D` is the operator each law predicts with: the Hooke matrix of an
+        elasticity, in its symmetry; the isotropic `D` behind a plasticity's elastic
+        predictor; the **undamaged** `D` a damage law degrades. `strain` is in
+        tensor convention, the layout of `deformation` and `thermal_strain`;
+        `materials` needs only each law's elastic constants (`E`, `nu` when
+        isotropic). One zone per continuum sub-model, its components the stresses
+        the law writes; a sub-model with no elastic operator (conduction, bar, beam,
+        constraint) contributes none.
+        """
+    def elastic_strain(self, stress: ElementField, materials: ElementField) -> ElementField:
+        r"""
+        Elastic strain `ε = D⁻¹:σ` of a stress field at the Gauss points of every
+        continuum sub-model of `model` — the inverse of `elastic_stress` (Cast3M
+        `ELAS` applied to a stress).
+        
+        `stress` carries the stresses each law writes (`sigma_xx`, …; the state
+        returned by `integrate_behavior` will do); `materials` the elastic
+        constants. The result is in tensor convention, the layout of `deformation`,
+        so it subtracts from a strain component for component; in plane stress the
+        out-of-plane `eps_zz` is not written. Raises when `D` is singular at a point
+        (a zero modulus).
+        """
+    def strain(self, solution: NodeField, materials: ElementField) -> ElementField:
+        r"""
+        The input of every law of `model`, produced from the nodal `solution` — the
+        model's `B`, of which `internal_forces` is the transpose (Cast3M `EPSI`,
+        extended to every physics).
+        
+        One zone per sub-model with a law, on its behaviour space, carrying what
+        that law reads: the small-strain tensor `eps_*` of a continuum or a bar, the
+        gradient `grad_T_*` of conduction, `T` itself for radiation, the section
+        strains of a beam, the generalized strains of a shell. Each law reads its
+        own unknowns of `solution` by name, so one solution — displacement,
+        temperature, multipliers — serves the whole model; sub-models without a law
+        produce nothing. `materials` is read by the beams alone (their `Φ`). The
+        result feeds `integrate_behavior` as is.
+        """
     def material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
         r"""
         Build a material `ElementField` applying the same uniform
@@ -2227,6 +2306,26 @@ class Model:
         (Cast3M `KTAN`). `D_alg` is evaluated **at the Gauss point**, from the same
         inputs `integrate_behavior` takes — no field of moduli is materialised, since
         this assembler would be its only reader. `prev=None` means the rest state.
+        """
+    def update_contact(self, displacement: NodeField) -> Model:
+        r"""
+        `model.update_contact(model, displacement)` — the model with its contacts
+        **updated** to the positions `X + u`: `X` the active configuration, `u` read
+        in `displacement` on each contact's variables (`u_x`, `u_y`, `u_z`; a node
+        or a component it lacks reads zero). Every other sub-model is shared as it
+        is; a model without contact comes back unchanged.
+        
+        Each slave node is paired again with its closest master facet on `X + u`,
+        and its relation becomes the gap linearised there, written in total
+        displacement from `X`: the right-hand side the contact carries is `-g~`,
+        the gap of the new pairing measured on `X`. The multiplier nodes are kept,
+        so the unknowns `lambda` and the rows `imposed` stay the same; at `u = 0`,
+        the contact as it was built. A master facet collapsed by the displacement
+        is not detected here.
+        
+        What large displacements call for: the step-by-step loop updates its
+        contacts each time it rebuilds its operator. See the contact chapter of the
+        book.
         """
     def internal_forces(self, state: ElementField, solution: NodeField, materials: ElementField) -> NodeField:
         r"""
@@ -2646,6 +2745,25 @@ class NodeField:
         
         Errors if `mesh` and `field` are attached to different `Coords`s.
         """
+    def project(self, mesh: Mesh, target: Mesh, tol: builtins.float = 1e-06) -> NodeField:
+        r"""
+        `field` interpolated by the cells of `mesh` at the nodes of `target` —
+        Cast3M `PROI` onto a geometry. A node of `target` inside a cell of `mesh`
+        takes `Σ Nᵢ(ξ) f(nodeᵢ)`, the shape functions of that cell at the node
+        (quadratic cells interpolate quadratically); every component is carried.
+        
+        A node of `target` outside `mesh` — farther than `tol` outside every cell's
+        reference element — gets zero, as a nodal field reads a node it does not
+        define: projecting a patch onto a larger mesh is a normal thing. `field` is
+        read first zone first, a node of `mesh` it does not define reading zero.
+        `mesh` and `target` may live in different `Coords` (a field moved onto a
+        remeshed part), each read in its active configuration. One zone per submesh
+        of `target`, like `positions`.
+        
+        An empty `field` or `target` gives an empty field; an empty `mesh` gives
+        zero at every node of `target`. Errors: `field` and `mesh` on different
+        `Coords`; `mesh` and `target` in different dimensions.
+        """
     def restrict_like(self, target: NodeField) -> NodeField:
         r"""
         Reproject `field` onto the exact support and components of `target`,
@@ -2970,20 +3088,25 @@ class SubEvolution:
     is a list of `(abscissa, value)` pairs; compose several curves into an
     `Evolution` with `|`.
     """
-    def __new__(cls, samples: typing.Sequence[tuple[builtins.float, typing.Any]], out_of_range: typing.Optional[builtins.str] = None, abscissa_type: typing.Optional[builtins.str] = None, ordinate_type: typing.Optional[builtins.str] = None) -> SubEvolution:
+    def __new__(cls, samples: typing.Sequence[tuple[typing.Any, typing.Any]], out_of_range: typing.Optional[builtins.str] = None, abscissa_type: typing.Optional[typing.Any] = None, ordinate_type: typing.Optional[builtins.str] = None) -> SubEvolution:
         r"""
         `SubEvolution(samples, out_of_range="error", abscissa_type=None,
-        ordinate_type=None)` — one curve. `samples` is a list of
-        `(abscissa, value)`; the values must all be of the same kind (and, for
-        fields, on the same support). `out_of_range` defaults to `"error"`.
-        `abscissa_type` names the physical type of
-        the abscissa (used to label plots and to select a field component when a
-        field is interpolated); `ordinate_type` names the value's type (scalar
-        curves only).
+        ordinate_type=None)` — one curve, or one table. `samples` is a list of
+        `(abscissa, value)`; the abscissa is a float for a curve, a tuple of
+        floats for a table of several variables (`((T, phi), value)`), read
+        hierarchically — grouped by the first variable, then the second… — so
+        the groups need not share their abscissas. The values must all be of
+        the same kind (and, for fields, on the same support). `out_of_range`
+        defaults to `"error"`. `abscissa_type` names the physical type of each
+        variable — a name, or a tuple of names for a table — used to label plots
+        and to select the field components a field is read from when it is
+        interpolated; `ordinate_type` names the value's type (scalar curves
+        only).
         """
-    def abscissa_type(self) -> typing.Optional[builtins.str]:
+    def abscissa_type(self) -> typing.Any:
         r"""
-        The abscissa's physical type, or `None`.
+        The abscissa's physical type: a name for a curve, a tuple of names for
+        a table, or `None`.
         """
     def ordinate_type(self) -> typing.Optional[builtins.str]:
         r"""
@@ -2993,9 +3116,10 @@ class SubEvolution:
         r"""
         Number of samples.
         """
-    def abscissas(self) -> builtins.list[builtins.float]:
+    def abscissas(self) -> typing.Any:
         r"""
-        The sorted abscissas.
+        The sorted abscissas: floats for a curve, tuples of floats for a table
+        (in lexicographic order).
         """
     def out_of_range(self) -> builtins.str:
         r"""
@@ -3005,12 +3129,13 @@ class SubEvolution:
         r"""
         Interpolate at `x`.
         
-        - `x` a **float** → a float / `SubNodeField` / `SubElementField` (the
-          curve's value at `x`);
+        - `x` a **float** (a curve) or a **tuple of floats** (a table) → a
+          float / `SubNodeField` / `SubElementField`, the value at `x`;
         - `x` a **`SubNodeField`** or **`SubElementField`** → a field of the
-          same support whose every entry is this **scalar** curve evaluated at
-          the input's `abscissa_type` component (the curve as a transfer
-          function). The output component is named after `ordinate_type`.
+          same support whose every entry is this **scalar** curve or table
+          evaluated at the input's `abscissa_type` components (applied like
+          `cos` to a field). The output component is named after
+          `ordinate_type`.
         
         `out_of_range` (`"error"` / `"clamp"` / `"extrapolate"`) overrides the
         stored policy for this query.
@@ -3198,6 +3323,8 @@ class SubMatrix:
     def get(self, row_node: Node, row_field: builtins.str, col_node: Node, col_field: builtins.str) -> builtins.float:
         r"""
         Value at row `(row_node, row_field)`, column `(col_node, col_field)`.
+        Raises on a computed block, which holds no value: read the assembled
+        `Matrix` it belongs to.
         """
     def n_rows(self) -> builtins.int:
         r"""
@@ -3269,8 +3396,8 @@ class SubMatrix:
     def __len__(self) -> builtins.int: ...
     def __add__(self, rhs: Matrix  |  SubMatrix) -> Matrix:
         r"""
-        `sub_matrix + other` → a fresh `Matrix` holding this block and the
-        other operand's, as `Matrix.__add__` does.
+        `sub_matrix + other` → this block and the other operand added, as
+        `Matrix.__add__` does; a literal block's values are its own.
         """
     def __sub__(self, rhs: Matrix  |  SubMatrix) -> Matrix:
         r"""
@@ -3448,6 +3575,12 @@ class SubModel:
         The physics nature(s) of this sub-model as a list of tags (`"mechanical"`,
         `"thermal"`, `"constraint"`, `"other"`). Determined entirely by the physics
         kind — one tag for a plain physics, several for a coupled one.
+        """
+    def label(self) -> builtins.str:
+        r"""
+        The kind of this sub-model, named — `"Dirichlet"`, `"Contact"`,
+        `"Elasticity"`… The question its natures cannot answer: a contact and a
+        Dirichlet on displacements are both constraint and mechanical.
         """
     def multiplier_mesh(self) -> Mesh:
         r"""
@@ -3866,33 +3999,44 @@ def border(mesh: Mesh, angle_deg: typing.Optional[builtins.float] = None) -> Mes
     `angle_deg=None` (the default) keeps every boundary as one closed loop.
     """
 
-def boundary_transfer(fespace: FiniteElementSpace, target: Model, components: typing.Sequence[tuple[builtins.str, builtins.str]]) -> Model:
+def boundary_transfer(fespace: FiniteElementSpace, target: Model, variables: typing.Sequence[builtins.str]) -> Model:
     r"""
-    `model.boundary_transfer(fespace, target, components)` — surface
+    `model.boundary_transfer(fespace, target, variables)` — surface
     exchange with an **imposed ambient** (Robin / film) spanning every
     subspace of a *boundary* `fespace` (edge mesh in 2-D, surface mesh in
     3-D), coupling into the model `target`.
     
-    `components` is a list of `(primal, dual)` pairs, each one that `target`
-    assembles — naming the bulk physics' own DOFs is what makes the boundary
-    term couple into it:
+    `variables` lists the exchanged unknowns of `target`; each couples into
+    the dual row `target` pairs it with — naming the bulk physics' own DOFs is
+    what makes the boundary term couple into it:
     
-    | `target` | `components` | you get |
+    | `target` | `variables` | you get |
     |---|---|---|
-    | `heat_conduction` | `[("T", "q")]` | Newton's law of cooling |
-    | `fick(..., "H2")` | `[("c_H2", "j_H2")]` | a surface mass-transfer law |
-    | `elasticity` | `[("u_x", "f_x"), ("u_y", "f_y")]` | a Winkler elastic foundation |
+    | `heat_conduction` | `["T"]` | Newton's law of cooling |
+    | `fick(..., "H2")` | `["c_H2"]` | a surface mass-transfer law |
+    | `elasticity` | `["u_x", "u_y"]` | a Winkler elastic foundation |
     
-    The nature (`"thermal"`, `"diffusion"`, `"mechanical"`) is not an
-    argument: it is the one of the sub-model of `target` assembling the pairs.
-    A pair `target` does not assemble, or pairs of two natures, raise.
+    Neither the dual row nor the nature (`"thermal"`, `"diffusion"`,
+    `"mechanical"`) is an argument: both are read from `target`. A variable
+    `target` does not declare, or variables of two natures, raise.
     
-    Material, per pair: the coefficient `h_<primal>` and the ambient
-    `a_ext_<primal>`. The film `h∫NᵢNⱼ` goes into the stiffness, the ambient
+    Material, per variable: the coefficient `h_<variable>` and the ambient
+    `a_ext_<variable>`. The film `h∫NᵢNⱼ` goes into the stiffness, the ambient
     term `h·a_ext·∫Nᵢ dΓ` comes out of `node_field.external_forces(...)`.
     Compose with `|`:
     `conduction = model.heat_conduction(bulk)`
-    `model = conduction | model.boundary_transfer(skin, conduction, [("T", "q")])`.
+    `model = conduction | model.boundary_transfer(skin, conduction, ["T"])`.
+    """
+
+def cell_integral(field: ElementField, target: FiniteElementSpace) -> ElementField:
+    r"""
+    Integral of every component of `field` over **each cell** (Cast3M
+    `INTG 'ELEM'`), with the field's own quadrature: `Σ_g f(g)·|J|·w_g`, the
+    `2πr` included on a body of revolution. The result lives on `target`, a
+    space of the same mesh with **one point per cell** —
+    `FiniteElementSpace(mesh, quadrature="REDUCED")`, a single point at each
+    centroid. Integrating `1` gives every cell's measure. Raises when `target`
+    has several points per cell or does not cover the field's mesh.
     """
 
 def chain(mesh: Mesh) -> Mesh:
@@ -4000,25 +4144,25 @@ def consolidate_node(field: NodeField) -> NodeField:
     pair. `field` itself is left untouched.
     """
 
-def contact(target: Model, slave: Mesh, master: Mesh, variables: typing.Sequence[builtins.str]) -> Model:
+def contact(slave: Mesh, master: Mesh, target: Model, variables: typing.Sequence[builtins.str]) -> Model:
     r"""
-    `model.contact(slave, master, components, multiplier=None,
-    imposed_value=None)` — node-to-surface contact (a single sub-model):
-    prevent the nodes of `slave` from penetrating the oriented `master`
-    surface mesh, one **unilateral** relation (`≥`) per slave node.
+    `model.contact(slave, master, target, variables)` — node-to-surface contact
+    (a single sub-model): prevent the nodes of `slave` from penetrating the
+    oriented `master` surface mesh, one **unilateral** relation (`≥`) per slave
+    node.
     
     Each slave node is paired at build with its closest master facet
     (projection weights, facet normal, initial signed gap); the pairing is
     then fixed (linearised, frictionless contact). The master surface must
     be consistently oriented with its normal pointing toward the slave
-    body. `components` is a list of `(variable, target_dual)` pairs — one
-    per space dimension, in ambient order (e.g.
-    `[("u_x","f_x"), ("u_y","f_y")]`); find each `target_dual` with
-    `model.dual_of(variable)`. `multiplier` / `imposed_value` override the
-    derived names `lambda_contact` / `contact_gap`.
+    body. `target` is the model being constrained; `variables` lists its
+    displacement primals, one per space dimension in ambient order (e.g.
+    `["u_x", "u_y"]`), each dual row read from it. Each relation gets a
+    multiplier node of its own, minted beside its slave node.
     
-    Solve with `solve_unilateral`; build the initial-gap right-hand side
-    with `contact_gaps()`. See the contact chapter of the book.
+    Solve with `solve`. The initial-gap right-hand side `-g0` is a load the
+    contact carries: `node_field.external_forces` returns it with the other
+    loads of the model. See the contact chapter of the book.
     """
 
 def convert(mesh: Mesh, element_type: builtins.str) -> Mesh:
@@ -4060,7 +4204,7 @@ def cosh(field: typing.Any) -> typing.Any:
     Element-wise hyperbolic cosine of a field.
     """
 
-def creep_blackburn(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def creep_blackburn(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.creep_blackburn(fespace, kinematics)` — a **saturating primary** creep
     stage plus a steady secondary one, with Blackburn's `sinh` stress
@@ -4069,9 +4213,12 @@ def creep_blackburn(fespace: FiniteElementSpace, kinematics: builtins.str) -> Mo
     
     The primary strain is tracked as its own internal variable (`p_prim`), so
     the law integrates correctly under a varying load.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
-def creep_lemaitre(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def creep_lemaitre(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.creep_lemaitre(fespace, kinematics)` — Lemaitre primary creep by
     **strain** hardening, `ṗ = (q/K)^N · p^(−M)`. Material `E`, `nu`, `K`,
@@ -4080,9 +4227,12 @@ def creep_lemaitre(fespace: FiniteElementSpace, kinematics: builtins.str) -> Mod
     The accumulated strain itself slows the flow, producing a decelerating
     primary stage with no explicit time dependence — which is what makes it
     usable under a varying load, where a time-hardening form would be wrong.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
-def creep_norton(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def creep_norton(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.creep_norton(fespace, kinematics)` — Norton-Odqvist secondary creep,
     `ṗ = (q/K)^n`. Material `E`, `nu`, `K`, `n`.
@@ -4092,9 +4242,12 @@ def creep_norton(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model
     `integrate_behavior(..., dt=...)` — and raises without one, because
     integrating a creep law as if it were instantaneous would give a
     plausible wrong answer.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
-def damage_sic_sic(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def damage_sic_sic(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.damage_sic_sic(fespace, kinematics)` — **orthotropic** damage of a
     woven SiC/SiC ceramic-matrix composite: one damage per weave direction.
@@ -4110,9 +4263,12 @@ def damage_sic_sic(fespace: FiniteElementSpace, kinematics: builtins.str) -> Mod
     Each damage **saturates** at `d_max_i` rather than reaching one: matrix
     cracking does not take the whole stiffness, and a law that let it would
     predict a collapse that does not happen. State: `kappa_1..3`, `d_1..3`.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
-def damage_tc(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def damage_tc(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.damage_tc(fespace, kinematics)` — **two** damage variables, tension
     and compression apart: `σ = (1−d⁺)σ̃⁺ + (1−d⁻)σ̃⁻`. Material `E`, `nu`,
@@ -4124,6 +4280,9 @@ def damage_tc(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     stiffness on closure — the unilateral effect — which is what makes the
     law usable under cyclic loading. State: `r_plus`, `r_minus`, `d_plus`,
     `d_minus`.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
 def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str = 'linear') -> ElementField:
@@ -4148,33 +4307,29 @@ def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str
     (`H_θθ = u_r / r`).
     """
 
-def dirichlet(target: Model, variable: builtins.str, imposed_mesh: Mesh, multiplier_mesh: Mesh, sense: typing.Optional[builtins.str] = None) -> Model:
+def dirichlet(imposed_mesh: Mesh, target: Model, variable: builtins.str, sense: builtins.str = '=') -> Model:
     r"""
-    `model.dirichlet(imposed_variable, target_dual, imposed_mesh,
-    multiplier_mesh, multiplier=None, imposed_value=None, sense="=")` —
-    Dirichlet constraint model (a single sub-model) imposed via Lagrange
-    multipliers.
+    `model.dirichlet(imposed_mesh, target, variable, sense="=")` — Dirichlet
+    constraint (a single sub-model) holding `variable` on the nodes of
+    `imposed_mesh`, via Lagrange multipliers.
     
-    `imposed_variable` is the constrained primary variable (e.g. `"T"`);
-    `target_dual` is the dual variable of the target physics it couples
-    `target` is the model being constrained: `variable` must be one of its
-    primals, and its dual row is read from it — the `T → q` map is the target's
-    business, not something to retype. `imposed_mesh` is the POI1 mesh of
-    constrained nodes; `multiplier_mesh` is the POI1 support of the multipliers
-    (same per-submesh cell count) — usually built from `imposed_mesh` with the
-    `barycenter` mesher. The multiplier and imposed-value names are derived,
-    `lambda_<variable>` / `imposed_<variable>`; the imposed value `u_d` is
-    written by the user in the load field at the multiplier node's
-    `imposed_<variable>` component.
+    `imposed_mesh` is the POI1 mesh of constrained nodes, one relation per
+    node. `target` is the model being constrained: `variable` must be one of
+    its primals, and its dual row is read from it — the `T → q` map is the
+    target's business, not something to retype. Each relation gets a multiplier
+    node of its own, minted beside its constrained node (`Model.multiplier_mesh()`
+    gives them back); its names are those of every constraint relation, `lambda`
+    and `imposed`. The imposed value `u_d` is written in the load field at the
+    multiplier node's `imposed` component — `Model.constraint_rhs` does it from
+    the constrained node.
     
     **One variable, and one only** — compose for a clamp:
-    `dirichlet(m, "u_x", …) | dirichlet(m, "u_y", …)`, the two sharing their
-    multiplier mesh, since `lambda_u_x` and `lambda_u_y` on one node are distinct
-    DOFs.
+    `dirichlet(nodes, m, "u_x") | dirichlet(nodes, m, "u_y")`.
     
-    `sense` (`"="`, `">="` or `"<="`, default `"="`) turns the constraint
-    unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a model is solved with
-    `solve_unilateral`. See the model chapter of the book for the full semantics.
+    `sense` (`"="`, the default, `">="` or `"<="`) turns the constraint
+    unilateral (`u ≥ u_d` / `u ≤ u_d`): the matrix carries the sense, and
+    `solve` runs its active-set loop. See the model chapter of the book for the
+    full semantics.
     """
 
 def displace(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
@@ -4183,6 +4338,17 @@ def displace(field: NodeField, components: typing.Optional[typing.Sequence[built
     components[a])` on the active coordinate set. `components` lists one
     displacement-component name per spatial axis, in axis order; `None` →
     `["ux", "uy", "uz"][:dim]`. Mutates the field's `Coords` in place.
+    """
+
+def displace_from(field: NodeField, reference: builtins.int, target: builtins.int, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
+    r"""
+    Lay configuration `target` of the field's `Coords` at configuration
+    `reference` displaced by `field`: `x = X + u`, in absolute — called again,
+    it lands at `X + u` again, nothing accumulates. A node the field does not
+    define stays at its reference position; the active configuration is left as
+    it is. `components` names one displacement component per axis; `None` →
+    `["ux", "uy", "uz"][:dim]`. Cast3M `FORM` with a displacement, without
+    changing the active configuration.
     """
 
 def divergence(field: ElementField, prefix: builtins.str) -> NodeField:
@@ -4196,10 +4362,11 @@ def divergence(field: ElementField, prefix: builtins.str) -> NodeField:
     tensor case is the internal forces of a continuum when the quantity is a
     Cauchy stress — `divergence(stress, "sigma")` is Cast3m `BSIG` — but the
     operator knows nothing of mechanics: it needs only the geometry and the
-    names. One zone per subspace.
+    names. A node shared by several subspaces receives the sum of their
+    contributions.
     """
 
-def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.drucker_prager(fespace, kinematics)` — pressure-sensitive plasticity
     with **non-associated** flow: `f = q + α·I₁ − k`, plastic potential
@@ -4210,15 +4377,47 @@ def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str) -> Mod
     and rocks, whose measured dilatancy is far below what friction alone
     would imply. A non-associated law has a **non-symmetric** tangent.
     Returns beyond the cone's apex (`I₁ = k/α`) collapse onto the tip.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
-def elasticity(fespace: FiniteElementSpace, kinematics: builtins.str, symmetry: typing.Optional[builtins.str] = None) -> Model:
+def elastic_strain(model: Model, stress: ElementField, materials: ElementField) -> ElementField:
     r"""
-    `model.elasticity(fespace, kinematics, symmetry=None)` — linear-elasticity
-    model spanning every subspace of `fespace`. `kinematics` is `"plane_stress"`,
-    `"plane_strain"` or `"axisymmetric"` (2-D), or `"full_3d"` (3-D). DOFs are
-    the vector displacement `u_x, u_y(, u_z)`; material is supplied at
-    assembly time.
+    Elastic strain `ε = D⁻¹:σ` of a stress field at the Gauss points of every
+    continuum sub-model of `model` — the inverse of `elastic_stress` (Cast3M
+    `ELAS` applied to a stress).
+    
+    `stress` carries the stresses each law writes (`sigma_xx`, …; the state
+    returned by `integrate_behavior` will do); `materials` the elastic
+    constants. The result is in tensor convention, the layout of `deformation`,
+    so it subtracts from a strain component for component; in plane stress the
+    out-of-plane `eps_zz` is not written. Raises when `D` is singular at a point
+    (a zero modulus).
+    """
+
+def elastic_stress(model: Model, strain: ElementField, materials: ElementField) -> ElementField:
+    r"""
+    Elastic stress `σ = D:ε` of a strain field at the Gauss points of every
+    continuum sub-model of `model` — Cast3M `ELAS` applied to a strain.
+    
+    `D` is the operator each law predicts with: the Hooke matrix of an
+    elasticity, in its symmetry; the isotropic `D` behind a plasticity's elastic
+    predictor; the **undamaged** `D` a damage law degrades. `strain` is in
+    tensor convention, the layout of `deformation` and `thermal_strain`;
+    `materials` needs only each law's elastic constants (`E`, `nu` when
+    isotropic). One zone per continuum sub-model, its components the stresses
+    the law writes; a sub-model with no elastic operator (conduction, bar, beam,
+    constraint) contributes none.
+    """
+
+def elasticity(fespace: FiniteElementSpace, kinematics: builtins.str, symmetry: builtins.str = 'isotropic', strain_measure: builtins.str = 'linear') -> Model:
+    r"""
+    `model.elasticity(fespace, kinematics, symmetry="isotropic",
+    strain_measure="linear")` — linear-elasticity model spanning every subspace of
+    `fespace`. `kinematics` is `"plane_stress"`, `"plane_strain"` or
+    `"axisymmetric"` (2-D), or `"full_3d"` (3-D). DOFs are the vector
+    displacement `u_x, u_y(, u_z)`; material is supplied at assembly time.
     
     `"axisymmetric"` requires a geometry built with `Coords.axisymmetric()`
     (`x = r`, `y = z`): the hoop strain `ε_θθ = u_r / r` comes from the kinematics,
@@ -4230,6 +4429,11 @@ def elasticity(fespace: FiniteElementSpace, kinematics: builtins.str, symmetry: 
     `"anisotropic"` (the 21 constants `C_11 … C_66`). The two oriented ones
     also require the material axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z`
     in 3-D — which are orthonormalised internally.
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains,
+    the default), `"green_lagrange"` (large rotations: Hooke on `E` is
+    Saint-Venant–Kirchhoff) or `"hencky"` (`½ ln C`). The stress it writes is
+    the dual, named after it: `sigma_*`, `S_*` or `T_*`.
     """
 
 def element_type_from_gmsh(code: builtins.int) -> builtins.str:
@@ -4253,24 +4457,22 @@ def elements_on(mesh: Mesh, points: Mesh, strict: builtins.bool = True) -> Mesh:
     `Coords`.
     """
 
-def embedded(target: Model, immersed: Mesh, host: Mesh, variables: typing.Sequence[builtins.str], tol: typing.Optional[builtins.float] = None) -> Model:
+def embedded(immersed: Mesh, host: Mesh, target: Model, variables: typing.Sequence[builtins.str], tol: builtins.float = 1e-06) -> Model:
     r"""
-    `model.embedded(immersed, host, components, multipliers=None,
-    imposed_values=None, tol=None)` — embedded (immersed) constraint (a
-    single sub-model) tying each node of `immersed` to the interpolation of
-    `host` at that node, via Lagrange multipliers.
+    `model.embedded(immersed, host, target, variables, tol=1e-6)` — embedded
+    (immersed) constraint (a single sub-model) tying each node of `immersed` to
+    the interpolation of `host` at that node, via Lagrange multipliers.
     
-    `immersed` and `host` are meshes sharing one Coords (e.g. a bar
-    « baignée » in a volume). `components` is a list of `(variable,
-    target_dual)` pairs — the field components to tie (e.g.
-    `[("u_x","f_x"), ("u_y","f_y"), ("u_z","f_z")]`); find each `target_dual`
-    with `model.dual_of(variable)`. The coupling weights are the host shape
-    functions at each immersed node, computed once at build by locating the
-    node in the host (an immersed node outside the host is an error).
-    `multipliers` / `imposed_values` override the per-component derived names
-    `lambda_<variable>` / `imposed_<variable>`; `tol` is the location
-    tolerance (default `1e-6`). The right-hand side `g` defaults to `0` (a
-    rigid tie). See the constraints chapter of the book.
+    `immersed` and `host` are meshes sharing one Coords (e.g. a bar embedded in
+    a volume). `target` is the model being constrained; `variables` lists the
+    primals of `target` to tie (e.g. `["u_x", "u_y", "u_z"]`), each dual row
+    read from it. The coupling weights are the host shape functions at each
+    immersed node, computed once at build by locating the node in the host (an
+    immersed node outside the host is an error); `tol` is the location
+    tolerance, a gap in the host's **reference** element, without dimension.
+    Each relation — one per immersed node and variable — gets a multiplier node
+    of its own; the right-hand side defaults to `0` (a rigid tie). See the
+    constraints chapter of the book.
     """
 
 def exp(field: typing.Any) -> typing.Any:
@@ -4319,10 +4521,10 @@ def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: bu
     displacement vector). SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
     """
 
-def fick(fespace: FiniteElementSpace, species: builtins.str, symmetry: typing.Optional[builtins.str] = None) -> Model:
+def fick(fespace: FiniteElementSpace, species: builtins.str, symmetry: builtins.str = 'isotropic') -> Model:
     r"""
-    `model.fick(fespace, species, symmetry=None)` — Fickian diffusion of one
-    named **species**, spanning every subspace of `fespace`.
+    `model.fick(fespace, species, symmetry="isotropic")` — Fickian diffusion of
+    one named **species**, spanning every subspace of `fespace`.
     
     Every name carries the species: DOFs are `c_<species>` (primal) and
     `j_<species>` (dual), the diffusivity is `D_<species>`, the reported flux
@@ -4341,20 +4543,27 @@ def fick(fespace: FiniteElementSpace, species: builtins.str, symmetry: typing.Op
 
 def flux(fespace: FiniteElementSpace, target: Model, dual: builtins.str) -> Model:
     r"""
-    `model.flux(fespace, target, dual)` — une **charge répartie** :
-    les forces nodales cohérentes `∫ φ N dΓ` d'une densité donnée, versées dans
-    la ligne duale `dual` (`"q"` pour une source de chaleur, `"f_x"` pour une
-    traction) du modèle `target`, qui lui donne sa nature et atteste que la
-    ligne est bien assemblée par quelqu'un.
+    `model.flux(fespace, target, dual)` — a **distributed load**: the
+    consistent nodal forces `∫ φ N dΓ` of a given density, fed into the dual row
+    `dual` (`"q"` for a heat source, `"f_x"` for a traction) of the model
+    `target`, which gives it its kind and attests that the row is assembled by
+    someone.
     
-    Matériau : `phi_<dual>` — la densité, uniforme ou variable par point de
-    Gauss selon le champ fourni.
+    Material: `phi_<dual>` — the density, uniform or varying per Gauss point as
+    the field provides.
     
-    Sa dérivée par rapport à la solution est **nulle** : elle ne contribue à
-    aucune matrice, seulement au second membre, qu'on récupère par
-    `node_field.external_forces(model, materials)`. C'est ce qui la distingue
-    d'une physique : elle n'introduit aucune inconnue et écrit dans la ligne
-    duale d'une autre.
+    The row `"n"` is the **normal** mode, a pressure: `phi_n` acts along the
+    normal of the cell, `∫ φ n N dΓ`, into every displacement row of the target
+    (`f_x`, `f_y`, `f_z`). The normal is that of the active configuration —
+    evaluated on a configuration laid at `X + u` (`coords.displace_from`), the
+    load follows the wall. For a contour travelled counter-clockwise the normal
+    of a segment points out of the material: a pressure `p` pushing on the wall
+    is then `phi_n = -p`.
+    
+    Its derivative with respect to the solution is taken as **zero**: it feeds no
+    matrix, only the right-hand side, read by
+    `node_field.external_forces(model, materials)`. That is what sets it apart
+    from a physics: it brings no unknown and writes into the dual row of another.
     """
 
 def from_arrays(coords: Coords, node_tags: typing.Any, node_coords: typing.Any, blocks: typing.Any, *, node_fields: typing.Sequence[typing.Any] = [], cell_fields: typing.Sequence[typing.Any] = [], order: builtins.str = 'pyrucast') -> tuple[dict, builtins.list[NodeField], builtins.list[ElementField]]:
@@ -4498,7 +4707,7 @@ def grid_surface2(contour: Mesh, element_type: builtins.str, size: typing.Option
     `size`, `band` and `relax` mean what they mean for `grid_surface`.
     """
 
-def gurson(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def gurson(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.gurson(fespace, kinematics)` — Gurson-Tvergaard-Needleman plasticity
     of a **porous** metal, where the porosity shrinks the yield surface.
@@ -4513,15 +4722,17 @@ def gurson(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     
     The porosity is exposed as the internal variable `porosity`, starting
     from `f_0`. Void **nucleation** is not modelled — only growth.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
-def heat_conduction(fespace: FiniteElementSpace, symmetry: typing.Optional[builtins.str] = None) -> Model:
+def heat_conduction(fespace: FiniteElementSpace, symmetry: builtins.str = 'isotropic') -> Model:
     r"""
-    `model.heat_conduction(fespace, symmetry=None)` — heat-conduction model
-    spanning **every** subspace of `fespace` (one zone per subspace). A
-    single-subspace space gives the unit case; several give one zone
-    each. Compose heterogeneous physics with `|`:
-    `model.heat_conduction(fes) | model.dirichlet(...)`.
+    `model.heat_conduction(fespace, symmetry="isotropic")` — heat-conduction
+    model spanning **every** subspace of `fespace` (one zone per subspace). A
+    single-subspace space gives the unit case; several give one zone each. Compose
+    heterogeneous physics with `|`: `model.heat_conduction(fes) | model.dirichlet(...)`.
     
     `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
     `"anisotropic"`, and selects which conductivity the material field must
@@ -4562,24 +4773,25 @@ def integrate_behavior(model: Model, deformation: ElementField, materials: Eleme
     (`∫ Bᵀ·flux = K·u`); a non-linear law is the exact response.
     """
 
-def interface_transfer(side_a: FiniteElementSpace, side_b: FiniteElementSpace, target: Model, components: typing.Sequence[tuple[builtins.str, builtins.str]], tol: builtins.float = 1e-09) -> Model:
+def interface_transfer(side_a: FiniteElementSpace, side_b: FiniteElementSpace, target: Model, variables: typing.Sequence[builtins.str], tol: builtins.float = 1e-09) -> Model:
     r"""
-    `model.interface_transfer(side_a, side_b, target, components, tol=1e-9)` —
+    `model.interface_transfer(side_a, side_b, target, variables, tol=1e-9)` —
     the exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
     that do **not** share their nodes, coupling into the model `target`.
     
-    `components` is a list of `(primal, dual)` pairs, each one that `target`
-    assembles: `[("c_H2", "j_H2")]` on a `fick` model for a coating,
-    `[("T", "q")]` on a `heat_conduction` for a contact resistance, the
-    displacement pairs on an `elasticity` for a bonded joint of finite
-    stiffness. The nature is not an argument: it is the one of the sub-model
-    of `target` assembling the pairs, and a pair `target` does not assemble —
-    or pairs of two natures — raise. `h_<primal>` is supplied at assembly time.
+    `variables` lists the exchanged unknowns of `target`, each coupling into
+    the dual row `target` pairs it with: `["c_H2"]` on a `fick` model for a
+    coating, `["T"]` on a `heat_conduction` for a contact resistance, the
+    displacements on an `elasticity` for a bonded joint of finite stiffness.
+    Neither the dual row nor the nature is an argument: both are read from
+    `target`, and a variable `target` does not declare — or variables of two
+    natures — raise. `h_<variable>` is supplied at assembly time.
     
     `side_a` and `side_b` are the two facing **boundary** FE spaces, which
     must be conforming — same element type, same cell count, and local node
-    `k` of a cell facing local node `k` of its counterpart, within `tol`. A
-    non-matching interface raises rather than being projected.
+    `k` of a cell facing local node `k` of its counterpart, within `tol`, a
+    **distance** in the length unit of the mesh. A non-matching interface
+    raises rather than being projected.
     
     This is what lets the field **jump** across the interface: with a shared
     node it could not. The jump is `q/h` for a flux density `q`.
@@ -4728,7 +4940,7 @@ def material_field_per_sub_model(model: Model, components_and_values_per_sub_mod
     sub-model (typical for Dirichlet).
     """
 
-def mazars(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def mazars(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.mazars(fespace, kinematics)` — Mazars isotropic damage spanning every
     subspace of `fespace`. `kinematics` is `"plane_stress"` / `"plane_strain"` /
@@ -4736,6 +4948,9 @@ def mazars(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     (`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at
     assembly / integration time. The behaviour integration (`COMP`) carries
     the scalar history variable `kappa` (`VAR0`→`VAR1`) and outputs `damage`.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
 def merge(a: NodeField, b: NodeField) -> NodeField:
@@ -4785,22 +5000,22 @@ def merge_triangles(mesh: Mesh) -> Mesh:
     Remove the triangles from a quadrangle-dominant mesh, in pairs.
     """
 
-def mpc(target: Model, terms: typing.Sequence[tuple[Mesh, builtins.str, builtins.float]], multiplier_mesh: Mesh, sense: typing.Optional[builtins.str] = None) -> Model:
+def mpc(terms: typing.Sequence[tuple[Mesh, builtins.str, builtins.float]], target: Model, sense: builtins.str = '=') -> Model:
     r"""
-    `model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None,
-    sense="=")` — multi-point constraint (a single sub-model) imposing, per
-    relation, `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange multipliers.
+    `model.mpc(terms, target, sense="=")` — multi-point constraint (a single
+    sub-model) imposing, per relation, `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange
+    multipliers.
     
-    `terms` is a list of `(mesh, variable, target_dual, coefficient)` tuples:
-    each `mesh` is a POI1 mesh (one node per relation), paired
-    element-for-element with the others and with `multiplier_mesh` (relation
-    `r` = cell `r` of every mesh). Find `target_dual` with
-    `model.dual_of(variable)`. `multiplier` / `imposed_value` override the
-    derived names `lambda_mpc` / `mpc_rhs`. The right-hand side `g` is written
-    by the user in the load field at the multiplier node's `imposed_value`
-    component (default `0`). `sense` (`"="`, `">="` or `"<="`, default `"="`)
-    turns the relations unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`) — such a model is
-    solved with `solve_unilateral`. See the constraints chapter of the book.
+    `terms` is a list of `(mesh, variable, coefficient)` tuples: each `mesh` is
+    a POI1 mesh (one node per relation), paired element-for-element with the
+    others (relation `r` = cell `r` of every mesh); each `variable` is a primal
+    of `target`, the model being constrained — the union of two models to tie
+    two bodies — whose dual row is read from it. Each relation gets a
+    multiplier node of its own, minted beside the node of the first term; `g`
+    is written in the load field at its `imposed` component (default `0`).
+    `sense` (`"="`, the default, `">="` or `"<="`) turns the relations
+    unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`): the matrix carries the sense, and
+    `solve` runs its active-set loop. See the constraints chapter of the book.
     """
 
 def orient(mesh: Mesh) -> Mesh:
@@ -4816,7 +5031,7 @@ def orient(mesh: Mesh) -> Mesh:
     a fresh mesh sharing the input's nodes.
     """
 
-def ottosen(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def ottosen(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.ottosen(fespace, kinematics)` — Ottosen's four-parameter criterion for
     concrete, whose strength depends on the pressure **and** on the Lode
@@ -4826,6 +5041,9 @@ def ottosen(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     Integrated by a cutting-plane return with a numerically differentiated
     normal: the criterion is exact, and the gradient — long enough that a
     hand-derived one could not be checked — is a central difference.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
 def pave_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
@@ -4901,15 +5119,18 @@ def pave_volume(envelope: Mesh, layers: builtins.int = 1, thickness: typing.Opti
     none, so without them the mesh could not be conforming.
     """
 
-def plasticity_isotropic(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def plasticity_isotropic(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.plasticity_isotropic(fespace, kinematics)` — von Mises with **linear
     isotropic hardening**, `σ_y(p) = σ_y + H·p`. Material `E`, `nu`,
     `sigma_y`, `H`; everything else as `plasticity_perfect` (`H = 0` would
     give it back exactly).
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
-def plasticity_perfect(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def plasticity_perfect(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.plasticity_perfect(fespace, kinematics)` — **perfect** (non-hardening)
     von Mises elastoplasticity spanning every subspace of `fespace`. `kinematics`
@@ -4919,6 +5140,9 @@ def plasticity_perfect(fespace: FiniteElementSpace, kinematics: builtins.str) ->
     behaviour integration (`COMP`) carries the plastic-strain +
     cumulated-`p` internal state (`VAR0`→`VAR1`) and emits the consistent
     tangent `D_alg`.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
 def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:
@@ -5040,6 +5264,26 @@ def positions(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins.s
     One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
     requests all the axes the mesh's `Coords` has (`["X"]` in 1-D,
     `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D).
+    """
+
+def project(field: NodeField, mesh: Mesh, target: Mesh, tol: builtins.float = 1e-06) -> NodeField:
+    r"""
+    `field` interpolated by the cells of `mesh` at the nodes of `target` —
+    Cast3M `PROI` onto a geometry. A node of `target` inside a cell of `mesh`
+    takes `Σ Nᵢ(ξ) f(nodeᵢ)`, the shape functions of that cell at the node
+    (quadratic cells interpolate quadratically); every component is carried.
+    
+    A node of `target` outside `mesh` — farther than `tol` outside every cell's
+    reference element — gets zero, as a nodal field reads a node it does not
+    define: projecting a patch onto a larger mesh is a normal thing. `field` is
+    read first zone first, a node of `mesh` it does not define reading zero.
+    `mesh` and `target` may live in different `Coords` (a field moved onto a
+    remeshed part), each read in its active configuration. One zone per submesh
+    of `target`, like `positions`.
+    
+    An empty `field` or `target` gives an empty field; an empty `mesh` gives
+    zero at every node of `target`. Errors: `field` and `mesh` on different
+    `Coords`; `mesh` and `target` in different dimensions.
     """
 
 def psca(x: typing.Any, y: typing.Any) -> typing.Any:
@@ -5190,6 +5434,21 @@ def rotate(mesh: Mesh, angle: builtins.float, center: typing.Sequence[builtins.f
     is required.
     """
 
+def rotate_frame(field: ElementField, gradient: ElementField) -> ElementField:
+    r"""
+    `field` with its material axes turned with the part: `V1*` (and `V2*` in
+    3-D) turned by the rotation `R` of the polar decomposition `F = R U` at each
+    point, `F` read from `gradient` — the field `deformation(u, fespace,
+    "gradient")` produces, computed on the **reference** configuration. Every
+    other component is copied as it is: the material is the same, only its axes
+    follow the rotation, `k = R k₀ Rᵀ`. This is what a conduction or a diffusion
+    computed on the deformed part reads.
+    
+    A zone without axes (an isotropic material) comes back as it is, shared. A
+    zone carrying part of the axes only, or a gradient missing on a zone's FE
+    space, is an error.
+    """
+
 def save(path: builtins.str, objects: dict) -> None:
     r"""
     Write `objects` and everything they need to `path`.
@@ -5240,13 +5499,13 @@ def set_positions(field: NodeField, components: typing.Optional[typing.Sequence[
     `Coords` in place.
     """
 
-def shell(fespace: FiniteElementSpace, model: builtins.str) -> Model:
+def shell(fespace: FiniteElementSpace, formulation: builtins.str) -> Model:
     r"""
-    `model.shell(fespace, model)` — a **shell**: a surface carrying membrane
+    `model.shell(fespace, formulation)` — a **shell**: a surface carrying membrane
     forces and bending moments, on a TRI3/QUA4 mesh in 3-D. Material `E`,
     `nu`, `h` (thickness), plus an optional `rho`.
     
-    | `model` | transverse shear | when |
+    | `formulation` | transverse shear | when |
     |---|---|---|
     | `"thick"` | yes, integrated **reduced** | the general case |
     | `"kirchhoff"` | imposed zero at discrete points | thin shells |
@@ -5270,12 +5529,12 @@ def shell(fespace: FiniteElementSpace, model: builtins.str) -> Model:
     has no constitutive `Q`, only a reaction.
     """
 
-def shell_deformation(field: NodeField, fespace: FiniteElementSpace, model: builtins.str) -> ElementField:
+def shell_deformation(field: NodeField, fespace: FiniteElementSpace, formulation: builtins.str) -> ElementField:
     r"""
     Generalised **strains of a shell** at the Gauss points — the geometric
     producer of the behaviour input for `shell`.
     
-    `shell_deformation(field, fespace, model)` with `model` the formulation
+    `shell_deformation(field, fespace, formulation)` with `formulation`
     (`"thick"` or `"kirchhoff"`), which decides the bending rows and whether a
     transverse shear is reported at all:
     
@@ -5325,88 +5584,54 @@ def skin(mesh: Mesh, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
     orientation; the original nodes are reused.
     """
 
-def solve(matrix: Matrix, rhs: NodeField, method: builtins.str = 'lu', cache: builtins.bool = True, verbosity: builtins.str = 'silent') -> NodeField:
+def solve(matrix: Matrix, rhs: NodeField, method: builtins.str = 'lu', relations: builtins.str = 'lagrange', active_set: builtins.str = 'schur', cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10, verbosity: builtins.str = 'silent') -> NodeField:
     r"""
     Solve the linear system `A·x = b` for `x` (sparse direct, faer).
     
-    `matrix` is the finalized system `A`; `rhs` is the right-hand side `b`
-    as a `NodeField` (read through the aggregate, zones resolved per DOF).
-    Returns the solution `x` as a single-zone `NodeField` over the
-    column-DOF nodes.
+    `matrix` is the assembled system `A`; `rhs` is the right-hand side `b` as a
+    `NodeField`, read at every row DOF of the matrix (a DOF no zone defines
+    reads zero). The imposed value of a constraint relation lives at its
+    multiplier node, component `imposed`. The matrix carries everything the
+    solve needs: its relation rows, their coefficients and their sense (`=`,
+    `>=`, `<=`), declared by the constraints that built them — no model is
+    passed alongside.
+    
+    `relations` says how the constraint relations are enforced:
+    
+    - `"lagrange"` (default) — by their multipliers, the saddle-point solved as
+      assembled; the multipliers come back in the solution as the reactions.
+      As soon as the matrix carries an inequality, the **active-set** loop
+      decides which relations are saturated: an active relation holds as an
+      equation (its `lambda` is `<= 0` for `>=`, `>= 0` for `<=`), an inactive
+      one reports `lambda = 0`;
+    - `"eliminate"` — each equality relation eliminates one unknown, and the
+      smaller system left, without multipliers, is solved; each eliminated
+      unknown's reaction is returned in its dual row. An inequality is not
+      eliminated: it stays on the reduced system, resolved by the same
+      active-set loop, its `lambda` returned at its multiplier node. Scope:
+      non-chained, disjoint slaves.
     
     `method` selects the factorization: `"lu"` (default) works on any square
-    matrix, `"cholesky"` is half the factors and no pivot search but asks that the
-    matrix be symmetric **and** positive definite. A Lagrange saddle-point — what
-    any multiplier boundary condition assembles — is symmetric and *indefinite*,
-    and comes back as an error naming the pivot that refused; solve it with the
-    LU, or eliminate the constraints first (`solve_eliminate`).
+    matrix, `"cholesky"` asks that the system be symmetric **and** positive
+    definite — never a Lagrange saddle-point, usually a system reduced by
+    elimination. The active-set loop factorizes by LU whatever is asked.
     
-    `verbosity` says how much the solve reports on stdout: `"silent"` (default),
-    `"brief"` (one line: size, non-zeros, method) or `"detailed"` (plus timings).
-    
-    `cache` (default `True`) reuses a factorization stored transparently on the
-    matrix: the first solve factorizes, later solves on the same matrix reuse the
-    factors (much cheaper). The cache is cleared automatically when the matrix
-    changes.
-    
-    A `Ctrl+C` is honoured at the solver's phase boundaries. The factorization
-    itself is a single library call and is not interrupted mid-way; when it is
-    already cached, only the (cheap) substitution runs.
-    """
-
-def solve_eliminate(matrix: Matrix, model: Model, rhs: NodeField, method: builtins.str = 'lu', cache: builtins.bool = True, verbosity: builtins.str = 'silent') -> NodeField:
-    r"""
-    Solve `model`'s constrained system by **master/slave elimination**
-    (condensation) — the alternative to the Lagrange-multiplier path of
-    [`solve`].
-    
-    `model` is the constrained model; `matrix` is its assembled (saddle-point)
-    stiffness; `rhs` is the load field (its right-hand sides `g` live at the
-    multiplier nodes' imposed-value slots). Each linear relation eliminates one
-    slave DOF, so the system solved is smaller and definite (no multiplier DOFs).
-    The solution carries the primal field at every physics node plus each slave's
-    reaction (the multiplier equivalent) in its dual row.
-    
-    A model with no constraint falls back to a plain [`solve`]. v1 scope:
-    non-chained, disjoint slaves (a slave DOF may not appear in another relation).
-    
-    `method` selects the factorization of the reduced system: `"lu"` (default) or
-    `"cholesky"`. Unlike the saddle-point it replaces, the reduced system carries
-    no multiplier DOF and is usually positive definite, so this is the path where
-    a Cholesky stands a real chance. `verbosity` (`"silent"`, `"brief"`,
-    `"detailed"`) says how much it reports. `cache` (default `True`) reuses the
-    condensation stored transparently on the matrix, cleared when the matrix
-    changes. `Ctrl+C` is honoured at phase boundaries.
-    """
-
-def solve_unilateral(matrix: Matrix, model: Model, rhs: NodeField, method: builtins.str = 'lu', active_set: typing.Optional[builtins.str] = None, cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10, verbosity: builtins.str = 'silent') -> NodeField:
-    r"""
-    Solve `model`'s system with **unilateral** (inequality) constraints by the
-    active-set (status) method — the operator for constraints built with
-    `sense=">="` / `"<="` (Dirichlet, MPC).
-    
-    `model` is the constrained model; `matrix` is its assembled (saddle-point)
-    stiffness; `rhs` is the load field (the right-hand sides `g` live at the
-    multiplier nodes' imposed-value slots). The status loop starts with every
-    inequality active (or from the previous converged status when `cache` is
-    on — a warm start), solves, releases the relations whose reaction pulls,
-    activates the relations whose gap penetrates, and repeats until the status
-    is stable. Inactive relations report `λ = 0` in the solution.
-    
-    A model with no inequality relation falls back to a plain `solve`.
-    
-    `method` selects the factorization of each iteration — `"lu"` (default); a
-    `"cholesky"` is refused here, blanking a row breaking the symmetry
-    structurally. `verbosity` (`"silent"`, `"brief"`, `"detailed"`) says how much
-    each iteration reports. `active_set` selects how each status's system is
-    factorized:
+    `active_set` selects how each status of the active-set loop is factorized:
     `"schur"` (default) factorizes the inequality-free base once and updates it
-    per status (falling back to refactorization when that base is singular),
-    `"refactorize"` refactorizes the full system at each status change. `cache`
-    (default `True`) stores the active-set state transparently on the matrix
-    (cleared when the matrix changes). `max_iter` (default `100`) bounds the
-    status loop; `tol` (default `1e-10`) is the sign tolerance on the multiplier
-    and the gap. `Ctrl+C` is honoured at each iteration boundary.
+    per status (falling back when that base is singular), `"refactorize"`
+    refactorizes the full system at each status change. `max_iter` (default
+    `100`) bounds the status loop; `tol` (default `1e-10`) is its sign
+    tolerance on the multiplier and on the gap.
+    
+    `cache` (default `True`) reuses what is stored transparently on the matrix —
+    the factorization, the condensation, the active-set state and its last
+    status — cleared automatically when the matrix changes. `verbosity` says
+    how much the solve reports on stdout: `"silent"` (default), `"brief"` or
+    `"detailed"`.
+    
+    A `Ctrl+C` is honoured at the solver's phase boundaries and at each status
+    iteration; a factorization itself is a single library call and is not
+    interrupted mid-way.
     """
 
 def spill_stats() -> dict:
@@ -5436,6 +5661,38 @@ def stiffness(model: Model, materials: ElementField) -> Matrix:
     needs it picks the `SubElementField` whose FE subspace matches its own.
     """
 
+def strain(model: Model, solution: NodeField, materials: ElementField) -> ElementField:
+    r"""
+    The input of every law of `model`, produced from the nodal `solution` — the
+    model's `B`, of which `internal_forces` is the transpose (Cast3M `EPSI`,
+    extended to every physics).
+    
+    One zone per sub-model with a law, on its behaviour space, carrying what
+    that law reads: the small-strain tensor `eps_*` of a continuum or a bar, the
+    gradient `grad_T_*` of conduction, `T` itself for radiation, the section
+    strains of a beam, the generalized strains of a shell. Each law reads its
+    own unknowns of `solution` by name, so one solution — displacement,
+    temperature, multipliers — serves the whole model; sub-models without a law
+    produce nothing. `materials` is read by the beams alone (their `Φ`). The
+    result feeds `integrate_behavior` as is.
+    """
+
+def stress_measure(stress: ElementField, gradient: ElementField, target: builtins.str) -> ElementField:
+    r"""
+    `stress` converted to the measure `target`, point by point, with the
+    deformation gradient `gradient` — the field `deformation(u, fespace,
+    "gradient")` produces (`F_xx, F_xy, …`).
+    
+    `target` is `"cauchy"` (`sigma_*`, the true stress), `"kirchhoff"`
+    (`tau_* = J sigma_*`), `"pk1"` (`P_*`, the nominal stress `F S`, not
+    symmetric), `"pk2"` (`S_*`, dual of Green–Lagrange) or `"hencky"` (`T_*`,
+    dual of the Hencky strain, what a law reading Hencky writes). The measure of
+    `stress` is recognised by its names, one per zone. This is how the
+    Lagrangian stress a law writes in large transformations becomes the first
+    Piola–Kirchhoff `internal_forces` reads, or the Cauchy stress of the
+    results — the stress half of Cast3M `CONF`.
+    """
+
 def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> SubElementField:
     r"""
     Build the material `SubElementField` of one sub-model.
@@ -5444,6 +5701,16 @@ def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequen
     SubElementField on the sub-model's FE subspace, pre-filled with the
     given uniform value per declared component. Errors for physics that
     need no material (e.g. Dirichlet).
+    """
+
+def sum_to_nodes(field: ElementField) -> NodeField:
+    r"""
+    A field carrying **one point per cell** gathered at the nodes by
+    **summation** (Cast3M `CHAN 'CHPO' 'SOMM'`): each node receives, per
+    component, the sum of the values of the cells it belongs to — across zones
+    too. Not a smoothing: no average, no weight. Applied to the cell measures of
+    `cell_integral`, it gives the volume each node stands for. Raises on a zone
+    with more than one point per cell (build it on a `REDUCED` space).
     """
 
 def sweep(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
@@ -5516,7 +5783,7 @@ def tanh(field: typing.Any) -> typing.Any:
     Element-wise hyperbolic tangent of a field.
     """
 
-def thermal_strain(temperature: ElementField, materials: ElementField, fespace: FiniteElementSpace, t_ref: builtins.float) -> ElementField:
+def thermal_strain(temperature: ElementField, materials: ElementField, fespace: FiniteElementSpace, t_ref: builtins.float, measure: builtins.str = 'linear') -> ElementField:
     r"""
     Thermal (free-dilation) strain `ε_th = α·(T − t_ref)` at the Gauss points of
     `fespace` — Cast3M `EPTH`. `temperature` is a per-element field carrying
@@ -5526,6 +5793,11 @@ def thermal_strain(temperature: ElementField, materials: ElementField, fespace: 
     mechanical strain. Backbone of uncoupled thermomechanics: assemble the
     thermal load with `internal_forces(integrate_behavior(model, ε_th,
     materials))` and recover `σ = D:(ε − ε_th)`.
+    
+    `measure` is the strain the law reads (`"linear"`, `"green_lagrange"`,
+    `"hencky"`): the dilation of stretch `1 + α·ΔT` is given exactly in it —
+    `α·ΔT`, `½((1 + α·ΔT)² − 1)`, `ln(1 + α·ΔT)` — under its names (`eps_*`,
+    `E_*`, `H_*`).
     """
 
 def timoshenko(fespace: FiniteElementSpace) -> Model:
@@ -5657,15 +5929,42 @@ def triangulate_volume(envelope: Mesh, size: typing.Optional[builtins.float] = N
     refused rather than meshed badly.
     """
 
-def truss(fespace: FiniteElementSpace) -> Model:
+def truss(fespace: FiniteElementSpace, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.truss(fespace)` — truss / bar (axial-force) model spanning
-    **every** subspace of `fespace` (SEG2 elements). DOFs are the vector
-    displacement `u_x, u_y(, u_z)`; the orientation is taken from the node
-    coordinates. Material (`E`, `A`) is supplied at assembly time.
+    `model.truss(fespace, strain_measure="linear")` — truss / bar
+    (axial-force) model spanning **every** subspace of `fespace` (SEG2 elements).
+    DOFs are the vector displacement `u_x, u_y(, u_z)`; the orientation is taken
+    from the node coordinates. Material (`E`, `A`) is supplied at assembly time.
+    
+    `strain_measure` is the strain the law reads: `"linear"` (the default; it
+    writes the axial force `n`) or `"green_lagrange"` (large displacements: it
+    writes the second Piola–Kirchhoff axial force `S_n`, which
+    `element_field.stress_measure` turns into the nominal force vector `P_*` or
+    the true force `n`).
     """
 
-def viscoplasticity_chaboche(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def update_contact(model: Model, displacement: NodeField) -> Model:
+    r"""
+    `model.update_contact(model, displacement)` — the model with its contacts
+    **updated** to the positions `X + u`: `X` the active configuration, `u` read
+    in `displacement` on each contact's variables (`u_x`, `u_y`, `u_z`; a node
+    or a component it lacks reads zero). Every other sub-model is shared as it
+    is; a model without contact comes back unchanged.
+    
+    Each slave node is paired again with its closest master facet on `X + u`,
+    and its relation becomes the gap linearised there, written in total
+    displacement from `X`: the right-hand side the contact carries is `-g~`,
+    the gap of the new pairing measured on `X`. The multiplier nodes are kept,
+    so the unknowns `lambda` and the rows `imposed` stay the same; at `u = 0`,
+    the contact as it was built. A master facet collapsed by the displacement
+    is not detected here.
+    
+    What large displacements call for: the step-by-step loop updates its
+    contacts each time it rebuilds its operator. See the contact chapter of the
+    book.
+    """
+
+def viscoplasticity_chaboche(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.viscoplasticity_chaboche(fespace, kinematics)` — a Norton flow on the
     shifted overstress `J(σ − X) − R − k`, with Armstrong-Frederick kinematic
@@ -5676,9 +5975,12 @@ def viscoplasticity_chaboche(fespace: FiniteElementSpace, kinematics: builtins.s
     loading: it translates the yield surface, so reverse yielding happens
     early — the Bauschinger effect, which no isotropic law can produce. It
     costs seven internal variables (`X_xx…X_xy`, `R`).
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
-def viscoplasticity_lemaitre_chaboche(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def viscoplasticity_lemaitre_chaboche(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.viscoplasticity_lemaitre_chaboche(fespace, kinematics)` — Chaboche
     viscoplasticity coupled to Lemaitre's ductile **damage**: the flow is
@@ -5688,6 +5990,9 @@ def viscoplasticity_lemaitre_chaboche(fespace: FiniteElementSpace, kinematics: b
     A damaged material flows faster, which damages it more — the coupling
     that produces tertiary creep and, at `D_c`, rupture. Adds `damage` to the
     internal state.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
 def xtx(x: typing.Any, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:

@@ -99,13 +99,14 @@ assert pyrucast.load("m.pyr")["maillage"].cell_count() == mesh.cell_count()
 # ── What is not saved: the derived states ───────────────────────────────────
 
 _imposed = pyrucast.mesh.poi1_from_nodes([_n[0]])
-_mult = pyrucast.mesh.barycenter(_imposed)
 cible = pyrucast.model.heat_conduction(fes)
+_appui = pyrucast.model.dirichlet(_imposed, cible, "T")
+_mult = _appui.multiplier_mesh()
 
-modele = cible | pyrucast.model.dirichlet(cible, "T", _imposed, _mult)
+modele = cible | _appui
 materiaux = pyrucast.element_field.material_field(modele, [("k", 1.0)])
-chargement = pyrucast.NodeField(_mult, ["imposed_T"])
-chargement[0].set_value(_mult.node(0, 0, 0), "imposed_T", 1.0)
+chargement = pyrucast.NodeField(_mult, ["imposed"])
+chargement[0].set_value(_mult.node(0, 0, 0), "imposed", 1.0)
 pyrucast.save(
     "etude.pyr",
     {"modele": modele, "materiaux": materiaux, "chargement": chargement},
@@ -161,6 +162,49 @@ young = loi.interpolate(temperature)  # temperature : NodeField de composante "T
 # ANCHOR_END: loi_materiau
 
 assert young.components() == ["young"]
+
+
+# ── A table of two variables, read hierarchically ───────────────────────────
+
+# ANCHOR: table
+# σ_y(T, φ): measured at two values of φ at 20 °C, at three at 500 °C.
+sigma_y = pc.Evolution(
+    [
+        ((20.0, 0.0), 300e6),
+        ((20.0, 1.0), 450e6),
+        ((500.0, 0.0), 200e6),
+        ((500.0, 0.5), 260e6),
+        ((500.0, 1.0), 320e6),
+    ],
+    abscissa_type=("T", "phi"),
+    ordinate_type="sigma_y",
+)
+print(sigma_y.interpolate((300.0, 0.4)))  # [≈ 2.947e8]: 360e6 at 20 °C, 248e6 at 500 °C
+# ANCHOR_END: table
+
+_attendu = 360e6 + (248e6 - 360e6) * (300.0 - 20.0) / 480.0
+assert abs(sigma_y.interpolate((300.0, 0.4))[0] - _attendu) < 1e-3
+
+
+# ── Material laws applied to the state, like cos to a field ─────────────────
+
+etat = pc.ElementField(fes, ["T", "phi"])
+etat[0].set_uniform("T", 300.0)
+etat[0].set_uniform("phi", 0.4)
+constant = pc.ElementField(fes, ["E", "nu", "sigma_y"])
+constant[0].set_uniform("nu", 0.3)
+
+# ANCHOR: lois_etat
+young_T = pc.SubEvolution(
+    [(20.0, 210e9), (500.0, 170e9)], abscissa_type="T", ordinate_type="E"
+)
+lois = young_T | sigma_y[0]  # two curves: E(T) and sigma_y(T, phi)
+varie = lois.interpolate(etat)  # etat: T and phi at the Gauss points → E, sigma_y
+materiau = pc.element_field.consolidate(constant.filter_components(["nu"]) | varie)
+# ANCHOR_END: lois_etat
+
+assert sorted(materiau.components()) == ["E", "nu", "sigma_y"]
+assert abs(materiau[0].value(0, 0, "sigma_y") - _attendu) < 1e-3
 
 
 # ── Every form of interpolation ─────────────────────────────────────────────

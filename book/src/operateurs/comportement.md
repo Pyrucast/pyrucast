@@ -14,12 +14,13 @@ matrice), `integrate_behavior` produit la **réponse ponctuelle exacte** comme
 C'est un **montage incrémental A → B** : la loi intègre le comportement entre
 l'état convergé du **début de pas A** et la déformation de **fin de pas B**.
 
-1. l'**entrée de déformation** `ε(B)` est construite **séparément et
-   géométriquement** par [`gradient`](champs.md) (`∇T`…), [`deformation`](champs.md)
-   (`ε`), [`beam_deformation`](champs.md) (`κ, γ`) ou
-   [`shell_deformation`](champs.md) (`ε, κ, γ`) — ces opérateurs ne dépendent
-   que de l'espace EF, pas du modèle ; le choix de *quelle* déformation nourrir
-   reste donc à l'appelant ;
+1. l'**entrée de déformation** `ε(B)` est produite par
+   [`strain(model, u, materials)`](champs.md#le-b-du-modèle--strainmodel-solution-materials--elementfield),
+   qui applique à chaque loi le producteur qu'elle déclare —
+   [`deformation`](champs.md) (`ε`), [`gradient`](champs.md) (`∇T`…),
+   [`beam_deformation`](champs.md) (`κ, γ`), [`shell_deformation`](champs.md)
+   (`ε, κ, γ`). Ces producteurs géométriques ne dépendent que de l'espace EF et
+   restent disponibles pour construire une entrée à la main ;
 2. `prev` est l'**état convergé de A** — la **sortie du pas précédent** : la
    contrainte `σ(A)`, les variables internes `VAR(A)` et la déformation `ε(A)`.
    Il vaut `None` au **premier pas**, où A est la configuration de référence
@@ -39,10 +40,30 @@ de matériau et d'état précédent sont appariées par sous-espace EF.
 > **Pourquoi le montage incrémental ?** Fournir l'état de A séparément de la
 > déformation de B (plutôt que fusionnés dans un même champ) rend le fil d'état
 > robuste — un `ElementField` = une zone par support, sans ambiguïté — et ouvre
-> les **grandes déformations** et les **lois visqueuses** : elles exigent l'accès
-> à `σ(A)` et à un incrément daté, que cette interface porte déjà. En petites
-> déformations le prédicteur incrémental `σ_trial = σ(A) + C:Δε` est
-> rigoureusement identique à la forme en déformation totale.
+> les **lois visqueuses**, qui exigent un incrément daté. C'est le montage de
+> MFront (`s0` / `s1` de MGIS).
+
+> **La convention de toutes les lois.** Chaque loi calcule la contrainte en B
+> comme **le matériau de B appliqué à la déformation élastique de B** :
+> `σ(B) = C(B) : ε_e(B)`. L'élasticité et l'endommagement le font directement,
+> la plasticité par `ε_e = ε − ε_p` (prédicteur `σ_trial = C:(ε(B) − ε_p(A))`).
+> Une contrainte écrite ainsi reste **sécante** quand le matériau dépend de
+> l'état : un module qui baisse avec la température baisse la contrainte à
+> déformation élastique égale, sans aucune correction. Une forme incrémentale
+> `σ(A) + C(B):Δε` garderait la contrainte de l'ancien module — Cast3M, dont
+> toutes les lois sont incrémentales, ajoute pour cela la correction
+> `(D⁻¹(B) − D⁻¹(A)) : σ(A)` ; MFront, comme pyrucast, n'en a pas besoin. Seule
+> limite : une précontrainte donnée seule (sans déformation élastique qui la
+> porte) n'est pas représentée par une loi plastique ; elle s'introduit comme une
+> déformation plastique initiale `ε_p = −C⁻¹σ₀`.
+
+> **La mesure que lit la loi.** Une loi continue lit la mesure de déformation
+> choisie à sa construction (`strain_measure`) et écrit sa duale, chacune sous
+> son nom : `eps_*` / `sigma_*` (`"linear"`), `E_*` / `S_*` (`"green_lagrange"`,
+> la Piola–Kirchhoff 2), `H_*` / `T_*` (`"hencky"`). Les équations de la loi ne
+> changent pas ; ce qu'elles relient, si. La convention ci-dessus vaut dans
+> chaque mesure, et l'état reste sur la configuration de référence — cf.
+> [Grandes transformations](../mecanique/grandes-transformations.md).
 
 Pour une loi **linéaire**, le résultat est cohérent avec `stiffness`
 (`∫ Bᵀ·flux = K·u`) ; une loi **non linéaire** s'écarte de cette tangente — c'est
@@ -80,7 +101,8 @@ variables internes (`VAR0` → `VAR1`), voir
 
 Les **forces internes** `f = ∫ Bᵀ σ dΩ` (le `BSIG` de cast3m) sont la
 **transposée** de l'opérateur de déformation `B` : là où
-[`deformation`](champs.md) applique `B` au déplacement (`ε = B·u`),
+[`strain`](champs.md#le-b-du-modèle--strainmodel-solution-materials--elementfield)
+applique `B` au déplacement (`ε = B·u`),
 `internal_forces` applique `Bᵀ` à la contrainte et **rassemble** le résultat aux
 nœuds. C'est la **généralisation mécanique** de [`divergence`](champs.md) (qui
 est exactement `Bᵀ q` pour un transport scalaire) : une composante de sortie par
@@ -95,6 +117,12 @@ Solides continus, barres et poutres sont donc tous couverts.
 
 Pour une loi **linéaire**, le résultat égale la rigidité appliquée à la solution
 (`K·u`) ; pour une loi **non linéaire**, il donne les forces internes exactes.
+
+Une loi en grandes transformations (`strain_measure` fini) est servie sur la
+configuration de référence par la contrainte **nominale** `P = F S`, lue entière
+(`P_xx, P_xy, P_yx, P_yy`) : `f = ∫ P·∇₀N dV₀`. On la prépare avec
+[`stress_measure`](champs.md) — cf.
+[Grandes transformations](../mecanique/grandes-transformations.md).
 
 C'est le côté **intérieur** du bilan `Σ f_int = Σ f_ext`, dont l'écart est le
 résidu d'équilibre. Le miroir nodal de [`stiffness`](assemblage.md) : là où

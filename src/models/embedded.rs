@@ -25,23 +25,23 @@
 //! immersed and host meshes must share one
 //! [`Coords`](crate::coords::Coords) (their node ids are
 //! Coords-relative). Fresh colocated multiplier nodes are minted with the
-//! [`barycenter`](crate::ops::mesh::barycenter()) mesher, one per immersed node.
+//! [`barycenter`](crate::ops::mesh::barycenter()) mesher, one per relation:
+//! a POI1 submesh per component, colocated with the immersed nodes.
 //!
 //! # Variables
 //!
-//! One relation per (immersed node × component). All components share **one**
-//! multiplier node per immersed node, each carrying its own multiplier /
-//! imposed-value variable:
+//! One relation per (immersed node × component), each on a multiplier node of
+//! its own:
 //!
 //! - `variable` (e.g. `"u_x"`) — the constrained primal, a column shared by the
 //!   immersed physics and the host physics;
 //! - `target_dual` (e.g. `"f_x"`) — the dual (residual) row of that variable,
 //!   where the reaction lands (find it with
 //!   [`Model::dual_of`](crate::containers::model::Model::dual_of));
-//! - `multiplier` (default `lambda_<variable>`) — this sub-model's primal on the
-//!   multiplier node (the reaction);
-//! - `imposed_value` (default `imposed_<variable>`) — this sub-model's dual: the
-//!   constraint row and the slot for the right-hand side `g_c`.
+//! - [`MULTIPLIER`] — this sub-model's primal on the multiplier node (the
+//!   reaction);
+//! - [`IMPOSED`] — this sub-model's dual: the constraint row and the slot for
+//!   the right-hand side `g_c`.
 
 use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
@@ -52,9 +52,10 @@ use crate::containers::mesh::{Mesh, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::models::transfer::{constrained_physics, constraint_physics};
 use crate::models::{
     Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation, RelationSense,
-    SubModelKind,
+    SubModelKind, IMPOSED, MULTIPLIER,
 };
 use crate::ops::geom::locate_points;
 use crate::ops::mesh::barycenter;
@@ -75,74 +76,6 @@ use std::collections::HashSet;
 /// ```
 pub const DEFAULT_TOL: f64 = 1e-6;
 
-/// Default multiplier (primal) name for a constrained variable: `lambda_<v>`.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
-/// # use pyrucast::ops::mesh;
-/// # let coords = Handle::new(Coords::new(2).unwrap());
-/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let maillage = Mesh::from_submesh(sm);
-/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let zone = fes.get(0).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # use pyrucast::models::embedded;
-/// // Derived rather than tabulated: `multiplier` and `imposed_value` left at
-/// // `None` take these values.
-/// assert_eq!(
-///     (embedded::default_multiplier("u_x").as_str(),
-///      embedded::default_imposed_value("u_x").as_str()),
-///     ("lambda_u_x", "imposed_u_x"));
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn default_multiplier(variable: &str) -> String {
-    format!("lambda_{variable}")
-}
-
-/// Default imposed-value (dual) name for a constrained variable: `imposed_<v>`.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
-/// # use pyrucast::ops::mesh;
-/// # let coords = Handle::new(Coords::new(2).unwrap());
-/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let maillage = Mesh::from_submesh(sm);
-/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let zone = fes.get(0).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # use pyrucast::models::embedded;
-/// // Derived rather than tabulated: `multiplier` and `imposed_value` left at
-/// // `None` take these values.
-/// assert_eq!(
-///     (embedded::default_multiplier("u_x").as_str(),
-///      embedded::default_imposed_value("u_x").as_str()),
-///     ("lambda_u_x", "imposed_u_x"));
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn default_imposed_value(variable: &str) -> String {
-    format!("imposed_{variable}")
-}
-
 /// The host binding of one immersed node: the host cell's nodes and the shape
 /// weights `Nᵢ(ξ)` at the immersed node, `weights[i]` pairing `nodes[i]`.
 #[derive(Serialize, Deserialize)]
@@ -151,23 +84,22 @@ struct HostBinding {
     weights: Vec<f64>,
 }
 
-/// One constrained component: its primal variable, dual row, and the two
-/// variable names this sub-model owns on the multiplier node.
+/// One constrained component: its primal variable and dual row.
 #[derive(Serialize, Deserialize)]
 struct Component {
     variable: String,
     target_dual: String,
-    multiplier: String,
-    imposed_value: String,
 }
 
 /// Embedded (immersed) constraint tying immersed nodes to a host interpolation.
 ///
 /// See the module documentation. The right-hand side `g` defaults to `0` (a
 /// rigid tie); a non-zero `g` is supplied through the load `SubNodeField` at the
-/// multiplier node's `imposed_value` component, as for `Dirichlet` / `Mpc`.
+/// multiplier node's [`IMPOSED`] component, as for `Dirichlet` / `Mpc`.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -185,8 +117,7 @@ struct Component {
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # use pyrucast::models::embedded::{self, Embedded};
+/// # use pyrucast::models::embedded::Embedded;
 /// # let p: Vec<Node> = [[0.25, 0.25], [0.5, 0.25]].iter()
 /// #     .map(|q| Node::create_in(coords.clone(), q).unwrap()).collect();
 /// # let mut barre = SubMesh::new(coords.clone(), ElementType::SEG2);
@@ -197,11 +128,10 @@ struct Component {
 /// // one relation per node and per component.
 /// # let cible = pyrucast::ops::model::elasticity(
 /// #     &FiniteElementSpace::lagrange1(&maillage)?,
-/// #     pyrucast::models::tensor::Kinematics::PlaneStress)?;
-/// let e = Embedded::new(&cible, &immergee, &maillage,
+/// #     pyrucast::models::tensor::Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
+/// let e = Embedded::new(&immergee, &maillage, &cible,
 ///     vec!["u_x".into(), "u_y".into()], pyrucast::models::embedded::DEFAULT_TOL)?;
-/// assert_eq!(e.relations()?.len(), 4); // deux nœuds × deux composantes
-/// assert_eq!(e.relations()?[0].imposed_value, embedded::default_imposed_value("u_x"));
+/// assert_eq!(e.relations()?.len(), 4); // two nodes × two components
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Serialize, Deserialize)]
@@ -209,8 +139,8 @@ pub struct Embedded {
     /// POI1 mesh of the immersed nodes, one cell per relation-group (its cell
     /// `r` is the immersed node of relation-group `r`).
     immersed_mesh: Mesh,
-    /// POI1 mesh of the fresh multiplier nodes, colocated with the immersed
-    /// nodes (paired cell-for-cell).
+    /// POI1 mesh of the fresh multiplier nodes: submesh `c` for component `c`,
+    /// colocated with the immersed nodes (paired cell-for-cell).
     multiplier_mesh: Mesh,
     /// POI1 support listing every node the constraint blocks reference — the
     /// immersed nodes and every host node — deduplicated. Row/col support of the
@@ -220,25 +150,30 @@ pub struct Embedded {
     hosts: Vec<HostBinding>,
     /// Constrained components (at least one).
     components: Vec<Component>,
+    /// Nature of the physics it constrains, read from the target at
+    /// construction.
+    target_physics: Option<Physics>,
 }
 
 impl Embedded {
     /// Build an embedded constraint tying each node of `immersed` to the host
-    /// interpolation of `host` at that node, for every `(variable, target_dual)`
-    /// in `components`.
+    /// interpolation of `host` at that node, for every primal of `target` in
+    /// `variables`; the dual row each reaction lands in is read from `target`.
     ///
-    /// `multipliers` / `imposed_values`, when `Some`, override the per-component
-    /// defaults `lambda_<variable>` / `imposed_<variable>` (must then match
-    /// `components` in length). `tol` is the reference-domain slack of the point
-    /// location (default `1e-6`).
+    /// Each relation — one per immersed node and variable — gets a multiplier
+    /// node of its own. `tol` is the reference-domain slack of the point
+    /// location ([`DEFAULT_TOL`] is `1e-6`).
     ///
     /// # Errors
     ///
-    /// - `components` is empty, or an override length mismatches;
-    /// - `immersed` and `host` do not share a `Coords`;
+    /// - a variable is not a primal of `target`, or `variables` is empty;
+    /// - `immersed` and `host` do not share a `Coords`, or `immersed` carries no
+    ///   node;
     /// - an immersed node lies in no host cell.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -256,8 +191,7 @@ impl Embedded {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # use pyrucast::models::embedded::{self, Embedded};
+    /// # use pyrucast::models::embedded::Embedded;
     /// # let p: Vec<Node> = [[0.25, 0.25], [0.5, 0.25]].iter()
     /// #     .map(|q| Node::create_in(coords.clone(), q).unwrap()).collect();
     /// # let mut barre = SubMesh::new(coords.clone(), ElementType::SEG2);
@@ -268,20 +202,22 @@ impl Embedded {
     /// // one relation per node and per component.
     /// # let cible = pyrucast::ops::model::elasticity(
     /// #     &FiniteElementSpace::lagrange1(&maillage)?,
-    /// #     pyrucast::models::tensor::Kinematics::PlaneStress)?;
-    /// let e = Embedded::new(&cible, &immergee, &maillage,
+    /// #     pyrucast::models::tensor::Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
+    /// let e = Embedded::new(&immergee, &maillage, &cible,
     ///     vec!["u_x".into(), "u_y".into()], pyrucast::models::embedded::DEFAULT_TOL)?;
-    /// assert_eq!(e.relations()?.len(), 4); // deux nœuds × deux composantes
-    /// assert_eq!(e.relations()?[0].imposed_value, embedded::default_imposed_value("u_x"));
+    /// assert_eq!(e.relations()?.len(), 4); // two nodes × two components
+    /// // A multiplier node per relation: one per immersed node and component.
+    /// assert_eq!(e.multiplier_mesh().cell_count(), 4);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(
-        target: &crate::containers::model::Model,
         immersed: &Mesh,
         host: &Mesh,
+        target: &crate::containers::model::Model,
         variables: Vec<String>,
         tol: f64,
     ) -> Result<Self> {
+        let target_physics = constrained_physics(target, variables.iter().map(String::as_str));
         // The target's own names: each variable must be one of its primals,
         // and the dual row its reaction lands in is read from it.
         let mut components: Vec<(String, String)> = Vec::with_capacity(variables.len());
@@ -351,8 +287,14 @@ impl Embedded {
             )));
         }
 
-        // Fresh multiplier nodes, colocated with the immersed nodes.
-        let multiplier_mesh = barycenter(&immersed_mesh)?;
+        // Fresh multiplier nodes, one per relation: a POI1 submesh per
+        // component, colocated with the immersed nodes.
+        let mut multiplier_mesh = Mesh::empty();
+        for _ in &components {
+            for sm in &barycenter(&immersed_mesh)? {
+                multiplier_mesh.add_sub(sm.clone())?;
+            }
+        }
 
         // The block support: immersed nodes ∪ every host node, deduplicated.
         let mut support_ids = immersed_ids.clone();
@@ -367,27 +309,12 @@ impl Embedded {
         let constrained_mesh =
             Mesh::from_submesh(SubMesh::poi1_from_node_ids(coords, &support_ids)?);
 
-        // Materialise the components with their (defaulted) variable names.
-        let multipliers: Vec<String> = components
-            .iter()
-            .map(|(v, _)| default_multiplier(v))
-            .collect();
-        let imposed_values: Vec<String> = components
-            .iter()
-            .map(|(v, _)| default_imposed_value(v))
-            .collect();
         let components = components
             .into_iter()
-            .zip(multipliers)
-            .zip(imposed_values)
-            .map(
-                |(((variable, target_dual), multiplier), imposed_value)| Component {
-                    variable,
-                    target_dual,
-                    multiplier,
-                    imposed_value,
-                },
-            )
+            .map(|(variable, target_dual)| Component {
+                variable,
+                target_dual,
+            })
             .collect();
 
         Ok(Self {
@@ -396,13 +323,14 @@ impl Embedded {
             constrained_mesh,
             hosts,
             components,
+            target_physics,
         })
     }
 
-    /// The single POI1 submesh of multiplier nodes (paired cell-for-cell with
-    /// the immersed nodes and the host bindings).
-    fn multiplier_sm(&self) -> Result<Handle<SubMesh>> {
-        self.multiplier_mesh.get(0)
+    /// The POI1 submesh of the multiplier nodes of component `c` (paired
+    /// cell-for-cell with the immersed nodes and the host bindings).
+    fn multiplier_sm(&self, c: usize) -> Result<Handle<SubMesh>> {
+        self.multiplier_mesh.get(c)
     }
 
     /// The single POI1 support submesh of the constraint blocks.
@@ -415,25 +343,19 @@ impl Embedded {
         Ok(self.immersed_mesh.get(0)?.read().connectivity()[r])
     }
 
-    /// Multiplier node of relation-group `r`.
-    fn multiplier_node(&self, r: usize) -> Result<NodeId> {
-        Ok(self.multiplier_mesh.get(0)?.read().connectivity()[r])
+    /// Multiplier node of the relation of component `c` at immersed node `r`.
+    fn multiplier_node(&self, c: usize, r: usize) -> Result<NodeId> {
+        Ok(self.multiplier_mesh.get(c)?.read().connectivity()[r])
     }
 }
 
 impl SubModelKind for Embedded {
     fn primal_vars(&self) -> Vec<String> {
-        self.components
-            .iter()
-            .map(|c| c.multiplier.clone())
-            .collect()
+        vec![MULTIPLIER.to_string()]
     }
 
     fn dual_vars(&self) -> Vec<String> {
-        self.components
-            .iter()
-            .map(|c| c.imposed_value.clone())
-            .collect()
+        vec![IMPOSED.to_string()]
     }
 
     /// Its relations, applied to the solution: the reaction `Cᵀ λ` on the
@@ -461,59 +383,54 @@ impl SubModelKind for Embedded {
         if kind != MatrixKind::Stiffness {
             return Ok(Vec::new());
         }
-        let mult_sm = self.multiplier_sm()?;
         let support_sm = self.support_sm()?;
         let n = self.hosts.len();
 
         let mut blocks = Vec::with_capacity(self.components.len() * 2);
-        for comp in &self.components {
+        for (ci, comp) in self.components.iter().enumerate() {
+            let mult_sm = self.multiplier_sm(ci)?;
             // Neither block is symmetric alone; the pair is. One component's
-            // identity folds in both supports and its four names — a second
-            // component on the same supports differs by them.
+            // identity folds in both supports and its two names — a second
+            // component differs by its multiplier nodes and its names.
             let (id_c, id_ct) = {
                 let (mult_g, sup_g) = (mult_sm.read(), support_sm.read());
                 let mut h = FNV_SEED;
                 h = hash_nodes(h, mult_g.connectivity());
                 h = hash_nodes(h, sup_g.connectivity());
-                for name in [
-                    &comp.variable,
-                    &comp.target_dual,
-                    &comp.multiplier,
-                    &comp.imposed_value,
-                ] {
+                for name in [&comp.variable, &comp.target_dual] {
                     h = hash_name(h, name);
                 }
                 mint_pair(h)
             };
-            // C: rows (multiplier, imposed_value), cols (constrained, variable).
+            // C: rows (multiplier, IMPOSED), cols (constrained, variable).
             let mut c = SubMatrix::new(
                 mult_sm.clone(),
                 support_sm.clone(),
-                vec![comp.imposed_value.clone()],
+                vec![IMPOSED.to_string()],
                 vec![comp.variable.clone()],
                 DofOrdering::NodesThenVars,
                 Symmetry::Half(id_c),
             );
-            // Cᵀ: rows (constrained, target_dual), cols (multiplier, multiplier).
+            // Cᵀ: rows (constrained, target_dual), cols (multiplier, MULTIPLIER).
             let mut ct = SubMatrix::new(
                 support_sm.clone(),
-                mult_sm.clone(),
+                mult_sm,
                 vec![comp.target_dual.clone()],
-                vec![comp.multiplier.clone()],
+                vec![MULTIPLIER.to_string()],
                 DofOrdering::NodesThenVars,
                 Symmetry::Half(id_ct),
             );
             for r in 0..n {
-                let m = self.multiplier_node(r)?;
+                let m = self.multiplier_node(ci, r)?;
                 let p = self.immersed_node(r)?;
                 // +1 on the immersed node.
-                c.add_entry(m, &comp.imposed_value, p, &comp.variable, 1.0)?;
-                ct.add_entry(p, &comp.target_dual, m, &comp.multiplier, 1.0)?;
+                c.add_entry(m, IMPOSED, p, &comp.variable, 1.0)?;
+                ct.add_entry(p, &comp.target_dual, m, MULTIPLIER, 1.0)?;
                 // −Nᵢ on each host node.
                 let h = &self.hosts[r];
                 for (node, w) in h.nodes.iter().zip(h.weights.iter()) {
-                    c.add_entry(m, &comp.imposed_value, *node, &comp.variable, -w)?;
-                    ct.add_entry(*node, &comp.target_dual, m, &comp.multiplier, -w)?;
+                    c.add_entry(m, IMPOSED, *node, &comp.variable, -w)?;
+                    ct.add_entry(*node, &comp.target_dual, m, MULTIPLIER, -w)?;
                 }
             }
             blocks.push(c);
@@ -528,7 +445,7 @@ impl SubModelKind for Embedded {
     }
 
     fn physics(&self) -> &'static [Physics] {
-        &[Physics::Constraint]
+        constraint_physics(self.target_physics)
     }
 
     fn label(&self) -> &'static str {
@@ -549,10 +466,7 @@ impl SubModelKind for Embedded {
             self.hosts.len()
         );
         for c in &self.components {
-            out.push_str(&format!(
-                "\n    {} (dual {}, multiplier {}, imposed {})",
-                c.variable, c.target_dual, c.multiplier, c.imposed_value
-            ));
+            out.push_str(&format!("\n    {} (dual {})", c.variable, c.target_dual));
         }
         out
     }
@@ -569,9 +483,9 @@ impl Constraint for Embedded {
     fn relations(&self) -> Result<Vec<Relation>> {
         let n = self.hosts.len();
         let mut relations = Vec::with_capacity(n * self.components.len());
-        for comp in &self.components {
+        for (ci, comp) in self.components.iter().enumerate() {
             for r in 0..n {
-                let m = self.multiplier_node(r)?;
+                let m = self.multiplier_node(ci, r)?;
                 let p = self.immersed_node(r)?;
                 let mut terms = Vec::with_capacity(1 + self.hosts[r].nodes.len());
                 terms.push(ConstraintTerm {
@@ -591,7 +505,6 @@ impl Constraint for Embedded {
                 }
                 relations.push(Relation {
                     multiplier_node: m,
-                    imposed_value: comp.imposed_value.clone(),
                     terms,
                     sense: RelationSense::default(),
                 });
@@ -623,7 +536,13 @@ mod tests {
     fn cible_mecanique(host: &Mesh) -> crate::containers::model::Model {
         let fes =
             crate::containers::finite_element_space::FiniteElementSpace::lagrange1(host).unwrap();
-        crate::ops::model::elasticity(&fes, crate::models::tensor::Kinematics::Full3D).unwrap()
+        crate::ops::model::elasticity(
+            &fes,
+            crate::models::tensor::Kinematics::Full3D,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear,
+        )
+        .unwrap()
     }
 
     /// The target of a test whose host is a SEG2: a bar declares the same
@@ -631,12 +550,14 @@ mod tests {
     fn cible_barre(host: &Mesh) -> crate::containers::model::Model {
         let fes =
             crate::containers::finite_element_space::FiniteElementSpace::lagrange1(host).unwrap();
-        crate::ops::model::truss(&fes).unwrap()
+        crate::ops::model::truss(&fes, crate::ops::element_field::StrainMeasure::Linear).unwrap()
     }
     use super::*;
     use crate::atoms::{ElementType, Node};
     use crate::coords::Coords;
     use crate::handle::Handle;
+    use crate::models::symmetry::MaterialSymmetry;
+    use crate::ops::element_field::StrainMeasure;
 
     /// Build a unit HEX8 host and a two-node bar through its interior; check the
     /// weights and the relation structure.
@@ -672,7 +593,7 @@ mod tests {
     #[test]
     fn empty_components_rejected() {
         let (bar, host, _c) = hex_and_bar();
-        assert!(Embedded::new(&cible_mecanique(&host), &bar, &host, vec![], DEFAULT_TOL).is_err());
+        assert!(Embedded::new(&bar, &host, &cible_mecanique(&host), vec![], DEFAULT_TOL).is_err());
     }
 
     #[test]
@@ -689,9 +610,9 @@ mod tests {
         bsm.add_cell(&[p.id()]).unwrap();
         let bar = Mesh::from_submesh(bsm);
         assert!(Embedded::new(
-            &cible_barre(&host),
             &bar,
             &host,
+            &cible_barre(&host),
             vec!["u_x".into()],
             DEFAULT_TOL
         )
@@ -702,19 +623,22 @@ mod tests {
     fn relations_have_immersed_plus_host_terms() {
         let (bar, host, _c) = hex_and_bar();
         let emb = Embedded::new(
-            &cible_mecanique(&host),
             &bar,
             &host,
+            &cible_mecanique(&host),
             vec!["u_x".into(), "u_y".into()],
             DEFAULT_TOL,
         )
         .unwrap();
 
         // Two components × two immersed nodes = four relations.
-        assert_eq!(emb.primal_vars(), vec!["lambda_u_x", "lambda_u_y"]);
-        assert_eq!(emb.dual_vars(), vec!["imposed_u_x", "imposed_u_y"]);
+        assert_eq!(emb.primal_vars(), vec![MULTIPLIER]);
+        assert_eq!(emb.dual_vars(), vec![IMPOSED]);
         let rels = emb.relations().unwrap();
         assert_eq!(rels.len(), 4);
+        // Every relation on a multiplier node of its own.
+        let nodes: HashSet<NodeId> = rels.iter().map(|r| r.multiplier_node).collect();
+        assert_eq!(nodes.len(), 4);
 
         // Each relation: +1 immersed term then 8 host terms (HEX8), weights sum 1.
         for rel in &rels {

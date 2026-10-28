@@ -32,13 +32,14 @@ use crate::models::{kernel, MatrixKind, ResidualContribution};
 /// [`SubModelKind::external_force_contribution`](crate::models::SubModelKind::external_force_contribution),
 /// resolves the material each integrated term reads — exactly as
 /// [`crate::ops::matrix::assemble_kind()`] resolves it before asking for a
-/// block — drives the kernel and gathers the result. One zone per contributing
-/// term, in model order.
+/// block — drives the kernel and gathers the result: the terms loading one node
+/// are **added**, in a single zone over every loaded node.
 ///
 /// A model whose every term is a response to `u` yields an empty field, which is
 /// the honest answer rather than a failure.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
@@ -57,7 +58,7 @@ use crate::models::{kernel, MatrixKind, ResidualContribution};
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let mut mat = ElementField::new(&fes, vec!["k".into()])?;
 /// # mat.get(0)?.write().set_uniform("k", 1.0)?;
-/// let volume = model::heat_conduction(&fes)?;
+/// let volume = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
 /// // Conduction alone has no term on the right of the equals sign: the field
 /// // comes back empty, and that is the right answer.
 /// assert_eq!(node_field::external_forces(&volume, &mat)?.len(), 0);
@@ -112,14 +113,13 @@ pub fn external_forces(model: &Model, materials: &ElementField) -> Result<NodeFi
             zones
         };
         for zone in built {
-            // `r = Σ rᵢ` is a **sum**, not a stack: two terms may load the same node in
-            // may load the same node in the same component, and an aggregate view would
-            // pick one instead of adding them. `+` unions the supports and sums what
-            // overlaps.
             let mut one = NodeField::empty();
             one.add_sub(zone)?;
             out = (&out + &one)?;
         }
     }
-    Ok(out)
+    // `r = Σ rᵢ` is a **sum**, not a stack: two terms may load the same node in
+    // the same component, and `+` only adds zones that share a support. The rest
+    // is added node by node here, or a reader would see one partial sum.
+    out.summed()
 }

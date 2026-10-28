@@ -33,9 +33,8 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
-use pyrucast::ops::mesh;
 use pyrucast::ops::model;
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 /// `N×N` QUA4 grid on the unit square.
@@ -193,7 +192,7 @@ fn patch_model(
     symmetry: MaterialSymmetry,
 ) -> Result<(Model, Vec<(pyrucast::atoms::NodeId, f64)>)> {
     let h = 1.0 / N as f64;
-    let mut model = model::heat_conduction_with_symmetry(fes, symmetry)?;
+    let mut model = model::heat_conduction(fes, symmetry)?;
     let mut multipliers = Vec::new();
     for j in 0..=N {
         for i in 0..=N {
@@ -203,15 +202,12 @@ fn patch_model(
             let node = grid[j * (N + 1) + i].clone();
             let imposed =
                 Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&node))?);
-            let multiplier = mesh::barycenter(&imposed)?;
-            multipliers.push((multiplier.node(0, 0, 0)?.id(), i as f64 * h));
-            model = model.union(&model::dirichlet(
-                &model,
-                "T",
-                &imposed,
-                &multiplier,
-                Default::default(),
-            )?)?;
+            let dirichlet = model::dirichlet(&imposed, &model, "T", Default::default())?;
+            multipliers.push((
+                dirichlet.multiplier_mesh()?.node(0, 0, 0)?.id(),
+                i as f64 * h,
+            ));
+            model = model.union(&dirichlet)?;
         }
     }
     Ok((model, multipliers))
@@ -230,9 +226,9 @@ fn solve_patch(
         load_sm.add_cell(&[*mult])?;
     }
     let load_sm = Handle::new(load_sm);
-    let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["imposed_T".into()])?;
+    let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["imposed".into()])?;
     for (mult, value) in multipliers {
-        rhs.set_value(*mult, "imposed_T", *value)?;
+        rhs.set_value(*mult, "imposed", *value)?;
     }
     let rhs = NodeField::from_sub(rhs);
     let stiffness = pyrucast::ops::matrix::stiffness(model, materials)?;

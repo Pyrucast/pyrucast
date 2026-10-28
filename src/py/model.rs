@@ -57,6 +57,13 @@ impl PySubModel {
             .collect()
     }
 
+    /// The kind of this sub-model, named — `"Dirichlet"`, `"Contact"`,
+    /// `"Elasticity"`… The question its natures cannot answer: a contact and a
+    /// Dirichlet on displacements are both constraint and mechanical.
+    fn label(&self) -> &'static str {
+        self.handle.read().label()
+    }
+
     /// POI1 `Mesh` of the multiplier nodes (Lagrange physics only — empty
     /// otherwise). Build a load `SubNodeField` on `mesh[0]` to impose the
     /// constrained values, or read the nodes via `mesh.node(0, i, 0)`.
@@ -105,18 +112,6 @@ impl PyModel {
         }
     }
 
-    /// `Model.contact_gaps()` — the contact right-hand side `−g₀`: a
-    /// `NodeField` carrying, at each contact multiplier node's `imposed_value`
-    /// slot, minus the initial signed gap of its relation, so that
-    /// non-penetration reads `g₀ + C·u ≥ 0`. Merge it into the global load
-    /// with `|`. The model must hold exactly one contact sub-model; omitting
-    /// this helper treats every pair as initially touching (`g₀ = 0`).
-    fn contact_gaps(&self) -> PyResult<PyNodeField> {
-        Ok(PyNodeField {
-            inner: self.inner.contact_gaps()?,
-        })
-    }
-
     /// Names of the primal (primary) variables across the whole model.
     fn primal_vars(&self) -> Vec<String> {
         self.inner.primal_vars()
@@ -153,17 +148,28 @@ impl PyModel {
     /// A coupled physics declares several natures and is therefore returned by
     /// each of its filters — a radiation boundary is both `"thermal"` and
     /// `"radiation"`.
-    fn filter(&self, physics: Physics) -> PyResult<Self> {
-        Ok(Self {
+    fn filter(&self, physics: Physics) -> Self {
+        Self {
             inner: self.inner.filter(physics),
-        })
+        }
+    }
+
+    /// `Model.exclude(physics)` — the complement of `filter`: a new `Model`
+    /// holding only the sub-models **whose nature set does not contain** the
+    /// given physics. The two compose, one condition each: a constraint also
+    /// carries the nature of the physics it pins, so
+    /// `model.filter("mechanical")` is the mechanics **with** its supports and
+    /// `model.filter("mechanical").exclude("constraint")` the mechanics alone.
+    fn exclude(&self, physics: Physics) -> Self {
+        Self {
+            inner: self.inner.exclude(physics),
+        }
     }
 
     /// `Model.multiplier_mesh()` — POI1 `Mesh` of the constraint multiplier
-    /// nodes across the model (empty for a model with no constraint). The handle
-    /// to the multiplier nodes of an `embedded` / `dirichlet` / `mpc` model whose
-    /// multipliers it minted itself: read them via `mesh.node(0, i, 0)` or build
-    /// a load `SubNodeField` on `mesh[0]`.
+    /// nodes across the model (empty for a model with no constraint). Each
+    /// constraint mints its own, one per relation: read them via
+    /// `mesh.node(0, i, 0)` or build a load `SubNodeField` on `mesh[0]`.
     fn multiplier_mesh(&self) -> PyResult<PyMesh> {
         Ok(PyMesh {
             inner: self.inner.multiplier_mesh()?,
@@ -177,8 +183,7 @@ impl PyModel {
     /// belongs to** (for `dirichlet` the constrained node itself, for `mpc` any
     /// of the relation's term nodes), and `value` is the right-hand side `g`.
     /// Returns a fresh `NodeField` over the multiplier nodes, carrying the
-    /// constraint's imposed-value component (its dual, e.g. `imposed_T` /
-    /// `mpc_rhs`), with `g` at each cited relation and `0` elsewhere. Union it
+    /// `imposed` component, with `g` at each cited relation and `0` elsewhere. Union it
     /// into the global load with `|`, e.g. `load | model.constraint_rhs([...])`.
     ///
     /// The model must hold exactly one constraint sub-model (the `dirichlet` /

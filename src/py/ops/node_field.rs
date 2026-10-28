@@ -53,6 +53,37 @@ pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNo
     })
 }
 
+/// `field` interpolated by the cells of `mesh` at the nodes of `target` —
+/// Cast3M `PROI` onto a geometry. A node of `target` inside a cell of `mesh`
+/// takes `Σ Nᵢ(ξ) f(nodeᵢ)`, the shape functions of that cell at the node
+/// (quadratic cells interpolate quadratically); every component is carried.
+///
+/// A node of `target` outside `mesh` — farther than `tol` outside every cell's
+/// reference element — gets zero, as a nodal field reads a node it does not
+/// define: projecting a patch onto a larger mesh is a normal thing. `field` is
+/// read first zone first, a node of `mesh` it does not define reading zero.
+/// `mesh` and `target` may live in different `Coords` (a field moved onto a
+/// remeshed part), each read in its active configuration. One zone per submesh
+/// of `target`, like `positions`.
+///
+/// An empty `field` or `target` gives an empty field; an empty `mesh` gives
+/// zero at every node of `target`. Errors: `field` and `mesh` on different
+/// `Coords`; `mesh` and `target` in different dimensions.
+#[py_op(method_on = PyNodeField)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (field, mesh, target, tol=1e-6))]
+pub fn project(
+    field: PyRef<PyNodeField>,
+    mesh: PyRef<PyMesh>,
+    target: PyRef<PyMesh>,
+    tol: f64,
+) -> PyResult<PyNodeField> {
+    Ok(PyNodeField {
+        inner: crate::ops::node_field::project(&field.inner, &mesh.inner, &target.inner, tol)?,
+    })
+}
+
 /// Reproject `field` onto the exact support and components of `target`,
 /// zone by zone.
 ///
@@ -114,12 +145,27 @@ pub fn consolidate(field: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
 /// tensor case is the internal forces of a continuum when the quantity is a
 /// Cauchy stress — `divergence(stress, "sigma")` is Cast3m `BSIG` — but the
 /// operator knows nothing of mechanics: it needs only the geometry and the
-/// names. One zone per subspace.
+/// names. A node shared by several subspaces receives the sum of their
+/// contributions.
 #[py_op(method_on = PyElementField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn divergence(field: PyRef<PyElementField>, prefix: &str) -> PyResult<PyNodeField> {
     let nf = crate::ops::node_field::divergence(&field.inner, prefix)?;
+    Ok(PyNodeField { inner: nf })
+}
+
+/// A field carrying **one point per cell** gathered at the nodes by
+/// **summation** (Cast3M `CHAN 'CHPO' 'SOMM'`): each node receives, per
+/// component, the sum of the values of the cells it belongs to — across zones
+/// too. Not a smoothing: no average, no weight. Applied to the cell measures of
+/// `cell_integral`, it gives the volume each node stands for. Raises on a zone
+/// with more than one point per cell (build it on a `REDUCED` space).
+#[py_op(method_on = PyElementField)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn sum_to_nodes(field: PyRef<PyElementField>) -> PyResult<PyNodeField> {
+    let nf = crate::ops::node_field::sum_to_nodes(&field.inner)?;
     Ok(PyNodeField { inner: nf })
 }
 

@@ -1,15 +1,17 @@
-"""Operators writing into the coordinate store — mirror of
-``ops::coords`` (Rust).
+"""Operators on the coordinate store — mirror of ``ops::coords`` (Rust).
 
-The only two operators that change the geometry: ``set`` lays down absolute
-positions, ``displace`` adds an increment. They are the write face of
-``node_field.positions``, which reads.
+The only three operators that change the geometry: ``set`` lays down absolute
+positions, ``displace`` adds an increment, ``displace_from`` lays one
+configuration at another plus a displacement. They are the write face of
+``node_field.positions``, which reads. Computing on another configuration is
+the method ``Coords.in_config``, a context manager.
 """
 
-from ._pyrucast import displace as displace
-from ._pyrucast import set_positions as set  # noqa: A001 — `pyrucast.coords.set`
+from ._pyrucast import displace, displace_from
+from ._pyrucast import set_positions as set
 
 __all__ = [
     "displace",
+    "displace_from",
     "set",
 ]

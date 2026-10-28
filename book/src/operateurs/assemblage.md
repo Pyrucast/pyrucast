@@ -100,14 +100,20 @@ pour l'instant) fait échouer l'appel plutôt que de rendre un bloc nul.
 
 ## Composition : `assemble(&mut Matrix)`
 
-`stiffness` produit une matrice portant des blocs **calculés** (recette, valeurs
-produites au scatter) que `Matrix::finalize` ne sait pas assembler seul. Pour
-**recomposer** — ajouter une `SubMatrix` de provenance quelconque à une matrice
-existante (ou combiner plusieurs `Matrix` déjà assemblées via l'union `|`) puis
-réassembler — `m.assemble()`. C'est une **méthode** et non une fonction libre :
-elle mute un seul conteneur en préservant son invariant, exactement comme sa
-voisine `finalize`. Elle reconstruit le motif creux depuis les **blocs seuls**
-(sans `Model`) et redisperse les valeurs :
+Une matrice est assemblée **une fois**, sur la configuration active à ce
+moment-là. `stiffness`, `mass`, `geometric` et `tangent` rendent une matrice
+assemblée, dont les valeurs ne bougent plus : ni quand une autre configuration
+devient active, ni par un second `assemble()`, qui ne fait alors rien. Les
+valeurs d'une autre configuration s'obtiennent en refaisant la matrice.
+
+`assemble()` sert aux blocs réunis **sans leurs valeurs** : une `SubMatrix`
+ajoutée par `add_sub`, l'union `|`, `filter`, `exclude`. Les blocs **calculés**
+de `stiffness` (une recette, des valeurs produites au scatter), `Matrix::finalize`
+ne sait pas les assembler seul ; `m.assemble()` le fait, sur la configuration
+active. C'est une **méthode** et non une fonction libre : elle mute un seul
+conteneur en préservant son invariant, exactement comme sa voisine `finalize`.
+Elle construit le motif creux depuis les **blocs seuls** (sans `Model`) et y
+disperse les valeurs :
 
 ```rust,ignore
 {{#include ../../../tests/doc_conteneurs.rs:reassembler}}
@@ -119,18 +125,35 @@ voisine `finalize`. Elle reconstruit le motif creux depuis les **blocs seuls**
 
 Contrairement à `stiffness`, ce chemin ne consulte pas le motif mémoïsé sur le
 `Model` (il n'y a pas de `Model` ici) et reconstruit la sparsité à chaque appel —
-adapté à la composition ponctuelle ; le réassemblage à chaud d'un modèle fixe
+adapté à la composition ponctuelle ; l'assemblage répété d'un modèle fixe
 reste sur `stiffness`.
 
-C'est aussi le chemin de composition pour la dynamique : chaque `SubMatrix`
-porte un **facteur scalaire** paresseux (`bloc * s` / `bloc / s`, `1.0` par
-défaut — voir [Matrice creuse](../matrix.md#facteur-scalaire-et-somme-de-matrices)),
-et `+` porte les blocs des deux opérandes sans rien copier, l'assembleur sommant
-les contributions qui retombent sur un même DOF. D'où `M/dt + K` :
+## La somme
+
+`+` additionne les **valeurs** de ses opérandes, chacune telle qu'elle a été
+assemblée, sur l'union de leurs DOFs : le résultat est assemblé et se résout
+tel quel. Rien n'est recalculé. Avec le **facteur scalaire** des blocs
+(`bloc * s`, `bloc / s` — voir
+[Matrice creuse](../matrix.md#facteur-scalaire-et-somme-de-matrices)), c'est
+l'opérateur de la dynamique, `M/dt + K` :
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_assemblage.py:somme}}
 ```
+
+Deux matrices assemblées sur deux configurations s'additionnent donc telles
+quelles. C'est ce que fait le pas à pas en grands déplacements : la capacité
+sur la référence, la conduction et les échanges sur la pièce déformée (voir
+[Grandes transformations](../mecanique/grandes-transformations.md)).
+
+```python
+{{#include ../../../tests/python/test_doc_ops_assemblage.py:somme_configurations}}
+```
+
+Un opérande dont des blocs calculés n'ont jamais été assemblés (une sortie de
+`filter` ou de `|`) n'a pas de valeurs à additionner : la somme lève une erreur
+plutôt que de les calculer en silence sur la configuration du moment. `get` fait
+de même.
 
 ## Chargement réparti : `model.flux(fespace, target, dual)` → `Model`
 
@@ -171,6 +194,21 @@ densité absente est refusée à l'assemblage, par son nom.
 La mesure `|J|` venant du sous-espace EF, un **bord** s'intègre directement :
 une arête `SEG2` plongée dans un `Coords` 2-D s'intègre comme une **ligne**
 (Jacobien manifold), une surface comme une aire.
+
+**Le mode normal : une pression.** La ligne `"n"` désigne une densité portée par
+la **normale** de la maille, versée dans toutes les lignes de déplacement de la
+cible à la fois (`f_x`, `f_y`, `f_z`) — le `PRES` de Cast3M :
+
+\[
+f_{ia} = \int_\Gamma \varphi_n\, n_a\, N_i\, d\Gamma .
+\]
+
+La normale est celle de la configuration **active** : `(t_y, −t_x)` pour une
+arête de tangente `t`, qui sort de la matière quand le contour est parcouru dans
+le sens trigonométrique ; une pression `p` qui pousse sur la paroi s'écrit alors
+`phi_n = −p`. Évaluée sur une configuration posée en `X + u`, la charge **suit
+la paroi** — sans raideur de chargement, comme dans Cast3M. Voir
+[Grandes transformations](../mecanique/grandes-transformations.md).
 
 Rien n'oblige une charge à rejoindre le modèle qu'elle charge : ne contribuant à
 aucune matrice, elle se tient très bien en modèle à elle seule, avec sa propre

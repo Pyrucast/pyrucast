@@ -70,11 +70,11 @@ def main() -> None:
     # ── Dirichlet T = 20 on the right edge (x = 1) ───────────────────────────
     right_nodes = [grid[idx(N, j)] for j in range(N + 1)]
     imposed = pyrucast.mesh.poi1_from_nodes(right_nodes)
-    multiplier = pyrucast.mesh.barycenter(imposed)
-    mults = [multiplier.node(0, j, 0) for j in range(N + 1)]
     cible = pyrucast.model.heat_conduction(fes)
+    held = pyrucast.model.dirichlet(imposed, cible, "T")
+    mults = [held.multiplier_mesh().node(0, j, 0) for j in range(N + 1)]
 
-    model = cible | pyrucast.model.dirichlet(cible, "T", imposed, multiplier)
+    model = cible | held
 
     # ── Matériau : k uniforme (Dirichlet ignoré automatiquement) ─────────────
 
@@ -91,11 +91,11 @@ def main() -> None:
     materials = pyrucast.element_field.material_field(model, [("k", K), ("phi_q", Q)])
     source = pyrucast.node_field.external_forces(model, materials)
 
-    # Imposed value T = 20 at the multiplier nodes' "imposed_T" slot.
+    # Imposed value T = 20 at the multiplier nodes' "imposed" slot.
     imposed_mesh = pyrucast.mesh.poi1_from_nodes(mults)
-    imposed_load = pyrucast.NodeField(imposed_mesh, ["imposed_T"])
+    imposed_load = pyrucast.NodeField(imposed_mesh, ["imposed"])
     for m in mults:
-        imposed_load[0].set_value(m, "imposed_T", T_IMPOSED)
+        imposed_load[0].set_value(m, "imposed", T_IMPOSED)
 
     # Loading = the edge's flux + the imposed values (union of the zones).
     rhs = source | imposed_load
@@ -124,7 +124,7 @@ def main() -> None:
     print(f"\nmax error over the whole grid = {max_err:.2e}")
 
     # La réaction totale équilibre le flux injecté : Σλ = Q.
-    reaction = sum(solution.value(m, "lambda_T") for m in mults)
+    reaction = sum(solution.value(m, "lambda") for m in mults)
     print(f"réaction totale Σλ = {reaction:.6f}  (attendu {Q})")
     assert abs(reaction - Q) < tol
 

@@ -14,7 +14,9 @@ use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::model;
 use pyrucast::Result;
 
@@ -35,7 +37,12 @@ fn unit_quad() -> Result<(FiniteElementSpace, [Node; 4])> {
 fn consistent_mass_of_unit_quad_matches_closed_form() -> Result<()> {
     const RHO: f64 = 2.0;
     let (fes, n) = unit_quad()?;
-    let model = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let model = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", 1.0), ("nu", 0.3), ("rho", RHO)],
@@ -48,13 +55,13 @@ fn consistent_mass_of_unit_quad_matches_closed_form() -> Result<()> {
     let diag = RHO * 4.0 / 36.0; // node with itself
     let adj = RHO * 2.0 / 36.0; // edge-adjacent nodes
     let opp = RHO * 1.0 / 36.0; // diagonally-opposite node
-    assert!((m.get(n[0].id(), "f_x", n[0].id(), "u_x") - diag).abs() < tol);
-    assert!((m.get(n[0].id(), "f_x", n[1].id(), "u_x") - adj).abs() < tol);
-    assert!((m.get(n[0].id(), "f_x", n[2].id(), "u_x") - opp).abs() < tol);
+    assert!((m.get(n[0].id(), "f_x", n[0].id(), "u_x").unwrap() - diag).abs() < tol);
+    assert!((m.get(n[0].id(), "f_x", n[1].id(), "u_x").unwrap() - adj).abs() < tol);
+    assert!((m.get(n[0].id(), "f_x", n[2].id(), "u_x").unwrap() - opp).abs() < tol);
     // Same for the u_y ↔ f_y block.
-    assert!((m.get(n[0].id(), "f_y", n[0].id(), "u_y") - diag).abs() < tol);
+    assert!((m.get(n[0].id(), "f_y", n[0].id(), "u_y").unwrap() - diag).abs() < tol);
     // The mass is block-diagonal in the components: no u_y ↔ f_x coupling.
-    assert!(m.get(n[0].id(), "f_x", n[0].id(), "u_y").abs() < tol);
+    assert!(m.get(n[0].id(), "f_x", n[0].id(), "u_y").unwrap().abs() < tol);
 
     // Whole-matrix sum = space_dim · ρ · area (ΣN_i = 1 ⇒ Σ_ij ∫N_iN_j = area).
     let total: f64 = m.to_dmatrix()?.sum();
@@ -64,7 +71,7 @@ fn consistent_mass_of_unit_quad_matches_closed_form() -> Result<()> {
     );
 
     // Consistent (not lumped): off-diagonal terms are present.
-    assert!(m.get(n[0].id(), "f_x", n[1].id(), "u_x").abs() > 1e-6);
+    assert!(m.get(n[0].id(), "f_x", n[1].id(), "u_x").unwrap().abs() > 1e-6);
     Ok(())
 }
 
@@ -73,7 +80,7 @@ fn heat_capacity_of_unit_quad_matches_closed_form() -> Result<()> {
     const RHO: f64 = 3.0;
     const CP: f64 = 5.0;
     let (fes, n) = unit_quad()?;
-    let model = model::heat_conduction(&fes)?;
+    let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     // `k` is required by the physics; `rho`/`cp` are optional and kept because
     // supplied — the capacity matrix needs them, the conductivity does not.
     let materials = pyrucast::ops::element_field::material_field(
@@ -84,9 +91,9 @@ fn heat_capacity_of_unit_quad_matches_closed_form() -> Result<()> {
     let c = pyrucast::ops::matrix::mass(&model, &materials)?;
     let tol = 1e-12;
     let rc = RHO * CP;
-    assert!((c.get(n[0].id(), "q", n[0].id(), "T") - rc * 4.0 / 36.0).abs() < tol);
-    assert!((c.get(n[0].id(), "q", n[1].id(), "T") - rc * 2.0 / 36.0).abs() < tol);
-    assert!((c.get(n[0].id(), "q", n[2].id(), "T") - rc * 1.0 / 36.0).abs() < tol);
+    assert!((c.get(n[0].id(), "q", n[0].id(), "T").unwrap() - rc * 4.0 / 36.0).abs() < tol);
+    assert!((c.get(n[0].id(), "q", n[1].id(), "T").unwrap() - rc * 2.0 / 36.0).abs() < tol);
+    assert!((c.get(n[0].id(), "q", n[2].id(), "T").unwrap() - rc * 1.0 / 36.0).abs() < tol);
 
     let total: f64 = c.to_dmatrix()?.sum();
     assert!((total - rc * 1.0).abs() < 1e-10, "total capacity = {total}");
@@ -97,7 +104,12 @@ fn heat_capacity_of_unit_quad_matches_closed_form() -> Result<()> {
 fn lumped_mass_is_diagonal_and_conserves_total() -> Result<()> {
     const RHO: f64 = 2.0;
     let (fes, n) = unit_quad()?;
-    let model = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let model = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", 1.0), ("nu", 0.3), ("rho", RHO)],
@@ -108,9 +120,15 @@ fn lumped_mass_is_diagonal_and_conserves_total() -> Result<()> {
     let tol = 1e-12;
 
     // Each diagonal = its consistent-mass row sum = ρ·(4+2+1+2)/36 = ρ/4.
-    assert!((lumped.get(n[0].id(), "f_x", n[0].id(), "u_x") - RHO / 4.0).abs() < tol);
+    assert!((lumped.get(n[0].id(), "f_x", n[0].id(), "u_x").unwrap() - RHO / 4.0).abs() < tol);
     // Off-diagonals vanish.
-    assert!(lumped.get(n[0].id(), "f_x", n[1].id(), "u_x").abs() < tol);
+    assert!(
+        lumped
+            .get(n[0].id(), "f_x", n[1].id(), "u_x")
+            .unwrap()
+            .abs()
+            < tol
+    );
 
     // Total mass is conserved by row-sum lumping.
     let (mc, ml): (f64, f64) = (m.to_dmatrix()?.sum(), lumped.to_dmatrix()?.sum());
@@ -122,7 +140,12 @@ fn lumped_mass_is_diagonal_and_conserves_total() -> Result<()> {
 #[test]
 fn mass_requires_density() -> Result<()> {
     let (fes, _) = unit_quad()?;
-    let model = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let model = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     // No `rho` supplied ⇒ the mass kernel must error clearly.
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("nu", 0.3)])?;

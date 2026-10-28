@@ -14,7 +14,9 @@ use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::model;
 use pyrucast::Result;
 
@@ -34,7 +36,12 @@ fn unit_quad() -> Result<(FiniteElementSpace, [Node; 4])> {
 fn geometric_stiffness_uniaxial_stress_unit_quad() -> Result<()> {
     const SIG: f64 = 3.0;
     let (fes, n) = unit_quad()?;
-    let model = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let model = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("nu", 0.3)])?;
 
@@ -51,16 +58,16 @@ fn geometric_stiffness_uniaxial_stress_unit_quad() -> Result<()> {
     let tol = 1e-12;
 
     // σ · ∫(∂N_0/∂x)² = σ/3, on both the u_x and (δ_ab) the u_y diagonal block.
-    assert!((kg.get(n[0].id(), "f_x", n[0].id(), "u_x") - SIG / 3.0).abs() < tol);
-    assert!((kg.get(n[0].id(), "f_y", n[0].id(), "u_y") - SIG / 3.0).abs() < tol);
+    assert!((kg.get(n[0].id(), "f_x", n[0].id(), "u_x").unwrap() - SIG / 3.0).abs() < tol);
+    assert!((kg.get(n[0].id(), "f_y", n[0].id(), "u_y").unwrap() - SIG / 3.0).abs() < tol);
     // σ · ∫ ∂N_0/∂x ∂N_1/∂x = −σ/3.
-    assert!((kg.get(n[0].id(), "f_x", n[1].id(), "u_x") + SIG / 3.0).abs() < tol);
+    assert!((kg.get(n[0].id(), "f_x", n[1].id(), "u_x").unwrap() + SIG / 3.0).abs() < tol);
     // No cross-component coupling.
-    assert!(kg.get(n[0].id(), "f_x", n[0].id(), "u_y").abs() < tol);
+    assert!(kg.get(n[0].id(), "f_x", n[0].id(), "u_y").unwrap().abs() < tol);
 
     // Each x-x row sums to 0 (rigid translation carries no geometric stiffness).
     let row_sum: f64 = (0..4)
-        .map(|j| kg.get(n[0].id(), "f_x", n[j].id(), "u_x"))
+        .map(|j| kg.get(n[0].id(), "f_x", n[j].id(), "u_x").unwrap())
         .sum();
     assert!(row_sum.abs() < 1e-10, "row sum = {row_sum}");
     Ok(())
@@ -70,7 +77,12 @@ fn geometric_stiffness_uniaxial_stress_unit_quad() -> Result<()> {
 fn geometric_stiffness_is_symmetric() -> Result<()> {
     const SIG: f64 = 2.0;
     let (fes, n) = unit_quad()?;
-    let model = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let model = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("nu", 0.3)])?;
     let stress_sub = SubElementField::from_uniform_per_component(
@@ -85,8 +97,8 @@ fn geometric_stiffness_is_symmetric() -> Result<()> {
     let tol = 1e-12;
     for i in 0..4 {
         for j in 0..4 {
-            let a = kg.get(n[i].id(), "f_x", n[j].id(), "u_x");
-            let b = kg.get(n[j].id(), "f_x", n[i].id(), "u_x");
+            let a = kg.get(n[i].id(), "f_x", n[j].id(), "u_x").unwrap();
+            let b = kg.get(n[j].id(), "f_x", n[i].id(), "u_x").unwrap();
             assert!((a - b).abs() < tol, "asymmetry at ({i},{j})");
         }
     }

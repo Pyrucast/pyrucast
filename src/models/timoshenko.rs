@@ -60,7 +60,7 @@ use crate::models::beam::{self, bending_4x4, mass_4x4, BeamModel};
 use crate::models::owned_components;
 use crate::models::ZoneLayout;
 use crate::models::{
-    frame, frame3d, Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind,
+    frame, frame3d, Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
 };
 use crate::models::{ElementLayout, MatrixKind};
 use serde::{Deserialize, Serialize};
@@ -471,6 +471,10 @@ impl Behavior for Timoshenko {
         })
     }
 
+    fn strain_operator(&self) -> StrainOperator {
+        StrainOperator::Beam
+    }
+
     fn integrate_point(
         &self,
         geom: &CellGeom,
@@ -655,7 +659,7 @@ mod tests {
         let (beam, a, _) = one_beam(&[0.0], &[l]);
         let mat = material(&beam, &[("E", e), ("I", i), ("G", g), ("A_s", a_s)]);
         let k = &beam.build_stiffness_blocks(&mat).unwrap()[0];
-        assert!((k.get(a, "f_w", a, "w") - series).abs() < 1e-9);
+        assert!((k.get(a, "f_w", a, "w").unwrap() - series).abs() < 1e-9);
 
         // 2-D: the same block, rotated, and decoupled from the axial term.
         let (frame, a2, _) = one_beam(&[0.0, 0.0], &[l, 0.0]);
@@ -664,9 +668,9 @@ mod tests {
             &[("E", e), ("A", 4.0), ("I", i), ("G", g), ("A_s", a_s)],
         );
         let k = &frame.build_stiffness_blocks(&mat).unwrap()[0];
-        assert!((k.get(a2, "f_y", a2, "u_y") - series).abs() < 1e-9);
-        assert!((k.get(a2, "f_x", a2, "u_x") - e * 4.0 / l).abs() < 1e-9);
-        assert!(k.get(a2, "f_x", a2, "u_y").abs() < 1e-9);
+        assert!((k.get(a2, "f_y", a2, "u_y").unwrap() - series).abs() < 1e-9);
+        assert!((k.get(a2, "f_x", a2, "u_x").unwrap() - e * 4.0 / l).abs() < 1e-9);
+        assert!(k.get(a2, "f_x", a2, "u_y").unwrap().abs() < 1e-9);
     }
 
     /// A vertical member puts the axial term on `u_y` — the local axes are read
@@ -681,8 +685,8 @@ mod tests {
             &[("E", e), ("A", area), ("I", 2.0), ("G", 5.0), ("A_s", 2.0)],
         );
         let k = &frame.build_stiffness_blocks(&mat).unwrap()[0];
-        assert!((k.get(a, "f_y", a, "u_y") - e * area / l).abs() < 1e-9);
-        assert!(k.get(a, "f_y", a, "u_x").abs() < 1e-9);
+        assert!((k.get(a, "f_y", a, "u_y").unwrap() - e * area / l).abs() < 1e-9);
+        assert!(k.get(a, "f_y", a, "u_x").unwrap().abs() < 1e-9);
     }
 
     /// A pure-bending beam has no axial force, so it declares no geometric
@@ -698,7 +702,7 @@ mod tests {
 }
 
 crate::physics_operator! {
-    /// Timoshenko-beam `Model` spanning **every** subspace of `fes`.
+    /// Timoshenko-beam `Model` spanning **every** subspace of `fespace`.
     /// Parent-level operator; material (`E`, `I`, `G`, `A_s`) is
     /// supplied at assembly time.
     ///
@@ -724,7 +728,6 @@ crate::physics_operator! {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::atoms::Interpolation;
     /// # let mut b = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # b.add_cell(&[n[0].id(), n[1].id()])?;
@@ -734,6 +737,6 @@ crate::physics_operator! {
     /// assert_eq!(m.len(), 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn timoshenko(fes) via SubModel::timoshenko;
+    pub fn timoshenko(fespace) via SubModel::timoshenko;
     python: "`model.timoshenko(fespace)` — the **shear-deformable** beam, in whichever\nconfiguration the mesh puts it (`SEG2` throughout):\n\n| `Coords` | DOFs per node | material | section forces |\n|---|---|---|---|\n| 1-D | `w`, `theta` | `E, I, G, A_s` | `M, V` |\n| 2-D | `u_x, u_y, r_z` | `+ A` | `N, M, V` |\n| 3-D | six | `E, A, I_y, I_z, J, G, A_sy, A_sz` | `N, M_y, M_z, T, V_y, V_z` |\n\nThis replaces `model.frame` and `model.frame3d`, which were the same\nphysics in 2-D and 3-D. Read the DOF names back with\n`model.primal_vars()`.\n\nThe element is the **exact** one — the closed form driven by\n`Φ = 12EI/(G·A_s·L²)` — so one element per member suffices. Its shape\nfunctions depend on the material through `Φ`, hence no space can tabulate\nthem: build the subspace with\n`FiniteElementSpace(mesh, interpolation=\"MODEL_EMBEDDED\")`.\n\nPrefer `bernoulli` for a slender member, where the shear compliance is\nnegligible."
 }

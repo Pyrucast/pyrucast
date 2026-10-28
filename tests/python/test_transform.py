@@ -4,9 +4,8 @@ rotational sweep revolve."""
 
 import math
 
-import pytest
-
 import pyrucast
+import pytest
 
 
 def _tri3(coords, pts):

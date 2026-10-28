@@ -162,10 +162,11 @@ scatter driver.
 
 ## Solver
 
-Direct sparse LU (`faer`), factorisation cached on the `Matrix`. Three routes:
-**Lagrange** (`solve`, augmented system), **elimination / condensation**
-(`solve_eliminate`), **unilateral active-set** (`solve_unilateral`). Output on
-block supports (reused POI1 handles, subtractable fields).
+Direct sparse LU (`faer`), factorisation cached on the `Matrix`. One entry,
+`solve`, reading everything in the matrix (relation rows, coefficients, sense):
+**Lagrange** (augmented system), **elimination / condensation**
+(`relations="eliminate"`), **unilateral active-set** as soon as a relation is an
+inequality. Output on block supports (reused POI1 handles, subtractable fields).
 
 ## Meshing
 
@@ -191,7 +192,7 @@ Kinematics (`gradient`, `deformation`, `beam_deformation`,
 `frame_deformation`), behaviour (`behavior`), materials (`material_field`,
 `interp_to_gauss`), positions, `restrict`, `flux`, `divergence`,
 `internal_forces`, field masks and arithmetic, reductions (`integral`, `xtx`,
-`xty`), geometric queries (`locate_points`, `project_points`, `contact_gaps`),
+`xty`), geometric queries (`locate_points`, `project_points`),
 `Evolution` (tabulated interpolated value). 168 free functions in `ops/`.
 
 ## Parallelism
@@ -210,9 +211,10 @@ layer into sub-modules named after the produced container (`pyrucast.mesh`,
 `pyrucast.element_field`, `pyrucast.matrix`, …), the containers and atoms
 staying at the top level. Versioned `.pyi` stub.
 Cooperative interruption (`Ctrl+C`) through the `Cancel` trait.
-Non-linear orchestration in pure Python: `pyrucast.thermomechanics`
-(step-by-step thermal→mechanical), modified Newton accelerated by Anderson in
-the examples.
+Non-linear orchestration in pure Python: `pyrucast.stepping`, the mirror
+of Cast3M's `PASAPAS` and of the procedures it calls (heat in three schemes,
+modified Newton accelerated by Anderson, substeps, contact, dynamics, load
+control).
 
 ## Visualisation
 
@@ -373,15 +375,14 @@ operators (`RIGI`, `KTAN`, `BSIG`, `RESO`, `COMP`, `EXCO`…). Here, the
 orchestration language is **Python** instead of GIBIANE:
 
 - **the Rust core supplies the bricks** — assembly (`stiffness`, `mass`,
-  `geometric`, `tangent`), linear solving (`solve`, `solve_eliminate`,
-  `solve_unilateral`), behaviour integration (`behavior`), internal forces
+  `geometric`, `tangent`), linear solving (`solve`), behaviour integration
+  (`behavior`), internal forces
   (`internal_forces`), field operations;
 - **Python assembles the algorithm** — the Newton loop (residual, tangent,
   increment, convergence test) and the time scheme are Python functions calling
   those bricks.
 
-That is already the case in practice: `pyrucast.thermomechanics` runs a
-step-by-step thermal→mechanical scheme, and the examples run a modified Newton
-accelerated by Anderson. An equivalent of `pasapas` / `unpas` / `transnon` will
-therefore be a **Python library** shipped with the binding, not a Rust operator
+That is the case: `pyrucast.stepping` is the equivalent of `pasapas` /
+`unpas` / `transnon`, a **Python library** shipped with the binding, not a Rust
+operator
 (cf. the "Équivalent pyrucast" column of `opérateur_castem.csv`).

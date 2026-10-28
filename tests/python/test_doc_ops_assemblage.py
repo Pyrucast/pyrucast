@@ -13,6 +13,8 @@ at **collection** time; an example that breaks is a collection error, with a
 full traceback and a non-zero exit code.
 """
 
+import itertools
+
 import pyrucast
 
 
@@ -21,16 +23,16 @@ def _modele_thermique():
     c = pyrucast.Coords(1)
     noeuds = [c.add_node([x]) for x in (0.0, 0.5, 1.0)]
     mesh = pyrucast.Mesh(c, "SEG2")
-    for a, b in zip(noeuds, noeuds[1:]):
+    for a, b in itertools.pairwise(noeuds):
         mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
 
     imposed = pyrucast.mesh.poi1_from_nodes([noeuds[0]])
-    multiplier = pyrucast.mesh.barycenter(imposed)
     cible = pyrucast.model.heat_conduction(fes)
+    appui = pyrucast.model.dirichlet(imposed, cible, "T")
 
-    model = cible | pyrucast.model.dirichlet(cible, "T", imposed, multiplier)
-    return model, fes, multiplier, noeuds
+    model = cible | appui
+    return model, fes, appui.multiplier_mesh(), noeuds
 
 
 def _modele_mecanique():
@@ -108,14 +110,39 @@ k = pyrucast.matrix.stiffness(model, materials)
 m = pyrucast.matrix.stiffness(model, materials)
 dt = 0.1
 # Loading: the imposed temperature, carried by the multiplier node.
-rhs = pyrucast.NodeField(multiplier, ["imposed_T"])
-rhs[0].set_value(multiplier.node(0, 0, 0), "imposed_T", 1.0)
+rhs = pyrucast.NodeField(multiplier, ["imposed"])
+rhs[0].set_value(multiplier.node(0, 0, 0), "imposed", 1.0)
 # ANCHOR: somme
-sys = m / dt + k
-sys.assemble()
+sys = m / dt + k  # assemblée : se résout telle quelle
 u = pyrucast.solver.solve(sys, rhs)
 # ANCHOR_END: somme
 assert u.node_count() > 0
+
+# ── somme sur deux configurations ──────────────────────────
+
+model, fes, _, noeuds = _modele_thermique()
+materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
+coords = fes.mesh().coords()
+# u_x = x: every length doubles.
+allonge = pyrucast.NodeField(fes.mesh(), ["u_x"])
+for n, x in zip(noeuds, (0.0, 0.5, 1.0), strict=True):
+    allonge[0].set_value(n, "u_x", x)
+etiree = coords.add_config("etiree")
+pyrucast.coords.displace_from(allonge, coords.active, etiree, ["u_x"])
+# ANCHOR: somme_configurations
+K_repos = pyrucast.matrix.stiffness(model, materials)  # sur la configuration active
+with coords.in_config(etiree):
+    K_etiree = pyrucast.matrix.stiffness(model, materials)  # sur la barre étirée
+
+# Chaque matrice garde les valeurs de sa configuration ; la somme les additionne.
+somme = K_repos + K_etiree
+# ANCHOR_END: somme_configurations
+milieu = noeuds[1]
+# Two SEG2 of conductance k / ℓ meet at the middle node: 2·(1/0.5) = 4 at
+# rest, 2·(1/1) = 2 once stretched.
+assert abs(somme.get(milieu, "q", milieu, "T") - 6.0) < 1e-12
+with coords.in_config(etiree):
+    assert abs(somme.get(milieu, "q", milieu, "T") - 6.0) < 1e-12
 
 # ── Rigidité géométrique ────────────────────────────────────────────────────
 

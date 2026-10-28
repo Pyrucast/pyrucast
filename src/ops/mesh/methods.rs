@@ -2,14 +2,13 @@
 //!
 //! A free function meeting the three conditions of `CONVENTIONS.md`
 //! (§ "The verb also exposed as a method") is **also** exposed as a method of
-//! its subject, to allow chaining. These methods do not
-//! contiennent **aucune** logique : elles appellent la fonction libre,
-//! receveur compris. La fonction libre reste la forme canonique et porte la
-//! documentation.
+//! its subject, to allow chaining. These methods contain **no** logic: they
+//! call the free function, receiver included. The free function stays the
+//! canonical form and carries the documentation.
 //!
 //! The `impl`s live here rather than in `containers/`: a container must not
-//! depend on an operator, and Rust allows an inherent `impl` in
-//! n'importe quel module de la crate de définition.
+//! depend on an operator, and Rust allows an inherent `impl` in any module of
+//! the crate that defines the type.
 
 use crate::atoms::Band;
 use crate::atoms::ElementType;
@@ -19,62 +18,62 @@ use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
 
 impl Mesh {
-    /// Voir [`mesh::barycenter`](fn@crate::ops::mesh::barycenter).
+    /// See [`mesh::barycenter`](fn@crate::ops::mesh::barycenter).
     pub fn barycenter(&self) -> Result<Mesh> {
         crate::ops::mesh::barycenter(self)
     }
 
-    /// Voir [`mesh::border`](fn@crate::ops::mesh::border).
+    /// See [`mesh::border`](fn@crate::ops::mesh::border).
     pub fn border(&self, angle_deg: Option<f64>) -> Result<Mesh> {
         crate::ops::mesh::border(self, angle_deg)
     }
 
-    /// Voir [`mesh::chain`](fn@crate::ops::mesh::chain).
+    /// See [`mesh::chain`](fn@crate::ops::mesh::chain).
     pub fn chain(&self) -> Result<Mesh> {
         crate::ops::mesh::chain(self)
     }
 
-    /// Voir [`mesh::consolidate`](fn@crate::ops::mesh::consolidate).
+    /// See [`mesh::consolidate`](fn@crate::ops::mesh::consolidate).
     pub fn consolidate(&self) -> Result<Mesh> {
         crate::ops::mesh::consolidate(self)
     }
 
-    /// Voir [`mesh::convert`](fn@crate::ops::mesh::convert).
+    /// See [`mesh::convert`](fn@crate::ops::mesh::convert).
     pub fn convert(&self, target: ElementType) -> Result<Mesh> {
         crate::ops::mesh::convert(self, target)
     }
 
-    /// Voir [`mesh::copy`](fn@crate::ops::mesh::copy).
+    /// See [`mesh::copy`](fn@crate::ops::mesh::copy).
     pub fn copy(&self, new_nodes: bool) -> Result<Mesh> {
         crate::ops::mesh::copy(self, new_nodes)
     }
 
-    /// Voir [`mesh::elements_on`](fn@crate::ops::mesh::elements_on).
+    /// See [`mesh::elements_on`](fn@crate::ops::mesh::elements_on).
     pub fn elements_on(&self, points: &Mesh, strict: bool) -> Result<Mesh> {
         crate::ops::mesh::elements_on(self, points, strict)
     }
 
-    /// Voir [`mesh::extrude`](fn@crate::ops::mesh::extrude).
+    /// See [`mesh::extrude`](fn@crate::ops::mesh::extrude).
     pub fn extrude(&self, direction: &[f64], n_layers: usize) -> Result<Mesh> {
         crate::ops::mesh::extrude(self, direction, n_layers)
     }
 
-    /// Voir [`mesh::invert`](fn@crate::ops::mesh::invert).
+    /// See [`mesh::invert`](fn@crate::ops::mesh::invert).
     pub fn invert(&self) -> Result<Mesh> {
         crate::ops::mesh::invert(self)
     }
 
-    /// Voir [`mesh::merge_nodes`](fn@crate::ops::mesh::merge_nodes).
+    /// See [`mesh::merge_nodes`](fn@crate::ops::mesh::merge_nodes).
     pub fn merge_nodes(&self, tol: f64, in_place: bool) -> Result<Mesh> {
         crate::ops::mesh::merge_nodes(self, tol, in_place)
     }
 
-    /// Voir [`mesh::orient`](fn@crate::ops::mesh::orient).
+    /// See [`mesh::orient`](fn@crate::ops::mesh::orient).
     pub fn orient(&self) -> Result<Mesh> {
         crate::ops::mesh::orient(self)
     }
 
-    /// Voir [`mesh::pave_surface`](fn@crate::ops::mesh::pave_surface).
+    /// See [`mesh::pave_surface`](fn@crate::ops::mesh::pave_surface).
     pub fn pave_surface(
         &self,
         element_type: ElementType,
@@ -85,7 +84,7 @@ impl Mesh {
         crate::ops::mesh::pave_surface(self, element_type, target_size, all_quad, relax)
     }
 
-    /// Voir [`mesh::pave_volume`](fn@crate::ops::mesh::pave_volume).
+    /// See [`mesh::pave_volume`](fn@crate::ops::mesh::pave_volume).
     pub fn pave_volume(
         &self,
         layers: usize,
@@ -95,7 +94,7 @@ impl Mesh {
         crate::ops::mesh::pave_volume(self, layers, thickness, core_size)
     }
 
-    /// Voir [`mesh::points_below_plane`](fn@crate::ops::mesh::points_below_plane).
+    /// See [`mesh::points_below_plane`](fn@crate::ops::mesh::points_below_plane).
     pub fn points_below_plane(
         &self,
         origin: &[f64],
@@ -105,7 +104,7 @@ impl Mesh {
         crate::ops::mesh::points_below_plane(self, origin, normal, tol)
     }
 
-    /// Voir [`mesh::points_in_cone`](fn@crate::ops::mesh::points_in_cone).
+    /// See [`mesh::points_in_cone`](fn@crate::ops::mesh::points_in_cone).
     pub fn points_in_cone(
         &self,
         base: &[f64],
@@ -117,7 +116,7 @@ impl Mesh {
         crate::ops::mesh::points_in_cone(self, base, top, base_radius, top_radius, tol)
     }
 
-    /// Voir [`mesh::points_in_cylinder`](fn@crate::ops::mesh::points_in_cylinder).
+    /// See [`mesh::points_in_cylinder`](fn@crate::ops::mesh::points_in_cylinder).
     pub fn points_in_cylinder(
         &self,
         base: &[f64],
@@ -128,12 +127,12 @@ impl Mesh {
         crate::ops::mesh::points_in_cylinder(self, base, top, radius, tol)
     }
 
-    /// Voir [`mesh::points_in_sphere`](fn@crate::ops::mesh::points_in_sphere).
+    /// See [`mesh::points_in_sphere`](fn@crate::ops::mesh::points_in_sphere).
     pub fn points_in_sphere(&self, center: &[f64], radius: f64, tol: Option<f64>) -> Result<Mesh> {
         crate::ops::mesh::points_in_sphere(self, center, radius, tol)
     }
 
-    /// Voir [`mesh::points_in_torus`](fn@crate::ops::mesh::points_in_torus).
+    /// See [`mesh::points_in_torus`](fn@crate::ops::mesh::points_in_torus).
     pub fn points_in_torus(
         &self,
         center: &[f64],
@@ -145,7 +144,7 @@ impl Mesh {
         crate::ops::mesh::points_in_torus(self, center, axis, major_radius, minor_radius, tol)
     }
 
-    /// Voir [`mesh::points_on_cone`](fn@crate::ops::mesh::points_on_cone).
+    /// See [`mesh::points_on_cone`](fn@crate::ops::mesh::points_on_cone).
     pub fn points_on_cone(
         &self,
         base: &[f64],
@@ -157,7 +156,7 @@ impl Mesh {
         crate::ops::mesh::points_on_cone(self, base, top, base_radius, top_radius, tol)
     }
 
-    /// Voir [`mesh::points_on_cylinder`](fn@crate::ops::mesh::points_on_cylinder).
+    /// See [`mesh::points_on_cylinder`](fn@crate::ops::mesh::points_on_cylinder).
     pub fn points_on_cylinder(
         &self,
         base: &[f64],
@@ -168,12 +167,12 @@ impl Mesh {
         crate::ops::mesh::points_on_cylinder(self, base, top, radius, tol)
     }
 
-    /// Voir [`mesh::points_on_line`](fn@crate::ops::mesh::points_on_line).
+    /// See [`mesh::points_on_line`](fn@crate::ops::mesh::points_on_line).
     pub fn points_on_line(&self, a: &[f64], b: &[f64], tol: Option<f64>) -> Result<Mesh> {
         crate::ops::mesh::points_on_line(self, a, b, tol)
     }
 
-    /// Voir [`mesh::points_on_plane`](fn@crate::ops::mesh::points_on_plane).
+    /// See [`mesh::points_on_plane`](fn@crate::ops::mesh::points_on_plane).
     pub fn points_on_plane(
         &self,
         origin: &[f64],
@@ -183,12 +182,12 @@ impl Mesh {
         crate::ops::mesh::points_on_plane(self, origin, normal, tol)
     }
 
-    /// Voir [`mesh::points_on_sphere`](fn@crate::ops::mesh::points_on_sphere).
+    /// See [`mesh::points_on_sphere`](fn@crate::ops::mesh::points_on_sphere).
     pub fn points_on_sphere(&self, center: &[f64], radius: f64, tol: Option<f64>) -> Result<Mesh> {
         crate::ops::mesh::points_on_sphere(self, center, radius, tol)
     }
 
-    /// Voir [`mesh::points_on_torus`](fn@crate::ops::mesh::points_on_torus).
+    /// See [`mesh::points_on_torus`](fn@crate::ops::mesh::points_on_torus).
     pub fn points_on_torus(
         &self,
         center: &[f64],
@@ -200,7 +199,7 @@ impl Mesh {
         crate::ops::mesh::points_on_torus(self, center, axis, major_radius, minor_radius, tol)
     }
 
-    /// Voir [`mesh::revolve`](fn@crate::ops::mesh::revolve).
+    /// See [`mesh::revolve`](fn@crate::ops::mesh::revolve).
     pub fn revolve(
         &self,
         angle: f64,
@@ -211,52 +210,52 @@ impl Mesh {
         crate::ops::mesh::revolve(self, angle, n_layers, center, axis)
     }
 
-    /// Voir [`mesh::rotate`](fn@crate::ops::mesh::rotate).
+    /// See [`mesh::rotate`](fn@crate::ops::mesh::rotate).
     pub fn rotate(&self, angle: f64, center: &[f64], axis: Option<&[f64]>) -> Result<Mesh> {
         crate::ops::mesh::rotate(self, angle, center, axis)
     }
 
-    /// Voir [`mesh::skin`](fn@crate::ops::mesh::skin).
+    /// See [`mesh::skin`](fn@crate::ops::mesh::skin).
     pub fn skin(&self, angle_deg: f64) -> Result<Mesh> {
         crate::ops::mesh::skin(self, angle_deg)
     }
 
-    /// Voir [`mesh::sweep`](fn@crate::ops::mesh::sweep).
+    /// See [`mesh::sweep`](fn@crate::ops::mesh::sweep).
     pub fn sweep(&self, mesh_b: &Mesh, n_layers: usize, element_type: ElementType) -> Result<Mesh> {
         crate::ops::mesh::sweep(self, mesh_b, n_layers, element_type)
     }
 
-    /// Voir [`mesh::sweep_solid`](fn@crate::ops::mesh::sweep_solid).
+    /// See [`mesh::sweep_solid`](fn@crate::ops::mesh::sweep_solid).
     pub fn sweep_solid(&self, mesh_b: &Mesh, n_layers: usize) -> Result<Mesh> {
         crate::ops::mesh::sweep_solid(self, mesh_b, n_layers)
     }
 
-    /// Voir [`mesh::symmetry_line`](fn@crate::ops::mesh::symmetry_line).
+    /// See [`mesh::symmetry_line`](fn@crate::ops::mesh::symmetry_line).
     pub fn symmetry_line(&self, a: &[f64], b: &[f64]) -> Result<Mesh> {
         crate::ops::mesh::symmetry_line(self, a, b)
     }
 
-    /// Voir [`mesh::symmetry_plane`](fn@crate::ops::mesh::symmetry_plane).
+    /// See [`mesh::symmetry_plane`](fn@crate::ops::mesh::symmetry_plane).
     pub fn symmetry_plane(&self, a: &[f64], b: &[f64], c: &[f64]) -> Result<Mesh> {
         crate::ops::mesh::symmetry_plane(self, a, b, c)
     }
 
-    /// Voir [`mesh::symmetry_point`](fn@crate::ops::mesh::symmetry_point).
+    /// See [`mesh::symmetry_point`](fn@crate::ops::mesh::symmetry_point).
     pub fn symmetry_point(&self, center: &[f64]) -> Result<Mesh> {
         crate::ops::mesh::symmetry_point(self, center)
     }
 
-    /// Voir [`mesh::to_poi1`](fn@crate::ops::mesh::to_poi1).
+    /// See [`mesh::to_poi1`](fn@crate::ops::mesh::to_poi1).
     pub fn to_poi1(&self) -> Result<Mesh> {
         crate::ops::mesh::to_poi1(self)
     }
 
-    /// Voir [`mesh::to_quadratic`](fn@crate::ops::mesh::to_quadratic).
+    /// See [`mesh::to_quadratic`](fn@crate::ops::mesh::to_quadratic).
     pub fn to_quadratic(&self) -> Result<Mesh> {
         crate::ops::mesh::to_quadratic(self)
     }
 
-    /// Voir [`mesh::transfinite`](fn@crate::ops::mesh::transfinite).
+    /// See [`mesh::transfinite`](fn@crate::ops::mesh::transfinite).
     pub fn transfinite(
         &self,
         side2: &Mesh,
@@ -267,12 +266,12 @@ impl Mesh {
         crate::ops::mesh::transfinite(self, side2, side3, side4, element_type)
     }
 
-    /// Voir [`mesh::translate`](fn@crate::ops::mesh::translate).
+    /// See [`mesh::translate`](fn@crate::ops::mesh::translate).
     pub fn translate(&self, vector: &[f64]) -> Result<Mesh> {
         crate::ops::mesh::translate(self, vector)
     }
 
-    /// Voir [`mesh::triangulate_surface`](fn@crate::ops::mesh::triangulate_surface).
+    /// See [`mesh::triangulate_surface`](fn@crate::ops::mesh::triangulate_surface).
     pub fn triangulate_surface(
         &self,
         element_type: ElementType,
@@ -281,7 +280,7 @@ impl Mesh {
         crate::ops::mesh::triangulate_surface(self, element_type, target_size)
     }
 
-    /// Voir [`mesh::triangulate_volume`](fn@crate::ops::mesh::triangulate_volume).
+    /// See [`mesh::triangulate_volume`](fn@crate::ops::mesh::triangulate_volume).
     pub fn triangulate_volume(
         &self,
         target_size: Option<f64>,
@@ -295,28 +294,28 @@ impl Mesh {
 // therefore lives in `ops::mesh`, and the `impl` follows it. The name loses
 // its qualifier — the subject's type already says whether it is nodes or cells.
 impl NodeField {
-    /// Voir [`mesh::select_nodes`](fn@crate::ops::mesh::select_nodes).
+    /// See [`mesh::select_nodes`](fn@crate::ops::mesh::select_nodes).
     pub fn select(&self, band: &Band, components: Option<Vec<String>>) -> Result<Mesh> {
         crate::ops::mesh::select_nodes(self, band, components)
     }
 }
 
 impl ElementField {
-    /// Voir [`mesh::select_cells`](fn@crate::ops::mesh::select_cells).
+    /// See [`mesh::select_cells`](fn@crate::ops::mesh::select_cells).
     pub fn select(&self, band: &Band, components: Option<Vec<String>>) -> Result<Mesh> {
         crate::ops::mesh::select_cells(self, band, components)
     }
 }
 
 impl SubNodeField {
-    /// Voir [`mesh::select_sub_nodes`](fn@crate::ops::mesh::select_sub_nodes).
+    /// See [`mesh::select_sub_nodes`](fn@crate::ops::mesh::select_sub_nodes).
     pub fn select(&self, band: &Band, components: Option<Vec<String>>) -> Result<Mesh> {
         crate::ops::mesh::select_sub_nodes(self, band, components)
     }
 }
 
 impl SubElementField {
-    /// Voir [`mesh::select_sub_cells`](fn@crate::ops::mesh::select_sub_cells).
+    /// See [`mesh::select_sub_cells`](fn@crate::ops::mesh::select_sub_cells).
     pub fn select(&self, band: &Band, components: Option<Vec<String>>) -> Result<Mesh> {
         crate::ops::mesh::select_sub_cells(self, band, components)
     }

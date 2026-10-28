@@ -32,9 +32,9 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
-use pyrucast::ops::mesh;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::model;
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 /// Traction on the right edge.
@@ -277,21 +277,21 @@ fn clamped_model(
     let idx = |i: usize, j: usize| j * (N + 1) + i;
     let roller = |target: &Model, nodes: &[Node], var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-        let multiplier = mesh::barycenter(&imposed)?;
-        model::dirichlet(target, var, &imposed, &multiplier, Default::default())
+        model::dirichlet(&imposed, target, var, Default::default())
     };
     let left: Vec<Node> = (0..=N).map(|j| grid[idx(0, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=N).map(|i| grid[idx(i, 0)].clone()).collect();
-    let mut model = model::elasticity_with_symmetry(fes, Kinematics::PlaneStress, symmetry)?;
+    let mut model = model::elasticity(
+        fes,
+        Kinematics::PlaneStress,
+        symmetry,
+        StrainMeasure::Linear,
+    )?;
     model = model.union(&roller(&model, &left, "u_x")?)?;
     model = model.union(&roller(&model, &bottom, "u_y")?)?;
     // The right edge's traction is a term of the model, not a vector built by
     // side: it joins it here, its density will join the material.
-    model = model.union(&model::flux(
-        &right_edge_fes(grid, fes)?,
-        &model,
-        "f_x".into(),
-    )?)?;
+    model = model.union(&model::flux(&right_edge_fes(grid, fes)?, &model, "f_x")?)?;
     Ok(model)
 }
 

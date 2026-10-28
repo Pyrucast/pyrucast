@@ -15,6 +15,7 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::{Physics, RelationSense};
 use pyrucast::ops::model;
 use pyrucast::ops::{element_field, matrix, mesh, solver};
@@ -39,22 +40,17 @@ fn barre() -> Result<(
     let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
 
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&n[0]))?;
-    let mult = mesh::barycenter(&imposed)?;
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
+    let appui = model::dirichlet(&imposed, &conduction, "T", RelationSense::Equality)?;
+    let mult = appui.multiplier_mesh()?;
     let mult_node = mult.node(0, 0, 0)?;
-    let conduction = model::heat_conduction(&fes)?;
-    let model = conduction.union(&model::dirichlet(
-        &conduction,
-        "T",
-        &imposed,
-        &mult,
-        RelationSense::Equality,
-    )?)?;
+    let model = conduction.union(&appui)?;
     let materials = element_field::material_field(&model, &[("k", 1.0)])?;
 
-    let rhs = NodeField::from_submesh(&mult.get(0)?, vec!["imposed_T".into()])?;
+    let rhs = NodeField::from_submesh(&mult.get(0)?, vec!["imposed".into()])?;
     rhs.get(0)?
         .write()
-        .set_value(mult_node.id(), "imposed_T", 1.0)?;
+        .set_value(mult_node.id(), "imposed", 1.0)?;
     Ok((model, materials, mult_node, rhs))
 }
 
@@ -86,7 +82,10 @@ fn diviser_une_matrice_ne_reecrit_aucune_valeur() -> Result<()> {
     // réassemblage, donc aucun noyau élémentaire relancé pour un scalaire.
     let m_dt = &m / dt;
 
-    assert_eq!(m.get(a, "q", a, "T"), m_dt.get(a, "q", a, "T") * dt); // m inchangée
+    assert_eq!(
+        m.get(a, "q", a, "T").unwrap(),
+        m_dt.get(a, "q", a, "T").unwrap() * dt
+    ); // m inchangée
     assert!(m_dt.to_csr().is_ok()); // utilisable telle quelle
     Ok(())
 }
@@ -100,12 +99,11 @@ fn additionner_deux_matrices_puis_resoudre() -> Result<()> {
     let m = matrix::stiffness(&model, &materials)?;
     let dt = 0.1;
 
-    // `+` porte les blocs des deux opérandes, partagés : rien n'est copié,
-    // aucune valeur n'est touchée. C'est l'assembleur qui somme ce qui retombe
-    // au même (ligne, colonne) global.
-    let mut sys = &m / dt + &k;
-    sys.assemble()?; // la somme n'est pas assemblée : requis avant de résoudre
-    let u = solver::lu::solve(&sys, &rhs)?;
+    // `+` additionne les valeurs de chaque opérande, telles qu'elles ont été
+    // assemblées, sur l'union de leurs degrés de liberté : rien n'est recalculé,
+    // et la somme se résout telle quelle.
+    let sys = (&m / dt + &k)?;
+    let u = solver::solve(&sys, &rhs)?;
 
     assert!(u.node_count()? > 0);
     Ok(())
@@ -118,23 +116,22 @@ fn union_compose_somme_additionne() -> Result<()> {
     let (model, materials, _, _) = barre()?;
     let k = matrix::stiffness(&model, &materials)?;
     let a = k.row_mesh()?.node(0, 0, 0)?.id();
-    let kaa = k.get(a, "q", a, "T");
+    let kaa = k.get(a, "q", a, "T").unwrap();
 
     // `+` compte une contribution chaque fois qu'on la lui donne.
-    let mut deux_fois = &k + &k;
-    deux_fois.assemble()?;
-    assert_eq!(deux_fois.get(a, "q", a, "T"), 2.0 * kaa);
+    let deux_fois = (&k + &k)?;
+    assert_eq!(deux_fois.get(a, "q", a, "T")?, 2.0 * kaa);
 
-    // `|` écarte un bloc dont il tient déjà l'emplacement : c'est l'outil pour
-    // composer un opérateur à partir de morceaux distincts, pas pour additionner.
+    // `|` écarte un bloc dont il tient déjà l'emplacement. Le résultat réunit
+    // des blocs sans leurs valeurs : `assemble` les calcule, sur la
+    // configuration active à ce moment.
     let mut une_fois = k.union(&k)?;
     une_fois.assemble()?;
-    assert_eq!(une_fois.get(a, "q", a, "T"), kaa);
+    assert_eq!(une_fois.get(a, "q", a, "T")?, kaa);
 
-    // `-` nie les blocs de droite (ce qui les recopie) ; `+` ne copie rien.
-    let mut nulle = &k - &k;
-    nulle.assemble()?;
-    assert_eq!(nulle.get(a, "q", a, "T"), 0.0);
+    // `-` additionne l'opposé de l'opérande de droite.
+    let nulle = (&k - &k)?;
+    assert_eq!(nulle.get(a, "q", a, "T")?, 0.0);
     Ok(())
 }
 // ANCHOR_END: union_ou_somme
@@ -244,7 +241,7 @@ fn lire_une_matrice_assemblee() -> Result<()> {
     // été appelé.
 
     // Value at a coordinate (the sum of every COO entry at that point).
-    let v: f64 = k.get(a, "q", a, "T");
+    let v: f64 = k.get(a, "q", a, "T").unwrap();
 
     // Dense row-major view (a flat Vec, handy for Python).
     let d: Vec<f64> = k.dense()?;

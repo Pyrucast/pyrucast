@@ -17,12 +17,12 @@ Détail complet : [Correspondance Rust ↔ Python](../correspondance-rust-python
 `pyrucast` est un paquet **mixed Rust/Python** (maturin) : l'extension
 compilée (tout le calcul) vit dans le sous-module privé `pyrucast._pyrucast`
 ; le paquet public la ré-exporte et y ajoute une petite couche Python pure
-de plus haut niveau (`pyrucast.thermomechanics`). À l'usage, aucune
+de plus haut niveau (`pyrucast.stepping`). À l'usage, aucune
 distinction n'est visible :
 
 ```text
 pc.matrix.stiffness(...)  # opérateur Rust (extension compilée)
-pc.thermomechanics.step_by_step(...)  # fonction Python pure
+pc.stepping.step_by_step(...)  # fonction Python pure
 ```
 
 ## Les objets : classes au niveau racine
@@ -55,7 +55,7 @@ l'arborescence Rust (`src/ops/<thème>/`) :
 | `pc.element_field.gradient`, `pc.mesh.select`, `pc.node_field.mask`… | champs | `GRAD`, `MASQUE` |
 | `pc.matrix.stiffness`, `pc.matrix.mass`, `pc.node_field.external_forces`… | assemblage | `RIGI`, `MASS`, `FLUX`/`PRES` |
 | `pc.element_field.integrate_behavior` | comportement | `COMP` |
-| `pc.solver.solve`, `pc.solver.solve_unilateral` | solveur | `RESO` |
+| `pc.solver.solve` | solveur | `RESO` |
 | `pc.element_field.material_field` | construction | `MATE` |
 | `pc.export.export_vtk` | export | `SORT 'VTK'` |
 

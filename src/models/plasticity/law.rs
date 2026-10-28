@@ -11,7 +11,7 @@
 //! What lives here is everything the laws share:
 //!
 //! - the state at the start of the step ([`PrevState`]) and the elastic
-//!   predictor `σ_trial = σ(A) + C:Δε`;
+//!   predictor `σ_trial = C:(ε(B) − ε_p(A))`, secant in the elastic strain;
 //! - the **plane-stress secant loop**, which solves `σ_zz(B) = 0` around any
 //!   law by re-running it — so no law implements plane stress itself;
 //! - the **cutting-plane** return mapping, for surfaces with no closed form;
@@ -1160,12 +1160,21 @@ impl PlasticStep {
     }
 }
 
-/// Elastic predictor of the **incremental** montage: `σ_trial = σ(A) + C:Δε`
-/// with `Δε = ε(B) − ε(A)`.
+/// Elastic predictor `σ_trial = C : (ε(B) − ε_p(A))` — the stress the step
+/// reaches if it stays elastic, written on the **elastic strain** with the
+/// moduli of the end of the step.
 ///
-/// Algebraically identical to `C:(ε(B) − ε_p(A))` in small strain, but this is
-/// the form that carries `σ(A)` explicitly — the shape a large-strain law reuses
-/// (with `σ(A)` rotated and `Δε` an objective increment).
+/// That is the convention every law of pyrucast follows (see
+/// [`Behavior`](crate::models::Behavior)): the stress at B is the material at
+/// B applied to the elastic strain at B. With constant moduli it equals the
+/// incremental `σ(A) + C:Δε`; when they move between A and B — a modulus that
+/// depends on temperature — it keeps the stress **secant**, `σ = E(T)·ε_e`,
+/// where the incremental form would carry the stress of the old modulus along
+/// (and need Cast3M's correction `(D⁻¹_B − D⁻¹_A)σ(A)` to undo it).
+///
+/// `σ(A)` is therefore not read. A stress at A that no elastic strain carries
+/// — a prestress given alone — is not represented: it would have to come in
+/// as an initial plastic strain `ε_p = −C⁻¹σ₀`.
 ///
 /// ```
 /// # use pyrucast::models::continuum::elastic;
@@ -1192,20 +1201,24 @@ impl PlasticStep {
 /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
 /// #                         vars: &[] };
-/// // σ_trial = σ(A) + C:Δε — the form that carries σ(A) explicitly, the one
-/// // a finite-strain law takes over as is.
+/// // σ_trial = C:(ε(B) − ε_p(A)): the elastic strain, at the moduli of B.
 /// let eps_b = [1e-3, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let trial = law::elastic_predictor(&eps_b, &repos, mat.lambda, mat.mu);
-/// assert!(trial[0] > 0.0);
-/// // Starting from rest, it coincides with C:ε.
+/// // Starting from rest, it is C:ε.
 /// let direct = elastic::elastic_stress(&eps_b, mat.lambda, mat.mu);
 /// assert!((trial[0] - direct[0]).abs() < 1e-9);
+/// // A plastic strain at A is taken off, whatever stress A carried: the
+/// // stress is secant in the elastic strain, not accumulated.
+/// let plastique = PrevState { eps: [0.0; 6], sigma: [123.0; 6],
+///                             eps_p: [4e-4, 0.0, 0.0, 0.0, 0.0, 0.0], p: 4e-4, vars: &[] };
+/// let apres = law::elastic_predictor(&eps_b, &plastique, mat.lambda, mat.mu);
+/// let attendu = elastic::elastic_stress(&[6e-4, 0.0, 0.0, 0.0, 0.0, 0.0], mat.lambda, mat.mu);
+/// assert!((apres[0] - attendu[0]).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn elastic_predictor(eps_b: &[f64; 6], prev: &PrevState, lambda: f64, mu: f64) -> [f64; 6] {
-    let deps: [f64; 6] = std::array::from_fn(|i| eps_b[i] - prev.eps[i]);
-    let c_deps = elastic_stress(&deps, lambda, mu);
-    std::array::from_fn(|i| prev.sigma[i] + c_deps[i])
+    let elastic: [f64; 6] = std::array::from_fn(|i| eps_b[i] - prev.eps_p[i]);
+    elastic_stress(&elastic, lambda, mu)
 }
 
 // ─── The incremental step, around any law ───────────────────────────────────

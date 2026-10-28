@@ -49,24 +49,24 @@ def main() -> None:
     fes = pyrucast.FiniteElementSpace(mesh)
 
     # ── Modèle : conduction + Dirichlet T = 20 en x = 1 ──────────────────────
-    # The multipliers' support is built from the imposed node by the `barycenter`
-    # mesher (a fresh co-located node). The model creates nothing.
+    # The constraint mints its multiplier beside the imposed node (a fresh
+    # co-located node).
     imposed = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
-    multiplier = pyrucast.mesh.barycenter(imposed)
-    mult = multiplier.node(0, 0, 0)
     cible = pyrucast.model.heat_conduction(fes)
+    held = pyrucast.model.dirichlet(imposed, cible, "T")
+    mult = held.multiplier_mesh().node(0, 0, 0)
 
-    model = cible | pyrucast.model.dirichlet(cible, "T", imposed, multiplier)
+    model = cible | held
 
     # ── Matériau : k uniforme (Dirichlet ignoré automatiquement) ─────────────
     materials = pyrucast.element_field.material_field(model, [("k", K)])
 
     # ── Chargement : source Q en x = 0 (composante duale "q"), valeur imposée
-    #    T = 20 at the multiplier node ("imposed_T" slot) ─────────────────────
+    #    T = 20 at the multiplier node ("imposed" slot) ─────────────────────
     load_mesh = pyrucast.mesh.poi1_from_nodes([nodes[0], mult])
-    rhs = pyrucast.NodeField(load_mesh, ["imposed_T", "q"])
+    rhs = pyrucast.NodeField(load_mesh, ["imposed", "q"])
     rhs[0].set_value(nodes[0], "q", Q)
-    rhs[0].set_value(mult, "imposed_T", T_IMPOSED)
+    rhs[0].set_value(mult, "imposed", T_IMPOSED)
 
     # ── Assemblage + résolution ──────────────────────────────────────────────
     K_mat = pyrucast.matrix.stiffness(model, materials)
@@ -83,7 +83,7 @@ def main() -> None:
         assert abs(got - expected) < tol, f"x={x}: {got} != {expected}"
 
     # La réaction (multiplicateur) équilibre le flux injecté : λ = Q.
-    reaction = solution.value(mult, "lambda_T")
+    reaction = solution.value(mult, "lambda")
     print(f"\nréaction λ = {reaction:.6f}  (attendu {Q})")
     assert abs(reaction - Q) < tol
 

@@ -72,7 +72,7 @@ support commun.
 
 Le chargement dépasse maintenant la limite élastique. Comme Cast3M pilote
 ce cas par la procédure `PASAPAS`, pyrucast fournit
-`pyrucast.thermomechanics.step_by_step` : la boucle sur les pas de charge,
+[`pyrucast.stepping.step_by_step`](../pas-a-pas.md) : la boucle sur les pas de charge,
 un Newton **modifié** (rigidité élastique, réassemblée une fois par pas) et
 son **accélération d'Anderson**. Il suffit de remplacer
 `model.elasticity` par `model.plasticity_perfect` :
@@ -94,26 +94,29 @@ linéairement en pseudo-temps — Cast3M `EVOL 'MANU'` :
 
 ![Déformation plastique cumulée (p)](img/plasticite.svg)
 
-> **Piège pyrucast.** Sans `free_mesh`, la norme du résidu de Newton porte
-> sur **tous** les nœuds, y compris les nœuds encastrés — dont la réaction
-> d'appui, potentiellement énorme, empêche toute convergence. `free_mesh`
-> restreint la norme aux degrés de liberté réellement libres (ici : tous
-> les nœuds d'abscisse `x > 0`). C'est l'équivalent, en plus explicite, du
-> traitement automatique des blocages par Cast3M dans `RESO`/`PASAPAS`.
+La plaque reste élastique aux premiers pas, puis une zone plastique s'ouvre
+autour du trou quand la charge approche puis dépasse sa valeur nominale : le
+Newton modifié demande alors davantage d'itérations, accélérées par Anderson.
 
-> **Non disponible dans pyrucast.** `model.plasticity_perfect` ne consomme pas
-> encore la composante matériau optionnelle `alpha` — la dépendance de
-> `sigma_y` à la température (Cast3M section 9.2 : `EVOL 'MANU' 'T' ... 'SIGY' ...`)
-> n'a donc pas d'équivalent testé ici ; seule la plasticité **isotherme**
-> est couverte.
+> **Les nœuds encastrés ne gênent pas la convergence.** Le résidu que teste
+> `step_by_step` retranche les réactions d'appui (`r = F_ext − F_int − Cᵀλ`,
+> comme Cast3M) : il s'annule aussi sur les nœuds bloqués, sans qu'il faille
+> restreindre la norme aux degrés de liberté libres.
+
+> **Thermo-plasticité.** La dépendance de `sigma_y` à la température (Cast3M
+> section 9.2 : `EVOL 'MANU' 'T' ... 'SIGY' ...`) s'écrit avec la clé
+> `material_laws` de `step_by_step`, comme `E(T)` dans
+> [Calcul pas à pas](../pas-a-pas.md) ; la dilatation thermique (`alpha`) y
+> est appliquée à toute loi, plastique comprise.
 
 ## 4. Contact unilatéral
 
 Cast3M pilote aussi le contact par `PASAPAS` (table `tab3`, section 10).
-pyrucast ne compose pas encore thermique + plasticité + contact dans un
-même appel `step_by_step` ; le contact se résout directement par le solveur
-actif-set `pyrucast.solver.solve_unilateral`, sur un patch-test classique
-(deux blocs superposés, jeu initial, pression sur le bloc du haut) :
+Pour un seul chargement, le contact se résout directement par le solveur
+actif-set que `pyrucast.solver.solve` lance de lui-même ; `step_by_step` le compose avec
+la thermique, la plasticité et les pas de charge quand il faut une histoire.
+Ici, un patch-test classique (deux blocs superposés, jeu initial, pression
+sur le bloc du haut) :
 
 ```python
 {{#include ../../../formation/contact.py:geometrie_contact}}
@@ -133,9 +136,9 @@ actif-set `pyrucast.solver.solve_unilateral`, sur un patch-test classique
 
 ![Réaction de contact (λ)](img/contact.svg)
 
-`model.contact_gaps()` fournit le second membre associé au contact — jeu
-initial à combler avant que les multiplicateurs `lambda_contact` ne portent
-une réaction non nulle. Voir
+`external_forces` rend, avec la pression, le second membre que le contact
+porte — le jeu initial, à combler avant que les multiplicateurs `lambda` ne
+portent une réaction non nulle. Voir
 [Contact (nœud-surface)](../contraintes/contact.md) pour le détail
 mathématique (formulation active-set, jeux, multiplicateurs).
 

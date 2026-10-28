@@ -65,9 +65,13 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `element_type_from_gmsh(code)` | le type pyrucast d'un code d'élément gmsh |
 | `gauss_to_external(element_type, ref_nodes, order)` / `match_gauss(…)` | la règle de Gauss de pyrucast dans l'élément de référence d'un autre format, et l'appariement inverse |
 
-`barycenter` sert notamment à fabriquer les supports de multiplicateurs des
-contraintes : POI1 → nœuds **neufs** colocalisés au centre de chaque cellule
-(cf. [Dirichlet](../contraintes/dirichlet.md)).
+`barycenter` donne un nœud **neuf** au centre de chaque cellule, même quand deux
+cellules partagent leurs nœuds. Les contraintes s'en servent pour créer leurs
+nœuds-multiplicateurs, un par relation (cf. [Dirichlet](../contraintes/dirichlet.md)).
+
+```python
+{{#include ../../../tests/python/test_doc_ops_maillage.py:barycenter}}
+```
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_maillage.py:line}}

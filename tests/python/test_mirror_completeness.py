@@ -18,6 +18,7 @@ A function deliberately left unexposed is written down in `RUST_ONLY`, with its
 reason.
 """
 
+import ast
 import pathlib
 import re
 
@@ -47,6 +48,11 @@ RUST_ONLY = {
     "pave_volume_cancellable": "interruption is wired into the nominal wrapper",
     "triangulate_surface_cancellable": "interruption is wired into the nominal wrapper",
     "triangulate_volume_cancellable": "interruption is wired into the nominal wrapper",
+    "solve_cancellable": "interruption is wired into the nominal wrapper",
+    "solve_cancellable_with_options": "interruption is wired into the nominal wrapper",
+    # Rust passes the options in a struct; Python passes them as keyword
+    # arguments of the nominal function.
+    "solve_with_options": "the options are the keyword arguments of `solve`",
     # Shared implementation details, not operators.
     "check_unique_component_per_support": "internal guard of the merge, not an operator",
     "assemble_kind": "common engine of the assemblers, not an operation of use",
@@ -63,22 +69,20 @@ RUST_ONLY = {
     "vtk_mesh_string": '"to a string" variant, not exposed',
     "vtk_node_field_string": '"to a string" variant, not exposed',
     "vtk_element_field_string": '"to a string" variant, not exposed',
-    # The `*_with_symmetry` / `*_with_law` variants of `ops::model`: Rust passes
-    # an enum (`MaterialSymmetry`, `PlasticLaw`, `DamageLaw`), Python does not
-    # expose those enums. The fold differs on each side — a `symmetry=` keyword
-    # for the symmetry, one function per law for the laws (see PYTHON_ONLY) —
-    # but no operation is missing.
-    "heat_conduction_with_symmetry": "folded into `model.heat_conduction(fes, symmetry=…)`",
-    "fick_with_symmetry": "folded into `model.fick(fes, species, symmetry=…)`",
-    "elasticity_with_symmetry": "folded into `model.elasticity(fes, model, symmetry=…)`",
-    "plasticity_with_law": "unfolded into one Python function per law (`drucker_prager`, `creep_norton`…)",
-    "damage_with_law": "unfolded into one Python function per law (`damage_tc`, `gurson`…)",
+    # The generic law operators of `ops::model`: Rust passes the law as an enum
+    # (`PlasticLaw`, `DamageLaw`), Python unfolds it into one function per law
+    # (see PYTHON_ONLY) — no operation is missing.
+    "plasticity": "unfolded into one Python function per law (`drucker_prager`, `creep_norton`…)",
+    "damage": "unfolded into one Python function per law (`mazars`, `damage_tc`…)",
     "select_cells": "dispatched by type inside `mesh.select`",
     "select_nodes": "dispatched by type inside `mesh.select`",
     "integral_element": "dispatched by type inside `measure.integral`",
     "consolidate": "exposed under the short name in its own Python sub-module",
+    # Idiomatic in each language: Rust takes the block as a closure, and needs
+    # the `Handle` to leave the coordinates free inside it; Python's form is a
+    # context manager on the `Coords`, beside `select` and `add_config`.
+    "in_config": "the method `Coords.in_config`, used with `with`",
     "set": "exposed under the short name in `pyrucast.coords`",
-    "solve": "exposed per variant (`solve`, `solve_eliminate`, `solve_unilateral`)",
     "Band": "value type, carried by the `ge`/`gt`/`le`/`lt` arguments",
     "FluxDensity": "value type, carried by the `density` argument",
     "Location": "return type of `geom`, not exposed",
@@ -86,12 +90,6 @@ RUST_ONLY = {
     # `nearest_node` has left `ops::geom`: it is not an operator but a method of
     # `Mesh`, on both sides (single container, derived view).
 }
-
-
-# `solver` is the only module whose entry points live in the sub-modules (one
-# `solve` per back-end) without being re-exported at the root: the sweep below
-# cannot see them, so they are named explicitly.
-SOLVER_ENTRY_POINTS = ["solve", "solve_eliminate", "solve_unilateral"]
 
 
 def module_roots():
@@ -124,16 +122,15 @@ def rust_exports():
         # may be defined elsewhere and only re-exported here, which a
         # single-segment path did not cover — the guard rail then lost the
         # operator **silently**.
-        for m in re.finditer(r"pub use (?:\w+::)+(?:\{(.*?)\}|(\w+));", text, re.S):
+        for m in re.finditer(
+            r"pub use (?:\w+::)+(?:\{(.*?)\}|(\w+));", text, re.DOTALL
+        ):
             names = m.group(1) or m.group(2)
             for name in (n.strip() for n in names.split(",")):
                 if name and name[0].islower():
                     yield module, name
-        for m in re.finditer(r"^pub fn (\w+)", text, re.M):
+        for m in re.finditer(r"^pub fn (\w+)", text, re.MULTILINE):
             yield module, m.group(1)
-        if module == "solver":
-            for name in SOLVER_ENTRY_POINTS:
-                yield module, name
 
 
 def test_every_rust_operator_has_a_python_binding():
@@ -175,8 +172,6 @@ PYTHON_ONLY = {
     "select": "dispatched by type onto `mesh::select_nodes` / `select_cells`",
     "integral": "dispatched by type onto `measure::integral` / `integral_element`",
     "integrate_behavior": "qualified name of `element_field::behavior::integrate`",
-    "solve_eliminate": "qualified name of `solver::eliminate::solve`",
-    "solve_unilateral": "qualified name of `solver::unilateral::solve`",
     "export_vtk": "qualified name of `export::vtk::write`",
     "xtx": "primitive of the `Field` trait, exposed as a reduction operator",
     "xty": "primitive of the `Field` trait, exposed as a reduction operator",
@@ -231,10 +226,10 @@ def test_python_only_entries_are_documented_and_real():
     Rust twin without anything flagging it. A stale exemption is a piece of
     reasoning one still believes to be valid.
     """
-    # Three names exist on both sides without the exemption being stale: there
+    # One name exists on both sides without the exemption being stale: there
     # the Python function spreads over **several** Rust functions, one of which
     # carries the same name. The name coincides, the operation does not.
-    dispatchers = {"integral", "solve_eliminate", "solve_unilateral"}
+    dispatchers = {"integral"}
     rust = {name for _, name in rust_exports()}
     for fn, reason in PYTHON_ONLY.items():
         assert reason.strip(), f"{fn}: exemption with no written reason"
@@ -244,6 +239,50 @@ def test_python_only_entries_are_documented_and_real():
             f"{fn}: stale exemption — Rust now exposes this name, "
             "remove it from PYTHON_ONLY"
         )
+
+
+def _declared(tree):
+    """The names a module's `__all__` lists, or `None` when it has none."""
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            getattr(target, "id", None) == "__all__" for target in node.targets
+        ):
+            return set(ast.literal_eval(node.value))
+    return None
+
+
+def test_every_reexport_is_declared_in_all():
+    """Every name a public module takes from the extension is in its `__all__`.
+
+    `__all__` is the single declaration of what a module re-exports: for whoever
+    reads the file, for `import *`, for the mirror above, which reads it, and
+    for the strict type checkers, which take any other imported name for a
+    private one. The `x as x` aliases that once said it a second time hid an
+    omission — `mesh.copy`, imported and used, missing from `__all__`, so the
+    mirror never saw it.
+    """
+    missing = []
+    for path in sorted((ROOT / "python" / "pyrucast").glob("*.py")):
+        if path.name.startswith("_") and path.name != "__init__.py":
+            continue  # private modules re-export nothing
+        module = "pyrucast" if path.name == "__init__.py" else f"pyrucast.{path.stem}"
+        tree = ast.parse(path.read_text())
+        declared = _declared(tree) or set()
+        for node in tree.body:
+            if not (
+                isinstance(node, ast.ImportFrom)
+                and node.level == 1
+                and node.module == "_pyrucast"
+            ):
+                continue
+            for alias in node.names:
+                name = alias.asname or alias.name
+                if not name.startswith("__") and name not in declared:
+                    missing.append(f"{module}.{name}")
+    assert not missing, (
+        "taken from the extension but missing from `__all__`:\n  "
+        + "\n  ".join(missing)
+    )
 
 
 def test_beam_deformation_is_reachable():

@@ -1,7 +1,7 @@
 Formulation Cast3M;Modèle Cast3M;Description courte;Nature (Physics);Tag API;Équivalent pyrucast
 MECANIQUE - linéaire;ELASTIQUE ISOTROPE;Élasticité linéaire isotrope (E, nu) — comportement par défaut;mechanical;isotropic;model.elasticity (plane_stress / plane_strain / axisymmetric / solid)
-MECANIQUE - linéaire;ELASTIQUE ORTHOTROPE;Élasticité orthotrope (3 modules, 3 coefficients de Poisson);mechanical;orthotropic;model.elasticity_with_symmetry (symmetry=orthotropic) — E_1..G_23 + repère V1/V2
-MECANIQUE - linéaire;ELASTIQUE ANISOTROPE;Élasticité anisotrope générale (matrice de Hooke complète);mechanical;anisotropic;model.elasticity_with_symmetry (symmetry=anisotropic) — les 21 constantes C_11..C_66 + repère V1/V2
+MECANIQUE - linéaire;ELASTIQUE ORTHOTROPE;Élasticité orthotrope (3 modules, 3 coefficients de Poisson);mechanical;orthotropic;model.elasticity (symmetry=orthotropic) — E_1..G_23 + repère V1/V2
+MECANIQUE - linéaire;ELASTIQUE ANISOTROPE;Élasticité anisotrope générale (matrice de Hooke complète);mechanical;anisotropic;model.elasticity (symmetry=anisotropic) — les 21 constantes C_11..C_66 + repère V1/V2
 MECANIQUE - linéaire;ELASTIQUE UNIDIRECTIONNEL;Élasticité de composite unidirectionnel (fibres);—;—;—
 MECANIQUE - linéaire;ELASTIQUE HOMOGENEISE;Comportement homogénéisé (éléments TRIH/QUAH/CUBH);—;—;—
 MECANIQUE - linéaire;ELASTIQUE SECTION;Comportement d'une section droite de poutre (modèle à fibres);—;—;—
@@ -145,7 +145,7 @@ MECANIQUE - impédance;IMPEDANCE ELASTIQUE;Impédance purement élastique linéa
 MECANIQUE - impédance;IMPEDANCE VOIGT;Frein visqueux en parallèle d'un ressort linéaire;—;—;—
 MECANIQUE - impédance;IMPEDANCE REUSS;Frein visqueux en série avec un ressort linéaire;—;—;—
 MECANIQUE - impédance;IMPEDANCE COMPLEXE;Élastique + frein visqueux, restreint au calcul fréquentiel;—;—;—
-MECANIQUE - élément fini;BARR (SEG2);Barre (traction/compression seule);mechanical;—;model.truss (E, A)
+MECANIQUE - élément fini;BARR (SEG2);Barre (traction/compression seule);mechanical;—;model.truss (E, A) · en grands déplacements strain_measure="green_lagrange" (effort S_n, vecteur nominal P_* par element_field.stress_measure)
 MECANIQUE - élément fini;BAEX (SEG2);Barre excentrée;—;—;—
 MECANIQUE - élément fini;POUT (SEG2/SEG3);Poutre d'Euler-Bernoulli (2D ou 3D);mechanical;—;model.bernoulli (espace HERMITE3 — configuration 1-D/plan/spatial déduite du maillage) — exacte aux nœuds
 MECANIQUE - élément fini;TIMO (SEG2);Poutre de Timoshenko (cisaillement transverse);mechanical;—;model.timoshenko (espace MODEL_EMBEDDED — configuration 1-D/plan/spatial déduite du maillage) — élément exact, corrigé par Φ
@@ -176,8 +176,8 @@ MECANIQUE - option globale;DERIVEE LINEAIRE / GRADIENT_F;Petites perturbations o
 MECANIQUE - option globale;INTEGRE N1;Nombre de points d'intégration dans l'épaisseur des coques;—;—;—
 MECANIQUE - option globale;CONS / PHAS;Nom de constituant / de phase (multicouches, multiphases);—;—;—
 THERMIQUE;CONDUCTION ISOTROPE;Conduction de Fourier isotrope (conductivité k) — comportement par défaut;thermal;isotropic;model.heat_conduction (k, plus rho et cp facultatifs pour la capacité)
-THERMIQUE;CONDUCTION ORTHOTROPE;Conduction orthotrope (conductivité par direction);thermal;orthotropic;model.heat_conduction_with_symmetry (symmetry=orthotropic) — k_1, k_2, k_3 + repère V1/V2
-THERMIQUE;CONDUCTION ANISOTROPE;Conduction anisotrope (tenseur de conductivité complet);thermal;anisotropic;model.heat_conduction_with_symmetry (symmetry=anisotropic) — k_11..k_33 + repère V1/V2
+THERMIQUE;CONDUCTION ORTHOTROPE;Conduction orthotrope (conductivité par direction);thermal;orthotropic;model.heat_conduction (symmetry=orthotropic) — k_1, k_2, k_3 + repère V1/V2
+THERMIQUE;CONDUCTION ANISOTROPE;Conduction anisotrope (tenseur de conductivité complet);thermal;anisotropic;model.heat_conduction (symmetry=anisotropic) — k_11..k_33 + repère V1/V2
 THERMIQUE;CONVECTION;Convection de surface (Robin / film, q·n = h(T − T_ext));thermal;cible heat_conduction + [("T","q")];model.boundary_transfer (coefficient h_T, ambiant a_ext_T ; nature prise de la cible) — échange entre DEUX surfaces en vis-à-vis (résistance de contact) : model.interface_transfer, même cible et mêmes composantes
 THERMIQUE;CONVECTION SUPERIEURE / INFERIEURE;Face d'échange d'une coque (supérieure ou inférieure);—;—;—
 THERMIQUE;RAYONNEMENT INFINI;Rayonnement vers l'infini;thermal · radiation;cible heat_conduction;model.radiation (emis, T_inf — sigma facultatif) — rigidité linéarisée + tangente cohérente — la cible doit assembler T/q
@@ -189,7 +189,7 @@ THERMIQUE;SOURCE;Densité volumique de chaleur appliquée sur le maillage;—;�
 THERMIQUE;SOURCE GAUSSIENNE SPHERIQUE;Source gaussienne à distribution sphérique (massifs 2D/3D);—;—;—
 THERMIQUE;SOURCE GAUSSIENNE ELLIPTIQUE;Source gaussienne à distribution elliptique (massifs 2D/3D);—;—;—
 THERMIQUE;SOURCE GAUSSIENNE ELARGIE;Source gaussienne élargie (3D uniquement);—;—;—
-CONTACT;CONTACT UNILATERAL;Contact sans frottement, décollement autorisé (option par défaut);constraint;—;model.contact + solve_unilateral (active-set nœud-surface)
+CONTACT;CONTACT UNILATERAL;Contact sans frottement, décollement autorisé (option par défaut);constraint;—;model.contact + solve (active-set nœud-surface)
 CONTACT;CONTACT BILATERAL;Contact sans décollement (conditions écrites sur les zones en contact);constraint;—;model.mpc (relation d'égalité)
 CONTACT;FROTTANT COULOMB;Frottement de Coulomb entre deux lignes (2D) ou surfaces (3D);—;—;—
 CONTACT;FROTTANT FROCABLE;Frottement des câbles de précontrainte selon le BPEL99;—;—;—

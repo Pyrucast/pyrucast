@@ -28,9 +28,9 @@ def test_truss_consistent_mass():
     assert abs(m.get(a, "f_x", a, "u_y")) < tol  # block-diagonal in components
 
 
-def test_truss_geometric_transverse():
+def test_truss_geometric_stiffens_every_direction():
     n = 7.0
-    fes, a, b, length = _bar(1.0, 0.0)  # axis x ⇒ transverse y
+    fes, a, b, length = _bar(1.0, 0.0)  # axis x
     model = pyrucast.model.truss(fes)
     materials = pyrucast.element_field.material_field(model, [("E", 1.0), ("A", 1.0)])
     state = pyrucast.ElementField(fes, ["n"])
@@ -38,6 +38,8 @@ def test_truss_geometric_transverse():
 
     kg = pyrucast.matrix.geometric(model, materials, state)
     tol = 1e-12
-    assert abs(kg.get(a, "f_y", a, "u_y") - n / length) < tol
-    assert abs(kg.get(a, "f_y", b, "u_y") + n / length) < tol
-    assert abs(kg.get(a, "f_x", a, "u_x")) < tol  # axial has no geometric term
+    # (N/L)·I: the transverse direction and the axial one, as the continuum.
+    for f, u in (("f_x", "u_x"), ("f_y", "u_y")):
+        assert abs(kg.get(a, f, a, u) - n / length) < tol
+        assert abs(kg.get(a, f, b, u) + n / length) < tol
+    assert abs(kg.get(a, "f_x", a, "u_y")) < tol

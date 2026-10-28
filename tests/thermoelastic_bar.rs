@@ -24,12 +24,12 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::{deformation, interp_to_gauss, thermal_strain, StrainMeasure};
-use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::node_field::internal_forces;
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 #[test]
@@ -73,13 +73,17 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     // ── Modèle : élasticité + deux bords en x encastrés + appui u_y en bas ──
     let clamp = |target: &Model, nodes: &[Node], var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
-        let multiplier = mesh::barycenter(&imposed)?;
-        model::dirichlet(target, var, &imposed, &multiplier, Default::default())
+        model::dirichlet(&imposed, target, var, Default::default())
     };
     let left: Vec<Node> = (0..=NY).map(|j| grid[idx(0, j)].clone()).collect();
     let right: Vec<Node> = (0..=NY).map(|j| grid[idx(NX, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=NX).map(|i| grid[idx(i, 0)].clone()).collect();
-    let mut model = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let mut model = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     model = model.union(&clamp(&model, &left, "u_x")?)?;
     model = model.union(&clamp(&model, &right, "u_x")?)?;
     model = model.union(&clamp(&model, &bottom, "u_y")?)?;
@@ -99,7 +103,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     let t_elem = interp_to_gauss(&NodeField::from_sub(t_nodal), &fes)?;
 
     // ── Charge thermique f_th = ∫ Bᵀ D ε_th (BSIG de σ_th = D:ε_th) ─────────
-    let eps_th = thermal_strain(&t_elem, &materials, &fes, T_REF)?;
+    let eps_th = thermal_strain(&t_elem, &materials, &fes, T_REF, StrainMeasure::Linear)?;
     let sig_th =
         pyrucast::ops::element_field::behavior::integrate(&model, &eps_th, None, &materials, None)?;
     let f_th = internal_forces(&model, &sig_th, &NodeField::empty(), &materials)?;
@@ -184,12 +188,12 @@ fn thermal_expansion_reaches_plasticity_and_damage() -> Result<()> {
     for (label, model, values) in [
         (
             "plasticity",
-            model::plasticity_perfect(&fes, Kinematics::PlaneStress)?,
+            model::plasticity_perfect(&fes, Kinematics::PlaneStress, StrainMeasure::Linear)?,
             vec![("E", E), ("nu", NU), ("sigma_y", SIGMA_Y), ("alpha", ALPHA)],
         ),
         (
             "damage",
-            model::mazars(&fes, Kinematics::PlaneStress)?,
+            model::mazars(&fes, Kinematics::PlaneStress, StrainMeasure::Linear)?,
             vec![
                 ("E", E),
                 ("nu", NU),
@@ -205,7 +209,7 @@ fn thermal_expansion_reaches_plasticity_and_damage() -> Result<()> {
         let materials = pyrucast::ops::element_field::material_field(&model, &values)?;
         // The operator resolves its zone *by* `alpha`: before the fix this line
         // is where a plastic or damaging material stopped.
-        let eps_th = thermal_strain(&t_elem, &materials, &fes, T_REF)?;
+        let eps_th = thermal_strain(&t_elem, &materials, &fes, T_REF, StrainMeasure::Linear)?;
         let sigma = pyrucast::ops::element_field::behavior::integrate(
             &model, &eps_th, None, &materials, None,
         )?;

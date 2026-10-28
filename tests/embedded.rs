@@ -18,11 +18,12 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::embedded::DEFAULT_TOL;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::matrix::stiffness;
-use pyrucast::ops::mesh::barycenter;
 use pyrucast::ops::model;
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::solve;
 use pyrucast::Result;
 
 const TOL: f64 = 1e-9;
@@ -61,7 +62,10 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
     materials.add_sub(Handle::new(mat))?;
 
     let mut model = Model::empty();
-    model.add_sub(Handle::new(SubModel::heat_conduction(sub)?))?;
+    model.add_sub(Handle::new(SubModel::heat_conduction(
+        sub,
+        MaterialSymmetry::Isotropic,
+    )?))?;
 
     // Dirichlet pinning all eight corners to the linear field.
     let mut corner_sm = SubMesh::new(coords.clone(), ElementType::POI1);
@@ -69,8 +73,7 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
         corner_sm.add_cell(&[n.id()])?;
     }
     let corner_mesh = Mesh::from_submesh(corner_sm);
-    let corner_mult = barycenter(&corner_mesh)?;
-    let dir = SubModel::dirichlet(&model, "T", &corner_mesh, &corner_mult, Default::default())?;
+    let dir = SubModel::dirichlet(&corner_mesh, &model, "T", Default::default())?;
     let dir_mult_nodes = dir.multiplier_nodes(); // paired corner-for-corner
     model.add_sub(Handle::new(dir))?;
 
@@ -79,24 +82,27 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
     let mut bar_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     bar_sm.add_cell(&[p.id()])?;
     let bar = Mesh::from_submesh(bar_sm);
-    let hote = model::heat_conduction(&FiniteElementSpace::lagrange1(&host)?)?;
-    let emb = SubModel::embedded(&hote, &bar, &host, vec!["T".into()], DEFAULT_TOL)?;
+    let hote = model::heat_conduction(
+        &FiniteElementSpace::lagrange1(&host)?,
+        MaterialSymmetry::Isotropic,
+    )?;
+    let emb = SubModel::embedded(&bar, &host, &hote, vec!["T".into()], DEFAULT_TOL)?;
     let emb_mult = emb.multiplier_nodes()[0];
     model.add_sub(Handle::new(emb))?;
 
-    // RHS: imposed_T = field(corner) at each Dirichlet multiplier, 0 (tie) at the
-    // embedded multiplier — all under the shared component name "imposed_T".
+    // RHS: imposed = field(corner) at each Dirichlet multiplier, 0 (tie) at the
+    // embedded multiplier — all under the shared component name "imposed".
     let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
     for &m in &dir_mult_nodes {
         rhs_sm.add_cell(&[m])?;
     }
     rhs_sm.add_cell(&[emb_mult])?;
     let rhs_sm = Handle::new(rhs_sm);
-    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed_T".into()])?;
+    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed".into()])?;
     for (m, c) in dir_mult_nodes.iter().zip(corner_coords.iter()) {
-        rhs.set_value(*m, "imposed_T", field(c))?;
+        rhs.set_value(*m, "imposed", field(c))?;
     }
-    rhs.set_value(emb_mult, "imposed_T", 0.0)?;
+    rhs.set_value(emb_mult, "imposed", 0.0)?;
     let rhs = NodeField::from_sub(rhs);
 
     let k = stiffness(&model, &materials)?;
@@ -154,10 +160,14 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
     let clamp = |target: &Model, ids: &[usize], var: &str| -> Result<Model> {
         let picked: Vec<Node> = ids.iter().map(|&i| nodes[i].clone()).collect();
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&picked)?);
-        let mult = barycenter(&imposed)?;
-        model::dirichlet(target, var, &imposed, &mult, Default::default())
+        model::dirichlet(&imposed, target, var, Default::default())
     };
-    let mut model = model::elasticity(&fes, Kinematics::Full3D)?;
+    let mut model = model::elasticity(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     model = model.union(&clamp(&model, &[0, 3, 4, 7], "u_x")?)?;
     model = model.union(&clamp(&model, &[0, 1, 4, 5], "u_y")?)?;
     model = model.union(&clamp(&model, &[0, 1, 2, 3], "u_z")?)?;
@@ -167,9 +177,9 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
     let p = Node::create_in(coords.clone(), &pc)?;
     let bar = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&p))?);
     model = model.union(&model::embedded(
-        &model,
         &bar,
         &host,
+        &model,
         vec!["u_x".into(), "u_y".into(), "u_z".into()],
         DEFAULT_TOL,
     )?)?;
@@ -178,7 +188,7 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
     let mut face = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let model = model.union(&model::flux(&face_fes, &model, "f_x".into())?)?;
+    let model = model.union(&model::flux(&face_fes, &model, "f_x")?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,
@@ -234,10 +244,14 @@ fn embedded_per_component_offset() -> Result<()> {
     let clamp = |target: &Model, ids: &[usize], var: &str| -> Result<Model> {
         let picked: Vec<Node> = ids.iter().map(|&i| nodes[i].clone()).collect();
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&picked)?);
-        let mult = barycenter(&imposed)?;
-        model::dirichlet(target, var, &imposed, &mult, Default::default())
+        model::dirichlet(&imposed, target, var, Default::default())
     };
-    let mut model = model::elasticity(&fes, Kinematics::Full3D)?;
+    let mut model = model::elasticity(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     model = model.union(&clamp(&model, &[0, 3, 4, 7], "u_x")?)?;
     model = model.union(&clamp(&model, &[0, 1, 4, 5], "u_y")?)?;
     model = model.union(&clamp(&model, &[0, 1, 2, 3], "u_z")?)?;
@@ -246,9 +260,9 @@ fn embedded_per_component_offset() -> Result<()> {
     let p = Node::create_in(coords.clone(), &pc)?;
     let bar = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&p))?);
     let embedded = SubModel::embedded(
-        &model,
         &bar,
         &host,
+        &model,
         vec!["u_x".into(), "u_y".into(), "u_z".into()],
         DEFAULT_TOL,
     )?;
@@ -261,7 +275,7 @@ fn embedded_per_component_offset() -> Result<()> {
     let mut face = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let model = model.union(&model::flux(&face_fes, &model, "f_x".into())?)?;
+    let model = model.union(&model::flux(&face_fes, &model, "f_x")?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,

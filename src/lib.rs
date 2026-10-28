@@ -123,10 +123,11 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::archive::save, m)?)?;
     m.add_function(wrap_pyfunction!(py::archive::load, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::solver::solve, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::solver::solve_eliminate, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::solver::solve_unilateral, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::heat_conduction, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::fick, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        models::heat_conduction::heat_conduction_py::heat_conduction,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(models::fick::fick_py::fick, m)?)?;
     m.add_function(wrap_pyfunction!(
         models::radiation::radiation_py::radiation,
         m
@@ -137,7 +138,10 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     m.add_function(wrap_pyfunction!(models::truss::truss_py::truss, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::elasticity, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        models::elasticity::elasticity_py::elasticity,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(
         models::plasticity::von_mises::plasticity_perfect_py::plasticity_perfect,
         m
@@ -203,6 +207,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::model::mpc, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::embedded, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::contact, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::model::update_contact, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::from_live_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::line, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::circle, m)?)?;
@@ -264,7 +269,9 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::node_field::positions, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::coords::set, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::coords::displace, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::coords::displace_from, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::restrict, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::node_field::project, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::restrict_like, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::select, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::mask, m)?)?;
@@ -277,6 +284,13 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::thermal_strain, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::elastic_stress, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::elastic_strain, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::cell_integral, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::strain, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::stress_measure, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::rotate_frame, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::node_field::sum_to_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(
         py::ops::element_field::beam_deformation,
         m
@@ -323,6 +337,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     m.add_class::<py::coords::PyCoords>()?;
+    m.add_class::<py::coords::PyInConfig>()?;
     m.add_class::<py::node::PyNode>()?;
     m.add_class::<py::mesh::PySubMesh>()?;
     m.add_class::<py::mesh::PyMesh>()?;

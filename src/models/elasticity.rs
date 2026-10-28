@@ -19,6 +19,7 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::matrix::Symmetry;
+use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
 use crate::error::Result;
 use crate::handle::Handle;
@@ -27,8 +28,11 @@ use crate::models::continuum::{elastic, voigt, Continuum};
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::tensor::{dual_name, primal_name, Kinematics};
 use crate::models::ZoneLayout;
-use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{
+    Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
+};
 use crate::models::{ElementLayout, MatrixKind};
+use crate::ops::element_field::StrainMeasure;
 use law::{ElasticLaw, StatelessLawKind};
 use serde::{Deserialize, Serialize};
 
@@ -63,7 +67,10 @@ use serde::{Deserialize, Serialize};
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::elasticity::Elasticity;
 /// # use pyrucast::models::tensor::Kinematics;
-/// let e = Elasticity::new(zone.clone(), Kinematics::PlaneStress)?;
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # use pyrucast::ops::element_field::StrainMeasure;
+/// let e = Elasticity::new(
+///     zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
 /// assert_eq!(e.material_components(), vec!["E".to_string(), "nu".to_string()]);
 /// // Thermal expansion is **optional**: without `alpha`, the model assembles
 /// // without it.
@@ -78,40 +85,10 @@ pub struct Elasticity {
 }
 
 impl Elasticity {
-    /// **Isotropic** linear elasticity on an FE subspace, with the given
-    /// 2-D/3-D kinematics. Errors if `kinematics` is inconsistent with the space dimension.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Interpolation, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::{Domain, SubModelKind};
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # use pyrucast::models::elasticity::Elasticity;
-    /// # use pyrucast::models::tensor::Kinematics;
-    /// let e = Elasticity::new(zone.clone(), Kinematics::PlaneStress)?;
-    /// assert_eq!(e.material_components(), vec!["E".to_string(), "nu".to_string()]);
-    /// // Thermal expansion is **optional**: without `alpha`, the model assembles
-    /// // without it.
-    /// assert!(e.optional_material_components().contains(&"alpha"));
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn new(fespace: Handle<SubFiniteElementSpace>, kinematics: Kinematics) -> Result<Self> {
-        Self::with_symmetry(fespace, kinematics, MaterialSymmetry::Isotropic)
-    }
-
-    /// Linear elasticity with an explicit material symmetry — the general
-    /// constructor, of which [`new`](Self::new) is the isotropic case.
+    /// Linear elasticity on an FE subspace, with the given 2-D/3-D kinematics,
+    /// material symmetry and strain measure. Errors if `kinematics` is
+    /// inconsistent with the space dimension, or if `strain_measure` is not a law input
+    /// (see [`Continuum::with_measure`]).
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -132,20 +109,31 @@ impl Elasticity {
     /// # use pyrucast::models::elasticity::Elasticity;
     /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// // The general constructor: an orthotropic symmetry widens the material
-    /// // contract, which then carries the moduli **and** the axes.
-    /// let o = Elasticity::with_symmetry(
-    ///     zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Orthotropic)?;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
+    /// let e = Elasticity::new(
+    ///     zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
+    /// assert_eq!(e.material_components(), vec!["E".to_string(), "nu".to_string()]);
+    /// // An orthotropic symmetry widens the material contract, which then
+    /// // carries the moduli **and** the axes.
+    /// let o = Elasticity::new(
+    ///     zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Orthotropic,
+    ///     StrainMeasure::Linear)?;
     /// assert!(o.material_components().len() > 2);
+    /// // A solid model on a 2-D zone is refused.
+    /// assert!(Elasticity::new(
+    ///     zone.clone(), Kinematics::Full3D, MaterialSymmetry::Isotropic,
+    ///     StrainMeasure::Linear).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn with_symmetry(
+    pub fn new(
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         symmetry: MaterialSymmetry,
+        strain_measure: StrainMeasure,
     ) -> Result<Self> {
         Ok(Self {
-            continuum: Continuum::new(fespace, kinematics, "Elasticity")?,
+            continuum: Continuum::new(fespace, kinematics, "Elasticity")?
+                .with_measure(strain_measure, "Elasticity")?,
             symmetry,
             law: ElasticLaw::Linear,
         })
@@ -280,6 +268,11 @@ impl Behavior for Elasticity {
         self.continuum.fespace()
     }
 
+    /// The law **is** its elastic operator, in whatever symmetry it was built.
+    fn elastic_operator(&self) -> Option<(&Continuum, MaterialSymmetry)> {
+        Some((&self.continuum, self.symmetry))
+    }
+
     fn behavior_output_components(&self) -> Vec<String> {
         self.continuum.stress_names()
     }
@@ -287,6 +280,10 @@ impl Behavior for Elasticity {
     /// Linear stress σ = D·ε at one Gauss point (material constants per cell).
     fn deformation_reads(&self) -> Vec<String> {
         self.continuum.strain_reads()
+    }
+
+    fn strain_operator(&self) -> StrainOperator {
+        StrainOperator::Deformation(self.continuum.measure())
     }
 
     fn integrate_point(
@@ -388,7 +385,13 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
         mesh.add_cell(&[a.id(), b.id(), c.id(), d.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        Elasticity::new(fes.get(0).unwrap(), kinematics).unwrap()
+        Elasticity::new(
+            fes.get(0).unwrap(),
+            kinematics,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear,
+        )
+        .unwrap()
     }
 
     #[test]
@@ -404,7 +407,13 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        assert!(Elasticity::new(fes.get(0).unwrap(), Kinematics::Full3D).is_err());
+        assert!(Elasticity::new(
+            fes.get(0).unwrap(),
+            Kinematics::Full3D,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear
+        )
+        .is_err());
     }
 
     #[test]
@@ -468,8 +477,8 @@ mod tests {
             for &nj in &nodes {
                 for a in ["x", "y"] {
                     for b in ["x", "y"] {
-                        let lhs = k.get(ni, &format!("f_{a}"), nj, &format!("u_{b}"));
-                        let rhs = k.get(nj, &format!("f_{b}"), ni, &format!("u_{a}"));
+                        let lhs = k.get(ni, &format!("f_{a}"), nj, &format!("u_{b}")).unwrap();
+                        let rhs = k.get(nj, &format!("f_{b}"), ni, &format!("u_{a}")).unwrap();
                         assert!((lhs - rhs).abs() < tol);
                     }
                 }
@@ -477,8 +486,59 @@ mod tests {
         }
         // A uniform translation in x ⇒ zero force everywhere (row sum = 0).
         for &ni in &nodes {
-            let row: f64 = nodes.iter().map(|&nj| k.get(ni, "f_x", nj, "u_x")).sum();
+            let row: f64 = nodes
+                .iter()
+                .map(|&nj| k.get(ni, "f_x", nj, "u_x").unwrap())
+                .sum();
             assert!(row.abs() < tol, "row sum {row} ≠ 0");
         }
     }
+}
+
+crate::physics_operator! {
+    /// Linear-elasticity `Model` spanning **every** subspace of `fespace` — one
+    /// [`SubModel::Elasticity`] per [`SubFiniteElementSpace`], with the same
+    /// 2-D/3-D `kinematics` for all. Parent-level operator.
+    ///
+    /// `symmetry` is the **material** axis, independent of the kinematic one:
+    /// `E`, `nu` (isotropic), the per-direction moduli (orthotropic) or the 21
+    /// constants `C_11 … C_66` (anisotropic), the two oriented ones with the
+    /// material axes. `strain_measure` is the strain the law reads — `Linear`,
+    /// `GreenLagrange` or `Hencky` — and names the stress it writes (`sigma_*`,
+    /// `S_*`, `T_*`). The material is supplied at assembly time.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::models::tensor::Kinematics;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// let m = model::elasticity(
+    ///     &fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
+    /// assert_eq!(m.dual_vars(), vec!["f_x".to_string(), "f_y".to_string()]);
+    /// // The material axis is independent of the kinematic one.
+    /// let ortho = model::elasticity(
+    ///     &fes, Kinematics::PlaneStress, MaterialSymmetry::Orthotropic, StrainMeasure::Linear)?;
+    /// let reads = ortho.get(0).unwrap().read().material_components().unwrap();
+    /// assert!(reads.contains(&"E_1".to_string()));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn elasticity(
+        fespace,
+        kinematics: Kinematics,
+        symmetry: MaterialSymmetry = MaterialSymmetry::Isotropic,
+        strain_measure: StrainMeasure = StrainMeasure::Linear,
+    ) via SubModel::elasticity;
+    python: "`model.elasticity(fespace, kinematics, symmetry=\"isotropic\",\nstrain_measure=\"linear\")` — linear-elasticity model spanning every subspace of\n`fespace`. `kinematics` is `\"plane_stress\"`, `\"plane_strain\"` or\n`\"axisymmetric\"` (2-D), or `\"full_3d\"` (3-D). DOFs are the vector\ndisplacement `u_x, u_y(, u_z)`; material is supplied at assembly time.\n\n`\"axisymmetric\"` requires a geometry built with `Coords.axisymmetric()`\n(`x = r`, `y = z`): the hoop strain `ε_θθ = u_r / r` comes from the kinematics,\nthe `2πr` integration measure from the geometry, and the two must agree.\n\n`symmetry` is the **material** axis, independent of the kinematic one:\n`\"isotropic\"` (the default, material `E`, `nu`), `\"orthotropic\"`\n(`E_1, E_2, E_3, nu_12, nu_13, nu_23, G_12, G_13, G_23`) or\n`\"anisotropic\"` (the 21 constants `C_11 … C_66`). The two oriented ones\nalso require the material axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z`\nin 3-D — which are orthonormalised internally.\n\n`strain_measure` is the strain the law reads: `\"linear\"` (small strains,\nthe default), `\"green_lagrange\"` (large rotations: Hooke on `E` is\nSaint-Venant–Kirchhoff) or `\"hencky\"` (`½ ln C`). The stress it writes is\nthe dual, named after it: `sigma_*`, `S_*` or `T_*`."
 }

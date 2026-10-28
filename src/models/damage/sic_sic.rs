@@ -285,6 +285,7 @@ crate::physics_operator! {
     /// predict a collapse that does not happen. State: `kappa_1..3`, `d_1..3`.
     ///
     /// ```
+    /// # use pyrucast::ops::element_field::StrainMeasure;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -299,10 +300,10 @@ crate::physics_operator! {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// let m = model::damage_sic_sic(&fes, Kinematics::PlaneStrain)?;
+    /// let m = model::damage_sic_sic(&fes, Kinematics::PlaneStrain, StrainMeasure::Linear)?;
     /// assert_eq!(m.primal_vars(), vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn damage_sic_sic(fes, kinematics: Kinematics) = crate::ops::model::damage_with_law, DamageLaw::SicSic;
+    pub fn damage_sic_sic(fespace, kinematics: Kinematics) = crate::ops::model::damage, DamageLaw::SicSic;
     python: "`model.damage_sic_sic(fespace, kinematics)` — **orthotropic** damage of a\nwoven SiC/SiC ceramic-matrix composite: one damage per weave direction.\nMaterial `E`, `nu`, then `eps_0_i`, `eps_c_i`, `d_max_i` for `i = 1..3`,\nplus the material axes (`V1X, V1Y[, V1Z, V2X…]`).\n\nThe matrix cracks in planes normal to the tows while the fibres keep\ncarrying load, so the stiffness falls **by direction** and by very\ndifferent amounts — which no scalar damage can express. The directions\nare the same material axes an orthotropic elasticity uses, so a curved\npart gets them right cell by cell.\n\nEach damage **saturates** at `d_max_i` rather than reaching one: matrix\ncracking does not take the whole stiffness, and a law that let it would\npredict a collapse that does not happen. State: `kappa_1..3`, `d_1..3`."
 }

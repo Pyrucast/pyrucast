@@ -186,8 +186,7 @@ Two practical consequences:
 
 - **An argument order that does not put the subject first is a defect to fix,
   not a reason to give up the method.** That is what moved
-  `internal_forces(model, stresses)` to `(stresses, model)` and
-  `solve_eliminate(model, matrix, rhs)` to `(matrix, model, rhs)`.
+  `internal_forces(model, stresses)` to `(stresses, model)`.
 - **A symmetric operation has no method**: `a.merge(b)` would suggest that
   order matters. `merge` is the named alias of `a | b` — the operator already
   gives the symmetric form, and that is enough.
@@ -322,10 +321,14 @@ implementation detail of the private namespace, not a breach of the mirror.
 
 It is the move to the maturin *mixed layout* (`python/pyrucast/` folder, private
 `_pyrucast` extension + pure Python layer) that unlocks this filing: each module
-is a real `.py` file re-exporting, in a typed way, the symbols of the flat
-extension. A single `_pyrucast/__init__.pyi` stub is still generated for the
-extension; since the sub-modules are only re-exports, the types follow them
-without a dedicated stub.
+is a real `.py` file re-exporting the symbols of the flat extension. Its
+`__all__` is the **single** declaration of what it re-exports — read by the
+mirror test, by `import *`, and by strict type checkers, which take any other
+imported name for a private one; no `x as x` alias says it a second time.
+`tests/python/test_mirror_completeness.py` checks that nothing imported from
+the extension escapes it. A single `_pyrucast/__init__.pyi` stub is still
+generated for the extension; since the sub-modules are only re-exports, the
+types follow them without a dedicated stub.
 
 ### The wrapper files mirror the Rust tree
 
@@ -375,7 +378,8 @@ Three mechanical consequences:
    where the "1 or several" transparency lies. Precedents already in place:
    `FiniteElementSpace(mesh)` builds one sub-space per sub-mesh;
    `Mesh(config, element_type)` creates a mesh with one sub-mesh. Target:
-   `model::heat_conduction(&fes)` creates one zone per sub-space.
+   `model::heat_conduction(&fes, MaterialSymmetry::Isotropic)` creates one zone
+   per sub-space.
 
 2. **Composing = union (`|` in Python, `union` in Rust), never `add_sub` by
    hand.** To assemble heterogeneous physics / zones, one unions parents:

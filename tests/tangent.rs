@@ -12,6 +12,8 @@ use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::plasticity::law::PlasticLaw;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::behavior::integrate;
 use pyrucast::ops::element_field::material_field;
@@ -91,7 +93,7 @@ fn check_tangent_fd(
                 &format!("f_{}", AXES[ia]),
                 nodes[jn].id(),
                 &format!("u_{}", AXES[ja]),
-            );
+            )?;
             assert!(
                 (fd - analytic).abs() < 1e-4 * (analytic.abs() + 1.0),
                 "K_t[{i},{j}] analytic {analytic} vs FD {fd}"
@@ -203,9 +205,11 @@ fn tangent_matches_fd_solid_hex() -> Result<()> {
 
 fn plasticity_model(fes: &FiniteElementSpace, model: Kinematics) -> Result<Model> {
     let mut m = Model::empty();
-    m.add_sub(Handle::new(SubModel::plasticity_perfect(
+    m.add_sub(Handle::new(SubModel::plasticity(
         fes.get(0)?,
         model,
+        PlasticLaw::Perfect,
+        StrainMeasure::Linear,
     )?))?;
     Ok(m)
 }
@@ -230,8 +234,8 @@ fn elastic_regime_tangent_equals_stiffness() -> Result<()> {
         for a in ["f_x", "f_y"] {
             for j in 0..4 {
                 for b in ["u_x", "u_y"] {
-                    let t = kt.get(n[i].id(), a, n[j].id(), b);
-                    let s = k.get(n[i].id(), a, n[j].id(), b);
+                    let t = kt.get(n[i].id(), a, n[j].id(), b)?;
+                    let s = k.get(n[i].id(), a, n[j].id(), b)?;
                     assert!(
                         (t - s).abs() < tol * (s.abs() + 1.0),
                         "{a}{i} {b}{j}: {t} ≠ {s}"
@@ -253,13 +257,13 @@ fn a_linear_physics_tangent_is_its_stiffness() -> Result<()> {
     use pyrucast::ops::matrix::stiffness;
     use pyrucast::ops::model;
     let (fes, n) = unit_quad()?;
-    let conduction = model::heat_conduction(&fes)?;
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     let k = 3.0;
     let materials = material_field(&conduction, &[("k", k)])?;
 
     let kt = tangent(&conduction, &materials, &ElementField::empty(), None, None)?;
     for (j, coef) in [4.0, -1.0, -2.0, -1.0].iter().enumerate() {
-        let t = kt.get(n[0].id(), "q", n[j].id(), "T");
+        let t = kt.get(n[0].id(), "q", n[j].id(), "T").unwrap();
         assert!((t - k * coef / 6.0).abs() < 1e-12, "q0 T{j}: {t}");
     }
     assert_eq!(kt.dense()?, stiffness(&conduction, &materials)?.dense()?);
@@ -276,14 +280,12 @@ fn constraints_enter_the_tangent() -> Result<()> {
     use pyrucast::ops::matrix::stiffness;
     use pyrucast::ops::{mesh, model};
     let (fes, n) = unit_quad()?;
-    let conduction = model::heat_conduction(&fes)?;
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     let imposed = mesh::poi1_from_nodes(&n[..1])?;
-    let multiplier = mesh::barycenter(&imposed)?;
     let constrained = conduction.union(&model::dirichlet(
+        &imposed,
         &conduction,
         "T",
-        &imposed,
-        &multiplier,
         RelationSense::Equality,
     )?)?;
     let materials = material_field(&constrained, &[("k", 1.0)])?;
@@ -303,7 +305,12 @@ fn a_nonlinear_physics_without_tangent_errors() -> Result<()> {
     use pyrucast::models::damage::law::DamageLaw;
     use pyrucast::ops::model;
     let (fes, n) = unit_quad()?;
-    let damage = model::damage_with_law(&fes, Kinematics::PlaneStress, DamageLaw::DamageTc)?;
+    let damage = model::damage(
+        &fes,
+        Kinematics::PlaneStress,
+        DamageLaw::DamageTc,
+        StrainMeasure::Linear,
+    )?;
     let materials = material_field(
         &damage,
         &[

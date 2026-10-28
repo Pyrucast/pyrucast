@@ -68,7 +68,7 @@ Elles sont presque toujours **différentes** :
 | `HeatConduction`   | `T` (température)  | `q` (flux de chaleur) |
 | `BoundaryTransfer` (film) | `T` (partagée avec `HeatConduction`) | `q` (partagée) |
 | `Truss` / `LinearElasticity` | `u_x`, `u_y`, …   | `f_x`, `f_y`, …    |
-| `Dirichlet { imposed_variable: "T" }` | `lambda_T`         | `imposed_T`         |
+| `Dirichlet { imposed_variable: "T" }` | `lambda`           | `imposed`           |
 
 Les DOFs de la `Matrix` sont identifiés par le couple `(NodeID, nom_de_champ)` (voir [`Matrix`](matrix.md)) : deux SubModels qui utilisent le même nom (`"T"`) sur des nœuds différents ne se collisionnent pas, et la jonction se fait automatiquement quand ils partagent un même `(NodeID, nom)`.
 
@@ -89,8 +89,8 @@ Pour la part **contrainte** du second membre (les valeurs imposées aux
 nœuds-multiplicateurs), le helper `model.constraint_rhs([(nœud, g), …])`
 construit ce `NodeField` tout seul : on désigne chaque relation par un nœud
 contraint (Dirichlet) ou un nœud-terme (MPC) et sa valeur `g`, et le helper
-retrouve le nœud-multiplicateur et la composante à renseigner
-(`imposed_<v>`, `mpc_rhs`). Voir [Contraintes](contraintes.md).
+retrouve le nœud-multiplicateur et y renseigne la composante `imposed`. Voir
+[Contraintes](contraintes.md).
 
 ## Les physiques disponibles
 
@@ -102,29 +102,24 @@ opérateurs qui les déclarent et leurs variables, vus du `Model` :
 
 | Opérateur (`ops::model::…`, Python `pyrucast.model.…`) | Primales | Duales | Matériau | Chapitre |
 |---|---|---|---|---|
-| `heat_conduction(fes)` | `T` | `q` | `k` | [Thermique](thermique.md) |
-| `heat_conduction_with_symmetry(fes, sym)` | `T` | `q` | `k_1…` / `k_11…` + repère | [Conduction orientée](thermique.md#conduction-orthotrope-et-anisotrope) |
-| `boundary_transfer(fes, cible, comps)` | libres | libres | `h_<primale>`, `a_ext_<primale>` | [Échanges](echanges.md) |
-| `radiation(fes, cible)` | `T` | `q` | `emis, T_inf` (+ `sigma` facultatif) | [Rayonnement](thermique.md#rayonnement-à-linfini-stefan-boltzmann) |
-| `fick(fes, espèce)` | `c_<espèce>` | `j_<espèce>` | `D_<espèce>` ; `poro` facultatif | [Diffusion](diffusion.md) |
-| `fick_with_symmetry(fes, sym, espèce)` | `c_<espèce>` | `j_<espèce>` | `D_1_<espèce>…` + repère ; `poro` facultatif | [Diffusion](diffusion.md) |
-| `interface_transfer(a, b, cible, comps, tol)` | libres | libres | `h_<primale>` | [Échanges](echanges.md) |
-| `truss(fes)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, A` | [Barre](mecanique/truss.md) |
-| `elasticity(fes, model)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu` | [Élasticité](mecanique/elasticite.md) |
-| `elasticity_with_symmetry(fes, model, sym)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E_1…G_23` / `C_11…C_66` + repère | [Orthotropie](mecanique/orthotropie.md) |
-| `plasticity_perfect(fes, model)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu, sigma_y` | [Plasticité](mecanique/plasticite.md) |
-| `plasticity_with_law(fes, model, law)` | idem | idem | selon la loi | [Lois d'écoulement](mecanique/lois-plastiques.md), [Fluage](mecanique/fluage.md) |
-| `bernoulli(fes, model)` | selon la configuration | idem | `E, I` (+ `A`, `I_y…`) | [Euler-Bernoulli](mecanique/bernoulli.md) |
-| `timoshenko(fes)` | `w, theta` | `f_w, m_theta` | `E, I, G, A_s` | [Timoshenko](mecanique/timoshenko.md) |
-| `frame(fes)` | `u_x, u_y, rz` | `f_x, f_y, m_z` | `E, A, I, G, A_s` | [Portique 2D](mecanique/timoshenko.md) |
-| `frame3d(fes)` | `u_x…r_z` (6) | `f_x…m_z` (6) | `E, A, I_y, I_z, J, G, A_sy, A_sz` | [Cadre 3D](mecanique/timoshenko.md) |
-| `shell(fes, model)`<br>`thick`, `kirchhoff` | `u_x…r_z` (6) | `f_x…m_z` (6) | `E, nu, h` | [Coques](mecanique/coques.md) |
-| `dirichlet(…)` | `lambda_<v>` | `imposed_<v>` | — | [Dirichlet](contraintes/dirichlet.md) |
-| `mpc(…)` | `lambda_mpc` | `mpc_rhs` | — | [Multi-points](contraintes/mpc.md) |
-| `embedded(…)` | `lambda_<v>` | `imposed_<v>` | — | [Baignage](contraintes/embedded.md) |
-| `contact(…)` | `lambda_contact` | `contact_gap` | — | [Contact](contraintes/contact.md) |
+| `heat_conduction(fespace, sym)` | `T` | `q` | `k` ; orientée : `k_1…` / `k_11…` + repère | [Thermique](thermique.md), [conduction orientée](thermique.md#conduction-orthotrope-et-anisotrope) |
+| `boundary_transfer(fespace, cible, variables)` | celles données | lues dans la cible | `h_<primale>`, `a_ext_<primale>` | [Échanges](echanges.md) |
+| `radiation(fespace, cible)` | `T` | `q` | `emis, T_inf` (+ `sigma` facultatif) | [Rayonnement](thermique.md#rayonnement-à-linfini-stefan-boltzmann) |
+| `fick(fespace, espèce, sym)` | `c_<espèce>` | `j_<espèce>` | `D_<espèce>` ; orientée : `D_1_<espèce>…` + repère ; `poro` facultatif | [Diffusion](diffusion.md) |
+| `interface_transfer(a, b, cible, variables, tol)` | celles données | lues dans la cible | `h_<primale>` | [Échanges](echanges.md) |
+| `truss(fespace, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, A` | [Barre](mecanique/truss.md) |
+| `elasticity(fespace, cinématique, sym, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu` ; orientée : `E_1…G_23` / `C_11…C_66` + repère | [Élasticité](mecanique/elasticite.md), [orthotropie](mecanique/orthotropie.md) ; en grandes transformations, [mesure de déformation](mecanique/grandes-transformations.md) |
+| `plasticity_perfect(fespace, cinématique, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu, sigma_y` | [Plasticité](mecanique/plasticite.md) |
+| `plasticity(fespace, cinématique, loi, mesure)` | idem | idem | selon la loi | [Lois d'écoulement](mecanique/lois-plastiques.md), [Fluage](mecanique/fluage.md) |
+| `bernoulli(fespace)` | selon la configuration | idem | `E, I` (+ `A`, `I_y…`) | [Euler-Bernoulli](mecanique/bernoulli.md) |
+| `timoshenko(fespace)` | selon la configuration lue sur le maillage : `w, theta` (1-D), `u_x, u_y, r_z` (plan), `u_x…r_z` (6, espace) | `f_w, m_theta` ; `f_x, f_y, m_z` ; `f_x…m_z` | 1-D : `E, I, G, A_s` ; plan : `E, A, I, G, A_s` ; espace : `E, A, I_y, I_z, J, G, A_sy, A_sz` | [Timoshenko](mecanique/timoshenko.md) |
+| `shell(fespace, formulation)`<br>`thick`, `kirchhoff` | `u_x…r_z` (6) | `f_x…m_z` (6) | `E, nu, h` | [Coques](mecanique/coques.md) |
+| `dirichlet(maillage, cible, variable, sens)` | `lambda` | `imposed` | — | [Dirichlet](contraintes/dirichlet.md) |
+| `mpc(termes, cible, sens)` | `lambda` | `imposed` | — | [Multi-points](contraintes/mpc.md) |
+| `embedded(immergé, hôte, cible, variables, tol)` | `lambda` | `imposed` | — | [Baignage](contraintes/embedded.md) |
+| `contact(esclave, maître, cible, variables)` | `lambda` | `imposed` | — | [Contact](contraintes/contact.md) |
 
-Toutes balaient **tous** les sous-espaces du `fes` (une zone par sous-espace),
+Toutes balaient **tous** les sous-espaces du `fespace` (une zone par sous-espace),
 sauf `dirichlet`, `mpc`, `embedded` et `contact` qui sont des
 [contraintes](contraintes.md) portées par des maillages fournis par
 l'utilisateur. Le matériau est toujours fourni **à l'assemblage**, pas au
@@ -151,7 +146,7 @@ de physique » là où les capacités répondent à « domaine ou contrainte » 
 |---|---|
 | `Mechanical` | `truss`, `elasticity`, `plasticity`, `mazars`, `bernoulli`, `timoshenko`, `shell` |
 | `Thermal`    | `heat_conduction`, `radiation` ; `boundary_transfer` et `interface_transfer` quand leur cible est thermique |
-| `Constraint` | `dirichlet`, `mpc`, `embedded`, `contact` |
+| `Constraint` | `dirichlet`, `mpc`, `embedded`, `contact` — portée **avec** la nature de la physique qu'ils contraignent (`[Constraint, Mechanical]` pour un Dirichlet sur `u_x`) |
 | `Other`      | nature « autre / rien » explicite (aucune physique de base ne la déclare) |
 | `Diffusion`  | `fick` ; `boundary_transfer` et `interface_transfer` quand leur cible est une diffusion |
 | `Radiation`  | `radiation` — portée **en plus** de `Thermal`, donc `filter("thermal")` le rend aussi |
@@ -166,11 +161,18 @@ opérateur n'est pas partager une physique.
 
 La nature d'une physique de base est **entièrement déterminée par la variante** :
 c'est une constante par physique, exposée par `SubModelKind::physics()` — un
-**slice** `&'static [Physics]` (comme `label()`), pas un champ stocké. Le type est
-un **ensemble** pour deux raisons :
+**slice** `&'static [Physics]` (comme `label()`). Les termes qui écrivent dans
+les lignes d'une autre physique la lisent sur leur cible à la construction :
+`boundary_transfer`, `interface_transfer` et `flux` prennent sa nature, et une
+**contrainte** porte `Constraint` **plus** la nature de la physique dont elle
+fige les inconnues. Une relation qui lie les inconnues de deux physiques n'en
+porte aucune des deux : aucun sous-problème mono-physique ne saurait la
+résoudre. Le type est un **ensemble** pour trois raisons :
 
 - une physique **couplée** (par ex. un futur élément thermo-mécanique) porte
   *plusieurs* natures — `[Mechanical, Thermal]` ;
+- une contrainte appartient à la fois aux contraintes et à la physique qu'elle
+  fige — `[Constraint, Mechanical]` ;
 - un bloc de matrice monté à la main, hors assemblage, n'en porte **aucune** —
   l'ensemble vide, le cas « rien ». `Physics::Other` est la nature « autre »
   *explicite*, pour un bloc qu'on veut classer plutôt que laisser sans étiquette.
@@ -179,19 +181,30 @@ L'ensemble voyage avec chaque bloc assemblé jusqu'à la [`SubMatrix`](matrix.md
 (posé par l'assembleur sur les deux chemins, calculé et littéral, donc le couple
 C/Cᵀ d'un Dirichlet est étiqueté aussi).
 
-Deux sélecteurs symétriques en découlent — ils gardent les entités dont
-l'ensemble **contient** la nature (une physique couplée apparaît donc sous
-chacune) — tous deux à partage par compteur de références (pas de copie
-profonde) :
+Deux sélecteurs en découlent, chacun présent sur `Model` et sur `Matrix`, tous
+deux à partage par compteur de références (pas de copie profonde) :
 
-- `model.filter(Physics::Mechanical)` → un `Model` ne gardant que les
-  sous-modèles au moins mécaniques ;
-- `k.filter(Physics::Mechanical)` → une `Matrix` ne gardant que les blocs au moins
-  mécaniques (non assemblée — relancer `Matrix::assemble` avant de résoudre).
+- `filter(nature)` garde les entités dont l'ensemble **contient** la nature (une
+  physique couplée apparaît donc sous chacune) ;
+- `exclude(nature)`, son complément, garde celles dont l'ensemble **ne la
+  contient pas**.
+
+Ils se composent, une condition chacun. Comme une contrainte porte la nature de
+ce qu'elle fige, `model.filter(Physics::Mechanical)` rend la mécanique **avec**
+ses appuis — un sous-problème solvable tel quel — et
+`model.filter(Physics::Mechanical).exclude(Physics::Constraint)` la mécanique
+**seule**, par exemple pour lire ses seules inconnues de déplacement. Côté
+matrice, `k.filter(...)` rend une `Matrix` non assemblée — relancer
+`Matrix::assemble` avant de résoudre.
+
+Les natures disent ce qu'un sous-modèle fige, pas ce qu'il est : un contact et
+un Dirichlet sur les déplacements portent tous deux `[Constraint, Mechanical]`.
+`label()` nomme la physique (`"Dirichlet"`, `"Contact"`, …) ; c'est par lui que
+le [pas à pas](pas-a-pas.md) reconnaît le contact.
 
 `k.physics()` renvoie l'ensemble des natures **présentes** dans la matrice
 (dédupliqué) : une matrice agrégeant plusieurs physiques y expose plusieurs tags
-(par ex. `[Thermal, Constraint]`). Un bloc à l'ensemble vide n'est jamais
+(par ex. `[Thermal, Constraint]` pour une conduction et son Dirichlet). Un bloc à l'ensemble vide n'est jamais
 sélectionné par une nature concrète — l'étiqueter `Physics::Other` le rend
 atteignable par `filter(Physics::Other)`.
 
@@ -235,7 +248,7 @@ lecture des inconnues et des réactions) sont déroulés dans
 
 - **Physiques disponibles** : `HeatConduction` et `BoundaryTransfer` (échange de
   surface / film) ([thermique](thermique.md)) ; `Truss`, `Elasticity`,
-  `Plasticity`, `Mazars`, `Timoshenko`, `Frame`, `Frame3d`
+  `Plasticity`, `Damage`, `Bernoulli`, `Timoshenko`, `Shell`
   ([mécanique](mecanique.md)) ; et les contraintes `Dirichlet`, `Mpc`,
   `Embedded`, `Contact` ([contraintes](contraintes.md)). Toute nouvelle physique
   est une struct implémentant `SubModelKind` (une variante de l'énum `SubModel`

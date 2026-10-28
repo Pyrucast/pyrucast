@@ -10,22 +10,32 @@ use pyrucast::atoms::{ElementType, Node};
 use pyrucast::containers::element_field::{ElementField, SubElementField};
 use pyrucast::containers::field::SubField;
 use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
+use pyrucast::containers::matrix::Matrix;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::models::mpc::MpcTerm;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::ops::matrix::stiffness;
-use pyrucast::ops::mesh::barycenter;
-use pyrucast::ops::solver::eliminate::{self, Condensation};
-use pyrucast::ops::solver::lu::solve;
+use pyrucast::ops::solver::{solve, solve_with_options, RelationMethod, SolveOptions};
 use pyrucast::Result;
 
 const N_ELEMS: usize = 4;
 const H: f64 = 1.0 / N_ELEMS as f64;
 const TOL: f64 = 1e-10;
+
+/// The system solved by master/slave elimination instead of multipliers.
+fn eliminate(k: &Matrix, rhs: &NodeField) -> Result<NodeField> {
+    solve_with_options(
+        k,
+        rhs,
+        &SolveOptions {
+            relations: RelationMethod::Eliminate,
+            ..Default::default()
+        },
+    )
+}
 
 /// Build the `[0, 1]` SEG2 bar with a `k = 1` heat-conduction sub-model already
 /// added; returns the nodes, the base model and the material field.
@@ -48,7 +58,10 @@ fn heat_bar() -> Result<(Vec<Node>, Handle<Coords>, Model, ElementField)> {
     materials.add_sub(Handle::new(mat))?;
 
     let mut model = Model::empty();
-    model.add_sub(Handle::new(SubModel::heat_conduction(sub)?))?;
+    model.add_sub(Handle::new(SubModel::heat_conduction(
+        sub,
+        MaterialSymmetry::Isotropic,
+    )?))?;
 
     Ok((nodes, coords, model, materials))
 }
@@ -69,8 +82,7 @@ fn mpc_difference_relation_recovers_linear_solution() -> Result<()> {
 
     // Dirichlet T(node0) = 0.
     let imposed0 = poi1(&nodes[0])?;
-    let mult0 = barycenter(&imposed0)?;
-    let dir = SubModel::dirichlet(&model, "T", &imposed0, &mult0, Default::default())?;
+    let dir = SubModel::dirichlet(&imposed0, &model, "T", Default::default())?;
     let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
@@ -78,23 +90,22 @@ fn mpc_difference_relation_recovers_linear_solution() -> Result<()> {
     assert_eq!(model.dual_of("T").as_deref(), Some("q"));
     let mesh_last = poi1(&nodes[N_ELEMS])?;
     let mesh_first = poi1(&nodes[0])?;
-    let mult_mpc_mesh = barycenter(&mesh_last)?;
-    let terms = vec![
-        MpcTerm::new(&model, &mesh_last, "T", 1.0)?,
-        MpcTerm::new(&model, &mesh_first, "T", -1.0)?,
-    ];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, Default::default())?;
+    let mpc = SubModel::mpc(
+        &[(&mesh_last, "T", 1.0), (&mesh_first, "T", -1.0)],
+        &model,
+        Default::default(),
+    )?;
     let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
-    // RHS: imposed_T = 0 at the Dirichlet multiplier, mpc_rhs = 1 (g) at the MPC one.
+    // RHS: imposed = 0 at the Dirichlet multiplier, 1 (g) at the MPC one.
     let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
     rhs_sm.add_cell(&[dir_mult])?;
     rhs_sm.add_cell(&[mpc_mult])?;
     let rhs_sm = Handle::new(rhs_sm);
-    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed_T".into(), "mpc_rhs".into()])?;
-    rhs.set_value(dir_mult, "imposed_T", 0.0)?;
-    rhs.set_value(mpc_mult, "mpc_rhs", 1.0)?;
+    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed".into()])?;
+    rhs.set_value(dir_mult, "imposed", 0.0)?;
+    rhs.set_value(mpc_mult, "imposed", 1.0)?;
     let rhs = NodeField::from_sub(rhs);
 
     let k = stiffness(&model, &materials)?;
@@ -129,8 +140,7 @@ fn a_multi_term_reaction_is_spread_by_its_coefficients() -> Result<()> {
 
     // T(node0) = 0, so the bar is held.
     let imposed0 = poi1(&nodes[0])?;
-    let mult0 = barycenter(&imposed0)?;
-    let dir = SubModel::dirichlet(&model, "T", &imposed0, &mult0, Default::default())?;
+    let dir = SubModel::dirichlet(&imposed0, &model, "T", Default::default())?;
     let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
@@ -138,12 +148,11 @@ fn a_multi_term_reaction_is_spread_by_its_coefficients() -> Result<()> {
     let (a, b) = (2.0_f64, -3.0_f64);
     let mesh_last = poi1(&nodes[N_ELEMS])?;
     let mesh_mid = poi1(&nodes[N_ELEMS / 2])?;
-    let mult_mpc_mesh = barycenter(&mesh_last)?;
-    let terms = vec![
-        MpcTerm::new(&model, &mesh_last, "T", a)?,
-        MpcTerm::new(&model, &mesh_mid, "T", b)?,
-    ];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, Default::default())?;
+    let mpc = SubModel::mpc(
+        &[(&mesh_last, "T", a), (&mesh_mid, "T", b)],
+        &model,
+        Default::default(),
+    )?;
     let mpc_mult = mpc.multiplier_nodes()[0];
     let mpc_h = Handle::new(mpc);
     let mpc_h_names = mpc_h.clone();
@@ -153,10 +162,10 @@ fn a_multi_term_reaction_is_spread_by_its_coefficients() -> Result<()> {
     rhs_sm.add_cell(&[dir_mult])?;
     rhs_sm.add_cell(&[mpc_mult])?;
     let rhs_sm = Handle::new(rhs_sm);
-    let mpc_dual = mpc_h_names.read().as_kind().dual_vars()[0].clone();
-    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed_T".into(), mpc_dual.clone()])?;
-    rhs.set_value(dir_mult, "imposed_T", 0.0)?;
-    rhs.set_value(mpc_mult, &mpc_dual, 1.0)?;
+    // Every relation names its row alike: one component, two multiplier nodes.
+    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed".into()])?;
+    rhs.set_value(dir_mult, "imposed", 0.0)?;
+    rhs.set_value(mpc_mult, "imposed", 1.0)?;
     let rhs = NodeField::from_sub(rhs);
 
     let k = stiffness(&model, &materials)?;
@@ -211,10 +220,8 @@ fn single_term_mpc_matches_dirichlet() -> Result<()> {
         let (nodes, coords, mut model, materials) = heat_bar()?;
         let left = poi1(&nodes[0])?;
         let right = poi1(&nodes[N_ELEMS])?;
-        let mult_l = barycenter(&left)?;
-        let mult_r = barycenter(&right)?;
-        let dl = SubModel::dirichlet(&model, "T", &left, &mult_l, Default::default())?;
-        let dr = SubModel::dirichlet(&model, "T", &right, &mult_r, Default::default())?;
+        let dl = SubModel::dirichlet(&left, &model, "T", Default::default())?;
+        let dr = SubModel::dirichlet(&right, &model, "T", Default::default())?;
         let (nl, nr) = (dl.multiplier_nodes()[0], dr.multiplier_nodes()[0]);
         model.add_sub(Handle::new(dl))?;
         model.add_sub(Handle::new(dr))?;
@@ -222,9 +229,9 @@ fn single_term_mpc_matches_dirichlet() -> Result<()> {
         sm.add_cell(&[nl])?;
         sm.add_cell(&[nr])?;
         let sm = Handle::new(sm);
-        let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed_T".into()])?;
-        rhs.set_value(nl, "imposed_T", 0.0)?;
-        rhs.set_value(nr, "imposed_T", 1.0)?;
+        let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed".into()])?;
+        rhs.set_value(nl, "imposed", 0.0)?;
+        rhs.set_value(nr, "imposed", 1.0)?;
         let k = stiffness(&model, &materials)?;
         solve(&k, &NodeField::from_sub(rhs))
     };
@@ -233,15 +240,12 @@ fn single_term_mpc_matches_dirichlet() -> Result<()> {
     let solve_mpc = || -> Result<NodeField> {
         let (nodes, coords, mut model, materials) = heat_bar()?;
         let left = poi1(&nodes[0])?;
-        let mult_l = barycenter(&left)?;
-        let dl = SubModel::dirichlet(&model, "T", &left, &mult_l, Default::default())?;
+        let dl = SubModel::dirichlet(&left, &model, "T", Default::default())?;
         let nl = dl.multiplier_nodes()[0];
         model.add_sub(Handle::new(dl))?;
 
         let right = poi1(&nodes[N_ELEMS])?;
-        let mult_mpc = barycenter(&right)?;
-        let terms = vec![MpcTerm::new(&model, &right, "T", 1.0)?];
-        let mpc = SubModel::mpc(terms, &mult_mpc, Default::default())?;
+        let mpc = SubModel::mpc(&[(&right, "T", 1.0)], &model, Default::default())?;
         let nm = mpc.multiplier_nodes()[0];
         model.add_sub(Handle::new(mpc))?;
 
@@ -249,9 +253,9 @@ fn single_term_mpc_matches_dirichlet() -> Result<()> {
         sm.add_cell(&[nl])?;
         sm.add_cell(&[nm])?;
         let sm = Handle::new(sm);
-        let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed_T".into(), "mpc_rhs".into()])?;
-        rhs.set_value(nl, "imposed_T", 0.0)?;
-        rhs.set_value(nm, "mpc_rhs", 1.0)?;
+        let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed".into()])?;
+        rhs.set_value(nl, "imposed", 0.0)?;
+        rhs.set_value(nm, "imposed", 1.0)?;
         let k = stiffness(&model, &materials)?;
         solve(&k, &NodeField::from_sub(rhs))
     };
@@ -284,36 +288,34 @@ fn mpc_elimination_matches_lagrange() -> Result<()> {
 
     // Dirichlet T(node0) = 0.
     let imposed0 = poi1(&nodes[0])?;
-    let mult0 = barycenter(&imposed0)?;
-    let dir = SubModel::dirichlet(&model, "T", &imposed0, &mult0, Default::default())?;
+    let dir = SubModel::dirichlet(&imposed0, &model, "T", Default::default())?;
     let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
     // MPC: 2·T(node4) − 1·T(node2) = 1.5 (slave = node4, master = node2).
     let mesh4 = poi1(&nodes[N_ELEMS])?;
     let mesh2 = poi1(&nodes[N_ELEMS / 2])?;
-    let mult_mpc_mesh = barycenter(&mesh4)?;
-    let terms = vec![
-        MpcTerm::new(&model, &mesh4, "T", 2.0)?,
-        MpcTerm::new(&model, &mesh2, "T", -1.0)?,
-    ];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, Default::default())?;
+    let mpc = SubModel::mpc(
+        &[(&mesh4, "T", 2.0), (&mesh2, "T", -1.0)],
+        &model,
+        Default::default(),
+    )?;
     let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
-    // RHS: imposed_T = 0, mpc_rhs = 1.5 (= 2·1 − 1·0.5).
+    // RHS: imposed = 0 at the Dirichlet multiplier, 1.5 (= 2·1 − 1·0.5) at the MPC one.
     let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
     rhs_sm.add_cell(&[dir_mult])?;
     rhs_sm.add_cell(&[mpc_mult])?;
     let rhs_sm = Handle::new(rhs_sm);
-    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed_T".into(), "mpc_rhs".into()])?;
-    rhs.set_value(dir_mult, "imposed_T", 0.0)?;
-    rhs.set_value(mpc_mult, "mpc_rhs", 1.5)?;
+    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed".into()])?;
+    rhs.set_value(dir_mult, "imposed", 0.0)?;
+    rhs.set_value(mpc_mult, "imposed", 1.5)?;
     let rhs = NodeField::from_sub(rhs);
 
     let k = stiffness(&model, &materials)?;
     let lagrange = solve(&k, &rhs)?;
-    let elim = eliminate::solve(&k, &model, &rhs)?;
+    let elim = eliminate(&k, &rhs)?;
 
     // The two methods produce the same field, node-for-node.
     for (i, node) in nodes.iter().enumerate() {
@@ -346,10 +348,8 @@ fn single_term_mpc_elimination_equals_dirichlet() -> Result<()> {
         let (nodes, coords, mut model, materials) = heat_bar()?;
         let left = poi1(&nodes[0])?;
         let right = poi1(&nodes[N_ELEMS])?;
-        let mult_l = barycenter(&left)?;
-        let mult_r = barycenter(&right)?;
-        let dl = SubModel::dirichlet(&model, "T", &left, &mult_l, Default::default())?;
-        let dr = SubModel::dirichlet(&model, "T", &right, &mult_r, Default::default())?;
+        let dl = SubModel::dirichlet(&left, &model, "T", Default::default())?;
+        let dr = SubModel::dirichlet(&right, &model, "T", Default::default())?;
         let (nl, nr) = (dl.multiplier_nodes()[0], dr.multiplier_nodes()[0]);
         model.add_sub(Handle::new(dl))?;
         model.add_sub(Handle::new(dr))?;
@@ -357,9 +357,9 @@ fn single_term_mpc_elimination_equals_dirichlet() -> Result<()> {
         sm.add_cell(&[nl])?;
         sm.add_cell(&[nr])?;
         let sm = Handle::new(sm);
-        let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed_T".into()])?;
-        rhs.set_value(nl, "imposed_T", 0.0)?;
-        rhs.set_value(nr, "imposed_T", 1.0)?;
+        let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed".into()])?;
+        rhs.set_value(nl, "imposed", 0.0)?;
+        rhs.set_value(nr, "imposed", 1.0)?;
         let k = stiffness(&model, &materials)?;
         solve(&k, &NodeField::from_sub(rhs))
     };
@@ -368,15 +368,12 @@ fn single_term_mpc_elimination_equals_dirichlet() -> Result<()> {
     let by_elimination = || -> Result<NodeField> {
         let (nodes, coords, mut model, materials) = heat_bar()?;
         let left = poi1(&nodes[0])?;
-        let mult_l = barycenter(&left)?;
-        let dl = SubModel::dirichlet(&model, "T", &left, &mult_l, Default::default())?;
+        let dl = SubModel::dirichlet(&left, &model, "T", Default::default())?;
         let nl = dl.multiplier_nodes()[0];
         model.add_sub(Handle::new(dl))?;
 
         let right = poi1(&nodes[N_ELEMS])?;
-        let mult_mpc = barycenter(&right)?;
-        let terms = vec![MpcTerm::new(&model, &right, "T", 1.0)?];
-        let mpc = SubModel::mpc(terms, &mult_mpc, Default::default())?;
+        let mpc = SubModel::mpc(&[(&right, "T", 1.0)], &model, Default::default())?;
         let nm = mpc.multiplier_nodes()[0];
         model.add_sub(Handle::new(mpc))?;
 
@@ -384,11 +381,11 @@ fn single_term_mpc_elimination_equals_dirichlet() -> Result<()> {
         sm.add_cell(&[nl])?;
         sm.add_cell(&[nm])?;
         let sm = Handle::new(sm);
-        let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed_T".into(), "mpc_rhs".into()])?;
-        rhs.set_value(nl, "imposed_T", 0.0)?;
-        rhs.set_value(nm, "mpc_rhs", 1.0)?;
+        let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed".into()])?;
+        rhs.set_value(nl, "imposed", 0.0)?;
+        rhs.set_value(nm, "imposed", 1.0)?;
         let k = stiffness(&model, &materials)?;
-        eliminate::solve(&k, &model, &NodeField::from_sub(rhs))
+        eliminate(&k, &NodeField::from_sub(rhs))
     };
 
     let (nodes, ..) = heat_bar()?;
@@ -415,10 +412,8 @@ fn elimination_recovers_reaction_equals_multiplier() -> Result<()> {
     let (nodes, coords, mut model, materials) = heat_bar()?;
     let left = poi1(&nodes[0])?;
     let right = poi1(&nodes[N_ELEMS])?;
-    let mult_l = barycenter(&left)?;
-    let mult_r = barycenter(&right)?;
-    let dl = SubModel::dirichlet(&model, "T", &left, &mult_l, Default::default())?;
-    let dr = SubModel::dirichlet(&model, "T", &right, &mult_r, Default::default())?;
+    let dl = SubModel::dirichlet(&left, &model, "T", Default::default())?;
+    let dr = SubModel::dirichlet(&right, &model, "T", Default::default())?;
     let (nl, nr) = (dl.multiplier_nodes()[0], dr.multiplier_nodes()[0]);
     model.add_sub(Handle::new(dl))?;
     model.add_sub(Handle::new(dr))?;
@@ -427,18 +422,18 @@ fn elimination_recovers_reaction_equals_multiplier() -> Result<()> {
     sm.add_cell(&[nl])?;
     sm.add_cell(&[nr])?;
     let sm = Handle::new(sm);
-    let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed_T".into()])?;
-    rhs.set_value(nl, "imposed_T", 0.0)?;
-    rhs.set_value(nr, "imposed_T", 1.0)?;
+    let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed".into()])?;
+    rhs.set_value(nl, "imposed", 0.0)?;
+    rhs.set_value(nr, "imposed", 1.0)?;
     let rhs = NodeField::from_sub(rhs);
 
     let k = stiffness(&model, &materials)?;
     let lagrange = solve(&k, &rhs)?;
-    let elim = eliminate::solve(&k, &model, &rhs)?;
+    let elim = eliminate(&k, &rhs)?;
 
     // Lagrange multipliers (reference boundary fluxes).
-    let lambda_l = lagrange.value(nl, "lambda_T")?;
-    let lambda_r = lagrange.value(nr, "lambda_T")?;
+    let lambda_l = lagrange.value(nl, "lambda")?;
+    let lambda_r = lagrange.value(nr, "lambda")?;
     assert!((lambda_l - 1.0).abs() < TOL);
     assert!((lambda_r + 1.0).abs() < TOL);
 
@@ -466,35 +461,33 @@ fn elimination_periodicity_constant_field() -> Result<()> {
 
     // Dirichlet T(node1) = 0.5 (interior anchor).
     let anchor = poi1(&nodes[1])?;
-    let mult_a = barycenter(&anchor)?;
-    let dir = SubModel::dirichlet(&model, "T", &anchor, &mult_a, Default::default())?;
+    let dir = SubModel::dirichlet(&anchor, &model, "T", Default::default())?;
     let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
     // Periodicity T(node4) − T(node0) = 0.
     let mesh4 = poi1(&nodes[N_ELEMS])?;
     let mesh0 = poi1(&nodes[0])?;
-    let mult_mpc_mesh = barycenter(&mesh4)?;
-    let terms = vec![
-        MpcTerm::new(&model, &mesh4, "T", 1.0)?,
-        MpcTerm::new(&model, &mesh0, "T", -1.0)?,
-    ];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, Default::default())?;
+    let mpc = SubModel::mpc(
+        &[(&mesh4, "T", 1.0), (&mesh0, "T", -1.0)],
+        &model,
+        Default::default(),
+    )?;
     let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
-    // RHS: imposed_T = 0.5 at the anchor, mpc_rhs = 0.
+    // RHS: imposed = 0.5 at the anchor, 0 at the MPC multiplier.
     let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
     rhs_sm.add_cell(&[dir_mult])?;
     rhs_sm.add_cell(&[mpc_mult])?;
     let rhs_sm = Handle::new(rhs_sm);
-    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed_T".into(), "mpc_rhs".into()])?;
-    rhs.set_value(dir_mult, "imposed_T", 0.5)?;
-    rhs.set_value(mpc_mult, "mpc_rhs", 0.0)?;
+    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed".into()])?;
+    rhs.set_value(dir_mult, "imposed", 0.5)?;
+    rhs.set_value(mpc_mult, "imposed", 0.0)?;
     let rhs = NodeField::from_sub(rhs);
 
     let k = stiffness(&model, &materials)?;
-    let elim = eliminate::solve(&k, &model, &rhs)?;
+    let elim = eliminate(&k, &rhs)?;
 
     for node in &nodes {
         let got = elim.value(node.id(), "T")?;
@@ -514,16 +507,13 @@ fn elimination_rejects_chaining() -> Result<()> {
     let (nodes, coords, mut model, materials) = heat_bar()?;
 
     let imposed0 = poi1(&nodes[0])?;
-    let mult0 = barycenter(&imposed0)?;
-    let dir = SubModel::dirichlet(&model, "T", &imposed0, &mult0, Default::default())?;
+    let dir = SubModel::dirichlet(&imposed0, &model, "T", Default::default())?;
     let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
     // A single-term MPC on the *same* node0 — its only DOF is already a slave.
     let mesh0 = poi1(&nodes[0])?;
-    let mult_mpc_mesh = barycenter(&mesh0)?;
-    let terms = vec![MpcTerm::new(&model, &mesh0, "T", 1.0)?];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, Default::default())?;
+    let mpc = SubModel::mpc(&[(&mesh0, "T", 1.0)], &model, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
@@ -531,13 +521,10 @@ fn elimination_rejects_chaining() -> Result<()> {
     rhs_sm.add_cell(&[dir_mult])?;
     rhs_sm.add_cell(&[mpc_mult])?;
     let rhs_sm = Handle::new(rhs_sm);
-    let rhs = NodeField::from_sub(SubNodeField::from_poi1(
-        &rhs_sm,
-        vec!["imposed_T".into(), "mpc_rhs".into()],
-    )?);
+    let rhs = NodeField::from_sub(SubNodeField::from_poi1(&rhs_sm, vec!["imposed".into()])?);
 
     let k = stiffness(&model, &materials)?;
-    assert!(eliminate::solve(&k, &model, &rhs).is_err());
+    assert!(eliminate(&k, &rhs).is_err());
     Ok(())
 }
 
@@ -548,39 +535,34 @@ fn elimination_rejects_zero_coefficient() -> Result<()> {
     let (nodes, coords, mut model, materials) = heat_bar()?;
 
     let mesh4 = poi1(&nodes[N_ELEMS])?;
-    let mult_mpc_mesh = barycenter(&mesh4)?;
-    let terms = vec![MpcTerm::new(&model, &mesh4, "T", 0.0)?];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, Default::default())?;
+    let mpc = SubModel::mpc(&[(&mesh4, "T", 0.0)], &model, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
     let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
     rhs_sm.add_cell(&[mpc_mult])?;
     let rhs_sm = Handle::new(rhs_sm);
-    let rhs = NodeField::from_sub(SubNodeField::from_poi1(&rhs_sm, vec!["mpc_rhs".into()])?);
+    let rhs = NodeField::from_sub(SubNodeField::from_poi1(&rhs_sm, vec!["imposed".into()])?);
 
     let k = stiffness(&model, &materials)?;
-    assert!(eliminate::solve(&k, &model, &rhs).is_err());
+    assert!(eliminate(&k, &rhs).is_err());
     Ok(())
 }
 
-/// The condensation is cached on the matrix after the first elimination solve,
-/// reused on the second (identical result), and invalidated when the matrix
-/// changes.
+/// A second elimination solve on the same matrix gives the same result — the
+/// condensation is reused from the matrix's cache (the cache itself is checked
+/// where its type lives, in the elimination path's own tests).
 #[test]
-fn elimination_condensation_cached_then_invalidated() -> Result<()> {
+fn elimination_resolve_gives_the_same_result() -> Result<()> {
     let (nodes, coords, mut model, materials) = heat_bar()?;
 
     let left = poi1(&nodes[0])?;
-    let mult_l = barycenter(&left)?;
-    let dl = SubModel::dirichlet(&model, "T", &left, &mult_l, Default::default())?;
+    let dl = SubModel::dirichlet(&left, &model, "T", Default::default())?;
     let nl = dl.multiplier_nodes()[0];
     model.add_sub(Handle::new(dl))?;
 
     let right = poi1(&nodes[N_ELEMS])?;
-    let mult_mpc = barycenter(&right)?;
-    let terms = vec![MpcTerm::new(&model, &right, "T", 1.0)?];
-    let mpc = SubModel::mpc(terms, &mult_mpc, Default::default())?;
+    let mpc = SubModel::mpc(&[(&right, "T", 1.0)], &model, Default::default())?;
     let nm = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
@@ -588,39 +570,18 @@ fn elimination_condensation_cached_then_invalidated() -> Result<()> {
     sm.add_cell(&[nl])?;
     sm.add_cell(&[nm])?;
     let sm = Handle::new(sm);
-    let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed_T".into(), "mpc_rhs".into()])?;
-    rhs.set_value(nl, "imposed_T", 0.0)?;
-    rhs.set_value(nm, "mpc_rhs", 1.0)?;
+    let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed".into()])?;
+    rhs.set_value(nl, "imposed", 0.0)?;
+    rhs.set_value(nm, "imposed", 1.0)?;
     let rhs = NodeField::from_sub(rhs);
 
-    let mut k = stiffness(&model, &materials)?;
-    assert!(k.cached_factorization::<Condensation>().is_none());
-
-    let s1 = eliminate::solve(&k, &model, &rhs)?;
-    assert!(k.cached_factorization::<Condensation>().is_some());
-    let s2 = eliminate::solve(&k, &model, &rhs)?;
+    let k = stiffness(&model, &materials)?;
+    let s1 = eliminate(&k, &rhs)?;
+    let s2 = eliminate(&k, &rhs)?;
     for node in &nodes {
         assert_eq!(s1.value(node.id(), "T")?, s2.value(node.id(), "T")?);
     }
-
-    // Mutating the matrix invalidates the cached condensation.
-    let other = Handle::new(Coords::new(1)?);
-    let b = Node::create_in(other.clone(), &[0.0])?;
-    let bsm = {
-        let mut bsm = SubMesh::new(other, ElementType::POI1);
-        bsm.add_cell(&[b.id()])?;
-        Handle::new(bsm)
-    };
-    let mut block = SubMatrix::new(
-        bsm.clone(),
-        bsm,
-        vec!["q".into()],
-        vec!["T".into()],
-        DofOrdering::NodesThenVars,
-        Symmetry::None,
-    );
-    block.add_entry(b.id(), "q", b.id(), "T", 4.0)?;
-    k.add_sub(Handle::new(block))?;
-    assert!(k.cached_factorization::<Condensation>().is_none());
+    // T = x on the bar: the relations hold.
+    assert!((s1.value(nodes[N_ELEMS].id(), "T")? - 1.0).abs() < 1e-12);
     Ok(())
 }

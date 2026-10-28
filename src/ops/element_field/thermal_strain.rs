@@ -19,10 +19,11 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::ElementField;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::FiniteElementSpace;
-use crate::error::Result;
+use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::kernel;
 use crate::ops::element_field::gradient::AXES;
+use crate::ops::element_field::StrainMeasure;
 
 /// Temperature component read from the per-element temperature field.
 const TEMPERATURE: &str = "T";
@@ -30,7 +31,7 @@ const TEMPERATURE: &str = "T";
 const ALPHA: &str = "alpha";
 
 /// Thermal strain `ε_th = α·(T − t_ref)` at the Gauss points of every subspace
-/// of `fespace`.
+/// of `fespace`, in the strain `measure` a law reads.
 ///
 /// - `temperature` carries the component `"T"` at the Gauss points (per
 ///   element), e.g. from
@@ -40,10 +41,16 @@ const ALPHA: &str = "alpha";
 ///
 /// The result is the symmetric strain tensor in **tensor** convention, same
 /// component layout as [`crate::ops::element_field::deformation`](fn@crate::ops::element_field::deformation)
-/// (`eps_<ai><aj>` for `i ≤ j`): the normal components equal `α·(T − t_ref)`,
-/// the shear components are zero. It aligns component-for-component with
-/// `deformation`, so `deformation(u) − thermal_strain(…)` is a well-formed
+/// (`<prefix>_<ai><aj>` for `i ≤ j`, the prefix that of `measure`): the strain
+/// of a free isotropic dilation of stretch `1 + α·(T − t_ref)`, zero shear. Its
+/// normal components are, exactly, `α·ΔT` for `linear`, `½((1 + α·ΔT)² − 1)`
+/// for `green_lagrange` and `ln(1 + α·ΔT)` for `hencky` — the three agree to
+/// first order. It aligns component-for-component with `deformation` under the
+/// same measure, so `deformation(u) − thermal_strain(…)` is a well-formed
 /// mechanical strain.
+///
+/// Errors: a measure that is not a strain a law reads (`gradient`,
+/// Cauchy–Green, Euler–Almansi).
 ///
 /// Runs on the shared parallel driver
 /// [`kernel::element_pointwise`](fn@crate::models::kernel::element_pointwise),
@@ -77,12 +84,16 @@ const ALPHA: &str = "alpha";
 /// # t.get(0)?.write().set_uniform("T", 120.0)?;
 /// # let mut m = ElementField::new(&fes, vec!["alpha".into()])?;
 /// # m.get(0)?.write().set_uniform("alpha", 1e-5)?;
-/// let eps = element_field::thermal_strain(&t, &m, &fes, 20.0)?;
+/// # use pyrucast::ops::element_field::StrainMeasure;
+/// let eps = element_field::thermal_strain(&t, &m, &fes, 20.0, StrainMeasure::Linear)?;
 /// assert!((eps.get(0)?.read().value(0, 0, "eps_xx")? - 1e-3).abs() < 1e-12);
 /// assert!(eps.get(0)?.read().value(0, 0, "eps_xy")?.abs() < 1e-15);
 /// // At T = T_ref, nothing.
-/// let nulle = element_field::thermal_strain(&t, &m, &fes, 120.0)?;
+/// let nulle = element_field::thermal_strain(&t, &m, &fes, 120.0, StrainMeasure::Linear)?;
 /// assert!(nulle.get(0)?.read().value(0, 0, "eps_xx")?.abs() < 1e-15);
+/// // Read by a law in Green–Lagrange, the same dilation is ½((1 + αΔT)² − 1).
+/// let e = element_field::thermal_strain(&t, &m, &fes, 20.0, StrainMeasure::GreenLagrange)?;
+/// assert!((e.get(0)?.read().value(0, 0, "E_xx")? - 0.5 * (1.001_f64.powi(2) - 1.0)).abs() < 1e-15);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn thermal_strain(
@@ -90,7 +101,22 @@ pub fn thermal_strain(
     material: &ElementField,
     fespace: &FiniteElementSpace,
     t_ref: f64,
+    measure: StrainMeasure,
 ) -> Result<ElementField> {
+    // The strain of the stretch `1 + a` in the measure, chosen once.
+    let dilation: fn(f64) -> f64 = match measure {
+        StrainMeasure::Linear => |a| a,
+        StrainMeasure::GreenLagrange => |a| 0.5 * ((1.0 + a) * (1.0 + a) - 1.0),
+        StrainMeasure::Hencky => |a| (1.0 + a).ln(),
+        other => {
+            return Err(PyrucastError::Message(format!(
+                "thermal_strain: `{}` is not a strain a law reads — the measures are `linear`, \
+                 `green_lagrange` and `hencky`",
+                crate::named::Named::name(other)
+            )))
+        }
+    };
+    let prefix = measure.prefix();
     let mut out = ElementField::empty();
     for sub in fespace {
         let temp_sub = temperature.sub_for_fespace(sub)?;
@@ -116,21 +142,22 @@ pub fn thermal_strain(
             .resolve_components(&[ALPHA], "thermal_strain: material")?[0]
             as usize;
 
-        // Strain entries eps_<ai><aj> for i ≤ j; the diagonal (i == j) carries α·ΔT.
+        // Strain entries <prefix>_<ai><aj> for i ≤ j; the diagonal (i == j)
+        // carries the dilation.
         let mut names = Vec::with_capacity(space_dim * (space_dim + 1) / 2);
         let mut pairs = Vec::with_capacity(space_dim * (space_dim + 1) / 2);
         for i in 0..space_dim {
             for j in i..space_dim {
-                names.push(format!("eps_{}{}", AXES[i], AXES[j]));
+                names.push(format!("{prefix}_{}{}", AXES[i], AXES[j]));
                 pairs.push((i, j));
             }
         }
-        // A body of revolution dilates circumferentially too: the hoop `eps_zz`
+        // A body of revolution dilates circumferentially too: the hoop `zz`
         // is a fourth diagonal entry, matching the extra component
         // [`crate::ops::element_field::deformation`](fn@crate::ops::element_field::deformation)
         // produces there.
         if axisymmetric {
-            names.push("eps_zz".to_string());
+            names.push(format!("{prefix}_zz"));
         }
         let n_diag = names.len();
 
@@ -144,12 +171,12 @@ pub fn thermal_strain(
             &mat_sub,
             names,
             |_geom, _g, input, _prev, material, out| {
-                let eps_th = material[i_alpha] * (input[i_temp] - t_ref);
+                let eps_th = dilation(material[i_alpha] * (input[i_temp] - t_ref));
                 for (c, &(i, j)) in pairs.iter().enumerate() {
                     out[c] = if i == j { eps_th } else { 0.0 };
                 }
                 if axisymmetric {
-                    out[n_diag - 1] = eps_th; // hoop `eps_zz`
+                    out[n_diag - 1] = eps_th; // the hoop `zz`
                 }
                 Ok(())
             },
@@ -193,7 +220,7 @@ mod tests {
             .set_uniform("alpha", 1e-5)
             .unwrap();
 
-        let eps = thermal_strain(&temp, &mat, &fes, 20.0).unwrap();
+        let eps = thermal_strain(&temp, &mat, &fes, 20.0, StrainMeasure::Linear).unwrap();
         let s = eps.get(0).unwrap().read();
         assert_eq!(
             s.components(),
@@ -223,7 +250,7 @@ mod tests {
             .set_uniform("alpha", 1e-5)
             .unwrap();
 
-        let eps = thermal_strain(&temp, &mat, &fes, 20.0).unwrap();
+        let eps = thermal_strain(&temp, &mat, &fes, 20.0, StrainMeasure::Linear).unwrap();
         let s = eps.get(0).unwrap().read();
         for g in 0..s.gauss_count() {
             for comp in ["eps_xx", "eps_xy", "eps_yy"] {
@@ -241,7 +268,7 @@ mod tests {
         // Material without alpha.
         let mat = ElementField::new(&fes, vec!["E".into()]).unwrap();
 
-        let err = thermal_strain(&temp, &mat, &fes, 20.0).unwrap_err();
+        let err = thermal_strain(&temp, &mat, &fes, 20.0, StrainMeasure::Linear).unwrap_err();
         assert!(format!("{err}").contains("alpha"), "unexpected: {err}");
     }
 }

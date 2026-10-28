@@ -1,5 +1,5 @@
 """Python tests for unilateral (inequality) constraints (`sense=">="` / `"<="`)
-and the active-set solver `solve_unilateral`.
+and the active-set loop `solve` runs when the matrix carries them.
 
 A 1-D heat-conduction bar `-T'' = 0` on `[0, 1]`, `T(0) = 0` and a flux load
 `q` at the right end: the unconstrained solution is `T(x) = q·x`. A unilateral
@@ -7,9 +7,8 @@ bound `T(1) ⋈ a` either releases (feasible, `λ = 0`) or holds active
 (`T(1) = a`, `λ = q − a` — `≤ 0` for `≥`, `≥ 0` for `≤`).
 """
 
-import pytest
-
 import pyrucast
+import pytest
 
 N_ELEMS = 4
 H = 1.0 / N_ELEMS
@@ -37,15 +36,13 @@ def _bounded_bar(q, bound, sense):
     c, nodes, fes, materials = _heat_bar()
 
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-    mult0 = pyrucast.mesh.barycenter(imposed0)
     conduction = pyrucast.model.heat_conduction(fes)
-    dirichlet = pyrucast.model.dirichlet(conduction, "T", imposed0, mult0)
-    dir_mult = mult0.node(0, 0, 0)
+    dirichlet = pyrucast.model.dirichlet(imposed0, conduction, "T")
+    dir_mult = dirichlet.multiplier_mesh().node(0, 0, 0)
 
     imposed1 = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
-    mult1 = pyrucast.mesh.barycenter(imposed1)
-    unilateral = pyrucast.model.dirichlet(conduction, "T", imposed1, mult1, sense=sense)
-    uni_mult = mult1.node(0, 0, 0)
+    unilateral = pyrucast.model.dirichlet(imposed1, conduction, "T", sense=sense)
+    uni_mult = unilateral.multiplier_mesh().node(0, 0, 0)
 
     model = pyrucast.model.heat_conduction(fes) | dirichlet | unilateral
 
@@ -53,10 +50,10 @@ def _bounded_bar(q, bound, sense):
     rhs_mesh.unit().add_cell([nodes[-1]])
     rhs_mesh.unit().add_cell([dir_mult])
     rhs_mesh.unit().add_cell([uni_mult])
-    rhs = pyrucast.NodeField(rhs_mesh, ["q", "imposed_T"])
+    rhs = pyrucast.NodeField(rhs_mesh, ["q", "imposed"])
     rhs[0].set_value(nodes[-1], "q", q)
-    rhs[0].set_value(dir_mult, "imposed_T", 0.0)
-    rhs[0].set_value(uni_mult, "imposed_T", bound)
+    rhs[0].set_value(dir_mult, "imposed", 0.0)
+    rhs[0].set_value(uni_mult, "imposed", bound)
 
     return nodes, model, materials, rhs, uni_mult
 
@@ -64,7 +61,7 @@ def _bounded_bar(q, bound, sense):
 def _check(nodes, solution, uni_mult, slope, lam):
     for i, node in enumerate(nodes):
         assert abs(solution.value(node, "T") - slope * i * H) < TOL
-    assert abs(solution.value(uni_mult, "lambda_T") - lam) < TOL
+    assert abs(solution.value(uni_mult, "lambda") - lam) < TOL
 
 
 @pytest.mark.parametrize(
@@ -80,7 +77,7 @@ def test_unilateral_bound_statuses(q, bound, sense, slope, lam):
     """The four sense × status cases of a bound `T(1) ⋈ a` under a flux `q`."""
     nodes, model, materials, rhs, uni_mult = _bounded_bar(q, bound, sense)
     k = pyrucast.matrix.stiffness(model, materials)
-    solution = pyrucast.solver.solve_unilateral(k, model, rhs)
+    solution = pyrucast.solver.solve(k, rhs)
     _check(nodes, solution, uni_mult, slope, lam)
 
 
@@ -88,15 +85,15 @@ def test_warm_start_survives_a_status_flip():
     """Re-solving on the same matrix warm-starts; a load flip re-iterates."""
     nodes, model, materials, rhs, uni_mult = _bounded_bar(1.0, 2.0, ">=")
     k = pyrucast.matrix.stiffness(model, materials)
-    first = pyrucast.solver.solve_unilateral(k, model, rhs)
+    first = pyrucast.solver.solve(k, rhs)
     _check(nodes, first, uni_mult, 2.0, -1.0)
     # Identical re-solve: pure warm start (cached status + factorization).
-    again = pyrucast.solver.solve_unilateral(k, model, rhs)
+    again = pyrucast.solver.solve(k, rhs)
     _check(nodes, again, uni_mult, 2.0, -1.0)
     # Stronger push on the same matrix: the relation must release from the
     # warm-started (active) status.
     rhs[0].set_value(nodes[-1], "q", 5.0)
-    released = pyrucast.solver.solve_unilateral(k, model, rhs)
+    released = pyrucast.solver.solve(k, rhs)
     _check(nodes, released, uni_mult, 5.0, 0.0)
 
 
@@ -106,66 +103,72 @@ def test_unilateral_mpc_difference_relation():
         c, nodes, fes, materials = _heat_bar()
 
         imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-        mult0 = pyrucast.mesh.barycenter(imposed0)
         conduction = pyrucast.model.heat_conduction(fes)
-        dirichlet = pyrucast.model.dirichlet(conduction, "T", imposed0, mult0)
-        dir_mult = mult0.node(0, 0, 0)
+        dirichlet = pyrucast.model.dirichlet(imposed0, conduction, "T")
+        dir_mult = dirichlet.multiplier_mesh().node(0, 0, 0)
 
         base = pyrucast.model.heat_conduction(fes)
         mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
         mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-        mult_mpc = pyrucast.mesh.barycenter(mesh_last)
         mpc = pyrucast.model.mpc(
-            base,
             [(mesh_last, "T", 1.0), (mesh_first, "T", -1.0)],
-            mult_mpc,
+            base,
             sense=">=",
         )
-        mpc_mult = mult_mpc.node(0, 0, 0)
+        mpc_mult = mpc.multiplier_mesh().node(0, 0, 0)
 
         model = base | dirichlet | mpc
         rhs_mesh = pyrucast.Mesh(c, "POI1")
         rhs_mesh.unit().add_cell([dir_mult])
         rhs_mesh.unit().add_cell([mpc_mult])
-        rhs = pyrucast.NodeField(rhs_mesh, ["imposed_T", "mpc_rhs"])
-        rhs[0].set_value(dir_mult, "imposed_T", 0.0)
-        rhs[0].set_value(mpc_mult, "mpc_rhs", g)
+        rhs = pyrucast.NodeField(rhs_mesh, ["imposed"])
+        rhs[0].set_value(dir_mult, "imposed", 0.0)
+        rhs[0].set_value(mpc_mult, "imposed", g)
 
-        solution = pyrucast.solver.solve_unilateral(
-            pyrucast.matrix.stiffness(model, materials), model, rhs
+        solution = pyrucast.solver.solve(
+            pyrucast.matrix.stiffness(model, materials), rhs
         )
         for i, node in enumerate(nodes):
             assert abs(solution.value(node, "T") - slope * i * H) < TOL
-        lam = solution.value(mpc_mult, "lambda_mpc")
+        lam = solution.value(mpc_mult, "lambda")
         if slope == 0.0:
             assert abs(lam) < TOL
         else:
             assert lam < 0.0
 
 
-def test_all_equality_model_falls_back_to_plain_solve():
-    """No inequality: `solve_unilateral` agrees with the plain `solve`."""
-    nodes, model, materials, rhs, _ = _bounded_bar(3.0, 0.5, "=")
-    k = pyrucast.matrix.stiffness(model, materials)
-    a = pyrucast.solver.solve_unilateral(k, model, rhs)
-    b = pyrucast.solver.solve(k, rhs)
-    for node in nodes:
-        assert abs(a.value(node, "T") - b.value(node, "T")) < TOL
+def test_the_matrix_carries_the_sense():
+    """Same bar, same load, the bound declared `>=` or `=`: `solve` reads which
+    from the matrix. Feasible push (`q = 5 > 2`): the inequality releases
+    (`T(1) = 5`), the equation holds (`T(1) = 2`)."""
+    answers = {}
+    for sense in (">=", "="):
+        nodes, model, materials, rhs, _ = _bounded_bar(5.0, 2.0, sense)
+        k = pyrucast.matrix.stiffness(model, materials)
+        answers[sense] = pyrucast.solver.solve(k, rhs).value(nodes[-1], "T")
+    assert abs(answers[">="] - 5.0) < TOL
+    assert abs(answers["="] - 2.0) < TOL
 
 
-def test_eliminate_rejects_unilateral_relations():
-    """`solve_eliminate` must reject a unilateral model with a clear error."""
-    _, model, materials, rhs, _ = _bounded_bar(1.0, 2.0, ">=")
+def test_elimination_keeps_the_inequalities():
+    """The elimination eliminates the equation `T(0) = 0` and keeps the bound
+    `T(1) >= 2` on the reduced system: same field and same multiplier as the
+    Lagrange path. Under `q = 1` the bound saturates: `T = 2x`, `lambda = -1`."""
+    nodes, model, materials, rhs, uni_mult = _bounded_bar(1.0, 2.0, ">=")
     k = pyrucast.matrix.stiffness(model, materials)
-    with pytest.raises(Exception, match="solve_unilateral"):
-        pyrucast.solver.solve_eliminate(k, model, rhs)
+    lagrange = pyrucast.solver.solve(k, rhs)
+    elimination = pyrucast.solver.solve(k, rhs, relations="eliminate")
+    for i, node in enumerate(nodes):
+        assert abs(elimination.value(node, "T") - 2.0 * i * H) < TOL
+        assert abs(elimination.value(node, "T") - lagrange.value(node, "T")) < TOL
+    assert abs(elimination.value(uni_mult, "lambda") + 1.0) < TOL
 
 
 def test_unknown_sense_rejected():
-    """An unknown `sense` string raises a clear error at model build."""
+    """An unknown `sense` is a bad argument: a `ValueError` naming what is
+    accepted, raised at model build."""
     _, nodes, fes, _ = _heat_bar()
     imposed = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-    mult = pyrucast.mesh.barycenter(imposed)
     conduction = pyrucast.model.heat_conduction(fes)
-    with pytest.raises(Exception, match="sense"):
-        pyrucast.model.dirichlet(conduction, "T", imposed, mult, sense="~")
+    with pytest.raises(ValueError, match="relation sense '~'"):
+        pyrucast.model.dirichlet(imposed, conduction, "T", sense="~")

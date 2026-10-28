@@ -90,6 +90,10 @@ NO_METHOD = {
     "beam_deformation": "exige déplacements + rotations",
     "shell_deformation": "requires the six shell DOFs, and the formulation",
     "thermal_strain": "requires a temperature, and alpha in the material",
+    "stress_measure": "requires a stress named after its measure (sigma_*, tau_*, P_*, "
+    "S_* or T_*) and a deformation gradient F_*",
+    "rotate_frame": "turns the material axes V1*/V2* of a material field, and requires a "
+    "deformation gradient F_*",
     "merge": "symmetric — `a | b` is already its form",
     "psca": "symmetric — order does not matter",
 }
@@ -100,7 +104,7 @@ PYI = pathlib.Path(pyrucast.__file__).parent / "_pyrucast" / "__init__.pyi"
 def free_functions():
     """(name, subject type, return type) of the stub's free functions."""
     for name, args, ret in re.findall(
-        r"^def (\w+)\((.*?)\) -> ([^:]+):", PYI.read_text(), re.M
+        r"^def (\w+)\((.*?)\) -> ([^:]+):", PYI.read_text(), re.MULTILINE
     ):
         parts = [a.strip() for a in args.split(",") if a.strip()]
         if not parts:

@@ -34,10 +34,11 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field;
 use pyrucast::ops::element_field::{material_field, StrainMeasure};
-use pyrucast::ops::solver::lu::{solve, solve_with_options, SolveMethod, SolveOptions};
+use pyrucast::ops::solver::{solve, solve_with_options, SolveMethod, SolveOptions};
 
 /// Grid side for the assembly / integration groups.
 ///
@@ -107,7 +108,13 @@ fn elasticity_grid_with(n: usize, model_kind: Kinematics) -> Grid {
         }
     }
     let fespace = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    let model = model::elasticity(&fespace, model_kind).unwrap();
+    let model = model::elasticity(
+        &fespace,
+        model_kind,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )
+    .unwrap();
     let materials = material_field(&model, &[("E", 210e9), ("nu", 0.3)]).unwrap();
 
     // A smooth displacement field u = (0.01·x, −0.005·y) → constant strain.

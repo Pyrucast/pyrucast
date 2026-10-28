@@ -4,9 +4,9 @@ A classic patch test: two elastic blocks stacked along `y`, separated by an
 initial gap `G0`. A pressure on the upper block closes the contact and
 transmits a uniform stress across the interface — the pyrucast equivalent of
 Cast3M's node-to-surface contact (section 10 of the training), driven here
-straight by the active-set solver `solve_unilateral` rather than by
-`step_by_step` (which cannot yet compose thermics, plasticity and contact in
-a single table).
+straight by the active-set loop of `solve`, in a single solve —
+`pyrucast.stepping.step_by_step` composes the same contact with heat,
+plasticity and load steps when a history is needed.
 
 Lancement ::
 
@@ -56,8 +56,7 @@ def bloc(coords: pc.Coords, y0: float):
 
 def clamp(target, nodes, var):
     imposed = pc.mesh.poi1_from_nodes(nodes)
-    multiplier = pc.mesh.barycenter(imposed)
-    return pc.model.dirichlet(target, var, imposed, multiplier)
+    return pc.model.dirichlet(imposed, target, var)
 
 
 def bord_horizontal(mesh: pc.Mesh, y: float) -> pc.Mesh:
@@ -87,7 +86,7 @@ def main() -> None:
     esclave = pc.mesh.poi1_from_nodes([haut[idx(i, 0)] for i in range(N + 1)])
 
     elasticite = pc.model.elasticity(fes, "plane_stress")
-    contact = pc.model.contact(elasticite, esclave, maitre, ["u_x", "u_y"])
+    contact = pc.model.contact(esclave, maitre, elasticite, ["u_x", "u_y"])
     # ANCHOR_END: geometrie_contact
 
     # ANCHOR: modele_contact
@@ -105,16 +104,14 @@ def main() -> None:
     materiaux = pc.element_field.material_field(
         modele, [("E", E), ("nu", 0.0), ("phi_f_y", -S)]
     )
-    traction = pc.node_field.external_forces(modele, materiaux)
-
-    # `contact_gaps()` supplies the contact's right-hand side — the Cast3M
-    # equivalent of preparing the unilateral problem before RESO.
-    second_membre = traction | modele.contact_gaps()
+    # The pressure and the contact's right-hand side −g₀: the gap is a load
+    # the contact carries, `external_forces` returns it with the others.
+    second_membre = pc.node_field.external_forces(modele, materiaux)
     # ANCHOR_END: chargement_contact
 
     # ANCHOR: resolution_contact
     K = pc.matrix.stiffness(modele, materiaux)
-    solution = pc.solver.solve_unilateral(K, modele, second_membre)
+    solution = pc.solver.solve(K, second_membre)
     # ANCHOR_END: resolution_contact
 
     print(f"Pression appliquée : {S}")
@@ -126,16 +123,13 @@ def main() -> None:
     # Réactions de contact : Σ(−λᵢ) doit reconstituer l'effort appliqué S.
     maillage_mult = contact.multiplier_mesh()
     lambdas = [
-        solution.value(maillage_mult.node(0, r, 0), "lambda_contact")
-        for r in range(N + 1)
+        solution.value(maillage_mult.node(0, r, 0), "lambda") for r in range(N + 1)
     ]
     print(f"\nΣ(−λ) = {sum(-lam for lam in lambdas):.6f}  (attendu {S})")
 
     out = os.environ.get("PYRUCAST_FORMATION_IMG_DIR", tempfile.gettempdir())
     chemin = os.path.join(out, "contact.svg")
-    maillage_mult.plot(
-        save=chemin, field=solution, component="lambda_contact", cmap="viridis"
-    )
+    maillage_mult.plot(save=chemin, field=solution, component="lambda", cmap="viridis")
     print(f"Contact reaction (λ) written to {chemin}")
 
 

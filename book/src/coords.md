@@ -106,6 +106,31 @@ Python :
 {{#include ../../tests/python/test_doc_coords.py:configurations}}
 ```
 
+Pour **calculer** dans une autre configuration — une matrice sur la déformée,
+une normale sur la paroi telle qu'elle est —, `in_config` l'active le temps
+d'un bloc puis rend la main à la configuration d'avant, même si le bloc échoue.
+C'est la forme à préférer à une paire `select(i)` … `select(0)`, qui laisse la
+mauvaise configuration active au premier `?` ou à la première exception. En
+Rust, une fonction qui reçoit le bloc en fermeture (l'idiome `with_*`) ; en
+Python, une méthode de `Coords` qui rend un gestionnaire de contexte,
+`with coords.in_config(i):`. Le verrou du `Coords` n'est pris qu'à
+l'entrée et à la sortie : le bloc lit et écrit les coordonnées librement, et
+peut imbriquer un autre `in_config`. La configuration active appartient au
+`Coords`, pas à l'appelant : un autre fil qui calcule sur le même `Coords`
+pendant le bloc la voit aussi.
+
+Rust :
+
+```rust,ignore
+{{#include ../../tests/doc_coords.rs:in_config}}
+```
+
+Python :
+
+```python
+{{#include ../../tests/python/test_doc_coords.py:in_config}}
+```
+
 ## Pourquoi plusieurs configurations dans un `Coords` plutôt que plusieurs `Coords` ?
 
 cast3m suit historiquement la convention inverse : un objet de coordonnées =

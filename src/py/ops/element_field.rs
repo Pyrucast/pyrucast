@@ -2,7 +2,7 @@
 //! produce an `ElementField`.
 
 use crate::handle::Handle;
-use crate::ops::element_field::StrainMeasure;
+use crate::ops::element_field::{StrainMeasure, StressMeasure};
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::model::{PyModel, PySubModel};
@@ -99,20 +99,161 @@ pub fn interp_to_gauss(
 /// mechanical strain. Backbone of uncoupled thermomechanics: assemble the
 /// thermal load with `internal_forces(integrate_behavior(model, ε_th,
 /// materials))` and recover `σ = D:(ε − ε_th)`.
+///
+/// `measure` is the strain the law reads (`"linear"`, `"green_lagrange"`,
+/// `"hencky"`): the dilation of stretch `1 + α·ΔT` is given exactly in it —
+/// `α·ΔT`, `½((1 + α·ΔT)² − 1)`, `ln(1 + α·ΔT)` — under its names (`eps_*`,
+/// `E_*`, `H_*`).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
+#[pyo3(signature = (temperature, materials, fespace, t_ref, measure=StrainMeasure::Linear))]
 pub fn thermal_strain(
     temperature: PyRef<PyElementField>,
     materials: PyRef<PyElementField>,
     fespace: PyRef<PyFiniteElementSpace>,
     t_ref: f64,
+    measure: StrainMeasure,
 ) -> PyResult<PyElementField> {
     let ef = crate::ops::element_field::thermal_strain(
         &temperature.inner,
         &materials.inner,
         &fespace.inner,
         t_ref,
+        measure,
     )?;
+    Ok(PyElementField { inner: ef })
+}
+
+/// `stress` converted to the measure `target`, point by point, with the
+/// deformation gradient `gradient` — the field `deformation(u, fespace,
+/// "gradient")` produces (`F_xx, F_xy, …`).
+///
+/// `target` is `"cauchy"` (`sigma_*`, the true stress), `"kirchhoff"`
+/// (`tau_* = J sigma_*`), `"pk1"` (`P_*`, the nominal stress `F S`, not
+/// symmetric), `"pk2"` (`S_*`, dual of Green–Lagrange) or `"hencky"` (`T_*`,
+/// dual of the Hencky strain, what a law reading Hencky writes). The measure of
+/// `stress` is recognised by its names, one per zone. This is how the
+/// Lagrangian stress a law writes in large transformations becomes the first
+/// Piola–Kirchhoff `internal_forces` reads, or the Cauchy stress of the
+/// results — the stress half of Cast3M `CONF`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn stress_measure(
+    stress: PyRef<PyElementField>,
+    gradient: PyRef<PyElementField>,
+    target: StressMeasure,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::element_field::stress_measure(&stress.inner, &gradient.inner, target)?;
+    Ok(PyElementField { inner: ef })
+}
+
+/// `field` with its material axes turned with the part: `V1*` (and `V2*` in
+/// 3-D) turned by the rotation `R` of the polar decomposition `F = R U` at each
+/// point, `F` read from `gradient` — the field `deformation(u, fespace,
+/// "gradient")` produces, computed on the **reference** configuration. Every
+/// other component is copied as it is: the material is the same, only its axes
+/// follow the rotation, `k = R k₀ Rᵀ`. This is what a conduction or a diffusion
+/// computed on the deformed part reads.
+///
+/// A zone without axes (an isotropic material) comes back as it is, shared. A
+/// zone carrying part of the axes only, or a gradient missing on a zone's FE
+/// space, is an error.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn rotate_frame(
+    field: PyRef<PyElementField>,
+    gradient: PyRef<PyElementField>,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::element_field::rotate_frame(&field.inner, &gradient.inner)?;
+    Ok(PyElementField { inner: ef })
+}
+
+/// Elastic stress `σ = D:ε` of a strain field at the Gauss points of every
+/// continuum sub-model of `model` — Cast3M `ELAS` applied to a strain.
+///
+/// `D` is the operator each law predicts with: the Hooke matrix of an
+/// elasticity, in its symmetry; the isotropic `D` behind a plasticity's elastic
+/// predictor; the **undamaged** `D` a damage law degrades. `strain` is in
+/// tensor convention, the layout of `deformation` and `thermal_strain`;
+/// `materials` needs only each law's elastic constants (`E`, `nu` when
+/// isotropic). One zone per continuum sub-model, its components the stresses
+/// the law writes; a sub-model with no elastic operator (conduction, bar, beam,
+/// constraint) contributes none.
+#[py_op(method_on = PyModel)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn elastic_stress(
+    model: PyRef<PyModel>,
+    strain: PyRef<PyElementField>,
+    materials: PyRef<PyElementField>,
+) -> PyResult<PyElementField> {
+    let ef =
+        crate::ops::element_field::elastic_stress(&model.inner, &strain.inner, &materials.inner)?;
+    Ok(PyElementField { inner: ef })
+}
+
+/// Elastic strain `ε = D⁻¹:σ` of a stress field at the Gauss points of every
+/// continuum sub-model of `model` — the inverse of `elastic_stress` (Cast3M
+/// `ELAS` applied to a stress).
+///
+/// `stress` carries the stresses each law writes (`sigma_xx`, …; the state
+/// returned by `integrate_behavior` will do); `materials` the elastic
+/// constants. The result is in tensor convention, the layout of `deformation`,
+/// so it subtracts from a strain component for component; in plane stress the
+/// out-of-plane `eps_zz` is not written. Raises when `D` is singular at a point
+/// (a zero modulus).
+#[py_op(method_on = PyModel)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn elastic_strain(
+    model: PyRef<PyModel>,
+    stress: PyRef<PyElementField>,
+    materials: PyRef<PyElementField>,
+) -> PyResult<PyElementField> {
+    let ef =
+        crate::ops::element_field::elastic_strain(&model.inner, &stress.inner, &materials.inner)?;
+    Ok(PyElementField { inner: ef })
+}
+
+/// The input of every law of `model`, produced from the nodal `solution` — the
+/// model's `B`, of which `internal_forces` is the transpose (Cast3M `EPSI`,
+/// extended to every physics).
+///
+/// One zone per sub-model with a law, on its behaviour space, carrying what
+/// that law reads: the small-strain tensor `eps_*` of a continuum or a bar, the
+/// gradient `grad_T_*` of conduction, `T` itself for radiation, the section
+/// strains of a beam, the generalized strains of a shell. Each law reads its
+/// own unknowns of `solution` by name, so one solution — displacement,
+/// temperature, multipliers — serves the whole model; sub-models without a law
+/// produce nothing. `materials` is read by the beams alone (their `Φ`). The
+/// result feeds `integrate_behavior` as is.
+#[py_op(method_on = PyModel)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn strain(
+    model: PyRef<PyModel>,
+    solution: PyRef<PyNodeField>,
+    materials: PyRef<PyElementField>,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::element_field::strain(&model.inner, &solution.inner, &materials.inner)?;
+    Ok(PyElementField { inner: ef })
+}
+
+/// Integral of every component of `field` over **each cell** (Cast3M
+/// `INTG 'ELEM'`), with the field's own quadrature: `Σ_g f(g)·|J|·w_g`, the
+/// `2πr` included on a body of revolution. The result lives on `target`, a
+/// space of the same mesh with **one point per cell** —
+/// `FiniteElementSpace(mesh, quadrature="REDUCED")`, a single point at each
+/// centroid. Integrating `1` gives every cell's measure. Raises when `target`
+/// has several points per cell or does not cover the field's mesh.
+#[py_op(method_on = PyElementField)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn cell_integral(
+    field: PyRef<PyElementField>,
+    target: PyRef<PyFiniteElementSpace>,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::element_field::cell_integral(&field.inner, &target.inner)?;
     Ok(PyElementField { inner: ef })
 }
 
@@ -153,7 +294,7 @@ pub fn beam_deformation(
 /// Generalised **strains of a shell** at the Gauss points — the geometric
 /// producer of the behaviour input for `shell`.
 ///
-/// `shell_deformation(field, fespace, model)` with `model` the formulation
+/// `shell_deformation(field, fespace, formulation)` with `formulation`
 /// (`"thick"` or `"kirchhoff"`), which decides the bending rows and whether a
 /// transverse shear is reported at all:
 ///
@@ -173,10 +314,12 @@ pub fn beam_deformation(
 pub fn shell_deformation(
     field: PyRef<PyNodeField>,
     fespace: PyRef<PyFiniteElementSpace>,
-    model: &str,
+    formulation: &str,
 ) -> PyResult<PyElementField> {
-    let model = <crate::models::shell::ShellModel as crate::named::Named>::parse(model)?;
-    let ef = crate::ops::element_field::shell_deformation(&field.inner, &fespace.inner, model)?;
+    let formulation =
+        <crate::models::shell::ShellFormulation as crate::named::Named>::parse(formulation)?;
+    let ef =
+        crate::ops::element_field::shell_deformation(&field.inner, &fespace.inner, formulation)?;
     Ok(PyElementField { inner: ef })
 }
 

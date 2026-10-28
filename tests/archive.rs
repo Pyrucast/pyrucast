@@ -16,6 +16,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::error::Result;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::ops::model;
 
 /// A path named `name` in a directory of its own, removed with the file when
@@ -359,7 +360,7 @@ fn a_handle_alone_cannot_be_serialized() -> Result<()> {
 #[test]
 fn a_whole_study_makes_the_round_trip() -> Result<()> {
     use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    use pyrucast::ops::solver::lu::solve;
+    use pyrucast::ops::solver::solve;
 
     const K: f64 = 1.0;
     const Q: f64 = 10.0;
@@ -380,16 +381,10 @@ fn a_whole_study_makes_the_round_trip() -> Result<()> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(
         nodes.last().unwrap(),
     ))?);
-    let multiplier = pyrucast::ops::mesh::barycenter(&imposed)?;
-    let mult = multiplier.node(0, 0, 0)?.id();
-    let conduction = model::heat_conduction(&fes)?;
-    let model = conduction.union(&model::dirichlet(
-        &conduction,
-        "T",
-        &imposed,
-        &multiplier,
-        Default::default(),
-    )?)?;
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
+    let dirichlet = model::dirichlet(&imposed, &conduction, "T", Default::default())?;
+    let mult = dirichlet.multiplier_mesh()?.node(0, 0, 0)?.id();
+    let model = conduction.union(&dirichlet)?;
     let materials = pyrucast::ops::element_field::material_field(&model, &[("k", K)])?;
 
     let node0 = nodes[0].id();
@@ -397,9 +392,9 @@ fn a_whole_study_makes_the_round_trip() -> Result<()> {
     load_sm.add_cell(&[node0])?;
     load_sm.add_cell(&[mult])?;
     let load_sm = Handle::new(load_sm);
-    let mut r = SubNodeField::from_poi1(&load_sm, vec!["imposed_T".into(), "q".into()])?;
+    let mut r = SubNodeField::from_poi1(&load_sm, vec!["imposed".into(), "q".into()])?;
     r.set_value(node0, "q", Q)?;
-    r.set_value(mult, "imposed_T", T_IMPOSED)?;
+    r.set_value(mult, "imposed", T_IMPOSED)?;
     let rhs = NodeField::from_sub(r);
 
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
@@ -445,10 +440,34 @@ fn a_whole_study_makes_the_round_trip() -> Result<()> {
             before.value(node.id(), "T")?
         );
     }
-    assert_eq!(
-        after.value(mult, "lambda_T")?,
-        before.value(mult, "lambda_T")?
-    );
+    assert_eq!(after.value(mult, "lambda")?, before.value(mult, "lambda")?);
+    Ok(())
+}
+
+/// The sense of a unilateral relation is part of its block: a matrix saved and
+/// reloaded still tells its inequality rows from its equations.
+#[test]
+fn a_unilateral_matrix_keeps_its_sense() -> Result<()> {
+    use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    use pyrucast::models::RelationSense;
+
+    let (coords, mesh, ids) = line_with_ids(2)?;
+    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    let support = Mesh::from_submesh(SubMesh::poi1_from_node_ids(coords, &ids[..1])?);
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
+    let floor = model::dirichlet(&support, &conduction, "T", RelationSense::GreaterEqual)?;
+    let model = conduction.union(&floor)?;
+    let materials = pyrucast::ops::element_field::material_field(&model, &[("k", 1.0)])?;
+    let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
+    let senses = |m: &pyrucast::containers::matrix::Matrix| -> Vec<RelationSense> {
+        m.iter().map(|b| b.read().row_sense()).collect()
+    };
+    assert!(senses(&stiffness).contains(&RelationSense::GreaterEqual));
+
+    let path = tmp("unilateral.pyr");
+    archive::save(&path, &[("rigidite", &stiffness as &dyn ArchiveRoot)])?;
+    let back = archive::load(&path)?.matrix("rigidite")?;
+    assert_eq!(senses(&back), senses(&stiffness));
     Ok(())
 }
 

@@ -30,11 +30,6 @@ def main() -> None:
     inner_mesh = pc.mesh.circle(center, normal, 1.0, 12)
     outer_mesh = pc.mesh.circle(center, normal, 2.0, 12)
 
-    # Contour for triangulate_surface: a Mesh holding both SEG2 loops. The CDT
-    # detects the outer loop automatically (largest signed area) and
-    # treats the inner one as a hole.
-    contour = inner_mesh | outer_mesh
-    contour = outer_mesh
     surface_mesh = pc.mesh.sweep(inner_mesh, outer_mesh, 2)
 
     print(surface_mesh)

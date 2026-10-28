@@ -1,0 +1,1076 @@
+//! Large transformations in total Lagrangian: a law reading the Green–Lagrange
+//! strain, its stress carried to the other measures, and the internal forces
+//! written with the first Piola–Kirchhoff stress on the reference
+//! configuration.
+//!
+//! Every oracle is independent of the operator it checks:
+//!
+//! - a **rigid rotation** strains nothing: no strain, no stress, no force —
+//!   where the linear strain of the same motion is not zero;
+//! - **objectivity**: rotating a stretched state rotates its Cauchy stress;
+//! - **duality**: the internal forces are the derivative of the stored energy
+//!   `∫ ½ E:S`, taken by finite differences;
+//! - the **operator** of the stepping — the elastic stiffness and the
+//!   geometric stiffness evaluated on the current configuration — is the
+//!   derivative of those forces where theory says it is exactly: after a rigid
+//!   rotation for the first, at frozen `S` for the second;
+//! - the **conversions** against the formulas written out with `nalgebra`.
+
+use nalgebra::Matrix3;
+use pyrucast::aggregate::Aggregate;
+use pyrucast::atoms::{ElementType, Node};
+use pyrucast::containers::element_field::ElementField;
+use pyrucast::containers::field::SubField;
+use pyrucast::containers::finite_element_space::FiniteElementSpace;
+use pyrucast::containers::matrix::Matrix;
+use pyrucast::containers::mesh::{Mesh, SubMesh};
+use pyrucast::containers::model::Model;
+use pyrucast::containers::node_field::NodeField;
+use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
+use pyrucast::models::tensor::Kinematics;
+use pyrucast::ops::coords as ops_coords;
+use pyrucast::ops::element_field::behavior::integrate;
+use pyrucast::ops::element_field::{
+    deformation, material_field, strain, stress_measure, StrainMeasure, StressMeasure,
+};
+use pyrucast::ops::measure::integral_element;
+use pyrucast::ops::node_field::{external_forces, internal_forces};
+use pyrucast::ops::{matrix, model};
+use pyrucast::Result;
+
+const AXES: [&str; 2] = ["x", "y"];
+
+/// Two distorted QUA4 side by side — nothing uniform, nothing aligned.
+struct Patch {
+    coords: Handle<Coords>,
+    mesh: Mesh,
+    fes: FiniteElementSpace,
+    nodes: Vec<Node>,
+}
+
+fn patch() -> Result<Patch> {
+    let coords = Handle::new(Coords::new(2)?);
+    let points = [
+        [0.0, 0.0],
+        [1.1, 0.1],
+        [2.0, 0.0],
+        [0.1, 1.0],
+        [1.0, 1.2],
+        [2.1, 0.9],
+    ];
+    let nodes: Vec<Node> = points
+        .iter()
+        .map(|p| Node::create_in(coords.clone(), p))
+        .collect::<Result<_>>()?;
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
+    mesh.add_cell(&[nodes[0].id(), nodes[1].id(), nodes[4].id(), nodes[3].id()])?;
+    mesh.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[5].id(), nodes[4].id()])?;
+    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    Ok(Patch {
+        coords,
+        mesh,
+        fes,
+        nodes,
+    })
+}
+
+/// Plane-strain elasticity reading `measure`, and its material.
+fn solid(p: &Patch, measure: StrainMeasure) -> Result<(Model, ElementField)> {
+    let solid = model::elasticity(
+        &p.fes,
+        Kinematics::PlaneStrain,
+        MaterialSymmetry::Isotropic,
+        measure,
+    )?;
+    let materials = material_field(&solid, &[("E", 100.0), ("nu", 0.3)])?;
+    Ok((solid, materials))
+}
+
+/// The nodal displacement `values[k]` at node `k`.
+fn displacement(p: &Patch, values: &[[f64; 2]]) -> Result<NodeField> {
+    let u = NodeField::new(&p.mesh, vec!["u_x".into(), "u_y".into()])?;
+    {
+        let mut zone = u.get(0)?.write();
+        for (n, v) in p.nodes.iter().zip(values) {
+            zone.set_value(n.id(), "u_x", v[0])?;
+            zone.set_value(n.id(), "u_y", v[1])?;
+        }
+    }
+    Ok(u)
+}
+
+/// The displacement of the affine motion `x = A X`.
+fn affine(p: &Patch, a: [[f64; 2]; 2]) -> Result<Vec<[f64; 2]>> {
+    p.nodes
+        .iter()
+        .map(|n| {
+            let x = n.position()?;
+            Ok([
+                a[0][0] * x[0] + a[0][1] * x[1] - x[0],
+                a[1][0] * x[0] + a[1][1] * x[1] - x[1],
+            ])
+        })
+        .collect()
+}
+
+fn rotation(theta: f64) -> [[f64; 2]; 2] {
+    let (s, c) = theta.sin_cos();
+    [[c, -s], [s, c]]
+}
+
+/// The law's state at `u`: what `strain` and `integrate` give.
+fn state(m: &Model, mat: &ElementField, u: &NodeField) -> Result<(ElementField, ElementField)> {
+    let eps = strain(m, u, mat)?;
+    let s = integrate(m, &eps, None, mat, None)?;
+    Ok((eps, s))
+}
+
+/// The internal forces of the law's state `s`, with the gradient of `u`:
+/// `∫ P·∇₀N` with `P = F S`.
+fn forces(
+    p: &Patch,
+    m: &Model,
+    mat: &ElementField,
+    s: &ElementField,
+    u: &NodeField,
+) -> Result<NodeField> {
+    let f = deformation(u, &p.fes, StrainMeasure::Gradient)?;
+    let pk1 = stress_measure(s, &f, StressMeasure::FirstPiolaKirchhoff)?;
+    internal_forces(m, &pk1, u, mat)
+}
+
+/// Every value of `component` in `field`, over all zones, cells and points.
+fn values(field: &ElementField, component: &str) -> Result<Vec<f64>> {
+    let mut out = Vec::new();
+    for zone in field {
+        let z = zone.read();
+        for cell in 0..z.cell_count() {
+            for g in 0..z.gauss_count() {
+                out.push(z.value(cell, g, component)?);
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn largest(xs: &[f64]) -> f64 {
+    xs.iter().fold(0.0_f64, |m, v| m.max(v.abs()))
+}
+
+/// The nodal force on node `k`, axis `a`.
+fn force(f: &NodeField, p: &Patch, k: usize, a: usize) -> Result<f64> {
+    f.value(p.nodes[k].id(), &format!("f_{}", AXES[a]))
+}
+
+/// `K e_(k,a)`: the column `(k, a)` of `K`, every node and axis.
+fn column(k_mat: &Matrix, p: &Patch, k: usize, a: usize) -> Result<Vec<f64>> {
+    let mut unit = vec![[0.0; 2]; p.nodes.len()];
+    unit[k][a] = 1.0;
+    let e = displacement(p, &unit)?;
+    let ke = (k_mat * &e)?;
+    let mut out = Vec::new();
+    for j in 0..p.nodes.len() {
+        for b in 0..2 {
+            out.push(force(&ke, p, j, b)?);
+        }
+    }
+    Ok(out)
+}
+
+/// Evaluate `build` with the configuration `x = X + u` active, then restore the
+/// reference.
+fn on_current<T>(p: &Patch, u: &NodeField, build: impl FnOnce() -> Result<T>) -> Result<T> {
+    let current = p.coords.write().add_config("current");
+    let names = Some(vec!["u_x".to_string(), "u_y".to_string()]);
+    ops_coords::displace_from(u, 0, current, names)?;
+    ops_coords::in_config(&p.coords, current, build)
+}
+
+#[test]
+fn a_rigid_rotation_strains_nothing() -> Result<()> {
+    let p = patch()?;
+    let u = displacement(&p, &affine(&p, rotation(std::f64::consts::FRAC_PI_3))?)?;
+
+    let (gl, mat) = solid(&p, StrainMeasure::GreenLagrange)?;
+    let (eps, s) = state(&gl, &mat, &u)?;
+    for name in ["E_xx", "E_yy", "E_xy"] {
+        assert!(largest(&values(&eps, name)?) < 1e-14, "{name}");
+    }
+    let f = forces(&p, &gl, &mat, &s, &u)?;
+    for k in 0..p.nodes.len() {
+        for a in 0..2 {
+            assert!(force(&f, &p, k, a)?.abs() < 1e-12);
+        }
+    }
+    let grad = deformation(&u, &p.fes, StrainMeasure::Gradient)?;
+    let sigma = stress_measure(&s, &grad, StressMeasure::Cauchy)?;
+    assert!(largest(&values(&sigma, "sigma_xx")?) < 1e-12);
+
+    // The linear strain of the same motion is not zero: ε = (cos θ − 1) I.
+    let (linear, mat_lin) = solid(&p, StrainMeasure::Linear)?;
+    let eps_lin = strain(&linear, &u, &mat_lin)?;
+    let spurious = largest(&values(&eps_lin, "eps_xx")?);
+    assert!((spurious - 0.5).abs() < 1e-12, "ε_xx = {spurious}");
+    Ok(())
+}
+
+#[test]
+fn rotating_a_stretched_state_rotates_its_cauchy_stress() -> Result<()> {
+    let p = patch()?;
+    let (gl, mat) = solid(&p, StrainMeasure::GreenLagrange)?;
+    let stretch = [[1.2, 0.1], [0.0, 0.9]];
+    let r = rotation(0.7);
+    let turned = [
+        [
+            r[0][0] * stretch[0][0] + r[0][1] * stretch[1][0],
+            r[0][0] * stretch[0][1] + r[0][1] * stretch[1][1],
+        ],
+        [
+            r[1][0] * stretch[0][0] + r[1][1] * stretch[1][0],
+            r[1][0] * stretch[0][1] + r[1][1] * stretch[1][1],
+        ],
+    ];
+    let cauchy = |a: [[f64; 2]; 2]| -> Result<ElementField> {
+        let u = displacement(&p, &affine(&p, a)?)?;
+        let (_, s) = state(&gl, &mat, &u)?;
+        let grad = deformation(&u, &p.fes, StrainMeasure::Gradient)?;
+        stress_measure(&s, &grad, StressMeasure::Cauchy)
+    };
+    let (before, after) = (cauchy(stretch)?, cauchy(turned)?);
+    let read = |f: &ElementField, name: &str| -> Result<f64> { Ok(values(f, name)?[0]) };
+    let s0 = nalgebra::Matrix2::new(
+        read(&before, "sigma_xx")?,
+        read(&before, "sigma_xy")?,
+        read(&before, "sigma_xy")?,
+        read(&before, "sigma_yy")?,
+    );
+    let rm = nalgebra::Matrix2::new(r[0][0], r[0][1], r[1][0], r[1][1]);
+    let expected = rm * s0 * rm.transpose();
+    let got = nalgebra::Matrix2::new(
+        read(&after, "sigma_xx")?,
+        read(&after, "sigma_xy")?,
+        read(&after, "sigma_xy")?,
+        read(&after, "sigma_yy")?,
+    );
+    assert!(s0.norm() > 1.0, "a stretched state is stressed");
+    assert!((got - expected).norm() < 1e-10 * s0.norm());
+    Ok(())
+}
+
+/// A moderate, non-affine displacement of the patch.
+fn some_motion(p: &Patch) -> Result<Vec<[f64; 2]>> {
+    let base = affine(p, [[1.15, 0.2], [-0.1, 0.95]])?;
+    Ok(base
+        .iter()
+        .enumerate()
+        .map(|(k, v)| {
+            [
+                v[0] + 0.03 * (k as f64).sin(),
+                v[1] - 0.02 * (k as f64).cos(),
+            ]
+        })
+        .collect())
+}
+
+#[test]
+fn the_internal_forces_are_the_derivative_of_the_stored_energy() -> Result<()> {
+    // Green–Lagrange checks B(F); Hencky checks, on top, T → S.
+    for (measure, strain_name, stress_name) in [
+        (StrainMeasure::GreenLagrange, "E", "S"),
+        (StrainMeasure::Hencky, "H", "T"),
+    ] {
+        let p = patch()?;
+        let (law, mat) = solid(&p, measure)?;
+        // ∫ ½ ε:σ in the measure, tensor convention: the shear counts twice.
+        let energy = |values_u: &[[f64; 2]]| -> Result<f64> {
+            let u = displacement(&p, values_u)?;
+            let (eps, s) = state(&law, &mat, &u)?;
+            let (e, sz) = (eps.get(0)?.read().clone(), s.get(0)?.read().clone());
+            let density = ElementField::new(&p.fes, vec!["w".into()])?;
+            {
+                let mut z = density.get(0)?.write();
+                for cell in 0..z.cell_count() {
+                    for g in 0..z.gauss_count() {
+                        let pair = |ij: &str| -> Result<f64> {
+                            Ok(e.value(cell, g, &format!("{strain_name}_{ij}"))?
+                                * sz.value(cell, g, &format!("{stress_name}_{ij}"))?)
+                        };
+                        let w = 0.5 * (pair("xx")? + pair("yy")? + 2.0 * pair("xy")?);
+                        z.set_value(cell, g, "w", w)?;
+                    }
+                }
+            }
+            integral_element(&density, "w")
+        };
+
+        let motion = some_motion(&p)?;
+        let u = displacement(&p, &motion)?;
+        let (_, s) = state(&law, &mat, &u)?;
+        let f = forces(&p, &law, &mat, &s, &u)?;
+
+        let h = 1e-6;
+        let mut scale = 0.0_f64;
+        let mut worst = 0.0_f64;
+        for k in 0..p.nodes.len() {
+            for a in 0..2 {
+                let (mut plus, mut minus) = (motion.clone(), motion.clone());
+                plus[k][a] += h;
+                minus[k][a] -= h;
+                let derivative = (energy(&plus)? - energy(&minus)?) / (2.0 * h);
+                let fa = force(&f, &p, k, a)?;
+                scale = scale.max(fa.abs());
+                worst = worst.max((derivative - fa).abs());
+            }
+        }
+        assert!(scale > 1.0, "the patch is loaded");
+        assert!(
+            worst < 1e-6 * scale,
+            "{measure:?}: |∂W/∂u − f_int| = {worst}, scale {scale}"
+        );
+    }
+    Ok(())
+}
+
+/// A unit HEX8 cube, `ν = 0` elasticity reading `measure`, stretched to `λ`
+/// along x with nothing else moving — the exact uniaxial state when the
+/// Poisson ratio vanishes. Returns the nominal force on the face `x = 1`.
+fn uniaxial_force(measure: StrainMeasure, lambda: f64) -> Result<(f64, f64)> {
+    let coords = Handle::new(Coords::new(3)?);
+    let mut nodes = Vec::new();
+    for z in [0.0, 1.0] {
+        for (x, y) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)] {
+            nodes.push(Node::create_in(coords.clone(), &[x, y, z])?);
+        }
+    }
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::HEX8));
+    let ids: Vec<_> = nodes.iter().map(|n| n.id()).collect();
+    mesh.add_cell(&ids)?;
+    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    let law = model::elasticity(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        measure,
+    )?;
+    let mat = material_field(&law, &[("E", 100.0), ("nu", 0.0)])?;
+    let u = NodeField::new(&mesh, vec!["u_x".into(), "u_y".into(), "u_z".into()])?;
+    {
+        let mut z = u.get(0)?.write();
+        for n in &nodes {
+            z.set_value(n.id(), "u_x", (lambda - 1.0) * n.position()?[0])?;
+        }
+    }
+    let (_, s) = state(&law, &mat, &u)?;
+    let grad = deformation(&u, &fes, StrainMeasure::Gradient)?;
+    let pk1 = stress_measure(&s, &grad, StressMeasure::FirstPiolaKirchhoff)?;
+    let f = internal_forces(&law, &pk1, &u, &mat)?;
+    let mut on_face = 0.0;
+    for n in &nodes {
+        if n.position()?[0] == 1.0 {
+            on_face += f.value(n.id(), "f_x")?;
+        }
+    }
+    Ok((on_face, values(&pk1, "P_xx")?[0]))
+}
+
+#[test]
+fn a_uniaxial_stretch_gives_the_closed_form_nominal_force() -> Result<()> {
+    // E = 100, A₀ = 1, λ = 1.5: Saint-Venant–Kirchhoff, S = E·E_xx with
+    // E_xx = ½(λ² − 1), gives P = λ S; Hencky, T = E ln λ, S = T/λ², gives
+    // P = E ln λ / λ.
+    let (lambda, young) = (1.5_f64, 100.0);
+    let expected = [
+        (
+            StrainMeasure::GreenLagrange,
+            lambda * young * 0.5 * (lambda * lambda - 1.0),
+        ),
+        (StrainMeasure::Hencky, young * lambda.ln() / lambda),
+    ];
+    for (measure, nominal) in expected {
+        let (force, p_xx) = uniaxial_force(measure, lambda)?;
+        assert!(
+            (p_xx - nominal).abs() < 1e-12 * nominal,
+            "{measure:?}: P_xx = {p_xx}"
+        );
+        assert!(
+            (force - nominal).abs() < 1e-12 * nominal,
+            "{measure:?}: F = {force}"
+        );
+    }
+    Ok(())
+}
+
+/// Finite-difference column `(k, a)` of `f(u)`, every node and axis.
+fn fd_column(
+    p: &Patch,
+    motion: &[[f64; 2]],
+    k: usize,
+    a: usize,
+    f: impl Fn(&NodeField) -> Result<NodeField>,
+) -> Result<Vec<f64>> {
+    let h = 1e-6;
+    let (mut plus, mut minus) = (motion.to_vec(), motion.to_vec());
+    plus[k][a] += h;
+    minus[k][a] -= h;
+    let (fp, fm) = (f(&displacement(p, &plus)?)?, f(&displacement(p, &minus)?)?);
+    let mut out = Vec::new();
+    for j in 0..p.nodes.len() {
+        for b in 0..2 {
+            out.push((force(&fp, p, j, b)? - force(&fm, p, j, b)?) / (2.0 * h));
+        }
+    }
+    Ok(out)
+}
+
+fn compare(expected: &[f64], got: &[f64]) -> (f64, f64) {
+    let scale = largest(expected);
+    let worst = expected
+        .iter()
+        .zip(got)
+        .fold(0.0_f64, |m, (e, g)| m.max((e - g).abs()));
+    (worst, scale)
+}
+
+#[test]
+fn after_a_rigid_rotation_the_stiffness_on_the_current_configuration_is_the_tangent() -> Result<()>
+{
+    let p = patch()?;
+    let (gl, mat) = solid(&p, StrainMeasure::GreenLagrange)?;
+    let motion = affine(&p, rotation(1.1))?;
+    let u = displacement(&p, &motion)?;
+    let k_current = on_current(&p, &u, || matrix::stiffness(&gl, &mat))?;
+
+    for k in 0..p.nodes.len() {
+        for a in 0..2 {
+            let derivative = fd_column(&p, &motion, k, a, |v| {
+                let (_, s) = state(&gl, &mat, v)?;
+                forces(&p, &gl, &mat, &s, v)
+            })?;
+            let (worst, scale) = compare(&derivative, &column(&k_current, &p, k, a)?);
+            assert!(
+                worst < 1e-6 * scale,
+                "column ({k}, {a}): {worst} of {scale}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn the_geometric_stiffness_on_the_current_configuration_is_the_lagrangian_one() -> Result<()> {
+    let p = patch()?;
+    let (gl, mat) = solid(&p, StrainMeasure::GreenLagrange)?;
+    let motion = some_motion(&p)?;
+    let u = displacement(&p, &motion)?;
+    let (_, frozen) = state(&gl, &mat, &u)?;
+    let grad = deformation(&u, &p.fes, StrainMeasure::Gradient)?;
+    let sigma = stress_measure(&frozen, &grad, StressMeasure::Cauchy)?;
+    let k_sigma = on_current(&p, &u, || matrix::geometric(&gl, &mat, &sigma))?;
+
+    // At frozen S, ∂/∂u ∫ (F S)·∇₀N is ∫ ∇₀N·S·∇₀N — the Lagrangian K_σ.
+    for k in 0..p.nodes.len() {
+        for a in 0..2 {
+            let derivative = fd_column(&p, &motion, k, a, |v| forces(&p, &gl, &mat, &frozen, v))?;
+            let (worst, scale) = compare(&derivative, &column(&k_sigma, &p, k, a)?);
+            assert!(scale > 1e-3, "the state is stressed");
+            assert!(
+                worst < 1e-6 * scale,
+                "column ({k}, {a}): {worst} of {scale}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn at_rest_every_measure_is_the_same_and_current_is_the_reference() -> Result<()> {
+    let p = patch()?;
+    let (gl, mat) = solid(&p, StrainMeasure::GreenLagrange)?;
+    let rest = displacement(&p, &vec![[0.0; 2]; p.nodes.len()])?;
+    let grad = deformation(&rest, &p.fes, StrainMeasure::Gradient)?;
+    let s = ElementField::new(&p.fes, vec!["S_xx".into(), "S_xy".into(), "S_yy".into()])?;
+    {
+        let mut z = s.get(0)?.write();
+        z.set_uniform("S_xx", 3.0)?;
+        z.set_uniform("S_xy", -2.0)?;
+        z.set_uniform("S_yy", 5.0)?;
+    }
+    let pk1 = stress_measure(&s, &grad, StressMeasure::FirstPiolaKirchhoff)?;
+    let sigma = stress_measure(&s, &grad, StressMeasure::Cauchy)?;
+    for (name, want) in [("P_xx", 3.0), ("P_xy", -2.0), ("P_yx", -2.0), ("P_yy", 5.0)] {
+        assert!(values(&pk1, name)?.iter().all(|v| (v - want).abs() < 1e-14));
+    }
+    for (name, want) in [("sigma_xx", 3.0), ("sigma_xy", -2.0), ("sigma_yy", 5.0)] {
+        assert!(values(&sigma, name)?
+            .iter()
+            .all(|v| (v - want).abs() < 1e-14));
+    }
+    // At rest the law's forces are the small-strain ones: ∫ Bᵀ S.
+    let (linear, mat_lin) = solid(&p, StrainMeasure::Linear)?;
+    let as_sigma = stress_measure(&s, &grad, StressMeasure::Cauchy)?;
+    let f_tl = internal_forces(&gl, &pk1, &rest, &mat)?;
+    let f_lin = internal_forces(&linear, &as_sigma, &rest, &mat_lin)?;
+    for k in 0..p.nodes.len() {
+        for a in 0..2 {
+            assert!((force(&f_tl, &p, k, a)? - force(&f_lin, &p, k, a)?).abs() < 1e-13);
+        }
+    }
+    let k_current = on_current(&p, &rest, || matrix::stiffness(&gl, &mat))?;
+    let k_reference = matrix::stiffness(&gl, &mat)?;
+    assert_eq!(k_current.dense()?, k_reference.dense()?);
+    Ok(())
+}
+
+#[test]
+fn the_conversions_follow_their_formulas() -> Result<()> {
+    let p = patch()?;
+    let a = [[1.3, 0.4], [-0.2, 0.8]];
+    let u = displacement(&p, &affine(&p, a)?)?;
+    let grad = deformation(&u, &p.fes, StrainMeasure::Gradient)?;
+    // A plane-strain second Piola–Kirchhoff stress, out-of-plane component
+    // included.
+    let s = ElementField::new(
+        &p.fes,
+        vec!["S_xx".into(), "S_xy".into(), "S_yy".into(), "S_zz".into()],
+    )?;
+    let s_m = Matrix3::new(7.0, -3.0, 0.0, -3.0, 2.0, 0.0, 0.0, 0.0, 4.0);
+    {
+        let mut z = s.get(0)?.write();
+        for (name, (i, j)) in [
+            ("S_xx", (0, 0)),
+            ("S_xy", (0, 1)),
+            ("S_yy", (1, 1)),
+            ("S_zz", (2, 2)),
+        ] {
+            z.set_uniform(name, s_m[(i, j)])?;
+        }
+    }
+    let f = Matrix3::new(a[0][0], a[0][1], 0.0, a[1][0], a[1][1], 0.0, 0.0, 0.0, 1.0);
+    let j = f.determinant();
+    let sigma_m = f * s_m * f.transpose() / j;
+    let p_m = f * s_m;
+
+    let sigma = stress_measure(&s, &grad, StressMeasure::Cauchy)?;
+    let tau = stress_measure(&s, &grad, StressMeasure::Kirchhoff)?;
+    let pk1 = stress_measure(&s, &grad, StressMeasure::FirstPiolaKirchhoff)?;
+    let close = |f: &ElementField, name: &str, want: f64| -> Result<()> {
+        for v in values(f, name)? {
+            assert!(
+                (v - want).abs() < 1e-12 * want.abs().max(1.0),
+                "{name}: {v} ≠ {want}"
+            );
+        }
+        Ok(())
+    };
+    for (suffix, (r, c)) in [
+        ("xx", (0, 0)),
+        ("xy", (0, 1)),
+        ("yy", (1, 1)),
+        ("zz", (2, 2)),
+    ] {
+        close(&sigma, &format!("sigma_{suffix}"), sigma_m[(r, c)])?;
+        close(&tau, &format!("tau_{suffix}"), j * sigma_m[(r, c)])?;
+    }
+    for (suffix, (r, c)) in [
+        ("xx", (0, 0)),
+        ("xy", (0, 1)),
+        ("yx", (1, 0)),
+        ("yy", (1, 1)),
+        ("zz", (2, 2)),
+    ] {
+        close(&pk1, &format!("P_{suffix}"), p_m[(r, c)])?;
+    }
+    // And back: every measure returns the S it came from.
+    for from in [&sigma, &tau, &pk1] {
+        let back = stress_measure(from, &grad, StressMeasure::SecondPiolaKirchhoff)?;
+        for (suffix, (r, c)) in [
+            ("xx", (0, 0)),
+            ("xy", (0, 1)),
+            ("yy", (1, 1)),
+            ("zz", (2, 2)),
+        ] {
+            close(&back, &format!("S_{suffix}"), s_m[(r, c)])?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn the_measures_a_law_cannot_read_are_refused() -> Result<()> {
+    let p = patch()?;
+    let build = |kinematics, measure| {
+        model::elasticity(&p.fes, kinematics, MaterialSymmetry::Isotropic, measure)
+    };
+    // Hencky needs C_zz, which plane stress leaves to the law.
+    assert!(build(Kinematics::PlaneStress, StrainMeasure::Hencky).is_err());
+    assert!(build(Kinematics::PlaneStress, StrainMeasure::GreenLagrange).is_ok());
+    // F is a kinematic quantity, not a strain a law reads.
+    assert!(build(Kinematics::PlaneStrain, StrainMeasure::Gradient).is_err());
+    // A stress field carrying two measures has no single one to convert.
+    let both = ElementField::new(
+        &p.fes,
+        vec![
+            "S_xx".into(),
+            "S_xy".into(),
+            "S_yy".into(),
+            "sigma_xx".into(),
+            "sigma_xy".into(),
+            "sigma_yy".into(),
+        ],
+    )?;
+    let rest = displacement(&p, &vec![[0.0; 2]; p.nodes.len()])?;
+    let grad = deformation(&rest, &p.fes, StrainMeasure::Gradient)?;
+    assert!(stress_measure(&both, &grad, StressMeasure::Cauchy).is_err());
+    Ok(())
+}
+
+#[test]
+fn displace_from_lays_the_current_configuration_in_absolute() -> Result<()> {
+    let p = patch()?;
+    let current = p.coords.write().add_config("current");
+    let names = || Some(vec!["u_x".to_string(), "u_y".to_string()]);
+    // Only some nodes move; the others stay at their reference position.
+    let some = NodeField::new(
+        &Mesh::from_submesh(SubMesh::poi1_from_nodes(&p.nodes[..2])?),
+        vec!["u_x".into(), "u_y".into()],
+    )?;
+    some.get(0)?
+        .write()
+        .set_value(p.nodes[1].id(), "u_y", 0.25)?;
+    for _ in 0..3 {
+        ops_coords::displace_from(&some, 0, current, names())?;
+    }
+    let (moved, still) = ops_coords::in_config(&p.coords, current, || {
+        Ok((p.nodes[1].position()?, p.nodes[5].position()?))
+    })?;
+    assert_eq!(moved, vec![1.1, 0.35]);
+    assert_eq!(still, p.nodes[5].position()?);
+    assert!(ops_coords::displace_from(&some, current, current, names()).is_err());
+    Ok(())
+}
+
+#[test]
+fn a_pressure_follows_the_normal_of_the_active_configuration() -> Result<()> {
+    // A unit square and its contour, travelled counter-clockwise.
+    let coords = Handle::new(Coords::new(2)?);
+    let nodes: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
+        .iter()
+        .map(|p| Node::create_in(coords.clone(), p))
+        .collect::<Result<_>>()?;
+    let ids: Vec<_> = nodes.iter().map(|n| n.id()).collect();
+    let mut body = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
+    body.add_cell(&ids)?;
+    let mut contour = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+    for k in 0..4 {
+        contour.add_cell(&[ids[k], ids[(k + 1) % 4]])?;
+    }
+    let body_fes = FiniteElementSpace::lagrange1(&body)?;
+    let solid_model = model::elasticity(
+        &body_fes,
+        Kinematics::PlaneStrain,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
+    let load = model::flux(&FiniteElementSpace::lagrange1(&contour)?, &solid_model, "n")?;
+    assert_eq!(load.dual_vars(), vec!["f_x".to_string(), "f_y".to_string()]);
+    let density = material_field(&load, &[("phi_n", 2.0)])?;
+    // The load feeds no matrix: asked for a geometric stiffness beside the solid
+    // it loads, it brings no block and reads no stress.
+    let both = solid_model.union(&load)?;
+    let both_materials = material_field(&both, &[("E", 1.0), ("nu", 0.3), ("phi_n", 2.0)])?;
+    let sigma = ElementField::new(
+        &body_fes,
+        vec!["sigma_xx".into(), "sigma_xy".into(), "sigma_yy".into()],
+    )?;
+    assert!(matrix::geometric(&both, &both_materials, &sigma).is_ok());
+    let at = |f: &NodeField, k: usize| -> Result<[f64; 2]> {
+        Ok([f.value(ids[k], "f_x")?, f.value(ids[k], "f_y")?])
+    };
+
+    let reference = external_forces(&load, &density)?;
+    // A closed contour: no resultant. Each corner gets φ·½ along each of its
+    // two outward normals.
+    let mut total = [0.0, 0.0];
+    for k in 0..4 {
+        let f = at(&reference, k)?;
+        total[0] += f[0];
+        total[1] += f[1];
+    }
+    assert!(total[0].abs() < 1e-14 && total[1].abs() < 1e-14);
+    assert_eq!(at(&reference, 0)?, [-1.0, -1.0]);
+    assert_eq!(at(&reference, 2)?, [1.0, 1.0]);
+
+    // On a configuration turned by R, the load turns with the wall.
+    let (s, c) = 0.9_f64.sin_cos();
+    let u = NodeField::new(&body, vec!["u_x".into(), "u_y".into()])?;
+    {
+        let mut z = u.get(0)?.write();
+        for n in &nodes {
+            let x = n.position()?;
+            z.set_value(n.id(), "u_x", c * x[0] - s * x[1] - x[0])?;
+            z.set_value(n.id(), "u_y", s * x[0] + c * x[1] - x[1])?;
+        }
+    }
+    let current = coords.write().add_config("current");
+    ops_coords::displace_from(&u, 0, current, Some(vec!["u_x".into(), "u_y".into()]))?;
+    let turned = ops_coords::in_config(&coords, current, || external_forces(&load, &density))?;
+    for k in 0..4 {
+        let (f0, f) = (at(&reference, k)?, at(&turned, k)?);
+        let expected = [c * f0[0] - s * f0[1], s * f0[0] + c * f0[1]];
+        assert!((f[0] - expected[0]).abs() < 1e-12 && (f[1] - expected[1]).abs() < 1e-12);
+    }
+    Ok(())
+}
+
+// ─── Bars ────────────────────────────────────────────────────────────────────
+//
+// A bar in large displacements reads the Green–Lagrange strain along its
+// reference direction, `(l² − L²)/2L²`, and its law writes the second
+// Piola–Kirchhoff axial force `S_n`. Every oracle below is written by hand
+// from the node positions.
+
+/// Two bars in space, A–B then B–C, aligned with no axis.
+const CABLE: [[f64; 3]; 3] = [[0.0, 0.0, 0.0], [1.2, 0.5, -0.3], [2.0, 1.4, 0.4]];
+const BARS: [(usize, usize); 2] = [(0, 1), (1, 2)];
+const YOUNG: f64 = 100.0;
+const AREA: f64 = 0.5;
+
+struct Cable {
+    coords: Handle<Coords>,
+    mesh: Mesh,
+    fes: FiniteElementSpace,
+    nodes: Vec<Node>,
+}
+
+fn cable() -> Result<Cable> {
+    let coords = Handle::new(Coords::new(3)?);
+    let nodes: Vec<Node> = CABLE
+        .iter()
+        .map(|p| Node::create_in(coords.clone(), p))
+        .collect::<Result<_>>()?;
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+    for (i, j) in BARS {
+        mesh.add_cell(&[nodes[i].id(), nodes[j].id()])?;
+    }
+    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    Ok(Cable {
+        coords,
+        mesh,
+        fes,
+        nodes,
+    })
+}
+
+/// The bars of `c`, their law reading `measure`, and their material.
+fn bars(c: &Cable, measure: StrainMeasure) -> Result<(Model, ElementField)> {
+    let bars = model::truss(&c.fes, measure)?;
+    let materials = material_field(&bars, &[("E", YOUNG), ("A", AREA)])?;
+    Ok((bars, materials))
+}
+
+fn cable_displacement(c: &Cable, values: &[[f64; 3]]) -> Result<NodeField> {
+    let u = NodeField::new(&c.mesh, vec!["u_x".into(), "u_y".into(), "u_z".into()])?;
+    {
+        let mut zone = u.get(0)?.write();
+        for (n, v) in c.nodes.iter().zip(values) {
+            for (a, name) in ["u_x", "u_y", "u_z"].iter().enumerate() {
+                zone.set_value(n.id(), name, v[a])?;
+            }
+        }
+    }
+    Ok(u)
+}
+
+/// A stretch, a shear and a turn: every bar lengthens and turns.
+fn cable_motion() -> Vec<[f64; 3]> {
+    let (s, c) = 0.7_f64.sin_cos();
+    CABLE
+        .iter()
+        .enumerate()
+        .map(|(k, x)| {
+            let stretched = [1.3 * x[0] + 0.2 * x[1], 0.9 * x[1], x[2] + 0.1 * x[0]];
+            let turned = [
+                c * stretched[0] - s * stretched[1],
+                s * stretched[0] + c * stretched[1],
+                stretched[2] + 0.05 * k as f64,
+            ];
+            [turned[0] - x[0], turned[1] - x[1], turned[2] - x[2]]
+        })
+        .collect()
+}
+
+fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+fn norm(a: [f64; 3]) -> f64 {
+    (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt()
+}
+
+/// One bar moved by `u`, by hand: its rest length `L`, its chord `x_B − x_A`
+/// and its Green–Lagrange strain `(l² − L²)/2L²`.
+fn bar_by_hand(u: &[[f64; 3]], (i, j): (usize, usize)) -> (f64, [f64; 3], f64) {
+    let rest = norm(sub(CABLE[j], CABLE[i]));
+    let x = |k: usize| {
+        [
+            CABLE[k][0] + u[k][0],
+            CABLE[k][1] + u[k][1],
+            CABLE[k][2] + u[k][2],
+        ]
+    };
+    let chord = sub(x(j), x(i));
+    let l = norm(chord);
+    (rest, chord, (l * l - rest * rest) / (2.0 * rest * rest))
+}
+
+/// The internal forces of the bars' state `s`: `±P`, `P = S_n F t₀`.
+fn cable_forces(
+    c: &Cable,
+    m: &Model,
+    mat: &ElementField,
+    s: &ElementField,
+    u: &NodeField,
+) -> Result<NodeField> {
+    let f = deformation(u, &c.fes, StrainMeasure::Gradient)?;
+    let pk1 = stress_measure(s, &f, StressMeasure::FirstPiolaKirchhoff)?;
+    internal_forces(m, &pk1, u, mat)
+}
+
+/// Every nodal force of `f`, node by node, axis by axis.
+fn cable_vector(c: &Cable, f: &NodeField) -> Result<Vec<f64>> {
+    let mut out = Vec::new();
+    for n in &c.nodes {
+        for name in ["f_x", "f_y", "f_z"] {
+            out.push(f.value(n.id(), name)?);
+        }
+    }
+    Ok(out)
+}
+
+/// The value of `component` on bar `cell`, at its first point — a bar's
+/// state is uniform along it.
+fn on_bar(field: &ElementField, cell: usize, component: &str) -> Result<f64> {
+    field.get(0)?.read().value(cell, 0, component)
+}
+
+#[test]
+fn a_rigid_rotation_loads_no_bar() -> Result<()> {
+    let c = cable()?;
+    // A turn of 1.2 rad about (1, 2, 2)/3.
+    let axis = [1.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0];
+    let rotation = nalgebra::Rotation3::from_axis_angle(
+        &nalgebra::Unit::new_normalize(nalgebra::Vector3::from(axis)),
+        1.2,
+    );
+    let motion: Vec<[f64; 3]> = CABLE
+        .iter()
+        .map(|x| {
+            let turned = rotation * nalgebra::Vector3::from(*x);
+            [turned[0] - x[0], turned[1] - x[1], turned[2] - x[2]]
+        })
+        .collect();
+    let u = cable_displacement(&c, &motion)?;
+
+    let (cable_gl, mat) = bars(&c, StrainMeasure::GreenLagrange)?;
+    let (_, s) = state(&cable_gl, &mat, &u)?;
+    assert!(largest(&values(&s, "S_n")?) < 1e-13);
+    let f = cable_forces(&c, &cable_gl, &mat, &s, &u)?;
+    assert!(largest(&cable_vector(&c, &f)?) < 1e-13);
+
+    // The linear strain of the same turn shortens the bars: cos θ − 1 along
+    // the axis-free part of each.
+    let (linear, mat) = bars(&c, StrainMeasure::Linear)?;
+    let (_, n) = state(&linear, &mat, &u)?;
+    assert!(largest(&values(&n, "n")?) > 1.0);
+    Ok(())
+}
+
+#[test]
+fn a_moved_bar_carries_its_forces_in_closed_form() -> Result<()> {
+    let c = cable()?;
+    let (cable_gl, mat) = bars(&c, StrainMeasure::GreenLagrange)?;
+    let motion = cable_motion();
+    let u = cable_displacement(&c, &motion)?;
+    let (_, s) = state(&cable_gl, &mat, &u)?;
+    let grad = deformation(&u, &c.fes, StrainMeasure::Gradient)?;
+    let pk1 = stress_measure(&s, &grad, StressMeasure::FirstPiolaKirchhoff)?;
+    let cauchy = stress_measure(&s, &grad, StressMeasure::Cauchy)?;
+    let pk2 = stress_measure(&s, &grad, StressMeasure::SecondPiolaKirchhoff)?;
+
+    let mut nominal = Vec::new();
+    for (cell, bar) in BARS.into_iter().enumerate() {
+        let (rest, chord, e) = bar_by_hand(&motion, bar);
+        let s_n = YOUNG * AREA * e;
+        assert!(e.abs() > 1e-2, "bar {cell} is strained");
+        assert!((on_bar(&s, cell, "S_n")? - s_n).abs() < 1e-12 * YOUNG);
+        assert_eq!(on_bar(&pk2, cell, "S_n")?, on_bar(&s, cell, "S_n")?);
+        // The true force: S_n λ, with λ = l/L.
+        let n = on_bar(&cauchy, cell, "n")?;
+        assert!((n - s_n * norm(chord) / rest).abs() < 1e-12 * YOUNG);
+        // The nominal force vector: S_n along the current chord over L.
+        let p: Vec<f64> = chord.iter().map(|x| s_n * x / rest).collect();
+        for (a, name) in ["P_x", "P_y", "P_z"].iter().enumerate() {
+            assert!((on_bar(&pk1, cell, name)? - p[a]).abs() < 1e-12 * YOUNG);
+        }
+        nominal.push(p);
+    }
+    // −P at the start of a bar, +P at its end.
+    let f = cable_vector(&c, &internal_forces(&cable_gl, &pk1, &u, &mat)?)?;
+    for a in 0..3 {
+        let expected = [-nominal[0][a], nominal[0][a] - nominal[1][a], nominal[1][a]];
+        for (k, value) in expected.iter().enumerate() {
+            assert!((f[3 * k + a] - value).abs() < 1e-12 * YOUNG);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn the_bar_forces_are_the_derivative_of_their_stored_energy() -> Result<()> {
+    let c = cable()?;
+    let (cable_gl, mat) = bars(&c, StrainMeasure::GreenLagrange)?;
+    // W = Σ ½ E A L e², by hand.
+    let energy = |u: &[[f64; 3]]| -> f64 {
+        BARS.into_iter()
+            .map(|bar| {
+                let (rest, _, e) = bar_by_hand(u, bar);
+                0.5 * YOUNG * AREA * rest * e * e
+            })
+            .sum()
+    };
+    let motion = cable_motion();
+    let u = cable_displacement(&c, &motion)?;
+    let (_, s) = state(&cable_gl, &mat, &u)?;
+    let f = cable_vector(&c, &cable_forces(&c, &cable_gl, &mat, &s, &u)?)?;
+
+    let h = 1e-6;
+    let (mut worst, scale) = (0.0_f64, largest(&f));
+    for k in 0..CABLE.len() {
+        for a in 0..3 {
+            let (mut plus, mut minus) = (motion.clone(), motion.clone());
+            plus[k][a] += h;
+            minus[k][a] -= h;
+            let derivative = (energy(&plus) - energy(&minus)) / (2.0 * h);
+            worst = worst.max((derivative - f[3 * k + a]).abs());
+        }
+    }
+    assert!(scale > 1.0, "the cable is loaded");
+    assert!(
+        worst < 1e-6 * scale,
+        "|∂W/∂u − f_int| = {worst}, scale {scale}"
+    );
+    Ok(())
+}
+
+/// Evaluate `build` with the configuration `x = X + u` of the cable active.
+fn cable_on_current<T>(c: &Cable, u: &NodeField, build: impl FnOnce() -> Result<T>) -> Result<T> {
+    let current = c.coords.write().add_config("current");
+    let names = Some(vec![
+        "u_x".to_string(),
+        "u_y".to_string(),
+        "u_z".to_string(),
+    ]);
+    ops_coords::displace_from(u, 0, current, names)?;
+    ops_coords::in_config(&c.coords, current, build)
+}
+
+/// Column `(k, a)` of `K` and of the finite-difference derivative of `f`.
+fn cable_columns(
+    c: &Cable,
+    k_mat: &Matrix,
+    motion: &[[f64; 3]],
+    (k, a): (usize, usize),
+    f: impl Fn(&NodeField) -> Result<NodeField>,
+) -> Result<(Vec<f64>, Vec<f64>)> {
+    let mut unit = vec![[0.0; 3]; CABLE.len()];
+    unit[k][a] = 1.0;
+    let column = cable_vector(c, &(k_mat * &cable_displacement(c, &unit)?)?)?;
+    let h = 1e-6;
+    let (mut plus, mut minus) = (motion.to_vec(), motion.to_vec());
+    plus[k][a] += h;
+    minus[k][a] -= h;
+    let fp = cable_vector(c, &f(&cable_displacement(c, &plus)?)?)?;
+    let fm = cable_vector(c, &f(&cable_displacement(c, &minus)?)?)?;
+    let derivative = fp
+        .iter()
+        .zip(&fm)
+        .map(|(p, m)| (p - m) / (2.0 * h))
+        .collect();
+    Ok((derivative, column))
+}
+
+#[test]
+fn the_bar_operator_is_the_derivative_of_its_forces_where_theory_says() -> Result<()> {
+    let c = cable()?;
+    let (cable_gl, mat) = bars(&c, StrainMeasure::GreenLagrange)?;
+
+    // After a rigid turn (about z): the stiffness on the current configuration
+    // is the tangent, E A / L along the turned bar.
+    let (s, co) = 0.8_f64.sin_cos();
+    let turn: Vec<[f64; 3]> = CABLE
+        .iter()
+        .map(|x| {
+            [
+                co * x[0] - s * x[1] - x[0],
+                s * x[0] + co * x[1] - x[1],
+                0.0,
+            ]
+        })
+        .collect();
+    let u = cable_displacement(&c, &turn)?;
+    let k_current = cable_on_current(&c, &u, || matrix::stiffness(&cable_gl, &mat))?;
+    for k in 0..CABLE.len() {
+        for a in 0..3 {
+            let (derivative, column) = cable_columns(&c, &k_current, &turn, (k, a), |v| {
+                let (_, s) = state(&cable_gl, &mat, v)?;
+                cable_forces(&c, &cable_gl, &mat, &s, v)
+            })?;
+            let (worst, scale) = compare(&derivative, &column);
+            assert!(
+                worst < 1e-6 * scale.max(1.0),
+                "stiffness ({k}, {a}): {worst} of {scale}"
+            );
+        }
+    }
+
+    // At frozen S_n, ∂(S_n F t₀)/∂x = S_n/L I = n/l I: the geometric stiffness
+    // on the current configuration, every direction stiffened, the axial one too.
+    let motion = cable_motion();
+    let u = cable_displacement(&c, &motion)?;
+    let (_, frozen) = state(&cable_gl, &mat, &u)?;
+    let grad = deformation(&u, &c.fes, StrainMeasure::Gradient)?;
+    let true_force = stress_measure(&frozen, &grad, StressMeasure::Cauchy)?;
+    let k_sigma = cable_on_current(&c, &u, || matrix::geometric(&cable_gl, &mat, &true_force))?;
+    for k in 0..CABLE.len() {
+        for a in 0..3 {
+            let (derivative, column) = cable_columns(&c, &k_sigma, &motion, (k, a), |v| {
+                cable_forces(&c, &cable_gl, &mat, &frozen, v)
+            })?;
+            let (worst, scale) = compare(&derivative, &column);
+            assert!(scale > 1e-1, "the cable is stressed");
+            assert!(
+                worst < 1e-6 * scale,
+                "geometric ({k}, {a}): {worst} of {scale}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn what_a_bar_cannot_read_or_become_is_refused() -> Result<()> {
+    let c = cable()?;
+    // Along t₀, ½ ln C is ln λ only while t₀ is an eigenvector of C.
+    assert!(model::truss(&c.fes, StrainMeasure::Hencky).is_err());
+    assert!(model::truss(&c.fes, StrainMeasure::Gradient).is_err());
+    // An axial force has no Kirchhoff nor Hencky measure.
+    let (cable_gl, mat) = bars(&c, StrainMeasure::GreenLagrange)?;
+    let u = cable_displacement(&c, &cable_motion())?;
+    let (_, s) = state(&cable_gl, &mat, &u)?;
+    let grad = deformation(&u, &c.fes, StrainMeasure::Gradient)?;
+    assert!(stress_measure(&s, &grad, StressMeasure::Kirchhoff).is_err());
+    assert!(stress_measure(&s, &grad, StressMeasure::Hencky).is_err());
+    Ok(())
+}

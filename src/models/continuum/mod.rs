@@ -25,6 +25,7 @@
 //!   belongs to the law, and is passed to the kernels rather than stored here.
 
 pub mod elastic;
+pub(crate) mod finite_strain;
 pub mod internal_force;
 pub mod material;
 pub mod voigt;
@@ -37,8 +38,9 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::symmetry::{self, MaterialSymmetry};
-use crate::models::tensor::{stress_names, Kinematics};
+use crate::models::tensor::{voigt_names, Kinematics};
 use crate::models::{CellGeom, ElementLayout, MatrixKind};
+use crate::ops::element_field::StrainMeasure;
 
 use elastic::RHO_SLOT;
 use voigt::{b_matrix_into, voigt_size, VoigtRows};
@@ -63,8 +65,9 @@ fn check_continuum_dimensions(label: &str, space_dim: usize, ref_dim: usize) -> 
     Ok(())
 }
 
-/// The continuum modelling of one FE subspace: its geometry, its support, and
-/// the kinematic hypothesis under which strains are measured.
+/// The continuum modelling of one FE subspace: its geometry, its support, the
+/// kinematic hypothesis under which strains are measured, and the strain
+/// measure its law reads.
 ///
 /// Held by every continuum physics — what they add is a law, not a geometry.
 ///
@@ -98,6 +101,9 @@ pub struct Continuum {
     pub(crate) support: Handle<SubMesh>,
     pub(crate) space_dim: usize,
     pub(crate) kinematics: Kinematics,
+    /// The strain measure the law reads — `linear` unless the modelling was
+    /// built for large transformations ([`with_measure`](Self::with_measure)).
+    pub(crate) measure: StrainMeasure,
 }
 
 impl Continuum {
@@ -186,7 +192,110 @@ impl Continuum {
             support,
             space_dim,
             kinematics,
+            measure: StrainMeasure::Linear,
         })
+    }
+
+    /// The same modelling, its law reading the strain `measure` — the choice a
+    /// small-strain law makes to enter large transformations.
+    ///
+    /// Hooke, J2 or Mazars relate a strain to its dual without saying which:
+    /// read on the Green–Lagrange `E` (small strains, large rotations) they
+    /// write the second Piola–Kirchhoff `S`; read on the Hencky `H = ½ ln C`
+    /// (large plastic strains) they write its dual `T`. Each pair is named for
+    /// what it holds — `E_*` / `S_*`, `H_*` / `T_*` — never renamed `eps_*` /
+    /// `sigma_*`, and the whole state stays on the reference configuration.
+    ///
+    /// Errors (`label` names the physics):
+    /// - a measure that is not a law's input — `gradient`, Cauchy–Green,
+    ///   Euler–Almansi are kinematic quantities, not strains a law reads;
+    /// - Hencky under plane stress: `ln C` needs `C_zz`, which only the law
+    ///   would know.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::continuum::Continuum;
+    /// # use pyrucast::models::tensor::Kinematics;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+    /// let c = Continuum::new(fes.get(0)?, Kinematics::PlaneStrain, "Elasticity")?
+    ///     .with_measure(StrainMeasure::GreenLagrange, "Elasticity")?;
+    /// // The law reads E and writes S: each component says what it holds.
+    /// assert_eq!(c.strain_reads(), ["E_xx", "E_yy", "E_xy"]);
+    /// assert_eq!(c.stress_names(), ["S_xx", "S_yy", "S_xy"]);
+    /// // F is no strain a law reads.
+    /// let plain = Continuum::new(fes.get(0)?, Kinematics::PlaneStrain, "Elasticity")?;
+    /// assert!(plain.with_measure(StrainMeasure::Gradient, "Elasticity").is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn with_measure(self, measure: StrainMeasure, label: &str) -> Result<Self> {
+        match measure {
+            StrainMeasure::Linear | StrainMeasure::GreenLagrange => {}
+            StrainMeasure::Hencky if self.kinematics == Kinematics::PlaneStress => {
+                return Err(PyrucastError::Message(format!(
+                    "{label}: the Hencky measure ½ ln C needs C_zz, which plane stress leaves \
+                     to the law — use plane_strain, or green_lagrange under plane stress"
+                )));
+            }
+            StrainMeasure::Hencky => {}
+            other => {
+                return Err(PyrucastError::Message(format!(
+                    "{label}: `{}` is not a strain a law reads — the measures are `linear`, \
+                     `green_lagrange` and `hencky`",
+                    crate::named::Named::name(other)
+                )));
+            }
+        }
+        Ok(Self { measure, ..self })
+    }
+
+    /// The strain measure the law reads.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::continuum::Continuum;
+    /// # use pyrucast::models::tensor::Kinematics;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+    /// let c = Continuum::new(fes.get(0)?, Kinematics::PlaneStrain, "Elasticity")?;
+    /// assert_eq!(c.measure(), StrainMeasure::Linear);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    #[inline]
+    pub fn measure(&self) -> StrainMeasure {
+        self.measure
+    }
+
+    /// The prefix of the stress the law writes, the dual of its measure:
+    /// `sigma` (Cauchy, small strains), `S` (second Piola–Kirchhoff, dual of
+    /// Green–Lagrange) or `T` (dual of Hencky).
+    pub(crate) fn stress_prefix(&self) -> &'static str {
+        match self.measure {
+            StrainMeasure::GreenLagrange => "S",
+            StrainMeasure::Hencky => "T",
+            // `with_measure` admits no other measure: anything else is linear.
+            _ => "sigma",
+        }
     }
 
     /// The FE subspace this modelling stands on.
@@ -294,7 +403,8 @@ impl Continuum {
         self.kinematics
     }
 
-    /// The strain components a law of this modelling reads, in Voigt order.
+    /// The strain components a law of this modelling reads, in Voigt order,
+    /// under the name of its measure (`eps`, `E` or `H`).
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -312,15 +422,16 @@ impl Continuum {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
     /// # let c = Continuum::new(fes.get(0)?, Kinematics::PlaneStress, "Elasticity")?;
-    /// // Trois composantes en plan ; l'axisymétrie en ajoute le cerceau.
+    /// // Three components in the plane; axisymmetry adds the hoop.
     /// assert_eq!(c.strain_reads(), ["eps_xx", "eps_yy", "eps_xy"]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn strain_reads(&self) -> Vec<String> {
-        voigt::strain_reads(self.space_dim, self.kinematics)
+        voigt::strain_reads(self.measure.prefix(), self.space_dim, self.kinematics)
     }
 
-    /// The stress components a law of this modelling writes, in Voigt order.
+    /// The stress components a law of this modelling writes, in Voigt order,
+    /// under the name of the dual of its measure (`sigma`, `S` or `T`).
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -342,7 +453,7 @@ impl Continuum {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn stress_names(&self) -> Vec<String> {
-        stress_names(self.space_dim, self.kinematics)
+        voigt_names(self.stress_prefix(), self.space_dim, self.kinematics)
     }
 
     /// What a continuum-mechanics **matrix** kernel reads from the state field,
@@ -399,6 +510,11 @@ impl Continuum {
     /// [`crate::models::kernel::assemble_block`]. Law-independent: the three
     /// families call it, their iteration operator being the elastic stiffness.
     ///
+    /// `D` is built at **every** Gauss point from that point's material: a
+    /// material field may vary inside a cell — moduli depending on the
+    /// temperature at the point, a heterogeneous `E(x)` — and the stiffness
+    /// integrates what the field holds, as the law does on the residual side.
+    ///
     /// ```
     /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::aggregate::Aggregate;
@@ -454,64 +570,23 @@ impl Continuum {
         symmetry: MaterialSymmetry,
         ke: &mut [f64],
     ) -> Result<()> {
-        let n_nodes = geom.n_nodes;
-        let space_dim = geom.space_dim;
-        let dofs = space_dim * n_nodes;
-        // Constants read at Gauss 0 — constant material per cell — **by index**:
-        // the zone resolved the names once, so this matches none and allocates
-        // nothing.
-        let mut d = [[0.0_f64; 6]; 6];
-        let v = symmetry::elastic_constitutive_into(
-            material.row(geom.cell, 0),
-            &lay.material,
-            symmetry,
-            self.kinematics,
-            space_dim,
-            &mut d,
-        )?;
-        // The three buffers live **outside** the loop: a Gauss point must
-        // allocate nothing, and both `B` and `D·B` are of fixed size once the
-        // cell is known.
-        let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
-        let mut b: VoigtRows = [[0.0; MAX_CELL_DOFS]; 6];
-        let mut db: VoigtRows = [[0.0; MAX_CELL_DOFS]; 6];
-        for g in 0..geom.n_gauss {
-            // On a body of revolution the hoop row needs `N` and `r` at this point.
-            let hoop = if self.kinematics.is_axisymmetric() {
-                Some((geom.n_at_g(g), geom.radius(g)))
-            } else {
-                None
-            };
-            geom.dn_dx(g, &mut dn_buf[..n_nodes * space_dim])?;
-            b_matrix_into(
-                &dn_buf[..n_nodes * space_dim],
-                n_nodes,
-                space_dim,
-                hoop,
-                &mut b,
-            );
-            // DB = D·B  (voigt × dofs).
-            for r in 0..v {
-                for c in 0..dofs {
-                    let mut acc = 0.0;
-                    for w in 0..v {
-                        acc += d[r][w] * b[w][c];
-                    }
-                    db[r][c] = acc;
-                }
-            }
-            let w = geom.det_j_w(g);
-            for r in 0..dofs {
-                for c in 0..dofs {
-                    let mut acc = 0.0;
-                    for vv in 0..v {
-                        acc += b[vv][r] * db[vv][c];
-                    }
-                    ke[r * dofs + c] += acc * w;
-                }
-            }
-        }
-        Ok(())
+        // The same `Bᵀ D B` loop as the tangent, `D` being the elastic one of
+        // the point — read **by index**: the zone resolved the names once.
+        self.element_tangent_with(
+            geom,
+            |g, d| {
+                symmetry::elastic_constitutive_into(
+                    material.row(geom.cell, g),
+                    &lay.material,
+                    symmetry,
+                    self.kinematics,
+                    geom.space_dim,
+                    d,
+                )?;
+                Ok(())
+            },
+            ke,
+        )
     }
 
     /// Element kernel: local **consistent mass** `M_e = Σ_g ρ (Nᵀ N) |J| w` of
@@ -519,7 +594,7 @@ impl Continuum {
     /// component-minor** dof order as [`element_stiffness`](Self::element_stiffness)).
     /// The vector shape-function matrix is block-diagonal, so
     /// `M[(i,a),(j,b)] = δ_ab ρ ∫ N_i N_j`. Density `ρ` is read from the optional
-    /// material component `rho` (constant per cell). Pure, sequential and
+    /// material component `rho`, at every Gauss point. Pure, sequential and
     /// law-independent.
     ///
     /// ```
@@ -587,10 +662,9 @@ impl Continuum {
                 "Continuum mass matrix: material component `rho` (density) is required".into(),
             ));
         }
-        let rho = material.row(geom.cell, 0)[i_rho as usize];
         for g in 0..geom.n_gauss {
             let n = geom.n_at_g(g);
-            let w = geom.det_j_w(g) * rho;
+            let w = geom.det_j_w(g) * material.row(geom.cell, g)[i_rho as usize];
             for i in 0..n_nodes {
                 for j in 0..n_nodes {
                     let m = n[i] * n[j] * w;
@@ -736,6 +810,8 @@ impl Continuum {
     /// every Gauss point is a **static** call.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::element_field::ElementField;
@@ -751,7 +827,7 @@ impl Continuum {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
     /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&mesh)?;
-    /// # let modele = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    /// # let modele = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
     /// # let materiaux = element_field::material_field(
     /// #     &modele, &[("E", 210_000.0), ("nu", 0.3)])?;
     /// # let eps = ElementField::new(

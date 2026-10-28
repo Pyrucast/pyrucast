@@ -14,6 +14,8 @@ at **collection** time; an example that breaks is a collection error, with a
 full traceback and a non-zero exit code.
 """
 
+import itertools
+
 import pyrucast
 
 
@@ -57,7 +59,7 @@ def _poutre_1d(dim=1):
         p[0] = float(i)
         noeuds.append(c.add_node(p))
     maillage = pyrucast.Mesh(c, "SEG2")
-    for a, b in zip(noeuds, noeuds[1:]):
+    for a, b in itertools.pairwise(noeuds):
         maillage.unit().add_cell([a, b])
     return maillage, noeuds
 

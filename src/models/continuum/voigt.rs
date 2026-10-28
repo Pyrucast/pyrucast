@@ -14,7 +14,6 @@
 //! and a table of positions resolved once for the zone.
 
 use crate::models::kernel::MAX_CELL_DOFS;
-use crate::models::owned_components;
 use crate::models::tensor::Kinematics;
 
 /// Six Voigt rows across a cell's width — the shape of the `B` and `D·B`
@@ -34,26 +33,17 @@ pub(crate) fn voigt_size(space_dim: usize, kinematics: Kinematics) -> usize {
 
 /// The strain components a continuum law reads, **in Voigt order** — the
 /// convention its indices assume, declared for
-/// [`crate::models::Behavior::deformation_reads`].
+/// [`crate::models::Behavior::deformation_reads`] — under `prefix`, that of the
+/// strain measure the law reads (`eps`, `E` or `H`).
 ///
-/// Axisymmetry is the odd one: its fourth slot is the *measured* hoop `eps_zz`,
+/// Axisymmetry is the odd one: its fourth slot is the *measured* hoop `zz`,
 /// produced by
 /// [`crate::ops::element_field::deformation`](fn@crate::ops::element_field::deformation),
 /// not an assumption.
-pub(crate) fn strain_reads(space_dim: usize, kinematics: Kinematics) -> Vec<String> {
-    let names: &[&str] = if space_dim == 2 && kinematics.is_axisymmetric() {
-        &["eps_xx", "eps_yy", "eps_zz", "eps_xy"]
-    } else if space_dim == 2 {
-        &["eps_xx", "eps_yy", "eps_xy"]
-    } else {
-        &["eps_xx", "eps_yy", "eps_zz", "eps_yz", "eps_xz", "eps_xy"]
-    };
-    owned_components(names)
+pub(crate) fn strain_reads(prefix: &str, space_dim: usize, kinematics: Kinematics) -> Vec<String> {
+    crate::models::tensor::voigt_names(prefix, space_dim, kinematics)
 }
 
-/// How many **normal** components open the Voigt order: the ones the
-/// engineering convention leaves alone. The shears that follow are doubled
-/// (`γ = 2ε`), which is what a `D` matrix in engineering Voigt expects.
 pub(crate) fn normal_count(space_dim: usize, kinematics: Kinematics) -> usize {
     if space_dim == 2 && kinematics.is_axisymmetric() {
         3

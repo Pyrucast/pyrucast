@@ -4,282 +4,199 @@
 //! Each one spans the **whole** support it is given (one zone per subspace);
 //! heterogeneous physics compose with `|`.
 
-use crate::models::mpc::MpcTerm;
-use crate::models::symmetry::MaterialSymmetry;
-use crate::models::tensor::Kinematics;
 use crate::models::RelationSense;
 use crate::ops::model;
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
 use crate::py::model::PyModel;
+use crate::py::node_field::PyNodeField;
 use pyo3::prelude::*;
+use pyrucast_macros::py_op;
 
-/// `model.heat_conduction(fespace, symmetry=None)` — heat-conduction model
-/// spanning **every** subspace of `fespace` (one zone per subspace). A
-/// single-subspace space gives the unit case; several give one zone
-/// each. Compose heterogeneous physics with `|`:
-/// `model.heat_conduction(fes) | model.dirichlet(...)`.
-///
-/// `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
-/// `"anisotropic"`, and selects which conductivity the material field must
-/// carry: the scalar `k`, the principal `k_1, k_2, k_3`, or the symmetric
-/// tensor `k_11 … k_33`. The two oriented ones also require the material
-/// axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z` in 3-D.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-#[pyo3(signature = (fespace, symmetry=None))]
-pub fn heat_conduction(
-    fespace: PyRef<PyFiniteElementSpace>,
-    symmetry: Option<MaterialSymmetry>,
-) -> PyResult<PyModel> {
-    let s = symmetry.unwrap_or(MaterialSymmetry::Isotropic);
-    let inner = model::heat_conduction_with_symmetry(&fespace.inner, s)?;
-    Ok(PyModel { inner })
-}
-
-/// `model.fick(fespace, species, symmetry=None)` — Fickian diffusion of one
-/// named **species**, spanning every subspace of `fespace`.
-///
-/// Every name carries the species: DOFs are `c_<species>` (primal) and
-/// `j_<species>` (dual), the diffusivity is `D_<species>`, the reported flux
-/// `j_<species>_x…`. Two species therefore share a mesh without colliding —
-/// and no bare `c` can be mistaken for anything else. Its physics nature is
-/// `"diffusion"`, so `model.filter("diffusion")` isolates it from a thermal
-/// or mechanical model it is composed with.
-///
-/// `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
-/// `"anisotropic"`, selecting the diffusivity the material field must carry:
-/// `D_<species>`, `D_1_<species> …`, or the symmetric `D_11_<species> …` —
-/// the oriented ones plus the material axes `V1X, V1Y, …`. Those axes and
-/// the optional storage `poro` keep **bare** names: they belong to the
-/// medium, not to what diffuses through it.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-#[pyo3(signature = (fespace, species, symmetry=None))]
-pub fn fick(
-    fespace: PyRef<PyFiniteElementSpace>,
-    species: &str,
-    symmetry: Option<MaterialSymmetry>,
-) -> PyResult<PyModel> {
-    let s = symmetry.unwrap_or(MaterialSymmetry::Isotropic);
-    let inner = model::fick_with_symmetry(&fespace.inner, s, species)?;
-    Ok(PyModel { inner })
-}
-
-/// `model.interface_transfer(side_a, side_b, target, components, tol=1e-9)` —
+/// `model.interface_transfer(side_a, side_b, target, variables, tol=1e-9)` —
 /// the exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
 /// that do **not** share their nodes, coupling into the model `target`.
 ///
-/// `components` is a list of `(primal, dual)` pairs, each one that `target`
-/// assembles: `[("c_H2", "j_H2")]` on a `fick` model for a coating,
-/// `[("T", "q")]` on a `heat_conduction` for a contact resistance, the
-/// displacement pairs on an `elasticity` for a bonded joint of finite
-/// stiffness. The nature is not an argument: it is the one of the sub-model
-/// of `target` assembling the pairs, and a pair `target` does not assemble —
-/// or pairs of two natures — raise. `h_<primal>` is supplied at assembly time.
+/// `variables` lists the exchanged unknowns of `target`, each coupling into
+/// the dual row `target` pairs it with: `["c_H2"]` on a `fick` model for a
+/// coating, `["T"]` on a `heat_conduction` for a contact resistance, the
+/// displacements on an `elasticity` for a bonded joint of finite stiffness.
+/// Neither the dual row nor the nature is an argument: both are read from
+/// `target`, and a variable `target` does not declare — or variables of two
+/// natures — raise. `h_<variable>` is supplied at assembly time.
 ///
 /// `side_a` and `side_b` are the two facing **boundary** FE spaces, which
 /// must be conforming — same element type, same cell count, and local node
-/// `k` of a cell facing local node `k` of its counterpart, within `tol`. A
-/// non-matching interface raises rather than being projected.
+/// `k` of a cell facing local node `k` of its counterpart, within `tol`, a
+/// **distance** in the length unit of the mesh. A non-matching interface
+/// raises rather than being projected.
 ///
 /// This is what lets the field **jump** across the interface: with a shared
 /// node it could not. The jump is `q/h` for a flux density `q`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (side_a, side_b, target, components, tol = crate::models::interface_transfer::DEFAULT_TOL))]
+#[pyo3(signature = (side_a, side_b, target, variables, tol = crate::models::interface_transfer::DEFAULT_TOL))]
 pub fn interface_transfer(
     side_a: PyRef<PyFiniteElementSpace>,
     side_b: PyRef<PyFiniteElementSpace>,
     target: PyRef<PyModel>,
-    components: Vec<(String, String)>,
+    variables: Vec<String>,
     tol: f64,
 ) -> PyResult<PyModel> {
     let inner =
-        model::interface_transfer(&side_a.inner, &side_b.inner, &target.inner, components, tol)?;
+        model::interface_transfer(&side_a.inner, &side_b.inner, &target.inner, variables, tol)?;
     Ok(PyModel { inner })
 }
 
-/// `model.elasticity(fespace, kinematics, symmetry=None)` — linear-elasticity
-/// model spanning every subspace of `fespace`. `kinematics` is `"plane_stress"`,
-/// `"plane_strain"` or `"axisymmetric"` (2-D), or `"full_3d"` (3-D). DOFs are
-/// the vector displacement `u_x, u_y(, u_z)`; material is supplied at
-/// assembly time.
+/// `model.dirichlet(imposed_mesh, target, variable, sense="=")` — Dirichlet
+/// constraint (a single sub-model) holding `variable` on the nodes of
+/// `imposed_mesh`, via Lagrange multipliers.
 ///
-/// `"axisymmetric"` requires a geometry built with `Coords.axisymmetric()`
-/// (`x = r`, `y = z`): the hoop strain `ε_θθ = u_r / r` comes from the kinematics,
-/// the `2πr` integration measure from the geometry, and the two must agree.
-///
-/// `symmetry` is the **material** axis, independent of the kinematic one:
-/// `"isotropic"` (the default, material `E`, `nu`), `"orthotropic"`
-/// (`E_1, E_2, E_3, nu_12, nu_13, nu_23, G_12, G_13, G_23`) or
-/// `"anisotropic"` (the 21 constants `C_11 … C_66`). The two oriented ones
-/// also require the material axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z`
-/// in 3-D — which are orthonormalised internally.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-#[pyo3(signature = (fespace, kinematics, symmetry=None))]
-pub fn elasticity(
-    fespace: PyRef<PyFiniteElementSpace>,
-    kinematics: Kinematics,
-    symmetry: Option<MaterialSymmetry>,
-) -> PyResult<PyModel> {
-    let s = symmetry.unwrap_or(MaterialSymmetry::Isotropic);
-    let inner = model::elasticity_with_symmetry(&fespace.inner, kinematics, s)?;
-    Ok(PyModel { inner })
-}
-
-/// `model.dirichlet(imposed_variable, target_dual, imposed_mesh,
-/// multiplier_mesh, multiplier=None, imposed_value=None, sense="=")` —
-/// Dirichlet constraint model (a single sub-model) imposed via Lagrange
-/// multipliers.
-///
-/// `imposed_variable` is the constrained primary variable (e.g. `"T"`);
-/// `target_dual` is the dual variable of the target physics it couples
-/// `target` is the model being constrained: `variable` must be one of its
-/// primals, and its dual row is read from it — the `T → q` map is the target's
-/// business, not something to retype. `imposed_mesh` is the POI1 mesh of
-/// constrained nodes; `multiplier_mesh` is the POI1 support of the multipliers
-/// (same per-submesh cell count) — usually built from `imposed_mesh` with the
-/// `barycenter` mesher. The multiplier and imposed-value names are derived,
-/// `lambda_<variable>` / `imposed_<variable>`; the imposed value `u_d` is
-/// written by the user in the load field at the multiplier node's
-/// `imposed_<variable>` component.
+/// `imposed_mesh` is the POI1 mesh of constrained nodes, one relation per
+/// node. `target` is the model being constrained: `variable` must be one of
+/// its primals, and its dual row is read from it — the `T → q` map is the
+/// target's business, not something to retype. Each relation gets a multiplier
+/// node of its own, minted beside its constrained node (`Model.multiplier_mesh()`
+/// gives them back); its names are those of every constraint relation, `lambda`
+/// and `imposed`. The imposed value `u_d` is written in the load field at the
+/// multiplier node's `imposed` component — `Model.constraint_rhs` does it from
+/// the constrained node.
 ///
 /// **One variable, and one only** — compose for a clamp:
-/// `dirichlet(m, "u_x", …) | dirichlet(m, "u_y", …)`, the two sharing their
-/// multiplier mesh, since `lambda_u_x` and `lambda_u_y` on one node are distinct
-/// DOFs.
+/// `dirichlet(nodes, m, "u_x") | dirichlet(nodes, m, "u_y")`.
 ///
-/// `sense` (`"="`, `">="` or `"<="`, default `"="`) turns the constraint
-/// unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a model is solved with
-/// `solve_unilateral`. See the model chapter of the book for the full semantics.
+/// `sense` (`"="`, the default, `">="` or `"<="`) turns the constraint
+/// unilateral (`u ≥ u_d` / `u ≤ u_d`): the matrix carries the sense, and
+/// `solve` runs its active-set loop. See the model chapter of the book for the
+/// full semantics.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (target, variable, imposed_mesh, multiplier_mesh, sense=None))]
+#[pyo3(signature = (imposed_mesh, target, variable, sense = RelationSense::Equality))]
 pub fn dirichlet(
+    imposed_mesh: PyRef<'_, PyMesh>,
     target: PyRef<'_, PyModel>,
     variable: &str,
-    imposed_mesh: PyRef<'_, PyMesh>,
-    multiplier_mesh: PyRef<'_, PyMesh>,
-    sense: Option<String>,
+    sense: RelationSense,
 ) -> PyResult<PyModel> {
-    let inner = model::dirichlet(
-        &target.inner,
-        variable,
-        &imposed_mesh.inner,
-        &multiplier_mesh.inner,
-        RelationSense::parse(sense.as_deref())?,
-    )?;
+    let inner = model::dirichlet(&imposed_mesh.inner, &target.inner, variable, sense)?;
     Ok(PyModel { inner })
 }
 
-/// `model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None,
-/// sense="=")` — multi-point constraint (a single sub-model) imposing, per
-/// relation, `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange multipliers.
+/// `model.mpc(terms, target, sense="=")` — multi-point constraint (a single
+/// sub-model) imposing, per relation, `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange
+/// multipliers.
 ///
-/// `terms` is a list of `(mesh, variable, target_dual, coefficient)` tuples:
-/// each `mesh` is a POI1 mesh (one node per relation), paired
-/// element-for-element with the others and with `multiplier_mesh` (relation
-/// `r` = cell `r` of every mesh). Find `target_dual` with
-/// `model.dual_of(variable)`. `multiplier` / `imposed_value` override the
-/// derived names `lambda_mpc` / `mpc_rhs`. The right-hand side `g` is written
-/// by the user in the load field at the multiplier node's `imposed_value`
-/// component (default `0`). `sense` (`"="`, `">="` or `"<="`, default `"="`)
-/// turns the relations unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`) — such a model is
-/// solved with `solve_unilateral`. See the constraints chapter of the book.
+/// `terms` is a list of `(mesh, variable, coefficient)` tuples: each `mesh` is
+/// a POI1 mesh (one node per relation), paired element-for-element with the
+/// others (relation `r` = cell `r` of every mesh); each `variable` is a primal
+/// of `target`, the model being constrained — the union of two models to tie
+/// two bodies — whose dual row is read from it. Each relation gets a
+/// multiplier node of its own, minted beside the node of the first term; `g`
+/// is written in the load field at its `imposed` component (default `0`).
+/// `sense` (`"="`, the default, `">="` or `"<="`) turns the relations
+/// unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`): the matrix carries the sense, and
+/// `solve` runs its active-set loop. See the constraints chapter of the book.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (target, terms, multiplier_mesh, sense=None))]
+#[pyo3(signature = (terms, target, sense = RelationSense::Equality))]
 pub fn mpc(
     py: Python<'_>,
-    target: PyRef<'_, PyModel>,
     terms: Vec<(Py<PyMesh>, String, f64)>,
-    multiplier_mesh: PyRef<'_, PyMesh>,
-    sense: Option<String>,
+    target: PyRef<'_, PyModel>,
+    sense: RelationSense,
 ) -> PyResult<PyModel> {
-    let mut rust_terms = Vec::with_capacity(terms.len());
-    for (mesh, variable, coefficient) in &terms {
-        let mesh = mesh.borrow(py);
-        rust_terms.push(MpcTerm::new(
-            &target.inner,
-            &mesh.inner,
-            variable,
-            *coefficient,
-        )?);
-    }
-    let inner = model::mpc(
-        rust_terms,
-        &multiplier_mesh.inner,
-        RelationSense::parse(sense.as_deref())?,
-    )?;
+    // The borrows first, then the views on them: the tuples the operator reads
+    // hold references into the borrowed meshes.
+    let meshes: Vec<PyRef<'_, PyMesh>> = terms.iter().map(|(m, _, _)| m.borrow(py)).collect();
+    let rust_terms: Vec<_> = meshes
+        .iter()
+        .zip(&terms)
+        .map(|(mesh, (_, variable, coefficient))| (&mesh.inner, variable.as_str(), *coefficient))
+        .collect();
+    let inner = model::mpc(&rust_terms, &target.inner, sense)?;
     Ok(PyModel { inner })
 }
 
-/// `model.embedded(immersed, host, components, multipliers=None,
-/// imposed_values=None, tol=None)` — embedded (immersed) constraint (a
-/// single sub-model) tying each node of `immersed` to the interpolation of
-/// `host` at that node, via Lagrange multipliers.
+/// `model.embedded(immersed, host, target, variables, tol=1e-6)` — embedded
+/// (immersed) constraint (a single sub-model) tying each node of `immersed` to
+/// the interpolation of `host` at that node, via Lagrange multipliers.
 ///
-/// `immersed` and `host` are meshes sharing one Coords (e.g. a bar
-/// « baignée » in a volume). `components` is a list of `(variable,
-/// target_dual)` pairs — the field components to tie (e.g.
-/// `[("u_x","f_x"), ("u_y","f_y"), ("u_z","f_z")]`); find each `target_dual`
-/// with `model.dual_of(variable)`. The coupling weights are the host shape
-/// functions at each immersed node, computed once at build by locating the
-/// node in the host (an immersed node outside the host is an error).
-/// `multipliers` / `imposed_values` override the per-component derived names
-/// `lambda_<variable>` / `imposed_<variable>`; `tol` is the location
-/// tolerance (default `1e-6`). The right-hand side `g` defaults to `0` (a
-/// rigid tie). See the constraints chapter of the book.
+/// `immersed` and `host` are meshes sharing one Coords (e.g. a bar embedded in
+/// a volume). `target` is the model being constrained; `variables` lists the
+/// primals of `target` to tie (e.g. `["u_x", "u_y", "u_z"]`), each dual row
+/// read from it. The coupling weights are the host shape functions at each
+/// immersed node, computed once at build by locating the node in the host (an
+/// immersed node outside the host is an error); `tol` is the location
+/// tolerance, a gap in the host's **reference** element, without dimension.
+/// Each relation — one per immersed node and variable — gets a multiplier node
+/// of its own; the right-hand side defaults to `0` (a rigid tie). See the
+/// constraints chapter of the book.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (target, immersed, host, variables, tol=None))]
+#[pyo3(signature = (immersed, host, target, variables, tol = crate::models::embedded::DEFAULT_TOL))]
 pub fn embedded(
-    target: PyRef<'_, PyModel>,
     immersed: PyRef<'_, PyMesh>,
     host: PyRef<'_, PyMesh>,
+    target: PyRef<'_, PyModel>,
     variables: Vec<String>,
-    tol: Option<f64>,
+    tol: f64,
 ) -> PyResult<PyModel> {
-    let inner = model::embedded(
-        &target.inner,
-        &immersed.inner,
-        &host.inner,
-        variables,
-        // Flattened at the boundary: the sub-model receives a tolerance, not an
-        // absence to test for.
-        tol.unwrap_or(crate::models::embedded::DEFAULT_TOL),
-    )?;
+    let inner = model::embedded(&immersed.inner, &host.inner, &target.inner, variables, tol)?;
     Ok(PyModel { inner })
 }
 
-/// `model.contact(slave, master, components, multiplier=None,
-/// imposed_value=None)` — node-to-surface contact (a single sub-model):
-/// prevent the nodes of `slave` from penetrating the oriented `master`
-/// surface mesh, one **unilateral** relation (`≥`) per slave node.
+/// `model.contact(slave, master, target, variables)` — node-to-surface contact
+/// (a single sub-model): prevent the nodes of `slave` from penetrating the
+/// oriented `master` surface mesh, one **unilateral** relation (`≥`) per slave
+/// node.
 ///
 /// Each slave node is paired at build with its closest master facet
 /// (projection weights, facet normal, initial signed gap); the pairing is
 /// then fixed (linearised, frictionless contact). The master surface must
 /// be consistently oriented with its normal pointing toward the slave
-/// body. `components` is a list of `(variable, target_dual)` pairs — one
-/// per space dimension, in ambient order (e.g.
-/// `[("u_x","f_x"), ("u_y","f_y")]`); find each `target_dual` with
-/// `model.dual_of(variable)`. `multiplier` / `imposed_value` override the
-/// derived names `lambda_contact` / `contact_gap`.
+/// body. `target` is the model being constrained; `variables` lists its
+/// displacement primals, one per space dimension in ambient order (e.g.
+/// `["u_x", "u_y"]`), each dual row read from it. Each relation gets a
+/// multiplier node of its own, minted beside its slave node.
 ///
-/// Solve with `solve_unilateral`; build the initial-gap right-hand side
-/// with `contact_gaps()`. See the contact chapter of the book.
+/// Solve with `solve`. The initial-gap right-hand side `-g0` is a load the
+/// contact carries: `node_field.external_forces` returns it with the other
+/// loads of the model. See the contact chapter of the book.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (target, slave, master, variables))]
+#[pyo3(signature = (slave, master, target, variables))]
 pub fn contact(
-    target: PyRef<'_, PyModel>,
     slave: PyRef<'_, PyMesh>,
     master: PyRef<'_, PyMesh>,
+    target: PyRef<'_, PyModel>,
     variables: Vec<String>,
 ) -> PyResult<PyModel> {
-    let inner = model::contact(&target.inner, &slave.inner, &master.inner, variables)?;
+    let inner = model::contact(&slave.inner, &master.inner, &target.inner, variables)?;
     Ok(PyModel { inner })
+}
+
+/// `model.update_contact(model, displacement)` — the model with its contacts
+/// **updated** to the positions `X + u`: `X` the active configuration, `u` read
+/// in `displacement` on each contact's variables (`u_x`, `u_y`, `u_z`; a node
+/// or a component it lacks reads zero). Every other sub-model is shared as it
+/// is; a model without contact comes back unchanged.
+///
+/// Each slave node is paired again with its closest master facet on `X + u`,
+/// and its relation becomes the gap linearised there, written in total
+/// displacement from `X`: the right-hand side the contact carries is `-g~`,
+/// the gap of the new pairing measured on `X`. The multiplier nodes are kept,
+/// so the unknowns `lambda` and the rows `imposed` stay the same; at `u = 0`,
+/// the contact as it was built. A master facet collapsed by the displacement
+/// is not detected here.
+///
+/// What large displacements call for: the step-by-step loop updates its
+/// contacts each time it rebuilds its operator. See the contact chapter of the
+/// book.
+#[py_op(method_on = PyModel)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn update_contact(model: PyRef<'_, PyModel>, displacement: PyRef<'_, PyNodeField>) -> PyModel {
+    PyModel {
+        inner: model::update_contact(&model.inner, &displacement.inner),
+    }
 }

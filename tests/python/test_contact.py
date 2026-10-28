@@ -1,5 +1,5 @@
 """Python tests for node-to-surface contact (`model.contact`) solved by the
-active-set operator `solve_unilateral`.
+active-set loop of `solve`.
 
 Patch test: two elastic blocks stacked in `y` with an initial gap, every `u_x`
 blocked (uniaxial column, plane stress, ν = 0). Pressing the top block closes
@@ -7,9 +7,8 @@ the contact and transmits a uniform stress through the interface; lifting it
 releases every pair (λ = 0).
 """
 
-import pytest
-
 import pyrucast
+import pytest
 
 E = 100.0
 S = 5.0  # applied pressure
@@ -39,8 +38,7 @@ def _block(c, mesh, y0):
 
 def _clamp(target, nodes, var):
     imposed = pyrucast.mesh.poi1_from_nodes(nodes)
-    mult = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.model.dirichlet(target, var, imposed, mult)
+    return pyrucast.model.dirichlet(imposed, target, var)
 
 
 def _two_blocks():
@@ -60,7 +58,7 @@ def _two_blocks():
     slave = pyrucast.mesh.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
 
     model = pyrucast.model.elasticity(fes, "plane_stress")
-    contact = pyrucast.model.contact(model, slave, master, ["u_x", "u_y"])
+    contact = pyrucast.model.contact(slave, master, model, ["u_x", "u_y"])
     model = model | _clamp(model, bottom + top, "u_x")
     model = model | _clamp(model, [bottom[idx(i, 0)] for i in range(N + 1)], "u_y")
     model = model | contact
@@ -82,11 +80,11 @@ def test_patch_test_uniform_pressure_through_contact():
     materials = pyrucast.element_field.material_field(
         model, [("E", E), ("nu", 0.0), ("phi_f_y", -S)]
     )
-    traction = pyrucast.node_field.external_forces(model, materials)
-    rhs = traction | model.contact_gaps()
+    # The pressure and the contact's own gap: every load the model carries.
+    rhs = pyrucast.node_field.external_forces(model, materials)
 
     k = pyrucast.matrix.stiffness(model, materials)
-    solution = pyrucast.solver.solve_unilateral(k, model, rhs)
+    solution = pyrucast.solver.solve(k, rhs)
 
     for j in range(N + 1):
         for i in range(N + 1):
@@ -100,14 +98,14 @@ def test_patch_test_uniform_pressure_through_contact():
     # Contact reactions −λᵢ ≥ 0 sum to the applied resultant S.
     mult_mesh = contact.multiplier_mesh()
     mults = [mult_mesh.node(0, r, 0) for r in range(N + 1)]
-    lambdas = [solution.value(m, "lambda_contact") for m in mults]
+    lambdas = [solution.value(m, "lambda") for m in mults]
     assert all(lam <= TOL for lam in lambdas)
     assert abs(sum(-lam for lam in lambdas) - S) < TOL
 
 
 def test_separation_releases_every_pair():
     """Lifting the top block opens every pair: λ = 0, bottom block untouched."""
-    c, bottom, top, model, contact, materials = _two_blocks()
+    _c, bottom, top, model, contact, materials = _two_blocks()
     idx = lambda i, j: j * (N + 1) + i
     lift = 0.1
 
@@ -115,10 +113,10 @@ def test_separation_releases_every_pair():
     lift_model = _clamp(model, top_edge_nodes, "u_y")
     model = model | lift_model
     rhs = lift_model.constraint_rhs([(n, lift) for n in top_edge_nodes])
-    rhs = rhs | model.contact_gaps()
+    rhs = rhs | pyrucast.node_field.external_forces(model, materials)
 
     k = pyrucast.matrix.stiffness(model, materials)
-    solution = pyrucast.solver.solve_unilateral(k, model, rhs)
+    solution = pyrucast.solver.solve(k, rhs)
 
     for j in range(N + 1):
         for i in range(N + 1):
@@ -127,18 +125,17 @@ def test_separation_releases_every_pair():
     mult_mesh = contact.multiplier_mesh()
     for r in range(N + 1):
         m = mult_mesh.node(0, r, 0)
-        assert abs(solution.value(m, "lambda_contact")) < TOL
+        assert abs(solution.value(m, "lambda")) < TOL
 
 
-def test_contact_gaps_requires_a_contact():
-    """`contact_gaps` on a contact-free model raises a clear error."""
-    c = pyrucast.Coords(2)
-    mesh = pyrucast.Mesh(c, "QUA4")
-    _block(c, mesh, 0.0)
-    fes = pyrucast.FiniteElementSpace(mesh)
-    model = pyrucast.model.elasticity(fes, "plane_stress")
-    with pytest.raises(Exception, match="contact"):
-        model.contact_gaps()
+def test_the_contact_carries_its_gap():
+    """The contact's right-hand side is a load it carries: `external_forces`
+    returns `-g0` at each multiplier node, the blocks being `G0` apart."""
+    _c, _bottom, _top, _model, contact, materials = _two_blocks()
+    gaps = pyrucast.node_field.external_forces(contact, materials)
+    mult_mesh = contact.multiplier_mesh()
+    for r in range(N + 1):
+        assert abs(gaps.value(mult_mesh.node(0, r, 0), "imposed") + G0) < TOL
 
 
 def test_components_must_match_dimension():
@@ -152,4 +149,29 @@ def test_components_must_match_dimension():
     slave = pyrucast.mesh.poi1_from_nodes([s])
     barre = pyrucast.model.truss(pyrucast.FiniteElementSpace(master))
     with pytest.raises(Exception, match="component"):
-        pyrucast.model.contact(barre, slave, master, ["u_y"])
+        pyrucast.model.contact(slave, master, barre, ["u_y"])
+
+
+def test_update_contact_pairs_the_slaves_again():
+    """`update_contact` pairs every slave again on `X + u`, keeping the
+    multipliers. The top block slid by half a cell to the right and pressed
+    down onto the bottom one: each slave projects where it now stands, and its
+    gap — measured on the positions at rest with the new pairing — is still
+    `G0`, the floor being flat. The method and the function agree."""
+    _c, _bottom, top, _model, contact, materials = _two_blocks()
+    u = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(top), ["u_x", "u_y"])
+    for n in top:
+        u[0].set_value(n, "u_x", 0.5 * H)
+        u[0].set_value(n, "u_y", -G0)
+    updated = pyrucast.model.update_contact(contact, u)
+    first = updated.multiplier_mesh().node(0, 0, 0)
+    assert first.id == contact.multiplier_mesh().node(0, 0, 0).id
+    gaps = pyrucast.node_field.external_forces(updated, materials)
+    by_method = pyrucast.node_field.external_forces(
+        contact.update_contact(u), materials
+    )
+    mult_mesh = updated.multiplier_mesh()
+    for r in range(N + 1):
+        m = mult_mesh.node(0, r, 0)
+        assert abs(gaps.value(m, "imposed") + G0) < TOL
+        assert gaps.value(m, "imposed") == by_method.value(m, "imposed")
