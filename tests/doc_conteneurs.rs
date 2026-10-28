@@ -28,13 +28,14 @@ use pyrucast::{archive, Result};
 
 // ANCHOR: premiers_pas
 #[test]
-fn un_maillage_minimal() {
-    let coords = Handle::new(Coords::new(2).unwrap());
-    let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
-    let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+fn un_maillage_minimal() -> Result<()> {
+    let coords = Handle::new(Coords::new(2)?);
+    let a = Node::create_in(coords.clone(), &[0.0, 0.0])?;
+    let b = Node::create_in(coords.clone(), &[1.0, 0.0])?;
 
-    let mesh = mesh::line(&a, &b, 10, ElementType::SEG2).unwrap();
+    let mesh = mesh::line(&a, &b, 10, ElementType::SEG2)?;
     println!("{}", mesh); // Mesh: 1 submesh(es) [#…], 10 cell(s) total
+    Ok(())
 }
 // ANCHOR_END: premiers_pas
 
