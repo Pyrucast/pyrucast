@@ -126,6 +126,10 @@ Tout objet pyrucast se liste à trois niveaux, du plus court au plus complet :
   borné : au-delà de `max_rows` lignes (20 par défaut), la table est coupée et
   la coupure annoncée (Rust `Dump`).
 
+Seule exception, `Array` — le tableau que rendent les fonctions d'échange — n'a
+pas de `dump()` : simple tampon sans homologue Rust, ce n'est pas un objet
+pyrucast à proprement parler.
+
 Sur les coordonnées du script ci-dessus, qui portent les 11 nœuds de la ligne :
 
 ```python
