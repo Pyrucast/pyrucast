@@ -189,7 +189,8 @@ sous pilotage.
   libre linéaire.
 - **Contact** : une contrainte d'inégalité (`sense=">="` ou `Model.contact`) est
   résolue par le solveur à statuts à chaque itération ; les multiplicateurs
-  en total en portent le signe.
+  en total en portent le signe. Le jeu d'un contact est une charge qu'il
+  porte : le pas à pas le reçoit avec les autres charges du modèle.
 - **Automatique** (`AUTOPILO`) : `Δu` est mis à l'échelle pour que sa
   déformation vaille `automatic_target`, et la fraction de charge
   `α ← α − (r·Δu)/(R·Δu)` ; le temps n'avance que de `α`. Le crochet
@@ -222,6 +223,10 @@ opérateur : stiffness + geometric(σ)              sur « current », en x = X 
   + 4/Δt² M en dynamique                         sur la référence (ρ₀ dV₀)
   construit en début de sous-pas, puis à la 2ᵉ itération,
   puis toutes les max(delta_iterations, 20) itérations ; au-delà de 20, échec
+contact : mis à jour en X + u à chaque construction de l'opérateur
+          (model.update_contact) ; figé entre deux ; à convergence, mis à
+          jour au dernier itéré : l'équilibre doit tenir avec lui, sinon
+          l'opérateur est reconstruit là et l'on continue
 thermique : conduction, échanges, rayonnement et flux sur « current »,
             en x = X + uₙ (début de pas), axes matériau tournés par R ;
             capacité sur la référence (ρ₀ c dV₀) ; l'opérateur additionne
@@ -241,8 +246,22 @@ tournant avec elle (`rotate_frame`, rotation `R` de `F = R U`), et le flux de
 la loi est le flux réel. Seule la capacité reste sur la référence, où elle est
 exacte (cf. [Grandes transformations](mecanique/grandes-transformations.md#la-conduction)).
 
-Sont refusés en grands déplacements : le contact (ses relations devraient
-suivre le glissement du point projeté), une loi de petites déformations à côté
+**Le contact** suit le glissement du point projeté. Chaque fois que
+l'opérateur est reconstruit, ses contacts sont mis à jour à l'itéré
+([`update_contact`](contraintes/contact.md#grands-glissements--mettre-le-contact-à-jour),
+le `RFCO` de Cast3M) : facette, poids et normale de `X + u`, mêmes
+multiplicateurs, et le jeu de ce nouvel appariement mesuré sur `X`. Entre deux
+reconstructions, les relations restent celles de l'opérateur : la résolution
+rend les multiplicateurs en total, contre les relations de l'opérateur, et un
+résidu écrit avec d'autres ne s'annulerait pas. À convergence, le contact est
+mis à jour une dernière fois au dernier itéré, et l'équilibre recalculé avec
+lui doit passer le **même test de convergence** (même mesure, même référence,
+même seuil) ; sinon l'opérateur est reconstruit là, l'accélération marque une
+pause, la fenêtre de stagnation repart, et les itérations continuent. Cast3M
+compare plutôt la variation des réactions, `max|ΔR|²/max|R|²`, à la
+précision ; pyrucast garde le test qui décide déjà de la convergence.
+
+Sont refusés en grands déplacements : une loi de petites déformations à côté
 d'une loi en grandes transformations (poutres et coques n'ont pas encore de
 formulation en grandes transformations ; une barre lit `green_lagrange`, cf.
 [Les barres et les câbles](mecanique/grandes-transformations.md#les-barres-et-les-câbles)).
@@ -277,6 +296,7 @@ enchaînement :
 | `GRANDS_DEPLACEMENTS`, `LAGRANGIEN` | la mesure des lois (`strain_measure`) ; toujours le lagrangien total |
 | `K_SIGMA` | `geometric_stiffness` |
 | `FORM` (GEOM2) | `stepping.configuration.Configurations` |
+| `RFCO` | `model.update_contact`, appelé par `stepping.mechanics.mechanics_at` à chaque reconstruction de l'opérateur |
 
 ## Écarts assumés
 

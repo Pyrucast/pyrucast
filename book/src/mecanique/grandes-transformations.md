@@ -127,7 +127,9 @@ Le **corps** se calcule sur la configuration de référence : sa mesure, sa loi,
 son état, ses forces internes. Ce qui agit sur la **forme
 actuelle** se calcule sur une configuration courante `x = X + u` : l'opérateur
 de Newton, la pression qui suit la paroi, la thermique de la pièce
-déformée. Le `Coords` les porte
+déformée. Le contact, lui, se réapparie sur `X + u` sans changer de
+configuration : [`update_contact`](../contraintes/contact.md#grands-glissements--mettre-le-contact-à-jour)
+lit `u` et range un jeu rapporté à la référence. Le `Coords` les porte
 toutes les deux ; on passe de l'une à l'autre en changeant d'indice, sans
 recopier le maillage. [`in_config`](../coords.md#plusieurs-configurations) rend
 la courante active le temps d'un bloc, puis rétablit celle d'avant, même si le
@@ -294,7 +296,11 @@ déduit comme plus haut, avec le déplacement enregistré. Voir
   limites, la taille des pas étant la flèche du sommet (crochet
   `automatic_measure`) ;
 - une corde tendue, chargée en son milieu, prend la flèche de l'équilibre
-  exact `2 S_n w / L = P` ; sans `K_σ`, l'opérateur est singulier.
+  exact `2 S_n w / L = P` ; sans `K_σ`, l'opérateur est singulier ;
+- un nœud tiré par une barre le long d'un sol rigide brisé, un plat puis une
+  rampe, quitte le plat pour la rampe : il s'arrête où l'équilibre le long de
+  la rampe le place, la réaction normale à la rampe — et non où un contact
+  figé sur le plat l'aurait laissé.
 
 ## Correspondance Cast3M
 
@@ -307,3 +313,4 @@ déduit comme plus haut, avec le déplacement enregistré. Voir
 | `KSIG` | `matrix.geometric` |
 | `BARR` en `GRANDS_DEPLACEMENTS` | `model.truss(fes, strain_measure="green_lagrange")` |
 | `PRES` sur la géométrie courante | `model.flux(…, "n")` évalué sur la configuration courante |
+| `RFCO` à chaque reconstruction de K | `model.update_contact`, appelé par le pas à pas |

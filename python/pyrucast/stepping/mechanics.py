@@ -11,7 +11,11 @@ the nominal stress ``P = F S``. The operator, the follower loads and the
 geometric stiffness are evaluated on the current configuration
 ``x = X + u`` (``configuration.Configurations``), and the operator is rebuilt
 there at the second iteration, then every ``max(delta_iterations, 20)``
-iterations (Cast3M ``K_e(GEOM2) + K_σ``).
+iterations (Cast3M ``K_e(GEOM2) + K_σ``). Each time, the contacts are updated
+to that configuration (``model.update_contact``, Cast3M ``RFCO``): the
+relations stay as they are between two rebuilds — the multipliers are totals,
+solved against the operator's relations — and, once converged, the contact is
+updated once more to check that the equilibrium holds with it.
 
 The iteration is a modified Newton: a constant operator (the elastic
 stiffness, or the consistent tangent on request), residuals evaluated exactly
@@ -26,6 +30,7 @@ from .anderson import Accelerator
 from .control import AutomaticControl, IndirectControl
 from .fields import STRAIN_PREFIXES, carried, infinity_norm, part, shifted
 from .materials import materials_at
+from .problem import contacts
 
 __all__ = [
     "Balance",
@@ -39,6 +44,7 @@ __all__ = [
     "integrate_increment",
     "iteration_operator",
     "mechanical_step",
+    "mechanics_at",
     "nonlinear_predictor",
     "reference_forces",
     "step_data",
@@ -152,13 +158,16 @@ class Balance:
     reactions: object | None
 
 
-def balance(problem, solution, behaviour, step, inertia=None):
+def balance(problem, mechanics, solution, behaviour, step, inertia=None):
     """The ``Balance`` at ``solution`` with the laws' state ``behaviour``.
 
-    ``inertia``, given in dynamics, is ``M·a`` at this iterate. In large
-    displacements the internal forces are those of the nominal stress
-    ``P = F S`` on the reference configuration, and the loads that follow the
-    wall are evaluated on the configuration of this iterate.
+    ``mechanics`` is the mechanical model the relations are read in —
+    ``problem.mechanics``, or the same with its contacts updated
+    (``mechanics_at``). ``inertia``, given in dynamics, is ``M·a`` at this
+    iterate. In large displacements the internal forces are those of the
+    nominal stress ``P = F S`` on the reference configuration, the loads that
+    follow the wall are evaluated on the configuration of this iterate, and
+    the contacts' gaps are those of their last update.
     """
     displacement = part(solution, problem.displacement_names)
     stress = behaviour
@@ -166,7 +175,7 @@ def balance(problem, solution, behaviour, step, inertia=None):
         gradient = element_field.deformation(displacement, problem.fespace, "gradient")
         stress = element_field.stress_measure(behaviour, gradient, "pk1")
     internal = node_field.internal_forces(
-        problem.mechanics, stress, displacement, step.materials
+        mechanics, stress, displacement, step.materials
     )
     system = internal * -1.0
     for load in step.loads:
@@ -177,6 +186,9 @@ def balance(problem, solution, behaviour, step, inertia=None):
                 problem.follower_loads, step.materials
             )
         system = system + node_field.restrict_like(follower, internal)
+    if problem.updates_contact:
+        gaps = node_field.external_forces(contacts(mechanics), step.materials)
+        system = system + node_field.restrict_like(gaps, internal)
     if inertia is not None:
         system = system - node_field.restrict_like(inertia, internal)
     multipliers = part(solution, problem.multiplier_names)
@@ -184,11 +196,21 @@ def balance(problem, solution, behaviour, step, inertia=None):
         return Balance(system, system, None)
     reactions = node_field.restrict_like(
         node_field.internal_forces(
-            problem.mechanics_constraints, behaviour, multipliers, step.materials
+            mechanics.filter("constraint"), behaviour, multipliers, step.materials
         ),
         internal,
     )
     return Balance(system, system - reactions, reactions)
+
+
+def mechanics_at(problem, solution):
+    """The mechanical model to iterate with at ``solution``: in large
+    displacements with contact, ``problem.mechanics`` with its contacts
+    updated to ``X + u`` (Cast3M ``RFCO``); otherwise ``problem.mechanics``
+    itself."""
+    if not problem.updates_contact:
+        return problem.mechanics
+    return problem.mechanics.update_contact(part(solution, problem.displacement_names))
 
 
 def _solve(operator, rhs):
@@ -228,9 +250,10 @@ def _work(problem, primal, dual):
 
 
 def iteration_operator(
-    problem, state, step, options, strain=None, behaviour=None, at=None
+    problem, state, step, options, mechanics, strain=None, behaviour=None, at=None
 ):
-    """The operator a substep iterates with.
+    """The operator a substep iterates with, assembled on ``mechanics`` (see
+    ``balance``).
 
     By default the elastic stiffness at the end-of-step materials, with the
     constraints; it is **kept** in the state and reused while the materials
@@ -247,17 +270,19 @@ def iteration_operator(
     """
     dt = step.t_end - step.t_start
     if problem.configurations is not None:
-        return _current_operator(problem, state, step, options, strain, behaviour, at)
+        return _current_operator(
+            problem, state, step, options, mechanics, strain, behaviour, at
+        )
     if options.tangent and strain is not None:
         operator = matrix.tangent(
-            problem.mechanics, step.materials, strain, prev=behaviour, dt=dt
+            mechanics, step.materials, strain, prev=behaviour, dt=dt
         )
     else:
         key = (step.materials, dt if options.dynamics else None)
         cached = state.operator_key
         if state.operator is not None and cached[0] is key[0] and cached[1] == key[1]:
             return state.operator
-        operator = matrix.stiffness(problem.mechanics, step.materials)
+        operator = matrix.stiffness(mechanics, step.materials)
     if options.augmented_stiffness is not None:
         operator = operator + options.augmented_stiffness
     if options.dynamics and dt > 0.0:
@@ -268,7 +293,7 @@ def iteration_operator(
     return operator
 
 
-def _current_operator(problem, state, step, options, strain, behaviour, at):
+def _current_operator(problem, state, step, options, mechanics, strain, behaviour, at):
     """The operator of an iterate in large displacements: ``K_e + K_σ`` on its
     configuration (Cast3M ``K_e(GEOM2) + K_σ``)."""
     dt = step.t_end - step.t_start
@@ -288,10 +313,10 @@ def _current_operator(problem, state, step, options, strain, behaviour, at):
     with problem.configurations.current_at(displacement):
         if options.tangent and strain is not None:
             operator = matrix.tangent(
-                problem.mechanics, step.materials, strain, prev=behaviour, dt=dt
+                mechanics, step.materials, strain, prev=behaviour, dt=dt
             )
         else:
-            operator = matrix.stiffness(problem.mechanics, step.materials)
+            operator = matrix.stiffness(mechanics, step.materials)
         if sigma is not None:
             operator = operator + matrix.geometric(
                 problem.mechanics_domain, step.materials, sigma
@@ -438,6 +463,10 @@ class Tracker:
     stalled: bool = False
     stall_tolerance: float = 1e-5
     relaxation: float = 1.0
+    # The iteration the stall test counts from: a contact updated at
+    # convergence changes the residual, and the test waits ``delta_iterations``
+    # more before judging it (Cast3M ``DLTAIT``).
+    window_start: int = 0
 
     def reset(self):
         """A new substep: the history and the stall flag start over, the cap
@@ -446,6 +475,7 @@ class Tracker:
         self.stalled = False
         self.stall_tolerance = 1e-5
         self.relaxation = 1.0
+        self.window_start = 0
 
 
 def convergence_status(tracker, i, measures, options, skip, controlled):
@@ -469,7 +499,11 @@ def convergence_status(tracker, i, measures, options, skip, controlled):
     ):
         return "relaxed" if tracker.relaxation < 1.0 else "converged"
     d = options.delta_iterations
-    reference = 0.99 * tracker.history[i - 1 - d] if i > d else float("inf")
+    reference = (
+        0.99 * tracker.history[i - 1 - d]
+        if i - tracker.window_start > d
+        else float("inf")
+    )
     if (
         not skip
         and not tracker.stalled
@@ -520,6 +554,7 @@ class Equilibrium:
 def equilibrium_iterations(
     problem,
     state,
+    mechanics,
     operator,
     step,
     start,
@@ -535,8 +570,15 @@ def equilibrium_iterations(
 ):
     """Iterate a substep to equilibrium (Algo 4).
 
-    ``start`` is the substep's starting point (solution, behaviour, strain),
-    ``first`` its ``Balance`` — the predictor already added. Each iteration:
+    ``mechanics`` is the model ``operator`` was assembled on (see
+    ``balance``), ``start`` the substep's starting point (solution,
+    behaviour, strain), ``first`` its ``Balance`` — the predictor already
+    added. In large displacements with contact, each rebuild of the operator
+    updates the contacts to the iterate and evaluates the forces again with
+    them; a converged iterate is accepted only if the equilibrium still holds
+    with the contacts updated to it (the usual force test, on the same
+    reference), otherwise the operator is rebuilt there and the iterations go
+    on. Each iteration:
     the consistent tangent if asked, Anderson's correction every other
     iteration from the fourth, a solve, the laws integrated at the new
     iterate, the forces, and the tests of ``convergence_status``. When a stall
@@ -570,15 +612,26 @@ def equilibrium_iterations(
     for i in range(1, 10**9):
         pause -= 1
         if options.tangent and i >= 2 and i % options.tangent_every == 0:
+            mechanics = mechanics_at(problem, solution)
             operator = iteration_operator(
                 problem,
                 state,
                 step,
                 options,
+                mechanics,
                 strain,
                 start.behaviour,
                 at=(solution, behaviour),
             )
+            if problem.updates_contact:
+                current = balance(
+                    problem,
+                    mechanics,
+                    solution,
+                    behaviour,
+                    step,
+                    inertia(solution) if inertia else None,
+                )
         elif large and i > 1 and (i - 2) % rebuild_every == 0:
             # The operator of the configuration reached (Cast3M K_e(GEOM2) + K_σ),
             # at the second iteration — the first correction has moved the
@@ -596,9 +649,19 @@ def equilibrium_iterations(
                     step,
                     controller,
                 )
+            mechanics = mechanics_at(problem, solution)
             operator = iteration_operator(
-                problem, state, step, options, at=(solution, behaviour)
+                problem, state, step, options, mechanics, at=(solution, behaviour)
             )
+            if problem.updates_contact:
+                current = balance(
+                    problem,
+                    mechanics,
+                    solution,
+                    behaviour,
+                    step,
+                    inertia(solution) if inertia else None,
+                )
             pause = 4
         rhs = current.system
         if accelerator is not None:
@@ -624,7 +687,12 @@ def equilibrium_iterations(
         )
         previous = current
         current = balance(
-            problem, solution, behaviour, step, inertia(solution) if inertia else None
+            problem,
+            mechanics,
+            solution,
+            behaviour,
+            step,
+            inertia(solution) if inertia else None,
         )
         if controller is not None:
             level = controller.after_balance(start.solution, solution, current)
@@ -635,6 +703,7 @@ def equilibrium_iterations(
                 )
                 current = balance(
                     problem,
+                    mechanics,
                     solution,
                     behaviour,
                     step,
@@ -669,6 +738,41 @@ def equilibrium_iterations(
         status = convergence_status(
             tracker, i, measures, options, skip_first and i == 1, controlled
         )
+        if status in ("converged", "relaxed") and problem.updates_contact:
+            # The relations the iterations converged with are those of the last
+            # rebuild: updated to the iterate reached, does the equilibrium
+            # still hold? The usual force test, on the same reference.
+            updated = mechanics_at(problem, solution)
+            check = balance(
+                problem,
+                updated,
+                solution,
+                behaviour,
+                step,
+                inertia(solution) if inertia else None,
+            )
+            if (
+                infinity_norm(check.out_of_balance, problem.force_names) / force_ref
+                >= options.precision
+            ):
+                rebuilds += 1
+                if rebuilds > _MAX_REBUILDS:
+                    status = "failed"
+                else:
+                    mechanics, current = updated, check
+                    operator = iteration_operator(
+                        problem,
+                        state,
+                        step,
+                        options,
+                        mechanics,
+                        at=(solution, behaviour),
+                    )
+                    pause = 4
+                    tracker.window_start = i
+                    continue
+            else:
+                current = check
         if status != "continue":
             return Equilibrium(
                 status,
@@ -688,6 +792,7 @@ def equilibrium_iterations(
             )
             current = balance(
                 problem,
+                mechanics,
                 solution,
                 behaviour,
                 step,
@@ -788,14 +893,25 @@ def mechanical_step(data, problem, state, t_end, temperature, options):
             problem, start.solution, step, start.behaviour
         )
         at = (start.solution, behaviour0)
+        mechanics = mechanics_at(problem, start.solution)
         if options.tangent:
             operator = iteration_operator(
-                problem, state, step, options, start.strain, start.behaviour, at=at
+                problem,
+                state,
+                step,
+                options,
+                mechanics,
+                start.strain,
+                start.behaviour,
+                at=at,
             )
         else:
-            operator = iteration_operator(problem, state, step, options, at=at)
+            operator = iteration_operator(
+                problem, state, step, options, mechanics, at=at
+            )
         first = balance(
             problem,
+            mechanics,
             start.solution,
             behaviour0,
             step,
@@ -841,7 +957,7 @@ def mechanical_step(data, problem, state, t_end, temperature, options):
             behaviour0 = integrate_increment(
                 problem, start.solution, step, start.behaviour
             )[1]
-            first = balance(problem, start.solution, behaviour0, step)
+            first = balance(problem, mechanics, start.solution, behaviour0, step)
         predicted = None
         if substep == 0 and controller is None:
             predicted = nonlinear_predictor(
@@ -859,6 +975,7 @@ def mechanical_step(data, problem, state, t_end, temperature, options):
         result = equilibrium_iterations(
             problem,
             state,
+            mechanics,
             operator,
             step,
             start,

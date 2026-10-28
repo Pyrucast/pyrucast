@@ -82,13 +82,13 @@ def _sub_models(model):
     return [model[i : i + 1] for i in range(len(model))]
 
 
-def _refuse_in_large_displacements(mechanics):
-    """What large displacements do not offer yet, refused with the reason."""
-    if any(sub[0].label() == "Contact" for sub in _sub_models(mechanics)):
-        raise ValueError(
-            "step_by_step: contact is not available in large displacements — its "
-            "relations would have to follow the sliding of the projected point"
-        )
+def contacts(model):
+    """The contact sub-models of ``model``, together; ``None`` without any."""
+    found = None
+    for sub in _sub_models(model):
+        if sub[0].label() == "Contact":
+            found = sub if found is None else found | sub
+    return found
 
 
 def _frame_fespace(model):
@@ -112,9 +112,13 @@ def _frame_fespace(model):
 def _follower_split(mechanics):
     """The loads that follow the wall (``flux`` in its normal mode, density
     ``phi_n``) and the rest of the mechanical model, ``(follower, others)``;
-    ``follower`` is ``None`` when there is none."""
+    ``follower`` is ``None`` when there is none. The contacts stay out of
+    both: their gap follows their pairing, read on the model they are updated
+    in."""
     follower, others = None, None
     for sub in _sub_models(mechanics):
+        if sub[0].label() == "Contact":
+            continue
         if (sub[0].material_components() or []) == ["phi_n"]:
             follower = sub if follower is None else follower | sub
         else:
@@ -169,6 +173,9 @@ class Problem:
     # material axes, where the gradient turning them with the part is
     # computed; ``None`` when no law does.
     frame_fespace: object | None = None
+    # Large displacements with contact: the contacts are updated to the
+    # configuration each time the operator is rebuilt.
+    updates_contact: bool = False
 
 
 def describe_problem(data, options):
@@ -184,7 +191,9 @@ def describe_problem(data, options):
     problem carries that measure, the reference and current configurations
     (one more set in the ``Coords``, added by the first computation), its
     follower loads, and the FE space where the material axes a heat step
-    reads are turned with the part.
+    reads are turned with the part. Its contacts are updated to the
+    configuration of the iterate each time the operator is rebuilt
+    (``updates_contact``).
     """
     model = data["model"]
     mechanics, mechanics_domain, mechanics_constraints = _part(model, "mechanical")
@@ -244,9 +253,10 @@ def describe_problem(data, options):
         )
     follower_loads, step_loads = None, mechanics
     frame_fespace = None
+    updates_contact = False
     if large:
-        _refuse_in_large_displacements(mechanics)
         follower_loads, step_loads = _follower_split(mechanics)
+        updates_contact = contacts(mechanics) is not None
         if heat is not None:
             frame_fespace = _frame_fespace(model)
 
@@ -290,4 +300,5 @@ def describe_problem(data, options):
         follower_loads=follower_loads,
         step_loads=step_loads,
         frame_fespace=frame_fespace,
+        updates_contact=updates_contact,
     )

@@ -566,6 +566,118 @@ def test_a_taut_string_carries_a_weight_through_its_geometric_stiffness(geometri
         assert w == pytest.approx(deflection(weight * record["time"]), rel=1e-8)
 
 
+def _ramp(times, pull):
+    """A bar in Green–Lagrange from the anchor P(0, −1) to the node S(0.5, 0)
+    resting on a rigid floor, flat from A(−1, 0) to B(1, 0) then rising along
+    the ramp B–C, C(3, 1): the floor is held, its normals point up. S is pulled
+    to the right by a fixed force growing with time to ``pull``. Returns
+    (data, s, slave contact model)."""
+    c = pc.Coords(2)
+    anchor, s = c.add_node([0.0, -1.0]), c.add_node([0.5, 0.0])
+    a, b, top = c.add_node([-1.0, 0.0]), c.add_node([1.0, 0.0]), c.add_node([3.0, 1.0])
+    bar = pc.Mesh(c, "SEG2")
+    bar.unit().add_cell([anchor, s])
+    bars = pc.model.truss(pc.FiniteElementSpace(bar), strain_measure="green_lagrange")
+    floor = pc.Mesh(c, "SEG2")
+    floor.unit().add_cell([b, a])
+    floor.unit().add_cell([top, b])
+    contact = pc.model.contact(
+        pc.mesh.poi1_from_nodes([s]), floor, bars, ["u_x", "u_y"]
+    )
+    model = bars | contact
+    for variable in ("u_x", "u_y"):
+        model = model | _fix(bars, [anchor, a, b, top], variable)[0]
+    force = pc.NodeField(pc.mesh.poi1_from_nodes([s]), ["f_x"])
+    force[0].set_value(s, "f_x", pull)
+    data = {
+        "model": model,
+        "times": times,
+        "materials": pc.element_field.material_field(model, [("E", 1.0), ("A", 1.0)]),
+        "loads": pc.Evolution([(0.0, force * 0.0), (1.0, force)]),
+        "precision": 1e-10,
+    }
+    return data, s
+
+
+_ANCHOR = (0.0, -1.0)
+_REST = math.dist(_ANCHOR, (0.5, 0.0))
+_RAMP = (2.0 / math.sqrt(5.0), 1.0 / math.sqrt(5.0))
+
+
+def _bar_force(q):
+    """The bar's axial force at S = q, pulling S toward the anchor: Cauchy
+    force n = λ S_n with S_n = EA (l² − L²)/2L², λ = l/L, EA = 1."""
+    l = math.dist(_ANCHOR, q)
+    n = (l / _REST) * (l * l - _REST**2) / (2.0 * _REST**2)
+    return n * (_ANCHOR[0] - q[0]) / l, n * (_ANCHOR[1] - q[1]) / l
+
+
+def _root(f, lo, hi):
+    """The root of ``f`` between ``lo`` and ``hi``, by bisection."""
+    f_lo = f(lo)
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        if (f(mid) > 0.0) == (f_lo > 0.0):
+            lo, f_lo = mid, f(mid)
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+def _on_the_flat(pull):
+    """Where S stands if the floor were flat everywhere: horizontal balance
+    along y = 0 — what a contact frozen on its first facet would give."""
+    x = _root(lambda x: pull + _bar_force((x, 0.0))[0], 0.5, 5.0)
+    return x, 0.0
+
+
+def _on_the_ramp(pull):
+    """Where S stands on the ramp B + ψ t: the balance along the ramp, the
+    floor pushing only along its normal."""
+
+    def along(psi):
+        q = (1.0 + psi * _RAMP[0], psi * _RAMP[1])
+        fx, fy = _bar_force(q)
+        return (pull + fx) * _RAMP[0] + fy * _RAMP[1]
+
+    psi = _root(along, 0.0, 3.0)
+    return 1.0 + psi * _RAMP[0], psi * _RAMP[1]
+
+
+@pytest.mark.parametrize("times", [[0.0, 0.1, 0.2, 0.8, 1.0], [0.0, 1.0]])
+def test_a_node_pulled_along_a_kinked_floor_climbs_the_ramp(times):
+    """S slides along the flat, then past the kink B onto the ramp: the
+    contact is updated each time the operator is rebuilt, and checked once
+    more at convergence. Under the final pull it stands where the balance
+    along the ramp puts it — not where a contact frozen on the flat would —,
+    on the ramp (no gap), the reaction normal to the ramp. One case takes the
+    whole pull in a single step, the kink crossed within it. In the other, the
+    first correction of the first step throws S past the kink: the contact
+    updated there holds it on the ramp, and only the check at convergence
+    brings it back to the flat, where it belongs."""
+    pull = 1.0
+    data, s = _ramp(times, pull)
+    pc.stepping.step_by_step(data)
+    for record in data["results"][1:]:
+        f = pull * record["time"]
+        flat_end = -_bar_force((1.0, 0.0))[0]
+        expected = _on_the_flat(f) if f < flat_end else _on_the_ramp(f)
+        u = record["displacement"]
+        at = (0.5 + u.value(s, "u_x"), u.value(s, "u_y"))
+        assert at[0] == pytest.approx(expected[0], abs=1e-7)
+        assert at[1] == pytest.approx(expected[1], abs=1e-7)
+    # The last state, on the ramp: on it, pushed only along its normal, and
+    # far from where the frozen contact would have left it.
+    x, y = at
+    assert y == pytest.approx((x - 1.0) * _RAMP[1] / _RAMP[0], abs=1e-9)
+    reaction = record["reactions"]
+    rx, ry = reaction.value(s, "f_x"), reaction.value(s, "f_y")
+    assert abs(rx * _RAMP[0] + ry * _RAMP[1]) < 1e-8 * math.hypot(rx, ry)
+    assert math.hypot(rx, ry) > 0.1
+    frozen = _on_the_flat(pull)
+    assert abs(x - frozen[0]) > 0.1
+
+
 def test_what_large_displacements_do_not_offer_is_refused():
     _, _, fes, node, _ = _grid(2, 1, 2.0, 1.0)
     solid = pc.model.elasticity(fes, "plane_strain")
