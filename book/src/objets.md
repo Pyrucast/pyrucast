@@ -5,22 +5,22 @@ chacun, son **principe** (à quoi il sert, comment il est structuré) et son
 **interface** (API Rust et Python). Les objets sont présentés dans leur
 **ordre de dépendance** — chacun ne s'appuie que sur les précédents.
 
-```text
-Coords ── Node
+<pre>
+<b>Coords</b> ── <b>Node</b>                            <i>le magasin de nœuds, et l'un d'eux</i>
    │
-   ├── Mesh (agrège des SubMesh)
-   │      └── FiniteElementSpace (agrège des SubFiniteElementSpace)
-   │             ├── ElementField (champ aux points de Gauss)
-   │             └── Model (agrège des SubModel : physiques)
-   │                    └── Matrix (matrice creuse, sortie d'assemblage)
-   └── NodeField (champ aux nœuds)
+   └── <b>Mesh</b>                               <i>agrège des SubMesh</i>
+          ├── <b>NodeField</b>                   <i>champ aux nœuds, sur un support POI1</i>
+          └── <b>FiniteElementSpace</b>          <i>agrège des SubFiniteElementSpace</i>
+                 ├── <b>ElementField</b>         <i>champ aux points de Gauss</i>
+                 └── <b>Model</b>                <i>agrège des SubModel : physiques et contraintes</i>
+                        └── <b>Matrix</b>        <i>matrice creuse, sortie d'assemblage</i>
 
-Evolution (agrège des SubEvolution : valeur tabulée vs variable, interpolée)
-```
+<b>Evolution</b>                                 <i>agrège des SubEvolution : valeur tabulée selon une variable</i>
+</pre>
 
 Une distinction structure toute cette liste et se lit dans l'arborescence :
-`Coords` est le **magasin** (`src/coords.rs`), `Node` et `Cell` sont des
-**atomes** insécables (`src/atoms/`), et tout le reste — les sept agrégats et
+`Coords` est le **magasin** (`src/coords.rs`), `Node`, `Cell` et `Element`
+sont des **atomes** insécables (`src/atoms/`), et tout le reste — les sept agrégats et
 leurs vues `Sub*` — sont des **conteneurs** divisibles (`src/containers/`),
 les seuls qui puissent être le sujet d'un opérateur. Voir
 [Conventions](conventions.md).
@@ -35,7 +35,9 @@ lues tôt :
   `NodeField` et `ElementField` : composantes nommées, `min`/`max`,
   arithmétique scalaire et par composante.
 
-Pour le contexte informatique (handles, refcount, motif zone/agrégat),
-voir [Aspect informatique](aspect-informatique.md). Pour les écrire dans un
+Pour le contexte informatique (durée de vie des objets, motif zone/agrégat),
+voir [Aspect informatique](aspect-informatique.md) ; pour ce qu'il y a dessous
+côté Rust (`Handle<T>`, compteurs de références), [Modèle
+mémoire](memory-model.md). Pour les écrire dans un
 fichier et les relire tels qu'ils étaient, [Sauvegarde et
 relecture](sauvegarde.md).
