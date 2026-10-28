@@ -58,16 +58,17 @@ franche.
 
 | forme | | triangulate | pave | grid | grid2 |
 |---|---|---:|---:|---:|---:|
-| rectangle 1 × 0,63 | mailles | 286 | 98 | **60** | **60** |
-| | pire | 0,425 | 0,465 | **0,999** | **0,999** |
-| plaque, marche sur la grille | mailles | 394 | 138 | **80** | **80** |
-| | pire | 0,489 | 0,290 | **1,000** | **1,000** |
+| rectangle 1 × 0,63 | mailles | 286 | 96 | **60** | **60** |
+| | pire | 0,425 | 0,389 | **0,999** | **0,999** |
+| plaque, marche sur la grille | mailles | 394 | 124 | **80** | **80** |
+| | pire | 0,489 | 0,669 | **1,000** | **1,000** |
 
 Les deux mailleurs en grille rendent le maillage qu'on dessinerait à la main :
 toutes les mailles sont des rectangles et il n'y a pas un seul triangle. Le
-paveur, lui, rend une pelure d'oignon avec quatre coutures diagonales — sa
-faiblesse est là où deux de ses rangées se rencontrent, et cette ligne-là existe
-même sur un rectangle.
+paveur, lui, rend une pelure d'oignon dont les rangées se referment sur une
+ligne médiane, avec deux petites zones de fermeture à ses bouts — sa faiblesse
+est là où ses rangées se referment, et cette fermeture existe même sur un
+rectangle.
 
 ### Une forme rectilinéaire qui ne tombe pas sur la grille
 
@@ -84,14 +85,14 @@ et `grid_surface2` se séparent nettement.
 
 | forme | | triangulate | pave | grid | grid2 |
 |---|---|---:|---:|---:|---:|
-| plaque à marche (0,53 ; 0,61) | mailles | 366 | 136 | 86 | **80** |
-| | pire | 0,481 | 0,187 | 0,405 | **0,963** |
-| L à cotes quelconques | mailles | 308 | 117 | 76 | **70** |
-| | pire | 0,459 | 0,446 | 0,437 | **0,979** |
-| L étiré à 1,02 | mailles | 319 | 117 | 80 | **74** |
-| | pire | 0,477 | 0,551 | 0,351 | **0,606** |
-| L étiré à 1,10 | mailles | 336 | 122 | 80 | **74** |
-| | pire | 0,474 | 0,446 | 0,421 | **0,963** |
+| plaque à marche (0,53 ; 0,61) | mailles | 366 | 130 | 86 | **80** |
+| | pire | 0,481 | 0,571 | 0,405 | **0,963** |
+| L à cotes quelconques | mailles | 308 | 111 | 76 | **70** |
+| | pire | 0,459 | 0,680 | 0,437 | **0,979** |
+| L étiré à 1,02 | mailles | 319 | 107 | 81 | **74** |
+| | pire | 0,477 | **0,639** | 0,307 | 0,606 |
+| L étiré à 1,10 | mailles | 336 | 112 | 80 | **74** |
+| | pire | 0,474 | 0,649 | 0,421 | **0,963** |
 
 `grid_surface` pose une ligne sur la coordonnée où repose chaque côté aligné,
 puis découpe entre deux lignes d'après le côté qui les enjambe : toutes ses
@@ -100,7 +101,8 @@ le traverse et laisse ses rangées **plier** pour aller chercher le contour — 
 même rangée peut alors rejoindre deux parois qui se font face à deux hauteurs
 différentes, ce qu'aucune droite ne sait faire.
 
-Le L étiré à 1,02 est le seul de la série que `grid_surface2` ne règle pas :
+Le L étiré à 1,02 est le seul de la série que `grid_surface2` ne règle pas — le
+paveur y fait mieux :
 les deux côtés y posent un nombre de nœuds **différent** sur la même portée,
 dix contre onze, et aucune disposition de lignes n'invente la rangée manquante.
 Le remède est dans le contour, pas dans le mailleur — voir
@@ -118,10 +120,10 @@ la sensibilité d'un mailleur à la discrétisation du contour.
 
 | forme | | triangulate | pave | grid | grid2 |
 |---|---|---:|---:|---:|---:|
-| base coupée | mailles | 2 050 | 860 | 474 | **456** |
-| | pire | 0,412 | 0,366 | 0,382 | **0,916** |
-| base d'un seul tenant | mailles | 2 089 | 863 | 486 | **456** |
-| | pire | 0,419 | 0,337 | 0,323 | **0,651** |
+| base coupée | mailles | 2 050 | 816 | **456** | **456** |
+| | pire | 0,412 | 0,118 | 0,860 | **0,916** |
+| base d'un seul tenant | mailles | 2 089 | 827 | 471 | **456** |
+| | pire | 0,419 | 0,415 | 0,287 | **0,651** |
 
 `grid_surface2` rend **exactement le même nombre de mailles dans les deux cas**.
 Les trois autres paient la base d'un seul tenant. C'est la propriété la plus
@@ -140,12 +142,12 @@ Ici le classement s'inverse, et c'est le seul endroit où il le fait.
 
 | forme | | triangulate | pave | grid | grid2 |
 |---|---|---:|---:|---:|---:|
-| maison | mailles | 1 723 | 620 | 460 | **450** |
-| | pire | 0,484 | 0,491 | 0,420 | **0,548** |
-| carré arrondi | mailles | 1 866 | 668 | 424 | **409** |
-| | pire | **0,474** | 0,360 | 0,340 | 0,371 |
-| cercle R = 1 | mailles | 6 114 | 2 339 | **1 236** | 2 044 |
-| | pire | **0,424** | 0,031 | **0,366** | 0,005 |
+| maison | mailles | 1 723 | 611 | **447** | 450 |
+| | pire | 0,484 | 0,515 | 0,365 | **0,548** |
+| carré arrondi | mailles | 1 866 | 665 | 418 | **404** |
+| | pire | **0,474** | 0,360 | 0,340 | 0,467 |
+| cercle R = 1 | mailles | 1 496 | 547 | **312** | 530 |
+| | pire | **0,527** | 0,081 | 0,179 | 0,444 |
 
 Une grille ne peut pas suivre une oblique : elle la découpe en escalier, et tout
 ce qui s'en approche est rendu au paveur frontal. Sur la maison, où l'oblique
@@ -155,30 +157,43 @@ ne fait que le toit, ce qui reste de rectilinéaire suffit encore à
 
 **Sur une forme sans direction dominante, `grid_surface2` n'est pas un
 candidat.** Il prend l'écartement de ses lignes sur le contour, et un cercle
-n'en dicte aucun : rien ne pose de ligne entre `y = 0,24` et `y = 1`, le vide y
-vaut quinze fois l'écartement moyen, et le cœur s'effondre — 0,005, une maille
-au bord de la dégénérescence. `grid_surface`, lui, rend 0,288 avec un 5ᵉ
-centile de 0,796, de loin le meilleur des quatre. **Sur une courbe, prenez
-`grid_surface`, ou `triangulate_surface` si la qualité du pire élément
-commande.**
+n'en dicte aucun : selon la taille demandée, son cœur tient ou s'effondre. À la
+taille de la figure il rend 0,444, mais la taille voisine le fait tomber au
+bord de la dégénérescence. Pire maille du même cercle, selon la taille :
 
-Le cercle mérite un mot de plus. `pave_surface` y tombe à **0,031** — ses
-rangées se rejoignent au centre en une étoile à quatre branches, et c'est cette
-ligne-là qui porte tout le défaut. `triangulate_surface`, lui, ne descend jamais
-sous 0,42, sur aucune des onze formes : c'est la signature d'un Delaunay
+| taille | triangulate | pave | grid | grid2 |
+|---|---:|---:|---:|---:|
+| 0,05 | 0,424 | 0,040 | 0,366 | 0,011 |
+| 0,06 | 0,526 | 0,031 | 0,291 | 0,406 |
+| 0,07 | 0,424 | 0,015 | 0,137 | 0,012 |
+| 0,08 | 0,436 | 0,039 | 0,191 | 0,035 |
+| 0,1 | 0,527 | 0,081 | 0,179 | 0,444 |
+| 0,12 | 0,497 | 0,003 | 0,362 | 0,005 |
+
+`triangulate_surface` ne descend jamais sous 0,42 et `grid_surface` jamais sous
+0,13 ; les deux autres passent d'une maille correcte à une maille presque plate
+d'une taille à la voisine. **Sur une courbe, prenez `triangulate_surface` si la
+qualité du pire élément commande, `grid_surface` s'il faut des quadrangles.**
+
+Le cercle mérite un mot de plus. `pave_surface` y tombe à **0,081** — ses
+rangées se referment toutes au centre, et c'est cette fermeture qui porte tout
+le défaut. `triangulate_surface`, lui, ne descend jamais
+sous 0,41, sur aucune des onze formes : c'est la signature d'un Delaunay
 raffiné, qui garantit un angle minimal et rien de plus. Il ne s'effondre jamais,
 mais il ne monte jamais non plus.
 
 ### Ce qu'il faut retenir
 
 **Le coût en mailles est le classement le plus stable** : sur les dix formes
-rectilinéaires ou peu obliques, `grid_surface2` ≤ `grid_surface` <
-`pave_surface` < `triangulate_surface`, avec un facteur quatre entre les
-extrêmes à qualité au moins égale. Pour un calcul, c'est le facteur qui compte
-juste après la qualité. Le cercle est la seule exception, et il l'est dans les
-deux colonnes à la fois : `grid_surface2` y rend **plus** de mailles pour une
-qualité effondrée, ce qui est la façon la plus nette de dire qu'il n'est pas
-fait pour ça.
+rectilinéaires ou peu obliques, les deux mailleurs en grille rendent le moins
+de mailles — `grid_surface2` le plus souvent, `grid_surface` sur la maison, à
+trois mailles près —, puis `pave_surface`, puis `triangulate_surface`, avec un
+facteur quatre à cinq entre les extrêmes, à qualité égale ou meilleure (à un
+centième près sur le carré arrondi). Pour un calcul, c'est le facteur qui compte
+juste après la qualité. Le cercle est la seule exception : `grid_surface2` y rend
+**plus** de mailles que `grid_surface` (530 contre 312), pour une qualité qui
+s'effondre d'une taille à l'autre — la façon la plus nette de dire qu'il n'est
+pas fait pour ça.
 
 En pratique :
 
@@ -186,7 +201,7 @@ En pratique :
   n'ont pas été coupés aux angles qui leur font face ;
 - **forme courbe** — `triangulate_surface` si la qualité du pire élément
   commande, `grid_surface` s'il faut des quadrangles ; **jamais
-  `grid_surface2`**, qui y perd son cœur ;
+  `grid_surface2`**, qui y perd son cœur à la plupart des tailles ;
 - **forme franchement oblique** — `pave_surface`, dont les rangées épousent la
   pente ; mais tant qu'il reste des parois droites autour de l'oblique, les
   mailleurs en grille tiennent — la maison en est l'exemple ;
@@ -202,22 +217,26 @@ deux rangées, le front est relaxé — c'est ce qui l'empêche de se plisser �
 cette relaxation est un laplacien, qui **arrondit les angles**. Or un front ne
 perd des nœuds qu'à ses coins : une fois les coins arrondis, il garde tous ses
 nœuds pendant que son périmètre rétrécit, et le milieu du domaine sort plus fin
-que la taille demandée. Un carré 20 × 20 à la taille 1 sort à **600 mailles au
-lieu de 400**, les plus intérieures à 0,43 de l'aire visée.
+que la taille demandée. Un carré 20 × 20 à la taille 1 sort à **592 mailles au
+lieu de 400**, les plus intérieures à 0,26 de l'aire visée.
 
 `relax="along"` garde le même déplacement mais **projeté sur le front** :
 l'écartement s'égalise encore, la forme n'est plus rabotée, et le carré sort
 comme les 400 carrés exacts qu'on dessinerait. `relax="none"` ne relaxe pas du
-tout. Aucun des trois ne gagne partout — sur une courbe, il n'y a pas d'angle à
-préserver et le front a tout à gagner à se redresser :
+tout. Aucun des trois ne gagne partout. Sur les formes à angles, `"along"` et
+`"none"` l'emportent nettement ; sur une courbe, il n'y a pas d'angle à
+préserver, et aucun réglage ne protège le paveur — sur le cercle, chacun des
+trois passe devant ou tombe près de zéro selon la taille. Mesuré sur un carré
+et une bande à la taille 1, puis sur trois formes des figures ci-dessus, à leur
+taille :
 
-| forme (taille 1) | `"free"` | `"along"` | `"none"` |
+| forme | `"free"` | `"along"` | `"none"` |
 |---|---:|---:|---:|
-| carré 20 × 20 | 600 mailles, pire 0,541 | **400, 1,000** | **400, 1,000** |
-| L | 374, 0,315 | 287, 0,449 | 290, **0,564** |
-| profil crénelé | 859, 0,240 | 620, **0,546** | **554**, 0,441 |
-| bande étroite 40 × 3 | 581, 0,650 | 557, **0,662** | 559, 0,564 |
-| cercle R = 10 | 569, 0,105 | 633, **0,257** | 639, 0,020 |
+| carré 20 × 20 | 592 mailles, pire 0,619 | **400, 1,000** | **400, 1,000** |
+| bande étroite 40 × 3 | 123, 0,702 | **120, 1,000** | 123, 0,684 |
+| L à cotes quelconques | 111, 0,680 | **66, 0,780** | **66**, 0,774 |
+| créneau, base coupée | 816, 0,118 | 586, 0,426 | **577, 0,546** |
+| cercle R = 1 | 547, 0,081 | **610, 0,281** | 620, 0,027 |
 
 Le détail du mécanisme est sur la page
 [Mailler](operateurs/maillage.md#relaxation-du-front--relax) des opérateurs. Les
@@ -233,18 +252,19 @@ verticale ne borde — il coupe le vide en mailles entières tant qu'il ne dépa
 pas **trois fois** l'écartement moyen, et **l'abandonne au front au-delà**.
 Remplir un tel vide de rangées ne crée pas du cœur : ces rangées n'existent que
 pour être érodées par l'oblique qui les traverse, et elles morcellent le travail
-du front au lieu de lui donner une région propre. Mesuré sur la maison :
-l'abandon coûte **un** triangle là où le remplissage en coûtait cinq, et le 5ᵉ
-centile monte de 0,644 à 0,676.
+du front au lieu de lui donner une région propre. Sur la maison, l'abandon ne
+laisse qu'**un** triangle (5ᵉ centile 0,725) ; quand ce seuil a été posé, le
+remplissage en coûtait cinq.
 
-C'est aussi ce qui coûte le cercle, dont les vides valent quinze fois
-l'écartement moyen. Aucun seuil ne sépare les deux cas — abandonner un vide de
-huit moyennes abandonne a fortiori un vide de quinze — et c'est un choix
-assumé : `grid_surface2` sert les formes rectilinéaires, `grid_surface` sert les
+C'est aussi ce qui coûte le cercle, dont le contour laisse de grands vides.
+Aucun seuil ne sépare les deux cas — abandonner un vide abandonne a fortiori un
+vide plus grand — et c'est un choix assumé : `grid_surface2` sert les formes rectilinéaires, `grid_surface` sert les
 courbes.
 
 **Le cercle est un objectif instable.** Sur une forme sans direction dominante,
-déplacer la grille d'un millième change la pire maille du simple au décuple. Les
+un rien déplace les décisions des mailleurs : le tableau des tailles le montre,
+et la position compte aussi — le même cercle, maillé à l'origine au lieu de sa
+place dans la figure, sort de `grid_surface2` à 0,459 au lieu de 0,444. Les
 chiffres du cercle ci-dessus sont justes mais ne se prolongent pas : ne réglez
 aucun paramètre dessus.
 
@@ -268,4 +288,7 @@ une figure.
 
 ## Mailler en 3D
 
-À venir.
+À venir. En attendant, les mailleurs volumiques — `triangulate_volume`
+(tétraèdres), `pave_volume` (couche limite d'hexaèdres autour d'un cœur
+tétraédrique), `extrude` et `sweep_solid` — sont décrits dans
+[Opérateurs → Maillage](operateurs/maillage.md).

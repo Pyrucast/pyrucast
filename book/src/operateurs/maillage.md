@@ -662,7 +662,7 @@ huit nœuds que le périmètre perd.
 
 | `relax` | mailles | pire maille | aire médiane |
 |---|---:|---:|---:|
-| `"free"` (défaut) | 600 | 0,541 | 0,62 |
+| `"free"` (défaut) | 592 | 0,619 | 0,62 |
 | `"along"` | **400** | **1,000** | **1,00** |
 | `"none"` | **400** | **1,000** | **1,00** |
 
@@ -674,18 +674,22 @@ huit nœuds que le périmètre perd.
 
 Il n'y a pas de bonne réponse universelle, et c'est pourquoi c'est un choix.
 `"along"` et `"none"` gagnent sur tout ce qui a des angles à garder ; sur une
-courbe, il n'y a rien à préserver et tout à redresser. Mesuré à la taille 1 :
+courbe, il n'y a rien à préserver et tout à redresser. Mesuré sur un carré et
+une bande à la taille 1, puis sur trois formes de
+[Mailler une géométrie](../mailler.md), à leur taille :
 
 | forme | `"free"` | `"along"` | `"none"` |
 |---|---:|---:|---:|
-| carré 20 × 20 | 600 mailles, pire 0,541 | **400, 1,000** | **400, 1,000** |
-| L | 374, 0,315 | 287, 0,449 | 290, **0,564** |
-| profil crénelé | 859, 0,240 | 620, **0,546** | **554**, 0,441 |
-| bande étroite 40 × 3 | 581, 0,650 | 557, **0,662** | 559, 0,564 |
-| cercle R = 10 | 569, **0,105** | 633, **0,257** | 639, 0,020 |
+| carré 20 × 20 | 592 mailles, pire 0,619 | **400, 1,000** | **400, 1,000** |
+| bande étroite 40 × 3 | 123, 0,702 | **120, 1,000** | 123, 0,684 |
+| L à cotes quelconques | 111, 0,680 | **66, 0,780** | **66**, 0,774 |
+| créneau, base coupée | 816, 0,118 | 586, 0,426 | **577, 0,546** |
+| cercle R = 1 | 547, 0,081 | **610, 0,281** | 620, 0,027 |
 
-Le cercle est le contre-exemple : `"none"` y tombe à 0,020, un front qui se
-plisse faute de pouvoir se redresser. **Sur une courbe, gardez `"free"`.**
+Le cercle ne se laisse départager par aucun réglage : selon la taille demandée,
+chacun des trois passe devant ou tombe près de zéro (de 0,001 à 0,281, voir
+[Mailler une géométrie](../mailler.md)). **Sur une courbe, ne comptez pas sur
+`relax` : prenez `triangulate_surface` ou `grid_surface`.**
 
 Un front qui n'arrive pas à converger ne s'obstine pas : le pavage s'arrête sur
 une erreur qui le dit, plutôt que de rendre un maillage fait de ce qui restait.

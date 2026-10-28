@@ -258,7 +258,7 @@ FORMES = [
         "carre-arrondi",
         True,
     ),
-    ("Cercle R = 1", cercle(), 0.05, "cercle", False),
+    ("Cercle R = 1", cercle(), 0.1, "cercle", False),
 ]
 
 

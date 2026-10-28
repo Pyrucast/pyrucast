@@ -3,7 +3,6 @@
 - [Introduction](introduction.md)
 - [Installation et démarrage rapide](installation.md)
 - [Aspect informatique](aspect-informatique.md)
-- [Mailler une géométrie](mailler.md)
 
 # Objets
 
@@ -77,6 +76,7 @@
   - [Solveur](operateurs/solveur.md)
   - [Sauvegarde et relecture](sauvegarde.md)
   - [Visualisation](visualization.md)
+- [Mailler une géométrie](mailler.md)
 
 # Couche Python haut niveau
 
