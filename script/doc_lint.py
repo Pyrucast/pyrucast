@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Documentation guards — five checks, no compilation.
+"""Documentation guards — six checks, no compilation.
 
-Called by `script/check_doc.{sh,ps1}`, after `cargo doc` (whose output it
-reads). The rules it enforces are written in `CONVENTIONS.md`, part
+Called by `script/check_doc.{sh,ps1}`, after `cargo doc` and `mdbook build`
+(whose outputs it reads). The rules it enforces are written in `CONVENTIONS.md`, part
 "Documentation et tests", and told in
 `book/src/developper/documentation-et-tests.md`.
 
@@ -24,6 +24,10 @@ reads). The rules it enforces are written in `CONVENTIONS.md`, part
                   written in the `///` of `src/py/`, one doctest per item
                   would cost a home-made collector; citation gives the same
                   non-regression guarantee for twenty lines.
+6. `equations`  — every equation reaches MathJax as written. mdBook runs
+                  Markdown first, which eats a `\\{`, reads a line `=` as a
+                  heading, turns a prime into a curly quote — 99 equations
+                  out of 1181 were damaged in October 2026, without a word.
 
 Every waiver ledger carries a **reason** and its hygiene test, which fails on
 a stale entry — the pattern of
@@ -38,14 +42,17 @@ a stale entry — the pattern of
 from __future__ import annotations
 
 import ast
+import html
 import inspect
 import re
+import string
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BOOK = ROOT / "book" / "src"
+BOOK_HTML = ROOT / "book" / "book"
 LEDGER = ROOT / "script" / "doc_coverage.txt"
 LEDGER_PY = ROOT / "script" / "python_coverage.txt"
 EXEMPLES_PY = ROOT / "tests" / "python"
@@ -781,6 +788,150 @@ def methodes_de(nom_classe, methodes):
     return {m for m, classes in methodes.items() if nom_classe in classes}
 
 
+# ── 6. Equations reach MathJax intact ───────────────────────────────────────
+
+# The book's TeX goes through Markdown before MathJax, so it is written with
+# Markdown escapes: `\\[ … \\]` and `\\( … \\)` around it, `\\,` for `\,`,
+# `\\\\` for a row break, `\_` and `\'` to keep emphasis and smart quotes away.
+MATH_SOURCE = re.compile(r"\\\\\[(.*?)\\\\\]|\\\\\((.*?)\\\\\)", re.DOTALL)
+MATH_SIMPLE = re.compile(r"(?<!\\)\\[\[\(]")
+MATH_HTML = re.compile(r"\\\[(.*?)\\\]|\\\((.*?)\\\)", re.DOTALL)
+# `\` + ASCII punctuation: what Markdown reads as an escape.
+ECHAPPEMENT = re.compile(r"\\([" + re.escape(string.punctuation) + "])")
+# A `_` that may open emphasis: after whitespace or punctuation.
+SOULIGNE_OUVRANT = re.compile(
+    r"(?<!\\)(?:^|(?<=[\s" + re.escape(string.punctuation) + "]))_"
+)
+# Escapes meant for Markdown alone, which MathJax must not see.
+ECHAPPEMENTS_MARKDOWN = {"_", "*", "'"}
+# A line Markdown reads as a block — heading, list item, quote, definition —
+# and not as the continuation of the equation. Checked on the source, because
+# the Markdown flavour depends on the mdBook version: definition lists exist
+# from 0.5 on, so a 0.4 build would not show the damage.
+LIGNE_BLOC = re.compile(
+    r"^ {0,3}([-+*:](\s|$)|=+\s*$|#{1,6}(\s|$)|>|\d{1,9}[.)](\s|$))"
+)
+
+
+def masque_code(text: str):
+    """True for each character inside a fenced block or an inline code span."""
+    masque, pos, cloture = [False] * len(text), 0, None
+    for ligne in text.splitlines(keepends=True):
+        m = re.match(r"^ {0,3}(`{3,}|~{3,})", ligne)
+        dedans = cloture is not None or m is not None
+        if cloture:
+            if m and m.group(1)[0] == cloture[0] and len(m.group(1)) >= len(cloture):
+                cloture = None
+        elif m:
+            cloture = m.group(1)
+        spans = (
+            [(0, len(ligne))]
+            if dedans
+            else [s.span() for s in re.finditer(r"(`+)(?!`).*?(?<!`)\1(?!`)", ligne)]
+        )
+        for debut, fin in spans:
+            masque[pos + debut : pos + fin] = [True] * (fin - debut)
+        pos += len(ligne)
+    return masque
+
+
+def sans_echappements(tex: str) -> str:
+    """What Markdown leaves of `tex`: `\\` + ASCII punctuation → the punctuation."""
+    return ECHAPPEMENT.sub(r"\1", tex)
+
+
+def tex_html(page: str):
+    """The (kind, TeX) MathJax finds in a built page, outside code."""
+    m = re.search(r"<main>(.*)</main>", page, re.DOTALL)
+    corps = m.group(1) if m else page
+    corps = re.sub(r"<(pre|code)\b.*?</\1>", " ", corps, flags=re.DOTALL)
+    texte = html.unescape(re.sub(r"<[^>]+>", "", corps))
+    return [
+        (
+            "display" if m.group(1) is not None else "inline",
+            " ".join((m.group(1) or m.group(2)).split()),
+        )
+        for m in MATH_HTML.finditer(texte)
+    ]
+
+
+def defauts_lexicaux(tex: str):
+    """The TeX commands Markdown eats without changing the page's structure."""
+    for m in re.finditer(r"(\\+)(\s|.)?", tex):
+        n, suivant = len(m.group(1)), m.group(2) or ""
+        if (
+            n % 2
+            and suivant in string.punctuation
+            and suivant not in ECHAPPEMENTS_MARKDOWN
+        ):
+            yield f"`\\{suivant}` becomes `{suivant}`: write `\\\\{suivant}`"
+        elif n == 2 and (not suivant or suivant.isspace()):
+            yield "row break `\\\\` becomes a control space: write `\\\\\\\\`"
+
+
+def lignes_bloc(tex: str):
+    """The continuation lines of an equation that Markdown reads as a block."""
+    for ligne in tex.split("\n")[1:]:
+        if LIGNE_BLOC.match(ligne):
+            yield (
+                f"the line `{ligne.strip()}` reads as a Markdown block: "
+                "move its operator to the end of the previous line"
+            )
+
+
+def cause_probable(tex: str):
+    """Why Markdown reshaped an equation, as far as the source tells."""
+    if re.search(r"(?<!\\)'", tex):
+        return "smart punctuation turns a prime into a curly quote: write `\\'`"
+    if "`" in tex:
+        return "a backtick opens inline code inside the equation: write `\\texttt{…}`"
+    if SOULIGNE_OUVRANT.search(tex):
+        return "a `_` after a punctuation opens emphasis: write `\\_`"
+    return "Markdown reshaped it (a `|` in a table cell? a `<`?)"
+
+
+def check_equations():
+    erreurs = []
+    for p in pages():
+        nom = rel(p)
+        if nom == "SUMMARY.md":
+            continue
+        text = p.read_text(encoding="utf-8")
+        masque = masque_code(text)
+        source = [m for m in MATH_SOURCE.finditer(text) if not masque[m.start()]]
+        for m in source:
+            masque[m.start() : m.end()] = [True] * (m.end() - m.start())
+        for m in MATH_SIMPLE.finditer(text):
+            if not masque[m.start()]:
+                ligne = text.count("\n", 0, m.start()) + 1
+                erreurs.append(
+                    f"{nom}:{ligne}: `{m.group(0)}` becomes `{m.group(0)[1]}`, "
+                    f"the equation is plain text: write `\\{m.group(0)}`"
+                )
+        if not source:
+            continue
+        construite = (BOOK_HTML / nom).with_suffix(".html")
+        if not construite.exists() or construite.stat().st_mtime < p.stat().st_mtime:
+            erreurs.append(
+                f"{nom}: HTML missing or older than the page — run `mdbook build book`"
+            )
+            continue
+        recues = tex_html(construite.read_text(encoding="utf-8"))
+        for m in source:
+            kind = "display" if m.group(1) is not None else "inline"
+            tex = m.group(1) if kind == "display" else m.group(2)
+            ligne = text.count("\n", 0, m.start()) + 1
+            lignes = list(lignes_bloc(tex))
+            defauts = lignes + list(defauts_lexicaux(tex))
+            attendue = (kind, " ".join(sans_echappements(tex).split()))
+            if attendue in recues:
+                recues.remove(attendue)
+            elif not lignes:
+                defauts.insert(0, cause_probable(tex))
+            erreurs.extend(f"{nom}:{ligne}: {d}" for d in defauts)
+    return erreurs
+
+
 # ── Point d'entrée ──────────────────────────────────────────────────────────
 
 VERIFICATIONS = {
@@ -789,6 +940,7 @@ VERIFICATIONS = {
     "symboles": ("symbols cited in prose", check_symboles),
     "doctests": ("doctest coverage ratchet", check_doctests),
     "api-python": ("Python API citation ratchet", check_api_python),
+    "equations": ("equations reach MathJax intact", check_equations),
 }
 
 

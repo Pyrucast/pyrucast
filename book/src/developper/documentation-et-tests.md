@@ -239,17 +239,18 @@ Deux points utiles :
 | la prose ne cite pas de symbole disparu | `doc_lint.py symboles` | `check_doc` |
 | tout item public a un exemple | `doc_lint.py doctests` | `check_doc` |
 | toute entrée Python est citée par un exemple | `doc_lint.py api-python` | `check_doc` |
+| chaque équation arrive intacte à MathJax | `doc_lint.py equations` | `check_doc` |
 
 Le détail de ce que chaque script lance — commande par commande, avec les
 fichiers concernés et les durées mesurées — est dans
 [Compilation et tests](../compilation.md#scriptcheck_sh--vérifications-en-bloc-ou-à-la-carte).
 
-Les cinq derniers vivent dans `script/doc_lint.py` et se lancent aussi un par
+Les six derniers vivent dans `script/doc_lint.py` et se lancent aussi un par
 un : `python script/doc_lint.py includes`. Chacun porte son registre de
 dérogations — nom → raison — et son test d'hygiène, qui échoue sur une entrée
 périmée.
 
-Deux d'entre eux méritent une précision.
+Quatre d'entre eux méritent une précision.
 
 **Le cliquet de couverture.** La règle « tout item public porte un exemple » ne
 pouvait pas être vérifiée frontalement au départ : la dette était de **1531
@@ -287,6 +288,20 @@ granularité est le *nom*, non l'appel : `.get(` cité une fois vaut pour les
 — aucune entrée publique absente des exemples, et aucune entrée nouvelle qui
 entre sans être montrée. Registre : `script/python_coverage.txt`, régénéré par
 `python script/doc_lint.py --ratchet-python`.
+
+**Les équations** passent par Markdown avant MathJax, et Markdown les abîme
+sans un mot : il mange la barre de `\{` ou de `\,`, lit une ligne `=` comme le
+soulignement d'un titre et une ligne `- …` comme une puce, change une prime en
+apostrophe courbe. En octobre 2026, **99 équations sur 1181** étaient ainsi
+abîmées sur le site publié, dont 25 écrites `\( … \)` avec une seule barre et
+rendues en texte brut. Le garde-fou compare chaque équation du source,
+échappements Markdown appliqués, au TeX que MathJax trouve dans le HTML
+construit — d'où l'ordre de `check_doc`, où `mdbook build` passe avant
+`doc_lint.py`. Il signale en plus, sur le source seul, les commandes dont
+Markdown mange la barre et les lignes qu'il lirait comme un bloc : ces
+dernières dépendent de la version de mdBook (les listes de définition ne
+datent que de la 0.5), et le HTML d'une autre version ne les montrerait pas.
+Les règles d'écriture sont dans `CONVENTIONS.md`.
 
 **L'audit de la prose** ne lit que les passages en `code inline`, hors blocs :
 c'est ce qui écarte les noms de fichiers et les domaines, qui ressemblent à des

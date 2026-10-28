@@ -765,6 +765,29 @@ file — the verification happens at the source, mdbook only displays it.
 compiles: it passes the whole file to rustdoc while displaying only the anchor.
 There is none in this repository today, and there is no reason to create one.
 
+## Equations in the book
+
+mdBook runs Markdown before MathJax, so the TeX of a page is written **with
+Markdown escapes**:
+
+- delimiters `\\[ … \\]` and `\\( … \\)` — a single `\[` becomes `[`, and the
+  equation is plain text;
+- a TeX command made of a backslash and a punctuation sign doubles its
+  backslash: `\\,` `\\;` `\\!` `\\{` `\\}` `\\|`; a row break is `\\\\`;
+- `\_` for an underscore after a punctuation sign (`}\_{`), which would
+  otherwise open emphasis; `\'` for a prime, which smart punctuation would
+  otherwise turn into a curly quote;
+- no line of an equation starts with `=`, `+`, `-`, `:`, `#` or `>`: Markdown
+  reads it as a heading, a list item or a definition — the operator ends the
+  previous line instead;
+- no backtick in an equation (`\texttt{…}`), and no `|` in an equation inside a
+  table (`\lvert … \rvert`).
+
+`doc_lint.py equations` compares each equation of the source, Markdown escapes
+applied, with the TeX MathJax finds in the built page, and flags on the source
+alone the escapes Markdown eats without a trace and the lines it reads as a
+block.
+
 ## A waiver carries a reason
 
 Every sketch page, every item without an example, every exclusion from a guard

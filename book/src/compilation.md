@@ -12,8 +12,8 @@ documentation. Pour le **simple usage en Python** (quatre commandes), voir
 | Rust (via `rustup`) | ≥ 1.89 (`rust-version` du crate), édition 2024 | Compilation du cœur |
 | Python | ≥ 3.11 (3.13 testé) | API Python et `maturin` |
 | `ruff` | 0.16.4 (la version épinglée en CI) | Format et règles du Python (`ruff format`, `ruff check`), vérifiés par `check_format` |
-| `mdbook` | ≥ 0.4 | Génération de cette documentation |
-| `mdbook-mermaid` | ≥ 0.14 | Rendu des graphes (ex. [graphe des dépendances](developper/arborescence.md#graphe-des-dépendances-externes)) |
+| `mdbook` | 0.5.4 (la version épinglée en CI) | Génération de cette documentation |
+| `mdbook-mermaid` | 0.17.1 (celle qui va avec mdBook 0.5) | Rendu des graphes (ex. [graphe des dépendances](developper/arborescence.md#graphe-des-dépendances-externes)) |
 
 `cargo fmt` et `clippy` viennent avec la toolchain (`rustup component add
 rustfmt clippy` si besoin).
@@ -237,8 +237,8 @@ la recompilation.
 | `python -m pytest` | l'API Python, unité par unité | 73 fichiers `tests/python/test_*.py`, dont 13 `test_doc_*.py` qui sont aussi les sources des exemples du book | 32 s | | | | ✓ | | | ✓ | ✓ |
 | `script/run_examples.sh` | des chaînes de calcul **de bout en bout** | 30 `examples/*.py`, 3 `examples/*.rs`, 6 `formation/*.py` | 80 s | | | | | ✓ | | ✓ | ✓ |
 | `cargo doc --no-deps --lib` (`-D warnings`) | la rustdoc n'a aucun lien cassé | — | 1 s | | | | | | ✓ | ✓ | ✓ |
-| `python script/doc_lint.py` | les **cinq garde-fous** du book et des exemples | `book/src/**.md`, la rustdoc, le module Python installé | 28 s | | | | | | ✓ | ✓ | ✓ |
 | `mdbook build book` | le book se rend | `book/src/**` | 1 s | | | | | | ✓ | ✓ | ✓ |
+| `python script/doc_lint.py` | les **six garde-fous** du book et des exemples | `book/src/**.md`, le book construit, la rustdoc, le module Python installé | 28 s | | | | | | ✓ | ✓ | ✓ |
 | `cargo clippy` × 4 jeux de features | aucun avertissement, `-D warnings` | — | 105 s | | | | | | | | ✓ |
 
 Et les totaux, dans le même régime :
@@ -327,8 +327,8 @@ Aucune page du book ne possède de code : **tout bloc `rust` ou `python` est un
 est donc exécuté par `check_rust`, `check_python` ou `check_examples`, et il ne
 peut plus diverger de l'API.
 
-`check_doc` ne compile donc rien lui-même. Il lance `script/doc_lint.py`, quatre
-vérifications de texte :
+`check_doc` ne compile donc rien lui-même. Il construit la rustdoc et le book,
+puis lance `script/doc_lint.py`, six vérifications de texte :
 
 | garde-fou | ce qu'il tient |
 |---|---|
@@ -336,6 +336,8 @@ vérifications de texte :
 | `fences` | aucune page ne possède de code |
 | `symboles` | la prose ne cite aucun symbole disparu |
 | `doctests` | cliquet : la couverture des doctests ne peut que monter |
+| `api-python` | cliquet : toute entrée Python est citée par un exemple exécuté |
+| `equations` | chaque équation arrive intacte à MathJax |
 
 Le premier est le plus important, parce que le mécanisme porteur n'est gardé par
 rien d'autre : une ancre inexistante rend un bloc **vide**, avec un code de
@@ -587,8 +589,10 @@ que d'être recopiée à la main : la présence de `viz` doit équivaloir à cel
 - *`No module named 'pyrucast'`* lors de `pytest` : `maturin develop` n'a pas
   déposé le module. Vérifier que `VIRTUAL_ENV` est défini, puis relancer
   `maturin develop`.
-- *`mdbook: command not found`* : installer `mdbook` via `cargo install mdbook`
-  ou un binaire publié.
+- *`mdbook: command not found`* : installer `mdbook` via `cargo install --locked
+  mdbook --version 0.5.4` ou un binaire publié.
 - *`The "mermaid" preprocessor exited unsuccessfully`* (ou graphes affichés en
-  bloc de code brut) : installer le préprocesseur via `cargo install
-  mdbook-mermaid`. Il doit être sur le `PATH` au moment de `mdbook build`.
+  bloc de code brut) : installer le préprocesseur via `cargo install --locked
+  mdbook-mermaid --version 0.17.1`. Il doit être sur le `PATH` au moment de
+  `mdbook build`, et aller avec mdBook : la 0.17 parle le protocole de
+  mdBook 0.5, la 0.16 celui de la 0.4.
