@@ -36,9 +36,11 @@ Seul prérequis : **Python ≥ 3.11**. Ni Rust ni compilateur. La wheel comprend
 la visualisation (`plot`), fenêtre interactive incluse.
 
 Sur une autre plateforme (Linux ARM, musl, BSD…), `pip` ne trouve pas de wheel
-et compile les sources : il faut alors Rust (voir ci-dessous), et le module
-obtenu n'a **pas** la visualisation — voir
+et compile lui-même les sources : il faut alors Rust (voir ci-dessous). Cette
+compilation automatique se fait **sans** la visualisation — voir
 [Ce que porte chaque distribution](compilation.md#ce-que-porte-chaque-distribution).
+Pour l'avoir, compilez à la main, comme le décrit la partie
+[Compilation](#compilation) ci-dessous.
 
 ## Compilation
 
@@ -47,6 +49,7 @@ visualisation sur une plateforme sans wheel.
 
 ### Prérequis
 
+- **Git**, pour cloner le dépôt.
 - **Rust** stable, installé via [`rustup`](https://rustup.rs).
 - **Python** ≥ 3.11.
 - **Linux uniquement** : la visualisation lie fontconfig et freetype, il faut
@@ -56,14 +59,15 @@ visualisation sur une plateforme sans wheel.
 
 ### Compiler et installer
 
-À la racine du dépôt cloné
-(`git clone https://github.com/Pyrucast/pyrucast`), dans un environnement
+On clone le dépôt, puis on compile à sa racine, dans un environnement
 virtuel : `maturin develop` refuse de s'en passer (« Couldn't find a
 virtualenv or conda environment »).
 
 #### Linux / macOS (bash)
 
 ```bash
+git clone https://github.com/Pyrucast/pyrucast
+cd pyrucast
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip maturin
@@ -73,6 +77,8 @@ maturin develop --release --features extension-module,viz-interactive
 #### Windows (PowerShell)
 
 ```powershell
+git clone https://github.com/Pyrucast/pyrucast
+cd pyrucast
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install --upgrade pip maturin
@@ -118,13 +124,13 @@ module `pyrucast.mesh` :
 
 Tout objet pyrucast se liste à trois niveaux, du plus court au plus complet :
 
-- `print(x)` ou `str(x)` — le **résumé**, une ligne, façon listing Cast3M
-  (Rust `Display`) ;
+- `print(x)` ou `str(x)` — le **résumé**, une ligne : le listing résumé de
+  Cast3M (Rust `Display`) ;
 - `repr(x)` — la **structure** : compteurs, dimensions, noms, *handles*, sans
   jamais le contenu (Rust `Debug`) ;
-- `x.dump()` — le **contenu** : valeurs, coordonnées, connectivité. Il reste
-  borné : au-delà de `max_rows` lignes (20 par défaut), la table est coupée et
-  la coupure annoncée (Rust `Dump`).
+- `x.dump()` — le **contenu** : valeurs, coordonnées, connectivité, comme le
+  listing complet de Cast3M. Il reste borné : au-delà de `max_rows` lignes
+  (20 par défaut), la table est coupée et la coupure annoncée (Rust `Dump`).
 
 Seule exception, `Array` — le tableau que rendent les fonctions d'échange — n'a
 pas de `dump()` : simple tampon sans homologue Rust, ce n'est pas un objet
