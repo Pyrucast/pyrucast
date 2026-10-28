@@ -199,6 +199,11 @@ class Array:
         A copy as a Python list.
         """
     def __repr__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout: one row per
+        item, elided beyond `max_rows`. Returns nothing.
+        """
 
 @typing.final
 class Cell:

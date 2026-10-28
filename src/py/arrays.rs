@@ -183,6 +183,44 @@ impl PyArray {
     fn __repr__(&self) -> String {
         format!("Array(len={}, format='{}')", self.len, self.format())
     }
+
+    /// Print the full content (third display level) to stdout: one row per
+    /// item, elided beyond `max_rows`. Returns nothing.
+    #[pyo3(signature = (precision=3, max_rows=20, max_cols=12))]
+    fn dump(
+        &self,
+        py: Python<'_>,
+        precision: usize,
+        max_rows: usize,
+        max_cols: usize,
+    ) -> PyResult<()> {
+        let opts = crate::dump::DumpOptions {
+            precision,
+            max_rows,
+            max_cols,
+        };
+        crate::dump::py_print(py, &crate::dump::Dump::render(self, &opts))
+    }
+}
+
+impl crate::dump::Dump for PyArray {
+    fn render(&self, opts: &crate::dump::DumpOptions) -> String {
+        use crate::dump::{fmt_float, table};
+        let headers = vec!["i".to_string(), "value".to_string()];
+        let rows: Vec<Vec<String>> = match &self.data {
+            ArrayData::F64(v) => v
+                .iter()
+                .enumerate()
+                .map(|(i, x)| vec![i.to_string(), fmt_float(*x, opts.precision)])
+                .collect(),
+            ArrayData::I64(v) => v
+                .iter()
+                .enumerate()
+                .map(|(i, x)| vec![i.to_string(), x.to_string()])
+                .collect(),
+        };
+        format!("{}\n{}", self.__repr__(), table(&headers, &rows, opts))
+    }
 }
 
 // The buffer protocol, kept out of the stub: its raw pointers mean nothing to

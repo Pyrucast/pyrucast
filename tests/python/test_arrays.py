@@ -250,6 +250,28 @@ def test_arrays_out_lend_their_buffer():
     assert len(out["blocks"][1][1]) == 6
 
 
+def test_arrays_out_dump_their_content(capsys):
+    """`dump()`, the third display level of every pyrucast object: the values
+    themselves, one row per item, elided beyond `max_rows`."""
+    tags, coords, blocks = square_arrays()
+    out = pyrucast.export.to_arrays(
+        meshes(pyrucast.Coords(dim=2), tags, coords, blocks)
+    )
+    out["node_coords"].dump(precision=1)
+    printed = capsys.readouterr().out.split("\n")
+    assert printed[0] == repr(out["node_coords"])
+    assert printed[1].split() == ["i", "value"]
+    rows = [line.split() for line in printed[2:] if line.strip()]
+    assert rows == [
+        [str(i), f"{v:.1f}"] for i, v in enumerate(out["node_coords"].tolist())
+    ]
+
+    out["node_tags"].dump(max_rows=2)
+    printed = capsys.readouterr().out.split("\n")
+    assert [line.split() for line in printed[2:4]] == [["0", "1"], ["1", "2"]]
+    assert "… (2 ligne(s) de plus)" in printed
+
+
 def test_arrays_out_are_numpy_int64():
     np = pytest.importorskip("numpy")
     tags, coords, blocks = square_arrays()
