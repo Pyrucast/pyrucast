@@ -1,9 +1,9 @@
-"""Formation débutant — 5. Contact (unilatéral, nœud-surface).
+"""Tutoriel débutant — 5. Contact (unilatéral, nœud-surface).
 
 A classic patch test: two elastic blocks stacked along `y`, separated by an
 initial gap `G0`. A pressure on the upper block closes the contact and
 transmits a uniform stress across the interface — the pyrucast equivalent of
-Cast3M's node-to-surface contact (section 10 of the training), driven here
+Cast3M's node-to-surface contact (section 10 of the Cast3M training), driven here
 straight by the active-set loop of `solve`, in a single solve —
 `pyrucast.stepping.step_by_step` composes the same contact with heat,
 plasticity and load steps when a history is needed.
@@ -11,10 +11,10 @@ plasticity and load steps when a history is needed.
 Lancement ::
 
     maturin develop --release
-    python formation/contact.py
+    python tutoriel/contact.py
 
-    # To regenerate the book figure (book/src/formation/img/):
-    # PYRUCAST_FORMATION_IMG_DIR=book/src/formation/img python formation/contact.py
+    # To regenerate the book figure (book/src/tutoriel/img/):
+    # PYRUCAST_TUTORIEL_IMG_DIR=book/src/tutoriel/img python tutoriel/contact.py
 """
 
 import os
@@ -35,7 +35,7 @@ def idx(i, j):
 def bloc(coords: pc.Coords, y0: float):
     """Bloc `[0,1] × [y0, y0+1]`, grille N×N de QUA4 — mailleurs dédiés
     (`line` for the bottom/top edges, `sweep` between them, as in
-    `formation/maillage.py`). Returns `(mesh, grille)`, `grille[idx(i,j)]`
+    `tutoriel/maillage.py`). Returns `(mesh, grille)`, `grille[idx(i,j)]`
     étant le nœud `(i,j)` (`i` : abscisse, `j` : ordonnée)."""
     bas = pc.mesh.line(coords.add_node([0.0, y0]), coords.add_node([1.0, y0]), N)
     haut = pc.mesh.line(
@@ -127,7 +127,7 @@ def main() -> None:
     ]
     print(f"\nΣ(−λ) = {sum(-lam for lam in lambdas):.6f}  (attendu {S})")
 
-    out = os.environ.get("PYRUCAST_FORMATION_IMG_DIR", tempfile.gettempdir())
+    out = os.environ.get("PYRUCAST_TUTORIEL_IMG_DIR", tempfile.gettempdir())
     chemin = os.path.join(out, "contact.svg")
     maillage_mult.plot(save=chemin, field=solution, component="lambda", cmap="viridis")
     print(f"Contact reaction (λ) written to {chemin}")

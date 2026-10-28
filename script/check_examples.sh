@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Exemples et scripts de formation, de bout en bout.
+# Exemples et scripts du tutoriel, de bout en bout.
 #
 # `pytest` couvre l'API unité par unité ; ceux-ci couvrent autre chose : des
 # chaînes de calcul complètes, écrites comme un utilisateur les écrirait.
@@ -9,6 +9,6 @@
 . "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 
 require_module
-step "exemples + formation (bout en bout)" ./script/run_examples.sh
+step "exemples + tutoriel (bout en bout)" ./script/run_examples.sh
 
 echo "OK : exemples."

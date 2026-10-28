@@ -679,7 +679,7 @@ Below, the rules alone.
    | a Rust API item | a doctest on the item | nothing — it is in the rustdoc |
    | a complete Rust chain | `tests/<subject>.rs`, anchored | `{{#include ../../tests/<subject>.rs:anchor}}` |
    | a complete Python chain | `examples/<subject>.py` | `{{#include}}`, whole or anchored |
-   | a teaching walkthrough | `formation/<subject>.py`, anchored | `{{#include …:anchor}}` |
+   | a teaching walkthrough | `tutoriel/<subject>.py`, anchored | `{{#include …:anchor}}` |
    | the use of an operator in Python | `tests/python/test_doc_<family>.py`, anchored | `{{#include …:anchor}}` |
    | what is **not code** | the page itself | ` ```text `, without highlighting |
 
@@ -751,7 +751,7 @@ Below, the rules alone.
 | Python test | `tests/python/*.py` | the pyo3 surface and the behaviour on the Python side |
 | guard | `tests/python/test_method_exposure.py`, `test_mirror_completeness.py` | an **API invariant**, not a behaviour |
 | example | `examples/*.py` | an end-to-end user chain |
-| training script | `formation/*.py` | a complete teaching walkthrough |
+| tutorial script | `tutoriel/*.py` | a complete teaching walkthrough |
 | bench | `benches/*.rs` | a **performance**, never a correctness |
 
 A bench never replaces a test: it measures, it asserts nothing. It does not run

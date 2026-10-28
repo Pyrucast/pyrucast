@@ -1,4 +1,4 @@
-# Formation débutant
+# Tutoriel débutant
 
 Adaptation, à pyrucast, du plan d'une formation « Débuter avec Cast3M »
 (présentation du logiciel, langage de commande, maillage, calcul thermique,
@@ -8,7 +8,7 @@ percée d'un trou**, encastrée d'un côté, chargée de l'autre.
 
 Chaque section ci-dessous condense la construction pas à pas
 en un script complet, testé, rangé dans le dossier
-[`formation/`](https://github.com/Pyrucast/pyrucast/tree/master/formation)
+[`tutoriel/`](https://github.com/Pyrucast/pyrucast/tree/master/tutoriel)
 du dépôt. Le code affiché dans le livre est **inclus directement depuis ces
 fichiers** (pas de copie manuelle) : ce que vous voyez est ce qui s'exécute.
 
@@ -46,5 +46,5 @@ pip install pyrucast
 Chaque script se lance directement depuis la racine du dépôt :
 
 ```bash
-python formation/maillage.py
+python tutoriel/maillage.py
 ```

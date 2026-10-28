@@ -167,7 +167,7 @@ CONVENTIONS.md      # règles de code (source de la page Conventions)
 script/check_all.sh # enchaîne toutes les vérifications (check_*.sh isolément)
 tests/              # tests d'intégration Rust (*.rs) + tests Python (python/)
 examples/           # scripts Python complets (thermique, treillis, poutres…)
-formation/          # scripts de la formation débutant
+tutoriel/           # scripts du tutoriel débutant
 benches/            # bancs criterion (parallel.rs, geom.rs)
 book/               # cette documentation (mdbook)
 ```

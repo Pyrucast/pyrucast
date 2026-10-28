@@ -1,5 +1,5 @@
 # ANCHOR: script
-"""Formation débutant — 1. Maillage. / Beginner training — 1. Meshing.
+"""Tutoriel débutant — 1. Maillage. / Beginner tutorial — 1. Meshing.
 
 FR — Construit la pièce qui sert de fil rouge : une **chape percée**, plaque
 rectangulaire terminée par un demi-disque et trouée en son centre, maillée de
@@ -37,10 +37,10 @@ page.
 Lancement / Running ::
 
     maturin develop --release
-    python formation/maillage.py
+    python tutoriel/maillage.py
 
-    # Figures du livre / book figures (book/src/formation/img/) :
-    # PYRUCAST_FORMATION_IMG_DIR=book/src/formation/img python formation/maillage.py
+    # Figures du livre / book figures (book/src/tutoriel/img/) :
+    # PYRUCAST_TUTORIEL_IMG_DIR=book/src/tutoriel/img python tutoriel/maillage.py
 """
 
 import os
@@ -50,7 +50,7 @@ import pyrucast as pc
 # ANCHOR: figures
 # FR — Répertoire des figures : défini → export SVG, absent → fenêtre interactive.
 # EN — Figure directory: set → SVG export, unset → interactive window.
-OUT = os.environ.get("PYRUCAST_FORMATION_IMG_DIR")
+OUT = os.environ.get("PYRUCAST_TUTORIEL_IMG_DIR")
 
 # FR — Vue commune à toutes les figures : azimut, élévation, échelle.
 # EN — View shared by every figure: azimuth, elevation, scale.

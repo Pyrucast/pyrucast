@@ -45,7 +45,7 @@ D'où la ligne directrice de toute cette page :
 | **test Python** | `tests/python/*.py` | la surface pyo3 et le comportement côté Python | `pytest` — `check_python` |
 | **garde-fou** | `tests/python/test_method_exposure.py`, `test_mirror_completeness.py` | une **invariante d'API**, pas un comportement | `pytest` — `check_python` |
 | **exemple** | `examples/*.py` | une chaîne utilisateur de bout en bout | `run_examples` — `check_examples` |
-| **script de formation** | `formation/*.py` | un parcours pédagogique complet | `run_examples` — `check_examples` |
+| **script du tutoriel** | `tutoriel/*.py` | un parcours pédagogique complet | `run_examples` — `check_examples` |
 | **banc** | `benches/*.rs` | une **performance**, jamais une correction | `cargo bench`, hors CI |
 
 Trois distinctions valent d'être tenues :
@@ -89,7 +89,7 @@ jamais de la page où on veut l'afficher.
 | un item de l'API Rust | un **doctest** sur l'item | rien — il est dans la rustdoc | `cargo test --doc` |
 | une chaîne Rust complète (une physique) | `tests/<sujet>.rs`, entre ancres | un `include` ancré | `cargo test` |
 | une chaîne Python complète | `examples/<sujet>.py` | un `include`, entier ou ancré | `run_examples` |
-| un parcours pédagogique | `formation/<sujet>.py`, entre ancres | un `include` ancré | `run_examples` |
+| un parcours pédagogique | `tutoriel/<sujet>.py`, entre ancres | un `include` ancré | `run_examples` |
 | l'usage d'un opérateur en Python | `tests/python/test_doc_<famille>.py`, entre ancres | un `include` ancré | `pytest` |
 | ce qui n'est **pas du code** (signature annotée, pseudo-code) | la page elle-même | ` ```text ` — pas de coloration, donc pas de promesse | rien, et c'est assumé |
 
@@ -149,7 +149,7 @@ illisible ; un doctest promu en chapitre ne raconterait rien.
 Le mécanisme d'inclusion se choisit sur une seule question : **est-ce que
 quelque chose compile déjà ce fichier ?**
 
-- **Oui** (`tests/`, `examples/`, `formation/`, `tests/python/`, `src/`) →
+- **Oui** (`tests/`, `examples/`, `tutoriel/`, `tests/python/`, `src/`) →
   l'inclusion simple suffit. La vérification a lieu à la source ; mdbook ne fait
   que l'afficher.
 - **Non** → `rustdoc_include`, qui passe le **fichier entier** à rustdoc tout en
@@ -231,7 +231,7 @@ Deux points utiles :
 |---|---|---|
 | tout opérateur Rust a son binding Python | `test_mirror_completeness.py` | `check_python` |
 | tout verbe éligible a sa méthode | `test_method_exposure.py` | `check_python` |
-| les exemples et la formation tournent | `run_examples` | `check_examples` |
+| les exemples et le tutoriel tournent | `run_examples` | `check_examples` |
 | les doctests compilent et tournent | `cargo test --doc` | `check_rust` |
 | la rustdoc n'a aucun lien cassé | `cargo doc` avec `RUSTDOCFLAGS="-D warnings"` | `check_doc` |
 | les includes du book résolvent | `doc_lint.py includes` | `check_doc` |

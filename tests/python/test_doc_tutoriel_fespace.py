@@ -1,4 +1,4 @@
-"""Source of the Python examples of `formation/langage-python.md` and `fe-space.md`.
+"""Source of the Python examples of `tutoriel/langage-python.md` and `fe-space.md`.
 
 **The code lives at module level, not inside test functions**: mdbook does not
 strip the indentation of an included excerpt, so a block anchored inside a

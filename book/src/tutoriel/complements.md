@@ -18,11 +18,11 @@ Barre en traction — comparée à la solution analytique
 \\( u_x = F \cdot L / (E \cdot A) \\), export du résultat au format VTK :
 
 ```python
-{{#include ../../../formation/complements.py:barre}}
+{{#include ../../../tutoriel/complements.py:barre}}
 ```
 
 ```python
-{{#include ../../../formation/complements.py:export}}
+{{#include ../../../tutoriel/complements.py:export}}
 ```
 
 > **Non disponible dans pyrucast.** Pas d'élément coque (Cast3M `DKT`,
@@ -39,7 +39,7 @@ Cast3M `MASS`/`LUMP`/`KSIG`/`KTAN`.
 
 ## Aller plus loin en 3D
 
-Cette formation reste en 2D, mais rien n'empêche de reprendre la même
+Ce tutoriel reste en 2D, mais rien n'empêche de reprendre la même
 plaque trouée en volume :
 
 - `pyrucast.mesh.extrude(mesh, direction, n_couches)` — balayage d'un
@@ -54,7 +54,7 @@ plaque trouée en volume :
   d'une enveloppe `TRI3` fermée par triangulation de Delaunay 3D (Cast3M
   `VOLU` par remplissage).
 
-Aucun de ces quatre n'est mis en œuvre dans les scripts de cette formation.
+Aucun de ces quatre n'est mis en œuvre dans les scripts de ce tutoriel.
 
 ## Éléments finis supportés
 

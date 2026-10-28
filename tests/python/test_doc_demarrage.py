@@ -1,5 +1,5 @@
 """Source of the Python examples of `book/src/installation.md` and
-`book/src/formation/maillage.md`.
+`book/src/tutoriel/maillage.md`.
 
 The first excerpts mesh a line and show the method form of a free function;
 the last two open an **interactive window**, which is precisely their
@@ -74,7 +74,7 @@ plaque.plot(save=None if ecran else "apercu.svg")
 assert ecran or os.path.exists("apercu.svg")
 
 
-# ── Formation : la vue interactive ──────────────────────────────────────────
+# ── Tutoriel : la vue interactive ───────────────────────────────────────────
 
 _c = pyrucast.Coords(2)
 _coins = [_c.add_node(p) for p in ([0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0])]

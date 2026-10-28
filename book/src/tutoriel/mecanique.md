@@ -9,7 +9,7 @@ dans le même ordre que le support original — élasticité linéaire (sections
 ## 1. Élasticité linéaire
 
 ```python
-{{#include ../../../formation/mecanique.py:construction}}
+{{#include ../../../tutoriel/mecanique.py:construction}}
 ```
 
 Le modèle : élasticité (contraintes planes), encastrement `u_x = u_y = 0`
@@ -18,11 +18,11 @@ sur le bord gauche, effort réparti sur l'arc bas du trou (Cast3M
 `f_y`) :
 
 ```python
-{{#include ../../../formation/mecanique.py:modele_elastique}}
+{{#include ../../../tutoriel/mecanique.py:modele_elastique}}
 ```
 
 ```python
-{{#include ../../../formation/mecanique.py:cas1_elastique}}
+{{#include ../../../tutoriel/mecanique.py:cas1_elastique}}
 ```
 
 ## 2. + Dilatation thermique
@@ -33,7 +33,7 @@ pour calculer une déformation thermique et l'ajouter au chargement —
 l'équivalent Cast3M `EPTH` :
 
 ```python
-{{#include ../../../formation/mecanique.py:cas2_thermique}}
+{{#include ../../../tutoriel/mecanique.py:cas2_thermique}}
 ```
 
 Trois briques, à la main, sans opérateur « tout-en-un » — comme en Cast3M
@@ -65,8 +65,8 @@ support commun.
 > même façon : un `ElementField` accepte des valeurs non uniformes par
 > `(cellule, point de Gauss)`, et `pyrucast.field.exp`/l'arithmétique de
 > champs (`+ - * **`) suffiraient à coder la formule — mais ce script ne le
-> met pas en œuvre, faute d'un exemple testé à ce jour dans cette
-> formation.
+> met pas en œuvre, faute d'un exemple testé à ce jour dans ce
+> tutoriel.
 
 ## 3. Plasticité parfaite — pas à pas
 
@@ -78,18 +78,18 @@ son **accélération d'Anderson**. Il suffit de remplacer
 `model.elasticity` par `model.plasticity_perfect` :
 
 ```python
-{{#include ../../../formation/plasticite.py:modele_plastique}}
+{{#include ../../../tutoriel/plasticite.py:modele_plastique}}
 ```
 
 L'historique de charge est un `Evolution` **à valeur champ**, interpolée
 linéairement en pseudo-temps — Cast3M `EVOL 'MANU'` :
 
 ```python
-{{#include ../../../formation/plasticite.py:chargement_evolution}}
+{{#include ../../../tutoriel/plasticite.py:chargement_evolution}}
 ```
 
 ```python
-{{#include ../../../formation/plasticite.py:pas_a_pas}}
+{{#include ../../../tutoriel/plasticite.py:pas_a_pas}}
 ```
 
 ![Déformation plastique cumulée (p)](img/plasticite.svg)
@@ -119,19 +119,19 @@ Ici, un patch-test classique (deux blocs superposés, jeu initial, pression
 sur le bloc du haut) :
 
 ```python
-{{#include ../../../formation/contact.py:geometrie_contact}}
+{{#include ../../../tutoriel/contact.py:geometrie_contact}}
 ```
 
 ```python
-{{#include ../../../formation/contact.py:modele_contact}}
+{{#include ../../../tutoriel/contact.py:modele_contact}}
 ```
 
 ```python
-{{#include ../../../formation/contact.py:chargement_contact}}
+{{#include ../../../tutoriel/contact.py:chargement_contact}}
 ```
 
 ```python
-{{#include ../../../formation/contact.py:resolution_contact}}
+{{#include ../../../tutoriel/contact.py:resolution_contact}}
 ```
 
 ![Réaction de contact (λ)](img/contact.svg)
@@ -145,15 +145,15 @@ mathématique (formulation active-set, jeux, multiplicateurs).
 ## Scripts complets
 
 ```python
-{{#include ../../../formation/mecanique.py}}
+{{#include ../../../tutoriel/mecanique.py}}
 ```
 
 ```python
-{{#include ../../../formation/plasticite.py}}
+{{#include ../../../tutoriel/plasticite.py}}
 ```
 
 ```python
-{{#include ../../../formation/contact.py}}
+{{#include ../../../tutoriel/contact.py}}
 ```
 
 Suite : [Compléments](complements.md) — éléments structuraux et export des

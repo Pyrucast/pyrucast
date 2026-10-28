@@ -1,4 +1,4 @@
-# Exemples et scripts de formation, de bout en bout.
+# Exemples et scripts du tutoriel, de bout en bout.
 #
 # pytest couvre l'API unite par unite ; ceux-ci couvrent autre chose : des
 # chaines de calcul completes, ecrites comme un utilisateur les ecrirait.
@@ -10,6 +10,6 @@
 . "$PSScriptRoot\_common.ps1"
 
 Require-Module-Pyrucast
-Step "exemples + formation (bout en bout)" { & "$PSScriptRoot\run_examples.ps1" }
+Step "exemples + tutoriel (bout en bout)" { & "$PSScriptRoot\run_examples.ps1" }
 
 Write-Host "OK : exemples."

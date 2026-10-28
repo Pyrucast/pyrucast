@@ -1,8 +1,8 @@
 # ANCHOR: script
-"""Formation débutant — 2. Calcul thermique. / Beginner training — 2. Thermal.
+"""Tutoriel débutant — 2. Calcul thermique. / Beginner tutorial — 2. Thermal.
 
 FR — Reprend la **chape percée** du chapitre 1 — le volume HEX8 structuré est
-importé de `formation/maillage.py`, aucune cote n'est redonnée — et y résout la
+importé de `tutoriel/maillage.py`, aucune cote n'est redonnée — et y résout la
 conduction **stationnaire** `div(-k·grad T) = q`, en deux temps :
 
 1. **conduction seule** — température imposée sur l'alésage, flux imposé sur la
@@ -17,7 +17,7 @@ rayonnement ni terme transitoire. Le détail pas à pas est dans le livre, page
 « Calcul thermique ».
 
 EN — Picks chapter 1's **pierced lug** back up — the structured HEX8 volume is
-imported from `formation/maillage.py`, not one dimension is restated — and
+imported from `tutoriel/maillage.py`, not one dimension is restated — and
 solves **steady** conduction `div(-k·grad T) = q` on it, in two steps:
 
 1. **conduction alone** — imposed temperature on the bore, imposed flux on the
@@ -33,10 +33,10 @@ transient term. The step-by-step walkthrough lives in the book's thermal page.
 Lancement / Running ::
 
     maturin develop --release
-    python formation/thermique.py
+    python tutoriel/thermique.py
 
-    # Figures du livre / book figures (book/src/formation/img/) :
-    # PYRUCAST_FORMATION_IMG_DIR=book/src/formation/img python formation/thermique.py
+    # Figures du livre / book figures (book/src/tutoriel/img/) :
+    # PYRUCAST_TUTORIEL_IMG_DIR=book/src/tutoriel/img python tutoriel/thermique.py
 """
 
 import os

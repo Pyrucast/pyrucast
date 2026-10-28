@@ -203,14 +203,14 @@ créent) le venv automatiquement et s'arrêtent à la première erreur.
 
 Autour d'eux gravitent quelques utilitaires : `dev.sh` / `dev.ps1` (build
 minimal — module Python en release avec la visu interactive + stub, rien
-d'autre), `run_examples.sh` / `run_examples.ps1` (exemples et formation de bout
+d'autre), `run_examples.sh` / `run_examples.ps1` (exemples et tutoriel de bout
 en bout, appelés par `check_examples`), `set_new_version.sh` (passe de version :
 `check_all` puis `check_clippy`, reporter le numéro dans `Cargo.toml` — seule
 déclaration de version du projet —, commit + tag : il ne pousse rien),
 `publish_macros.sh` (vérifie et publie `pyrucast-macros` sur crates.io, le seul
 paquet que la CI ne publie pas),
 `scaling.sh` (mesure de montée en charge du parallélisme) et
-`generate-formation-figures.sh` (régénère les SVG de la formation, qui sont des
+`generate-tutoriel-figures.sh` (régénère les SVG du tutoriel, qui sont des
 artefacts commités).
 
 ### `script/check_*.sh` — vérifications, en bloc ou à la carte
@@ -235,7 +235,7 @@ la recompilation.
 | `cargo build --features viz-interactive` | la fenêtre winit compile | aucun test — 960 lignes que rien n'exerce sans écran | 14 s | ✓ | | ✓ | | | | ✓ | ✓ |
 | `maturin develop --features extension-module,viz` | l'extension Python s'installe | — | 20 s | | | | ✓ | | | ✓ | ✓ |
 | `python -m pytest` | l'API Python, unité par unité | 73 fichiers `tests/python/test_*.py`, dont 13 `test_doc_*.py` qui sont aussi les sources des exemples du book | 32 s | | | | ✓ | | | ✓ | ✓ |
-| `script/run_examples.sh` | des chaînes de calcul **de bout en bout** | 30 `examples/*.py`, 3 `examples/*.rs`, 6 `formation/*.py` | 80 s | | | | | ✓ | | ✓ | ✓ |
+| `script/run_examples.sh` | des chaînes de calcul **de bout en bout** | 30 `examples/*.py`, 3 `examples/*.rs`, 6 `tutoriel/*.py` | 80 s | | | | | ✓ | | ✓ | ✓ |
 | `cargo doc --no-deps --lib` (`-D warnings`) | la rustdoc n'a aucun lien cassé | — | 1 s | | | | | | ✓ | ✓ | ✓ |
 | `mdbook build book` | le book se rend | `book/src/**` | 1 s | | | | | | ✓ | ✓ | ✓ |
 | `python script/doc_lint.py` | les **six garde-fous** du book et des exemples | `book/src/**.md`, le book construit, la rustdoc, le module Python installé | 28 s | | | | | | ✓ | ✓ | ✓ |
@@ -248,7 +248,7 @@ Et les totaux, dans le même régime :
 | `check_format` | formatage seul | 2 s |
 | `check_rust` | cœur Rust | 169 s |
 | `check_python` | liaison et tests Python | 64 s |
-| `check_examples` | exemples et formation | 80 s |
+| `check_examples` | exemples et tutoriel | 80 s |
 | `check_doc` | rustdoc, garde-fous, book | 50 s |
 | `check_clippy` | quatre jeux de features, `-D warnings` | ~2 min |
 | `check_gmsh` | l'interface gmsh (exige `pip install gmsh`) | 5 s |
@@ -313,7 +313,7 @@ Trois points valent d'être notés :
 - les **deux vérifications de format viennent en tête** — le script *vérifie*,
   il ne formate pas. Passer `cargo fmt` et `ruff format .` **avant** de le
   lancer, sinon il s'arrête au premier pas ;
-- `run_examples` rejoue les **exemples et les scripts de formation** de bout
+- `run_examples` rejoue les **exemples et les scripts du tutoriel** de bout
   en bout. Ce sont des chaînes de calcul complètes : elles attrapent ce que les
   tests unitaires laissent passer, typiquement une méthode renommée dont plus
   personne ne se sert ;

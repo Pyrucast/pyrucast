@@ -40,7 +40,7 @@ repository.workspace = true
 # sans elle, `exclude` se lit comme un `.gitignore` et emporte tout répertoire
 # du même nom, si profond soit-il.
 exclude = [
-    "/book/", "/python/", "/formation/", "tests/python/", "examples/*.py",
+    "/book/", "/python/", "/tutoriel/", "tests/python/", "examples/*.py",
     "profile.json.gz", "opérateur_castem.csv", "modèle_castem.csv",
     # Dev-only tooling and internal notes, irrelevant to a crates.io consumer.
     "/.claude/", "/.github/", "recall.config.json", "/script/",

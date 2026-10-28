@@ -1,4 +1,4 @@
-"""Formation débutant — 3. Calcul mécanique (élasticité linéaire).
+"""Tutoriel débutant — 3. Calcul mécanique (élasticité linéaire).
 
 Reprend la plaque trouée : bord gauche encastré, effort ponctuel (masse
 mass) spread over the lower half of the hole. Three load cases follow one
@@ -6,7 +6,7 @@ another, like sections 6/7/8 of the Cast3M training:
 
 1. **élasticité pure** — effort seul ;
 2. **+ dilatation thermique** — on réutilise le champ de température de
-   `formation/thermique.py` (`ε_th = α·(T − T_ref)`, opérateur
+   `tutoriel/thermique.py` (`ε_th = α·(T − T_ref)`, opérateur
    `field.thermal_strain`, l'équivalent Cast3M `EPTH`) ;
 3. a paragraph (no code tested here) on the **heterogeneous material**
    (Cast3M varies `alpha(x)` through a formula on a field at the Gauss
@@ -15,10 +15,10 @@ another, like sections 6/7/8 of the Cast3M training:
 Lancement ::
 
     maturin develop --release
-    python formation/mecanique.py
+    python tutoriel/mecanique.py
 
-    # To regenerate the book figure (book/src/formation/img/):
-    # PYRUCAST_FORMATION_IMG_DIR=book/src/formation/img python formation/mecanique.py
+    # To regenerate the book figure (book/src/tutoriel/img/):
+    # PYRUCAST_TUTORIEL_IMG_DIR=book/src/tutoriel/img python tutoriel/mecanique.py
 """
 
 import os
@@ -41,7 +41,7 @@ def construire_plaque_trouee():
     """A holed rectangular plate, built edge by edge with the
     mailleurs dédiés (`line`, `circle`), fusionnés en un seul
     submeshes by `pyrucast.mesh.consolidate` before `triangulate_surface` — as
-    in `formation/maillage.py`. Also returns the submeshes the mechanics and
+    in `tutoriel/maillage.py`. Also returns the submeshes the mechanics and
     the thermics need: left edge (clamped end), lower half of the hole
     (loading) and the whole hole (imposed temperature, reused as is to stay on
     the same nodes as `plaque`)."""
@@ -78,7 +78,7 @@ def construire_plaque_trouee():
 
 
 def resoudre_thermique(plaque, trou):
-    """Ré-sout la thermique de `formation/thermique.py` (version simplifiée,
+    """Ré-sout la thermique de `tutoriel/thermique.py` (version simplifiée,
     without convection or source, just T imposed on the hole) so as to reuse
     a non-uniform field in the second load case below.
 
@@ -156,7 +156,7 @@ def main() -> None:
     )
     print(f"   σ_xx max ≈ {contraintes.max('sigma_xx'):.3e} Pa")
 
-    out = os.environ.get("PYRUCAST_FORMATION_IMG_DIR", tempfile.gettempdir())
+    out = os.environ.get("PYRUCAST_TUTORIEL_IMG_DIR", tempfile.gettempdir())
     chemin = os.path.join(out, "mecanique-deplacement.svg")
     plaque.plot(save=chemin, field=u2, component="u_y", cmap="coolwarm", smooth=1)
     print(f"Displacement u_y written to {chemin}")

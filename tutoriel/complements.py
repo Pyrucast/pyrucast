@@ -1,7 +1,7 @@
-"""Formation débutant — 6. Compléments : éléments structuraux + export.
+"""Tutoriel débutant — 6. Compléments : éléments structuraux + export.
 
 Barre en traction (élément `SEG2`, `model.truss`) — l'équivalent pyrucast
-of Cast3M's `BARR`/`POUT` elements mentioned in the training's complements.
+of Cast3M's `BARR`/`POUT` elements mentioned in the Cast3M training's complements.
 The result is compared with the analytical solution then exported to VTK
 (readable by ParaView), the equivalent of Cast3M's `SORT 'VTK'`.
 Cast3M.
@@ -9,7 +9,7 @@ Cast3M.
 Lancement ::
 
     maturin develop --release
-    python formation/complements.py
+    python tutoriel/complements.py
 """
 
 import os

@@ -10,7 +10,7 @@ def _closed_loop(coords, points):
     """A closed SEG2 loop through `points`, in the order given.
 
     `pave_surface` wants each loop in a single submesh, so the per-segment
-    meshes are consolidated exactly as the formation script does.
+    meshes are consolidated exactly as the tutorial script does.
     """
     nodes = [coords.add_node(list(p)) for p in points]
     mesh = None

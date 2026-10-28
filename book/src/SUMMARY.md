@@ -82,15 +82,15 @@
 
 - [Calcul pas à pas](pas-a-pas.md)
 
-# Formations
+# Tutoriel
 
-- [Formation débutant](formation/debutant.md)
-  - [Présentation de pyrucast](formation/presentation.md)
-  - [Python & conventions pyrucast](formation/langage-python.md)
-  - [Maillage](formation/maillage.md)
-  - [Calcul thermique](formation/thermique.md)
-  - [Calcul mécanique](formation/mecanique.md)
-  - [Compléments](formation/complements.md)
+- [Tutoriel débutant](tutoriel/debutant.md)
+  - [Présentation de pyrucast](tutoriel/presentation.md)
+  - [Python & conventions pyrucast](tutoriel/langage-python.md)
+  - [Maillage](tutoriel/maillage.md)
+  - [Calcul thermique](tutoriel/thermique.md)
+  - [Calcul mécanique](tutoriel/mecanique.md)
+  - [Compléments](tutoriel/complements.md)
 
 # Développer
 

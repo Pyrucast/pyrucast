@@ -872,7 +872,7 @@ mod tests {
 
     #[test]
     fn a_planar_contour_in_3d_is_paved_in_its_own_plane() {
-        // The formation benchmark lives in the y = 0 plane of a 3-D Coords.
+        // The tutorial benchmark lives in the y = 0 plane of a 3-D Coords.
         let coords = Handle::new(Coords::new(3).unwrap());
         let ids: Vec<NodeId> = rect_loop(1.0, 1.0, 6, 6)
             .iter()

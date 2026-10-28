@@ -2107,7 +2107,7 @@ mod tests {
     #[test]
     #[ignore]
     fn perf_hundred_k_triangles_under_30s() {
-        // A plate-with-hole domain at the scale of formation/maillage_test.py:
+        // A plate-with-hole domain at the scale of tutoriel/maillage_test.py:
         // 0.30 x 0.10 m rectangle with a r=0.035 m circular hole.
         let coords = Handle::new(Coords::new(2).unwrap());
         let mut contour = loop_mesh(

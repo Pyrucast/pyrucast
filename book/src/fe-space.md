@@ -476,20 +476,20 @@ règles de quadrature sont passées en chaînes de caractères
 (`"LAGRANGE1"`, `"GAUSS"`).
 
 ```python
-{{#include ../../tests/python/test_doc_formation_fespace.py:fespace}}
+{{#include ../../tests/python/test_doc_tutoriel_fespace.py:fespace}}
 ```
 
 Variantes de construction :
 
 ```python
-{{#include ../../tests/python/test_doc_formation_fespace.py:fespace_variantes}}
+{{#include ../../tests/python/test_doc_tutoriel_fespace.py:fespace_variantes}}
 ```
 
 Déplacement du maillage : le Jacobien reflète automatiquement les
 coordonnées courantes du `Coords` — pas de cache à invalider.
 
 ```python
-{{#include ../../tests/python/test_doc_formation_fespace.py:deplacement}}
+{{#include ../../tests/python/test_doc_tutoriel_fespace.py:deplacement}}
 ```
 
 ## Limitations actuelles

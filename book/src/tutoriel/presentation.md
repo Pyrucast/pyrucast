@@ -29,7 +29,7 @@ physiques capitalisées.
 > l'optimisation topologique. **pyrucast ne couvre, à ce jour, que les deux
 > premiers points — et partiellement.** Le reste (fluides, magnétostatique,
 > diffusion, optimisation topologique, rupture) n'existe pas dans pyrucast ;
-> il n'en sera plus question dans cette formation.
+> il n'en sera plus question dans ce tutoriel.
 
 Ce que pyrucast fait réellement :
 
@@ -47,14 +47,14 @@ Ce que pyrucast fait réellement :
 > [Calcul thermique](thermique.md) pour le détail). Pas de dynamique
 > (temporelle ou modale), pas de flambage, pas de rupture (XFEM). La liste
 > évolue vite : elle sera obsolète avant longtemps, mais reflète l'état au
-> moment de l'écriture de cette formation.
+> moment de l'écriture de ce tutoriel.
 
 ## Comment obtenir pyrucast ?
 
 - **Multiplateforme** : Linux, macOS, Windows — tout ce qu'accepte la chaîne
   Rust + Python (`rustup`, `pip`).
 - **Où le télécharger ?** Le dépôt du projet (voir le lien en tête de la page
-  [Formation débutant](debutant.md)).
+  [Tutoriel débutant](debutant.md)).
 - **Code source** : toujours accessible — pyrucast est un projet Rust
   ordinaire, sans build fermé.
 - **Prix** : logiciel libre.
@@ -80,5 +80,5 @@ Voir [Installation et démarrage rapide](../installation.md) pour le détail
 
 - Ce livre — théorie et référence des objets/opérateurs.
 - La documentation de l'API Rust : `cargo doc --no-deps --lib --open`.
-- Les scripts de cette formation : dossier `formation/` du dépôt.
+- Les scripts de ce tutoriel : dossier `tutoriel/` du dépôt.
 - Des exemples plus nombreux, un par sujet : dossier `examples/` du dépôt.

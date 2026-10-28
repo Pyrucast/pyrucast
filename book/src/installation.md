@@ -175,8 +175,8 @@ modèle d'objets, et la section [Objets](objets.md) détaille chaque brique
 [Conduction thermique](thermique.md) et [Mécanique](mecanique.md) déroulent
 des problèmes complets de bout en bout.
 
-- **Formation** : un parcours guidé, du maillage au calcul thermique et
-  mécanique — [Formation débutant](formation/debutant.md).
+- **Tutoriel** : un parcours guidé, du maillage au calcul thermique et
+  mécanique — [Tutoriel débutant](tutoriel/debutant.md).
 - **Référence API Rust** : publiée sur
   <https://pyrucast.github.io/pyrucast/rust/>, ou en local avec
   `cargo doc --no-deps --lib --open`.

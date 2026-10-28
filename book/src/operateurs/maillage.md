@@ -1734,7 +1734,7 @@ cellules n'y est pas convexe — tandis que vider l'anneau de cellules autour de
 l'arête fautive et le remplir autrement a toujours la place de le faire. Le
 retrait d'arête généralise la bascule 3-2 et tout ce qui vient après.
 
-Mesuré sur la plaque percée de `formation/maillage_test.py`, en ajoutant cette
+Mesuré sur la plaque percée de `tutoriel/maillage_test.py`, en ajoutant cette
 passe (l'angle dièdre médian reste à 47° dans tous les cas) :
 
 | mailles | part sous 10° | part sous 1° | cellule la plus plate / moyenne |
@@ -1818,7 +1818,7 @@ C'est aussi ce qui débloque. Une arête qu'on n'arrive pas à faire rentrer n'a
 autrement aucune issue ; la couper en deux scinde le problème en deux plus
 faciles, et une arête suffisamment entourée de ses propres subdivisions est
 récupérée par le Delaunay tout seul. Ce qui a été ajouté est ensuite **rendu**
-partout où le maillage veut bien s'en séparer : sur la plaque de la formation,
+partout où le maillage veut bien s'en séparer : sur la plaque du tutoriel,
 15 nœuds posés, 12 repris, 3 restants.
 
 ### Pièges
@@ -1838,7 +1838,7 @@ explicitement.
 
 ### Coût
 
-Sur la plaque percée de la formation, extrudée puis pelée :
+Sur la plaque percée du tutoriel, extrudée puis pelée :
 
 | `size` | facettes | tétraèdres | temps |
 | --- | --- | --- | --- |

@@ -52,7 +52,7 @@
 //! that were essential stay, as they must: removing them would put the mesh
 //! back in the situation that had no answer.
 //!
-//! On the plate of `formation/maillage_test.py`, 3308 facets, this is 15
+//! On the plate of `tutoriel/maillage_test.py`, 3308 facets, this is 15
 //! nodes added and 12 given back, leaving **3**, in under a second, where
 //! the strict mode cannot finish at all. On a small plate of flat panels
 //! nothing comes back, because every cut there was essential.
@@ -107,7 +107,7 @@
 //!   the **slivers** refinement cannot reach, by reconnecting cells, taking
 //!   out the edges a sliver is flat across, and relaxing interior nodes.
 //!
-//! What that is worth, measured on the plate of `formation/maillage_test.py`
+//! What that is worth, measured on the plate of `tutoriel/maillage_test.py`
 //! (the median dihedral angle sits at 47° throughout, so what moves is the
 //! tail):
 //!
@@ -171,7 +171,7 @@ const MAX_SUBDIVISIONS: usize = 12;
 /// The measure is `η = 12 (3V)^(2/3) / Σℓ²`: 1 for a regular tetrahedron, 0
 /// for a flat one, and independent of how big the mesh is. Sound cells sit
 /// well above this even in the tail — the worst on the plate of
-/// `formation/maillage_test.py` is 4·10⁻² — while a genuinely flat one lands
+/// `tutoriel/maillage_test.py` is 4·10⁻² — while a genuinely flat one lands
 /// several orders below, so the line between "thin" and "degenerate" is not
 /// a matter of taste.
 const DEGENERATE_SHAPE: f64 = 1e-4;
@@ -979,7 +979,7 @@ mod tests {
     }
 
     /// The envelope of a plate meshed by `triangulate_surface`, extruded and
-    /// peeled — the pipeline `formation/maillage_test.py` uses.
+    /// peeled — the pipeline `tutoriel/maillage_test.py` uses.
     ///
     /// `n` segments per side of a unit square, `size` the target edge length.
     /// Note the `invert`: `extrude` does not check that its direction lies on

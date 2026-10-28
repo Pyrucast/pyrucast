@@ -1,6 +1,6 @@
 # Maillage
 
-Fil rouge de la formation : une **chape percée** — plaque rectangulaire
+Fil rouge du tutoriel : une **chape percée** — plaque rectangulaire
 terminée par un demi-disque, trouée en son centre. C'est l'équivalent
 pyrucast de la pièce « structure avec un trou » de la formation Cast3M originale.
 
@@ -16,7 +16,7 @@ Deux familles de mailleurs coexistent :
 | **non structuré** | une **taille de maille** cible | place ses propres nœuds à l'intérieur | quelconque |
 | **structuré** | un **nombre d'éléments** | balaie une ligne sur une autre | grille |
 
-Le script complet est [`formation/maillage.py`](https://github.com/Pyrucast/pyrucast/blob/master/formation/maillage.py)
+Le script complet est [`tutoriel/maillage.py`](https://github.com/Pyrucast/pyrucast/blob/master/tutoriel/maillage.py)
 ; tous les extraits ci-dessous en sont issus directement, dans l'ordre du
 fichier.
 
@@ -25,7 +25,7 @@ fichier.
 ### L'espace de coordonnées
 
 ```python
-{{#include ../../../formation/maillage.py:coords}}
+{{#include ../../../tutoriel/maillage.py:coords}}
 ```
 
 `pyrucast.Coords` est le **seul objet mutable** du script. Tous les mailleurs y
@@ -39,7 +39,7 @@ décrit d'emblée en 3D pour n'avoir rien à relever au moment de l'extruder.
 ### Les cotes
 
 ```python
-{{#include ../../../formation/maillage.py:parametres}}
+{{#include ../../../tutoriel/maillage.py:parametres}}
 ```
 
 Toutes les dimensions sont en mètres et nommées une seule fois : elles servent
@@ -54,7 +54,7 @@ sont les coins du rectangle, `p6` le centre du demi-disque **et** du trou,
 `p3` la pointe.
 
 ```python
-{{#include ../../../formation/maillage.py:points}}
+{{#include ../../../tutoriel/maillage.py:points}}
 ```
 
 Ce sont les seuls nœuds saisis à la main de tout le script : tous les autres
@@ -68,7 +68,7 @@ Le contour se maille **bord par bord**, chacun avec son mailleur dédié :
 `line` pour les côtés droits, `arc` pour le demi-disque.
 
 ```python
-{{#include ../../../formation/maillage.py:contour_bords}}
+{{#include ../../../tutoriel/maillage.py:contour_bords}}
 ```
 
 **Le nombre d'éléments par bord est décidé ici, et seulement ici.**
@@ -79,7 +79,7 @@ l'utilisateur, indépendant de la taille de maille demandée pour l'intérieur.
 ### `mesh.consolidate` est obligatoire
 
 ```python
-{{#include ../../../formation/maillage.py:contour_consolidate}}
+{{#include ../../../tutoriel/maillage.py:contour_consolidate}}
 ```
 
 L'union `|` réunit les cinq bords dans un même maillage, mais chacun y garde
@@ -90,7 +90,7 @@ fusionne sans toucher à la connectivité.
 ### Le trou, et le contour complet
 
 ```python
-{{#include ../../../formation/maillage.py:contour_trou}}
+{{#include ../../../tutoriel/maillage.py:contour_trou}}
 ```
 
 Le trou tient en une commande : un cercle centré sur `p6`, de normale −Y
@@ -107,7 +107,7 @@ contrainte, raffinée à la taille cible (raffinement de Ruppert).
 ### L'orientation des boucles décide de la matière
 
 ```python
-{{#include ../../../formation/maillage.py:deux_domaines}}
+{{#include ../../../tutoriel/maillage.py:deux_domaines}}
 ```
 
 Le point à retenir est **l'orientation des boucles**. Le mailleur la lit pour
@@ -126,7 +126,7 @@ second domaine, et le disque est rempli :
 ### `invert` fait du disque un vrai trou
 
 ```python
-{{#include ../../../formation/maillage.py:invert_trou}}
+{{#include ../../../tutoriel/maillage.py:invert_trou}}
 ```
 
 `invert` retourne la boucle du trou — le sous-maillage 1 du contour, d'où le
@@ -144,7 +144,7 @@ Quatre opérateurs enchaînés font passer de la surface au volume tétraédriqu
 ### `extrude` — balayage sur l'épaisseur
 
 ```python
-{{#include ../../../formation/maillage.py:extrude}}
+{{#include ../../../tutoriel/maillage.py:extrude}}
 ```
 
 L'extrusion balaie la surface le long d'un vecteur, en un nombre de couches
@@ -162,7 +162,7 @@ cachées, ne montre que la peau :
 ### `skin` — la peau, découpée en faces planes
 
 ```python
-{{#include ../../../formation/maillage.py:skin}}
+{{#include ../../../tutoriel/maillage.py:skin}}
 ```
 
 `skin` extrait les facettes du bord du volume et les **regroupe par face
@@ -180,7 +180,7 @@ travers la pièce.)*
 ### `convert` + `invert` — préparer l'enveloppe
 
 ```python
-{{#include ../../../formation/maillage.py:convert_invert}}
+{{#include ../../../tutoriel/maillage.py:convert_invert}}
 ```
 
 `triangulate_volume` n'accepte qu'une enveloppe **TRI3** fermée dont les
@@ -193,7 +193,7 @@ bon sens.
 ### `triangulate_volume` — remplissage TET4
 
 ```python
-{{#include ../../../formation/maillage.py:triangulate_volume}}
+{{#include ../../../tutoriel/maillage.py:triangulate_volume}}
 ```
 
 C'est le compagnon 3D de `triangulate_surface` : il remplit l'intérieur de
@@ -209,7 +209,7 @@ que mal maillée.
 ### Les nœuds ajoutés, un sous-maillage de plus
 
 ```python
-{{#include ../../../formation/maillage.py:noeuds_ajoutes}}
+{{#include ../../../tutoriel/maillage.py:noeuds_ajoutes}}
 ```
 
 ![Volume non structuré triangulé, TET4](img/maillage-volume-tetra.svg)
@@ -227,7 +227,7 @@ que mal maillée.
 ### Un nombre d'éléments, plus une taille
 
 ```python
-{{#include ../../../formation/maillage.py:comptes}}
+{{#include ../../../tutoriel/maillage.py:comptes}}
 ```
 
 En structuré on ne donne plus une taille de maille mais un **nombre
@@ -237,7 +237,7 @@ rectangulaire à gauche, une couronne autour du trou à droite.
 ### La grille, par balayage du bord gauche
 
 ```python
-{{#include ../../../formation/maillage.py:grille}}
+{{#include ../../../tutoriel/maillage.py:grille}}
 ```
 
 **Balayer plutôt que remplir.** `extrude(ligne, vecteur, n)` balaie une ligne
@@ -254,7 +254,7 @@ cette page.
 ### Un bord se récupère, il ne se refabrique pas
 
 ```python
-{{#include ../../../formation/maillage.py:bord_droit}}
+{{#include ../../../tutoriel/maillage.py:bord_droit}}
 ```
 
 Pour raccorder la couronne à la grille, il faut le bord **droit** de la
@@ -268,7 +268,7 @@ segments dont **tous** les nœuds y sont. Aucun indice n'est écrit à la main.
 ### Ses deux extrémités, par coordonnée
 
 ```python
-{{#include ../../../formation/maillage.py:extremites}}
+{{#include ../../../tutoriel/maillage.py:extremites}}
 ```
 
 Même méthode pour les deux points de raccord de la couronne, repérés par leur
@@ -278,7 +278,7 @@ coordonnée Z (le plus bas et le plus haut) : la sélection rend un maillage
 ### La boucle extérieure de la couronne
 
 ```python
-{{#include ../../../formation/maillage.py:boucle_exterieure}}
+{{#include ../../../tutoriel/maillage.py:boucle_exterieure}}
 ```
 
 Elle réunit le demi-disque, les deux tronçons de bord restants et le bord
@@ -288,7 +288,7 @@ seule boucle fermée, comme pour le contour non structuré.
 ### La boucle intérieure, alignée sur elle
 
 ```python
-{{#include ../../../formation/maillage.py:boucle_interieure}}
+{{#include ../../../tutoriel/maillage.py:boucle_interieure}}
 ```
 
 **Les deux boucles doivent se correspondre.** `sweep` relie les nœuds de la
@@ -306,7 +306,7 @@ exactement ce que `sweep` demande.
 ### `sweep`, puis l'union
 
 ```python
-{{#include ../../../formation/maillage.py:sweep}}
+{{#include ../../../tutoriel/maillage.py:sweep}}
 ```
 
 `sweep(a, b, n)` balaie une ligne **sur une autre**, en `n` couches : entre
@@ -323,7 +323,7 @@ suffit ensuite à en faire un maillage conforme — 200 + 120 = 320 `QUA4` :
 ### Le volume HEX8
 
 ```python
-{{#include ../../../formation/maillage.py:volume_hex8}}
+{{#include ../../../tutoriel/maillage.py:volume_hex8}}
 ```
 
 La même extrusion que pour le non structuré donne le volume — mais un `QUA4`
@@ -355,20 +355,20 @@ Le script réunit les deux dans un petit helper, pour que chaque tracé soit
 interactif à l'exécution et devienne une figure de cette page en mode batch :
 
 ```python
-{{#include ../../../formation/maillage.py:figures}}
+{{#include ../../../tutoriel/maillage.py:figures}}
 ```
 
 L'attribut `face_color` d'un sous-maillage fixe sa couleur de tracé, ce qui
 sert à distinguer les faces d'une peau ou à faire ressortir un groupe de
 nœuds.
 
-Les figures SVG de cette formation (`img/*.svg`) sont pré-générées à partir
-des scripts `formation/*.py` et commitées avec le livre — `mdbook build` ne
+Les figures SVG de ce tutoriel (`img/*.svg`) sont pré-générées à partir
+des scripts `tutoriel/*.py` et commitées avec le livre — `mdbook build` ne
 connaît pas Python, elles ne sont donc **pas** régénérées automatiquement.
 Après modification d'un script, régénérer avant de committer :
 
 ```bash
-script/generate-formation-figures.sh
+script/generate-tutoriel-figures.sh
 ```
 
 ## Script complet
@@ -377,7 +377,7 @@ Une fois les explications retirées, tout le chapitre tient en une page — du
 premier point guide au volume structuré :
 
 ```python
-{{#include ../../../formation/maillage.py:script}}
+{{#include ../../../tutoriel/maillage.py:script}}
 ```
 
 Suite : [Calcul thermique](thermique.md), qui reprend le volume `HEX8`

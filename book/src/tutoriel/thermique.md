@@ -7,7 +7,7 @@ enrichi d'un film convectif et d'une source volumique. Chaque étape est
 **tracée avant d'être résolue** — les régions chargées d'abord, le champ de
 température ensuite.
 
-Le script complet est [`formation/thermique.py`](https://github.com/Pyrucast/pyrucast/blob/master/formation/thermique.py)
+Le script complet est [`tutoriel/thermique.py`](https://github.com/Pyrucast/pyrucast/blob/master/tutoriel/thermique.py)
 ; tous les extraits ci-dessous en sont issus directement, dans l'ordre du
 fichier.
 
@@ -66,7 +66,7 @@ pression et source volumique passent donc tous par le même opérateur.
 ## Les données du calcul
 
 ```python
-{{#include ../../../formation/thermique.py:donnees}}
+{{#include ../../../tutoriel/thermique.py:donnees}}
 ```
 
 Toutes les valeurs physiques sont groupées en tête de fichier, en unités SI :
@@ -83,12 +83,12 @@ explicite plutôt que cachée dans le mailleur.
 ## On ne remaille pas : on importe
 
 Le script ne redonne **aucune cote**. Il importe `structured_mesh` de
-[`formation/maillage.py`](https://github.com/Pyrucast/pyrucast/blob/master/formation/maillage.py)
+[`tutoriel/maillage.py`](https://github.com/Pyrucast/pyrucast/blob/master/tutoriel/maillage.py)
 et calcule sur le volume **HEX8 structuré** du chapitre précédent — 640
 hexaèdres.
 
 ```python
-{{#include ../../../formation/thermique.py:maillage}}
+{{#include ../../../tutoriel/thermique.py:maillage}}
 ```
 
 C'est la bonne façon d'enchaîner deux calculs sur une même pièce : un
@@ -115,7 +115,7 @@ nœud n'apparaît dans le script : les régions sont découpées
 ### L'alésage, sur un cylindre
 
 ```python
-{{#include ../../../formation/thermique.py:alesage}}
+{{#include ../../../tutoriel/thermique.py:alesage}}
 ```
 
 L'axe du trou se donne par deux points, débordant de part et d'autre de la
@@ -139,7 +139,7 @@ sous-maillage **vide** que laisse la partie du volume qui ne touche pas le trou
 ### La face gauche, sur un plan
 
 ```python
-{{#include ../../../formation/thermique.py:face_gauche}}
+{{#include ../../../tutoriel/thermique.py:face_gauche}}
 ```
 
 Même principe, mais un flux s'intègre sur une **surface** : les nœuds ne
@@ -151,7 +151,7 @@ il ne coupe la peau qu'à cet endroit.
 ### La figure des conditions aux limites
 
 ```python
-{{#include ../../../formation/thermique.py:figure_conduction}}
+{{#include ../../../tutoriel/thermique.py:figure_conduction}}
 ```
 
 ![Régions chargées de l'étape 1](img/thermique-cl-conduction.svg)
@@ -164,7 +164,7 @@ se lit comme le croquis des conditions aux limites, sans annotation manuelle.
 ### Le modèle et son matériau
 
 ```python
-{{#include ../../../formation/thermique.py:modele_conduction}}
+{{#include ../../../tutoriel/thermique.py:modele_conduction}}
 ```
 
 `model.heat_conduction` déclare le couple de degrés de liberté « T » (primal)
@@ -195,7 +195,7 @@ sait quels coefficients celui-ci réclame, et la conduction n'en demande qu'un,
 ### Les deux chargements
 
 ```python
-{{#include ../../../formation/thermique.py:charges_conduction}}
+{{#include ../../../tutoriel/thermique.py:charges_conduction}}
 ```
 
 Le flux imposé est un pur second membre : `pc.model.flux` intègre
@@ -210,7 +210,7 @@ du système ci-dessus, en face des inconnues \\( \lambda \\).
 ### Résolution
 
 ```python
-{{#include ../../../formation/thermique.py:resolution_conduction}}
+{{#include ../../../tutoriel/thermique.py:resolution_conduction}}
 ```
 
 `pc.matrix.stiffness` intègre la matrice, `|` réunit les deux chargements —
@@ -235,7 +235,7 @@ sont repérées par **coordonnée**, la seconde façon de découper une région.
 ### La surface convectée, par coordonnée
 
 ```python
-{{#include ../../../formation/thermique.py:face_basse}}
+{{#include ../../../tutoriel/thermique.py:face_basse}}
 ```
 
 ![Surface convectée](img/thermique-cl-convection.svg)
@@ -251,7 +251,7 @@ portent entièrement.
 ### La zone chauffée, en bande
 
 ```python
-{{#include ../../../formation/thermique.py:zone_source}}
+{{#include ../../../tutoriel/thermique.py:zone_source}}
 ```
 
 ![Zone chauffée](img/thermique-cl-source.svg)
@@ -270,7 +270,7 @@ le prix à payer pour que la région chargée soit un sous-maillage conforme.
 ### Le modèle complet
 
 ```python
-{{#include ../../../formation/thermique.py:modele_complet}}
+{{#include ../../../tutoriel/thermique.py:modele_complet}}
 ```
 
 La convection est la seule des quatre sollicitations à toucher **les deux**
@@ -288,7 +288,7 @@ Un seul `material_field` couvre le tout — « k » est réclamé par la conduct
 ### Les deux nouveaux chargements
 
 ```python
-{{#include ../../../formation/thermique.py:charges_complet}}
+{{#include ../../../tutoriel/thermique.py:charges_complet}}
 ```
 
 La part en \\( T\_f \\) de la convection donne
@@ -326,7 +326,7 @@ précisément ce que l'union `|` ne fait pas.
 > [chapitre 3](mecanique.md) en donne un exemple avec `restrict_like`).
 
 ```python
-{{#include ../../../formation/thermique.py:second_membre}}
+{{#include ../../../tutoriel/thermique.py:second_membre}}
 ```
 
 D'où ces quelques lignes : le maillage `POI1` de tous les nœuds chargés
@@ -342,7 +342,7 @@ sans rien avoir à sommer.
 ### Résolution
 
 ```python
-{{#include ../../../formation/thermique.py:resolution_complet}}
+{{#include ../../../tutoriel/thermique.py:resolution_complet}}
 ```
 
 Rien de nouveau par rapport à l'étape 1 : la même paire
@@ -380,7 +380,7 @@ Une fois les explications retirées, tout tient en une page — c'est le déroul
 complet, du maillage importé aux deux résolutions :
 
 ```python
-{{#include ../../../formation/thermique.py:script}}
+{{#include ../../../tutoriel/thermique.py:script}}
 ```
 
 Suite : [Calcul mécanique](mecanique.md), qui réutilise ce champ de

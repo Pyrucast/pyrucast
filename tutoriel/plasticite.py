@@ -1,14 +1,14 @@
-"""Formation débutant — 4. Mécanique non linéaire (plasticité).
+"""Tutoriel débutant — 4. Mécanique non linéaire (plasticité).
 
 Picks the holed plate clamped on the left back up, with the hung mass's force
 **ramped up** until it passes the elastic limit —
 l'équivalent Python de la table `PASAPAS` de Cast3M (section 9 de la
-formation) : ``pyrucast.stepping.step_by_step`` orchestre la boucle
+formation Cast3M) : ``pyrucast.stepping.step_by_step`` orchestre la boucle
 over the load steps and, at each step, a **modified** Newton (elastic
 stiffness, sped up by Anderson acceleration).
 
 Replacing ``model.elasticity`` with ``Model.plasticity`` in
-`formation/mecanique.py` is all it takes to get this script — the same call
+`tutoriel/mecanique.py` is all it takes to get this script — the same call
 ``step_by_step`` gère la boucle non linéaire.
 
 The thermo-plastic coupling of Cast3M's section 9.2 (`sigma_y` depending on
@@ -18,10 +18,10 @@ temperature) is not part of this script: ``step_by_step`` takes it through
 Lancement ::
 
     maturin develop --release
-    python formation/plasticite.py
+    python tutoriel/plasticite.py
 
-    # To regenerate the book figure (book/src/formation/img/):
-    # PYRUCAST_FORMATION_IMG_DIR=book/src/formation/img python formation/plasticite.py
+    # To regenerate the book figure (book/src/tutoriel/img/):
+    # PYRUCAST_TUTORIEL_IMG_DIR=book/src/tutoriel/img python tutoriel/plasticite.py
 """
 
 import os
@@ -34,7 +34,7 @@ RAYON_TROU = 0.025  # m
 CENTRE_TROU = (0.75 * LONGUEUR, HAUTEUR / 2.0)
 
 E, NU = 200e9, 0.3
-# σy deliberately modest: this training's geometry and loading are not at the
+# σy deliberately modest: this tutorial's geometry and loading are not at the
 # scale of a real steel — what matters is to bring out a plastic zone in a
 # few steps, not the material's physical reality.
 
@@ -44,7 +44,7 @@ FACTEUR_CHARGE = 6.0  # multiplier on the hung mass, to pass σy
 
 
 def construire_plaque_trouee():
-    """Same geometry as `formation/mecanique.py`."""
+    """Same geometry as `tutoriel/mecanique.py`."""
     coords = pc.Coords(2)
     p1 = coords.add_node([0.0, 0.0])
     p2 = coords.add_node([LONGUEUR, 0.0])
@@ -127,7 +127,7 @@ def main() -> None:
     assert dernier["behaviour"].max("p") > 0.0
     print(f"\nzone plastique développée : p_max = {dernier['behaviour'].max('p'):.3e}")
 
-    out = os.environ.get("PYRUCAST_FORMATION_IMG_DIR", tempfile.gettempdir())
+    out = os.environ.get("PYRUCAST_TUTORIEL_IMG_DIR", tempfile.gettempdir())
     chemin = os.path.join(out, "plasticite.svg")
     plaque.plot(
         save=chemin, field=dernier["behaviour"], component="p", cmap="viridis", smooth=0
