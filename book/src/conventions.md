@@ -177,6 +177,8 @@ Chaque objet du modèle implémente deux traits :
 - `Display` — vue **résumée** orientée utilisateur EF, façon listing cast3m, exposée en Python via `__str__`.
 
 Le binding PyO3 branche ces deux vues sur les dunder methods Python correspondantes.
+Un troisième niveau, le trait `Dump`, imprime le **contenu intégral** (valeurs,
+topologie), borné par `DumpOptions` ; en Python, c'est la méthode `dump()`.
 
 Rust :
 

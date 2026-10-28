@@ -95,6 +95,7 @@ c.add_node([0.0, 0.0])
 print(repr(c))  # vue structurelle — __repr__
 print(str(c))  # vue résumée cast3m — __str__
 print(c)  # same as str(c)
+c.dump()  # contenu intégral — dump()
 # ANCHOR_END: affichage
 
 

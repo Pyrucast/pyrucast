@@ -1,9 +1,10 @@
 """Source of the Python examples of `book/src/installation.md` and
 `book/src/formation/maillage.md`.
 
-These two excerpts open an **interactive window**, which is precisely
-their purpose: the first checks that the visualization layer really is
-compiled, the second shows the view under the mouse. They nonetheless stay
+The first excerpts mesh a line and show the method form of a free function;
+the last two open an **interactive window**, which is precisely their
+purpose: one checks that the visualization layer really is compiled, the
+other shows the view under the mouse. They nonetheless stay
 exécutables, parce qu'ils portent la garde qu'un utilisateur écrirait de
 anyway for a script that must also run in continuous integration —
 the same condition winit tests itself (`DISPLAY` or `WAYLAND_DISPLAY`).
@@ -28,29 +29,41 @@ _CWD = os.getcwd()
 os.chdir(_TMP.name)
 
 
-# ── Vérifier l'installation ─────────────────────────────────────────────────
+# ── Premier script ──────────────────────────────────────────────────────────
 
-# ANCHOR: installation
-import os
-
+# ANCHOR: premier_script
 import pyrucast
 
 c = pyrucast.Coords(dim=2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 
-mesh = pyrucast.Mesh(c, "SEG2")  # un sous-maillage
-mesh.unit().add_cell([a, b])
+ligne = pyrucast.mesh.line(a, b, 10)
+print(ligne)  # Mesh: 1 submesh(es) [#…], 10 cell(s) total
+# ANCHOR_END: premier_script
+assert ligne.cell_count() == 10
+
+# ANCHOR: methode
+plaque = pyrucast.mesh.extrude(ligne, [0.0, 1.0], 5)  # fonction libre
+plaque = ligne.extrude([0.0, 1.0], 5)  # la même, en méthode
+# ANCHOR_END: methode
+assert plaque.cell_count() == 50
+
+# ANCHOR: composition
+bord = pyrucast.mesh.border(pyrucast.mesh.extrude(ligne, [0.0, 1.0], 5))  # imbriqué
+bord = ligne.extrude([0.0, 1.0], 5).border()  # enchaîné
+print(bord)  # Mesh: 1 submesh(es) [#…], 30 cell(s) total
+# ANCHOR_END: composition
+assert bord.cell_count() == 30
+
+# ANCHOR: apercu
+import os
 
 # Without a screen (continuous integration, a remote session), `plot()` would fail:
 # we fall back to a file. That is the condition winit tests itself.
 ecran = os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
-mesh.plot(save=None if ecran else "apercu.svg")
-
-print(c)
-print(mesh)  # Mesh: 1 submesh(es), 1 cell(s) total
-mesh.dump()
-# ANCHOR_END: installation
+plaque.plot(save=None if ecran else "apercu.svg")
+# ANCHOR_END: apercu
 
 assert ecran or os.path.exists("apercu.svg")
 
