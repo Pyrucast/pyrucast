@@ -4,24 +4,22 @@
 - [Installation et démarrage rapide](installation.md)
 - [Aspect informatique](aspect-informatique.md)
 
-# Objets
+- [Objets]()
+  - [Vue d'ensemble](objets.md)
+  - [Coordonnées (Coords)](coords.md)
+  - [Nœud (Node)](node.md)
+  - [Agrégat](aggregate.md)
+  - [Maillage (Mesh / SubMesh)](mesh.md)
+  - [Espace éléments finis](fe-space.md)
+  - [Champ (Field / SubField)](field.md)
+  - [Champ aux nœuds](node-field.md)
+  - [Champ aux points de Gauss](element-field.md)
+  - [Modèle physique](model.md)
+  - [Matrice creuse](matrix.md)
+  - [Évolution (Evolution / SubEvolution)](evolution.md)
 
-- [Vue d'ensemble](objets.md)
-- [Coordonnées (Coords)](coords.md)
-- [Nœud (Node)](node.md)
-- [Agrégat](aggregate.md)
-- [Maillage (Mesh / SubMesh)](mesh.md)
-- [Espace éléments finis](fe-space.md)
-- [Champ (Field / SubField)](field.md)
-- [Champ aux nœuds](node-field.md)
-- [Champ aux points de Gauss](element-field.md)
-- [Modèle physique](model.md)
-- [Matrice creuse](matrix.md)
-- [Évolution (Evolution / SubEvolution)](evolution.md)
-
-# Détails des physiques
-
-- [Vue d'ensemble](physiques.md)
+- [Détails des physiques]()
+  - [Vue d'ensemble](physiques.md)
   - [Conduction thermique](thermique.md)
   - [Diffusion (loi de Fick)](diffusion.md)
   - [Échanges (frontière et interface)](echanges.md)
@@ -44,9 +42,8 @@
     - [Baignage (embedded)](contraintes/embedded.md)
     - [Contact (nœud-surface)](contraintes/contact.md)
 
-# Éléments finis supportés
-
-- [Catalogue](elements/index.md)
+- [Éléments finis supportés]()
+  - [Catalogue](elements/index.md)
   - [SEG2 — segment linéaire](elements/seg2.md)
   - [TRI3 — triangle linéaire](elements/tri3.md)
   - [QUA4 — quadrangle bilinéaire](elements/qua4.md)
@@ -63,9 +60,8 @@
   - [HEX20 — hexaèdre sérendipité](elements/hex20.md)
   - [HEX27 — hexaèdre tri-quadratique](elements/hex27.md)
 
-# Détail des opérateurs
-
-- [Vue d'ensemble](operateurs.md)
+- [Détail des opérateurs]()
+  - [Vue d'ensemble](operateurs.md)
   - [Maillage](operateurs/maillage.md)
     - [Triangulation : briques mathématiques](triangulation.md)
   - [Construction](operateurs/construction.md)
@@ -76,15 +72,13 @@
   - [Solveur](operateurs/solveur.md)
   - [Sauvegarde et relecture](sauvegarde.md)
   - [Visualisation](visualization.md)
-- [Mailler une géométrie](mailler.md)
+  - [Mailler une géométrie](mailler.md)
 
-# Couche Python haut niveau
+- [Couche Python haut niveau]()
+  - [Calcul pas à pas](pas-a-pas.md)
 
-- [Calcul pas à pas](pas-a-pas.md)
-
-# Tutoriel
-
-- [Tutoriel débutant](tutoriel/debutant.md)
+- [Tutoriel]()
+  - [Tutoriel débutant](tutoriel/debutant.md)
   - [Présentation de pyrucast](tutoriel/presentation.md)
   - [Python & conventions pyrucast](tutoriel/langage-python.md)
   - [Maillage](tutoriel/maillage.md)
@@ -92,9 +86,8 @@
   - [Calcul mécanique](tutoriel/mecanique.md)
   - [Compléments](tutoriel/complements.md)
 
-# Développer
-
-- [Vue d'ensemble](developper.md)
+- [Développer]()
+  - [Vue d'ensemble](developper.md)
   - [Arborescence](developper/arborescence.md)
   - [Conventions & philosophie](conventions.md)
   - [Correspondance Rust ↔ Python](developper/correspondance-rust-python.md)
