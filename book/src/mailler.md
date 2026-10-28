@@ -14,12 +14,26 @@ la même chose — un ou plusieurs [contours orientés](operateurs/maillage.md) 
 `SEG2` et une taille de maille visée — et rendent tous un maillage dont le bord
 **est** le contour, nœuds compris.
 
-| opérateur | méthode | rend |
-|---|---|---|
-| `triangulate_surface` | Delaunay contraint + raffinement de Ruppert | des `TRI3` |
-| `pave_surface` | front avançant, en rangées depuis le bord | des `QUA4`, quelques `TRI3` |
-| `grid_surface` | cœur en grille + bande frontale au bord | des `QUA4`, quelques `TRI3` |
-| `grid_surface2` | idem, lignes prises une par nœud du contour | des `QUA4`, quelques `TRI3` |
+| opérateur | méthode | types et options | rend |
+|---|---|---|---|
+| `triangulate_surface` | Delaunay contraint + raffinement de Ruppert | `"TRI3"`, `"QUA4"` ; `size` | des `TRI3` — en `QUA4`, des quadrangles et quelques triangles |
+| `pave_surface` | front avançant, en rangées depuis le bord | `"QUA4"`, `"QUA8"`, `"QUA9"` ; `size`, `all_quad`, `relax` | des `QUA4`, quelques `TRI3` |
+| `grid_surface` | cœur en grille + bande frontale au bord | `"QUA4"`, `"QUA8"`, `"QUA9"` ; `size`, `band`, `all_quad`, `relax` | des `QUA4`, quelques `TRI3` |
+| `grid_surface2` | idem, lignes prises une par nœud du contour | comme `grid_surface` | des `QUA4`, quelques `TRI3` |
+
+Le premier argument est le contour, le deuxième le type d'élément. Les options :
+
+- `size` — la taille de maille visée ; sans elle, la longueur moyenne des arêtes
+  du contour, domaine par domaine ;
+- `all_quad` (défaut `False`) — `True` demande un résultat sans triangle, et
+  refuse une boucle au nombre impair de segments, qu'aucun pavage en
+  quadrangles ne remplit ;
+- `relax` (défaut `"free"`) — ce que le front s'autorise entre deux rangées :
+  `"free"`, `"along"` ou `"none"` (voir
+  [plus bas](#le-front-peut-garder-ses-angles--relax)) ;
+- `band` (défaut `0`) — une marge, en mailles, entre le cœur en grille et le
+  contour ; zéro est la valeur utile, à relever seulement pour un contour que
+  la grille ne peut pas rejoindre, comme une courbe.
 
 ### Comment lire les figures
 
