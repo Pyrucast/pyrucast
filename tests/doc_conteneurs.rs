@@ -28,20 +28,13 @@ use pyrucast::{archive, Result};
 
 // ANCHOR: premiers_pas
 #[test]
-fn un_maillage_minimal() -> Result<()> {
-    let coords = Handle::new(Coords::new(2)?);
-    let a = Node::create_in(coords.clone(), &[0.0, 0.0])?;
-    let b = Node::create_in(coords.clone(), &[1.0, 0.0])?;
+fn un_maillage_minimal() {
+    let coords = Handle::new(Coords::new(2).unwrap());
+    let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 
-    let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-    sm.add_cell(&[a.id(), b.id()])?;
-
-    // The aggregate does not carry the `Coords`: the submeshes are what hold it.
-    // `Mesh::from_submesh(sm)` is the shortcut for the single-submesh case.
-    let mut mesh = Mesh::empty();
-    mesh.add_sub(Handle::new(sm))?;
-    println!("{}", mesh); // Mesh: 1 submesh(es), 1 cell(s) total
-    Ok(())
+    let mesh = mesh::line(&a, &b, 10, ElementType::SEG2).unwrap();
+    println!("{}", mesh); // Mesh: 1 submesh(es) [#…], 10 cell(s) total
 }
 // ANCHOR_END: premiers_pas
 

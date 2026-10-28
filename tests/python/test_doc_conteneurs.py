@@ -163,11 +163,10 @@ c = pyrucast.Coords(dim=2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 
-mesh = pyrucast.Mesh(c, "SEG2")
-mesh.unit().add_cell([a, b])
-print(mesh)  # Mesh: 1 submesh(es), 1 cell(s) total
+mesh = pyrucast.mesh.line(a, b, 10)
+print(mesh)  # Mesh: 1 submesh(es) [#…], 10 cell(s) total
 # ANCHOR_END: premiers_pas
-assert mesh.cell_count() == 1
+assert mesh.cell_count() == 10
 
 # ── Nœud ────────────────────────────────────────────────────────────────────
 

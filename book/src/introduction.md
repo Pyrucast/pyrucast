@@ -1,6 +1,6 @@
 # Introduction
 
-**pyrucast** est une librairie d'éléments finis dont le cœur est écrit en Rust et qui expose une API Python. Elle s'inspire des principes de cast3m : un noyau d'objets typés, accompagné de fonctions opérant sur ces objets.
+**pyrucast** est une librairie d'éléments finis dont le cœur est écrit en Rust et qui expose une API Python. Elle s'inspire des principes de Cast3M : un noyau d'objets typés, accompagné de fonctions opérant sur ces objets.
 
 > 📖 **Référence API Rust (rustdoc).** Cette documentation couvre les principes,
 > l'architecture et les exemples ; la référence par item (signatures, types,
@@ -22,21 +22,24 @@ viennent par **paire** zone / agrégat (`SubMesh`/`Mesh`…) — c'est le motif
 ```text
 Coords ── Node                          (NodeId u32 stable ; Node = accesseur RAII)
    │
-   ├── NodeField  (agrège des SubNodeField)        valeurs par nœud × composante
-   │
    └── Mesh  (agrège des SubMesh, + ElementType)   géométrie
+          ├── NodeField  (agrège des SubNodeField, support POI1)   valeurs par nœud × composante
           └── FiniteElementSpace  (agrège des SubFiniteElementSpace)
                  │                  (+ Interpolation, QuadratureRule)
                  ├── ElementField  (agrège des SubElementField)   valeurs aux Gauss
                  └── Model  (agrège des SubModel : physiques + contraintes)
                         └── ops::matrix ──► Matrix   (matrice creuse, DOFs nommés)
 
+Evolution  (agrège des SubEvolution)    scalaire, NodeField ou ElementField
+                                        tabulé vs une variable
+
 Model + ElementField (matériau) ──► stiffness ──► Matrix
 Matrix + NodeField (second membre) ──► solve ──► NodeField (solution)
 ```
 
 Deux **traits transverses** factorisent le comportement commun :
-[`Aggregate`](aggregate.md) (accès `len`/`[i]`/union `|`) et
+[`Aggregate`](aggregate.md) (accès `len`/`[i]`, union — `|` en Python, `union`
+en Rust) et
 [`Field`/`SubField`](field.md) (composantes nommées, `min`/`max`, arithmétique),
 partagés entre `NodeField` et `ElementField`.
 
@@ -51,7 +54,7 @@ Résumé des rôles :
 | [`SubFiniteElementSpace`](fe-space.md) / `FiniteElementSpace` | Formulation EF (interpolation + quadrature) / union |
 | [`SubElementField`](element-field.md) / `ElementField` | Valeurs par cellule × point de Gauss × composante |
 | [`SubModel`](model.md) / `Model` | Physique ou contrainte locale / problème complet |
-| [`SubMatrix`](matrix.md) / `Matrix` | Matrice creuse dont les lignes/colonnes sont des DOFs `(NodeId, champ)` |
+| [`SubMatrix`](matrix.md) / `Matrix` | Matrice creuse dont les lignes/colonnes sont des DOFs nommés `(NodeId, inconnue)`, par ex. l'inconnue `"UX"` d'un nœud |
 | [`SubEvolution`](evolution.md) / `Evolution` | Valeur (scalaire ou champ) tabulée vs une variable, interpolée linéairement (zone / agrégat) |
 
 ## Premiers pas
@@ -60,6 +63,12 @@ Exemple minimal en Rust :
 
 ```rust,ignore
 {{#include ../../tests/doc_conteneurs.rs:premiers_pas}}
+```
+
+En Python, il suffit d'installer le paquet :
+
+```bash
+pip install pyrucast
 ```
 
 Exemple équivalent en Python :
