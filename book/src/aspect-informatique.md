@@ -99,13 +99,13 @@ motif est factorisé dans le trait `Aggregate` — voir [Agrégat](aggregate.md)
 
 Chaque objet implémente trois vues, du plus court au plus complet :
 
-- `__str__` (Rust `Display`) — **résumé** une ligne, façon listing cast3m ;
+- `__str__` (Rust `Display`) — **résumé** une ligne, façon listing Cast3M ;
 - `__repr__` (Rust `Debug`) — vue **structurelle** bornée, pour le
   développement ;
 - `dump()` — **contenu intégral** (valeurs, topologie) imprimé sur la sortie
   standard, au-delà de ce que `repr` montre.
 
-Détail dans [Conventions](conventions.md).
+Exemple dans [Trois niveaux de listing](installation.md#trois-niveaux-de-listing).
 
 ## Erreurs
 

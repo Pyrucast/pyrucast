@@ -169,29 +169,6 @@ Python :
 {{#include ../../tests/python/test_doc_conventions.py:erreurs}}
 ```
 
-## Affichage : `Debug` vs `Display`
-
-Chaque objet du modèle implémente deux traits :
-
-- `Debug` — vue **structurelle** : utile pour le développement, exposée en Python via `__repr__`.
-- `Display` — vue **résumée** orientée utilisateur EF, façon listing cast3m, exposée en Python via `__str__`.
-
-Le binding PyO3 branche ces deux vues sur les dunder methods Python correspondantes.
-Un troisième niveau, le trait `Dump`, imprime le **contenu intégral** (valeurs,
-topologie), borné par `DumpOptions` ; en Python, c'est la méthode `dump()`.
-
-Rust :
-
-```rust,ignore
-{{#include ../../tests/doc_conventions.rs:affichage}}
-```
-
-Python :
-
-```python
-{{#include ../../tests/python/test_doc_conventions.py:affichage}}
-```
-
 ## Sérialisation : un seul mécanisme
 
 Le trait `Portable` (implémenté automatiquement pour tout type `serde::Serialize + DeserializeOwned`) produit un format binaire **portable Linux ↔ Windows**. C'est le socle de la **sauvegarde fichier** : un graphe d'objets écrit dans un conteneur versionné, relu en préservant le partage.
@@ -209,11 +186,12 @@ Rust — sérialisation manuelle d'un type quelconque :
 Un objet n'est considéré comme terminé que lorsque les six points suivants sont verts :
 
 1. Struct Rust adressable par un `Handle<T>` typé.
-2. `Debug` (structure) + `Display` (résumé).
+2. Les [trois niveaux de listing](installation.md#trois-niveaux-de-listing) :
+   `Display` (résumé), `Debug` (structure), `Dump` (contenu).
 3. Tests unitaires Rust, **et un doctest portant un exemple exécutable sur
    chaque item public** — `ignore` proscrit, `no_run` si l'exemple ne peut pas
    tourner.
-4. Binding PyO3 (`__repr__` / `__str__`).
+4. Binding PyO3 (`__str__` / `__repr__` / `dump()`).
 5. Tests Python (`tests/python/`), la surface pyo3 comprise.
 6. Chapitre de cette documentation, dont **le code est inclus depuis un test ou
    un exemple**, jamais recopié dans la page.

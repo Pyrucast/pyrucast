@@ -114,6 +114,26 @@ module `pyrucast.mesh` :
 {{#include ../../tests/python/test_doc_demarrage.py:premier_script}}
 ```
 
+### Trois niveaux de listing
+
+Tout objet pyrucast se liste à trois niveaux, du plus court au plus complet :
+
+- `print(x)` ou `str(x)` — le **résumé**, une ligne, façon listing Cast3M
+  (Rust `Display`) ;
+- `repr(x)` — la **structure** : compteurs, dimensions, noms, *handles*, sans
+  jamais le contenu (Rust `Debug`) ;
+- `x.dump()` — le **contenu** : valeurs, coordonnées, connectivité. Il reste
+  borné : au-delà de `max_rows` lignes (20 par défaut), la table est coupée et
+  la coupure annoncée (Rust `Dump`).
+
+Sur les coordonnées du script ci-dessus, qui portent les 11 nœuds de la ligne :
+
+```python
+{{#include ../../tests/python/test_doc_demarrage.py:listing}}
+```
+
+### Fonctions libres et méthodes
+
 Les opérateurs de pyrucast sont des fonctions libres, rangées par ce qu'elles
 produisent : tout ce qui rend un maillage est dans `pyrucast.mesh`. Quand une
 fonction prend en premier l'objet qu'elle transforme et rend un nouvel objet,
@@ -135,20 +155,21 @@ s'enchaînent et se lisent dans l'ordre des opérations :
 La règle complète — quelles fonctions ont leur méthode, et pourquoi — est
 dans [Conventions](conventions.md#le-verbe-exposé-aussi-en-méthode).
 
-Enfin, pour voir la plaque (une fenêtre interactive s'ouvre, s'il y a un
-écran) :
+### Voir le maillage
+
+Une fenêtre interactive s'ouvre, s'il y a un écran :
 
 ```python
 {{#include ../../tests/python/test_doc_demarrage.py:apercu}}
 ```
+
+## Aller plus loin
 
 À partir d'ici, le chapitre [Introduction](introduction.md) présente le
 modèle d'objets, et la section [Objets](objets.md) détaille chaque brique
 (coordonnées, maillage, champs, modèle physique…). Les chapitres
 [Conduction thermique](thermique.md) et [Mécanique](mecanique.md) déroulent
 des problèmes complets de bout en bout.
-
-## Aller plus loin
 
 - **Formation** : un parcours guidé, du maillage au calcul thermique et
   mécanique — [Formation débutant](formation/debutant.md).

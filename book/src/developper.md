@@ -8,7 +8,7 @@ plus courantes (ajouter une physique, ajouter un élément fini).
 - [Arborescence](developper/arborescence.md) — la carte des sources : où vit
   chaque morceau (`containers/`, `ops/`, `models/`, `py/`, `viz/`…).
 - [Conventions & philosophie](conventions.md) — méthode vs fonction libre,
-  erreurs, `Display`/`Debug`/`dump`, sérialisation, *Definition of Done*.
+  erreurs, sérialisation, *Definition of Done*.
 - [Correspondance Rust ↔ Python](developper/correspondance-rust-python.md) — la
   table complète des structures, des fonctions et des opérateurs, des deux
   côtés.

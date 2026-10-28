@@ -32,19 +32,6 @@ fn une_erreur_se_lit_et_se_filtre() {
 }
 // ANCHOR_END: erreurs
 
-// ANCHOR: affichage
-use pyrucast::dump::Dump;
-
-#[test]
-fn debug_montre_la_structure_display_le_resume() {
-    let coords = Handle::new(Coords::new(2).unwrap());
-    let c = coords.read();
-    println!("{:?}", *c); // vue structurelle (Debug)
-    println!("{}", *c); // vue résumée (Display)
-    c.dump(); // contenu intégral (Dump)
-}
-// ANCHOR_END: affichage
-
 // ANCHOR: serialisation
 use pyrucast::archive::Portable;
 use pyrucast::models::symmetry::MaterialSymmetry;
