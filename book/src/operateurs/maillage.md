@@ -1734,20 +1734,23 @@ cellules n'y est pas convexe — tandis que vider l'anneau de cellules autour de
 l'arête fautive et le remplir autrement a toujours la place de le faire. Le
 retrait d'arête généralise la bascule 3-2 et tout ce qui vient après.
 
-Mesuré sur la plaque percée de `tutoriel/maillage_test.py`, en ajoutant cette
-passe (l'angle dièdre médian reste à 47° dans tous les cas) :
+Mesuré sur l'enveloppe de `tutoriel/maillage.py` (3 304 facettes), remplie à
+quatre tailles, sans puis avec cette passe. Le plus petit angle dièdre médian
+reste entre 44° et 47° dans tous les cas ; la dernière colonne est la forme
+\\( \eta \\) de la cellule la plus plate, 1 pour un tétraèdre régulier et 0
+pour un plat :
 
-| mailles | part sous 10° | part sous 1° | cellule la plus plate / moyenne |
-|---|---|---|---|
-| 28 000 | 0,59 % → **0,00 %** | 0 → 0 | \\( 5{,}5\cdot10^{-2} \\) → \\( 1{,}5\cdot10^{-1} \\) |
-| 117 000 | 0,81 % → **0,02 %** | 0,009 % → **0,000 %** | \\( 2{,}9\cdot10^{-2} \\) → \\( 7{,}8\cdot10^{-2} \\) |
-| 402 000 | 0,94 % → **0,11 %** | 0,022 % → **0,000 %** | \\( 7{,}3\cdot10^{-5} \\) → \\( 3{,}6\cdot10^{-3} \\) |
-| 977 000 | 0,91 % → **0,18 %** | 0,028 % → **0,001 %** | \\( 4{,}0\cdot10^{-3} \\) → \\( 7{,}1\cdot10^{-4} \\) |
+| `size` | mailles | part sous 10° | part sous 1° | \\( \eta \\) de la plus plate |
+|---|---|---|---|---|
+| 0,01 | 12 850 | 0,36 % → **0,00 %** | 0 → 0 | \\( 9{,}3\cdot10^{-2} \\) → \\( 3{,}5\cdot10^{-1} \\) |
+| 0,005 | 97 574 | 0,89 % → **0,005 %** | 0,002 % → **0** | \\( 1{,}6\cdot10^{-2} \\) → \\( 7{,}9\cdot10^{-2} \\) |
+| 0,0033 | 340 329 | 1,99 % → **0,10 %** | 0,017 % → **0,0003 %** | \\( 8{,}3\cdot10^{-3} \\) → \\( 1{,}9\cdot10^{-2} \\) |
+| 0,0025 | 378 190 | 0,88 % → **0,018 %** | 0,0013 % → **0,0003 %** | \\( 9{,}3\cdot10^{-3} \\) → \\( 2{,}7\cdot10^{-2} \\) |
 
-Le second chiffre est l'enjeu : une cellule sous 1° d'angle dièdre donne une
+La colonne sous 1° est l'enjeu : une cellule sous 1° d'angle dièdre donne une
 matrice élémentaire quasi singulière, et il n'en faut pas beaucoup pour
-couler un calcul. La passe coûte environ **1,35×** le temps de maillage, à
-toutes les tailles.
+couler un calcul. La passe coûte de **1,1× à 1,7×** le temps de maillage,
+selon la taille.
 
 > **Ce que cela a demandé.** Une passe qui améliore un maillage doit être
 > moins chère que sa construction, ce qui interdit deux réflexes. On ne
@@ -1818,8 +1821,8 @@ C'est aussi ce qui débloque. Une arête qu'on n'arrive pas à faire rentrer n'a
 autrement aucune issue ; la couper en deux scinde le problème en deux plus
 faciles, et une arête suffisamment entourée de ses propres subdivisions est
 récupérée par le Delaunay tout seul. Ce qui a été ajouté est ensuite **rendu**
-partout où le maillage veut bien s'en séparer : sur la plaque du tutoriel,
-15 nœuds posés, 12 repris, 3 restants.
+partout où le maillage veut bien s'en séparer : sur la plaque de
+`tutoriel/maillage.py`, 13 nœuds posés, 10 repris, 3 restants.
 
 ### Pièges
 
@@ -1838,14 +1841,15 @@ explicitement.
 
 ### Coût
 
-Sur la plaque percée du tutoriel, extrudée puis pelée :
+Sur la plaque percée de `tutoriel/maillage.py`, maillée, extrudée et pelée à
+la même taille que le remplissage :
 
 | `size` | facettes | tétraèdres | temps |
 | --- | --- | --- | --- |
-| 0,01 | 3 308 | 28 081 | 1,9 s |
-| 0,006 | 8 032 | 117 245 | 7,0 s |
-| 0,004 | 17 144 | 405 400 | 24 s |
-| 0,003 | 29 604 | 984 415 | 57 s |
+| 0,01 | 3 304 | 12 850 | 2,3 s |
+| 0,006 | 8 096 | 58 669 | 6,6 s |
+| 0,004 | 17 824 | 195 919 | 19 s |
+| 0,003 | 30 616 | 462 447 | 51 s |
 
 Le coût est essentiellement **linéaire** en nombre de mailles produites.
 L'opération est interruptible : `Ctrl+C` pendant un long maillage lève

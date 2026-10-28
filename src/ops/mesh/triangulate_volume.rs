@@ -52,10 +52,11 @@
 //! that were essential stay, as they must: removing them would put the mesh
 //! back in the situation that had no answer.
 //!
-//! On the plate of `tutoriel/maillage_test.py`, 3308 facets, this is 15
-//! nodes added and 12 given back, leaving **3**, in under a second, where
-//! the strict mode cannot finish at all. On a small plate of flat panels
-//! nothing comes back, because every cut there was essential.
+//! On the plate of `tutoriel/maillage.py`, 3304 facets, this is 13 nodes
+//! added and 10 given back, leaving **3**; the whole call, quality passes
+//! included, takes 2.3 s. The strict mode gives up after 198 s, on an
+//! envelope edge it cannot fit. On a small plate of flat panels nothing
+//! comes back, because every cut there was essential.
 //!
 //! Every geometric decision runs on exact predicates, so degenerate input —
 //! a box, a regular grid, cospherical corners — is decided rather than
@@ -107,19 +108,24 @@
 //!   the **slivers** refinement cannot reach, by reconnecting cells, taking
 //!   out the edges a sliver is flat across, and relaxing interior nodes.
 //!
-//! What that is worth, measured on the plate of `tutoriel/maillage_test.py`
-//! (the median dihedral angle sits at 47° throughout, so what moves is the
-//! tail):
+//! What the edge removal in `smooth` is worth — the same envelope filled
+//! without it, then with it — measured on the envelope of
+//! `tutoriel/maillage.py` (3304 facets) at four sizes. The median of the
+//! smallest dihedral angle stays between 44° and 47° throughout, so what
+//! moves is the tail; the last column is the shape `η` of the flattest cell,
+//! 1 for a regular tetrahedron and 0 for a flat one:
 //!
-//! | cells | under 10° | under 1° | flattest / average |
-//! |---|---|---|---|
-//! | 28 000 | 0.59 % → 0.00 % | 0 → 0 | 5.5·10⁻² → 1.5·10⁻¹ |
-//! | 402 000 | 0.94 % → 0.11 % | 0.022 % → 0.000 % | 7.3·10⁻⁵ → 3.6·10⁻³ |
-//! | 977 000 | 0.91 % → 0.18 % | 0.028 % → 0.001 % | 4.0·10⁻³ → 7.1·10⁻⁴ |
+//! | size | cells | under 10° | under 1° | flattest η |
+//! |---|---|---|---|---|
+//! | 0.01 | 12 850 | 0.36 % → 0.00 % | 0 → 0 | 9.3·10⁻² → 3.5·10⁻¹ |
+//! | 0.005 | 97 574 | 0.89 % → 0.005 % | 0.002 % → 0 | 1.6·10⁻² → 7.9·10⁻² |
+//! | 0.0033 | 340 329 | 1.99 % → 0.10 % | 0.017 % → 0.0003 % | 8.3·10⁻³ → 1.9·10⁻² |
+//! | 0.0025 | 378 190 | 0.88 % → 0.018 % | 0.0013 % → 0.0003 % | 9.3·10⁻³ → 2.7·10⁻² |
 //!
-//! The second column is the whole point: a cell under 1° has a nearly
+//! The under-1° column is the whole point: a cell under 1° has a nearly
 //! singular element matrix, and it does not take many to sink a computation.
-//! The passes cost about 1.35× the meshing time, at every size.
+//! The edge removal costs 1.1× to 1.7× the meshing time, depending on the
+//! size.
 //!
 //! **What can still defeat all three** is a sliver whose four corners are all
 //! nodes of the envelope. No node can be inserted to break it up and none of
@@ -171,7 +177,8 @@ const MAX_SUBDIVISIONS: usize = 12;
 /// The measure is `η = 12 (3V)^(2/3) / Σℓ²`: 1 for a regular tetrahedron, 0
 /// for a flat one, and independent of how big the mesh is. Sound cells sit
 /// well above this even in the tail — the worst on the plate of
-/// `tutoriel/maillage_test.py` is 4·10⁻² — while a genuinely flat one lands
+/// `tutoriel/maillage.py`, from 13 000 to 460 000 cells, is 2·10⁻² — while a
+/// genuinely flat one lands
 /// several orders below, so the line between "thin" and "degenerate" is not
 /// a matter of taste.
 const DEGENERATE_SHAPE: f64 = 1e-4;
