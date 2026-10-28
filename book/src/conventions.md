@@ -186,7 +186,7 @@ Rust — sérialisation manuelle d'un type quelconque :
 Un objet n'est considéré comme terminé que lorsque les six points suivants sont verts :
 
 1. Struct Rust adressable par un `Handle<T>` typé.
-2. Les [trois niveaux de listing](installation.md#trois-niveaux-de-listing) :
+2. Les [trois niveaux de listing](aspect-informatique.md#trois-niveaux-de-listing) :
    `Display` (résumé), `Debug` (structure), `Dump` (contenu).
 3. Tests unitaires Rust, **et un doctest portant un exemple exécutable sur
    chaque item public** — `ignore` proscrit, `no_run` si l'exemple ne peut pas

@@ -1,9 +1,10 @@
 # Aspect informatique
 
 Avant de détailler les objets un par un, ce chapitre donne la **vue
-informatique** de pyrucast : comment le code est organisé, comment les objets
-vivent en mémoire, et les quelques motifs transverses qu'on retrouve partout.
-Chaque section renvoie au chapitre qui en donne le détail.
+informatique** de pyrucast, vue de Python : comment les objets vivent, et les
+quelques motifs qu'on retrouve partout. Quand cela éclaire l'usage, un encart
+dit ce qu'il y a dessous, côté Rust. Chaque section renvoie au chapitre qui en
+donne le détail.
 
 ## Deux langages, un seul cœur
 
@@ -14,12 +15,17 @@ pyrucast est une librairie **Rust** exposée à **Python**.
   performances natives.
 - Le **binding Python** est une fine couche [`pyo3`](https://pyo3.rs),
   compilée par [`maturin`](https://www.maturin.rs) en un module
-  d'extension `.so` / `.pyd`. Chaque classe Python (`pyrucast.Coords`,
-  `pyrucast.Mesh`, …) enveloppe un type Rust ; chaque fonction de module
-  (`pyrucast.matrix.stiffness`, `pyrucast.solver.solve`, …) appelle une fonction Rust.
+  d'extension `.so` / `.pyd`. Les classes Python (`pyrucast.Coords`,
+  `pyrucast.Mesh`, …) enveloppent des types Rust, et les fonctions de module
+  (`pyrucast.matrix.stiffness`, `pyrucast.solver.solve`, …) appellent des
+  fonctions Rust.
 
 Le binding est un **miroir 1:1** du Rust, sans logique propre : une méthode
-Rust reste une méthode, une fonction libre reste une fonction. La table de
+Rust reste une méthode, une fonction libre reste une fonction. Seules quelques
+parties sont écrites en Python, parce qu'elles n'ont rien à faire en Rust : les
+échanges avec gmsh et MED (`mesh.from_gmsh`, `export.to_medcoupling`…), qui
+appellent ces modules Python, et la [couche pas à pas](pas-a-pas.md)
+(`pyrucast.stepping`), qui orchestre les opérateurs. La table de
 correspondance exhaustive est dans [Correspondance Rust ↔
 Python](developper/correspondance-rust-python.md) ; la règle qui décide *méthode vs
 fonction libre* est dans [Conventions](conventions.md).
@@ -31,48 +37,25 @@ fonction libre* est dans [Conventions](conventions.md).
    pyrucast.matrix.stiffness     fonction de module              ops::matrix::stiffness
 ```
 
-## Les objets se désignent par des handles
+## Durée de vie des objets
 
-Les objets ne se relient pas entre eux par des références Rust directes, mais
-par un **`Handle<T>`** : une référence comptée munie de son propre verrou
-(`Arc<RwLock<T>>`). Pas de registre à interroger, pas de session à passer — le
-handle *est* l'adresse de l'objet.
+En Python, rien à libérer à la main : un objet pyrucast vit tant qu'une
+variable ou un autre objet le référence — un maillage garde ses nœuds, un champ
+garde son support.
 
-Trois propriétés en découlent, et elles structurent tout le reste de la
-librairie :
-
-1. **Libération automatique.** `Clone` partage, `Drop` relâche. Quand le
-   dernier handle d'un objet disparaît, l'objet est détruit — aucune fonction
-   `remove()` à appeler.
-2. **Toujours valide.** Détenir un handle maintient l'objet en vie : il n'y a
-   pas de référence périmée, et `read` / `write` ne peuvent pas échouer.
-3. **L'identité, c'est le pointeur.** `same_object` dit si deux références
-   désignent le même objet — la base de l'union des agrégats.
-
-L'accès passe par un **guard** (`read` / `write`) qui verrouille ce seul objet
-le temps de l'opération (RAII). Le détail — guards possédés, granularité du
-verrouillage, compteur par nœud — est dans
-[Modèle mémoire](memory-model.md).
-
-## Refcount à deux niveaux
-
-La gestion de durée de vie opère à **deux échelles** indépendantes :
-
-- au niveau **objet** : le `Handle<T>` décide si un objet entier (un `Coords`,
-  un `SubMesh`…) est vivant ;
-- au niveau **interne** : à l'intérieur d'un `Coords`, un second compteur par
-  **nœud** décide si tel nœud est vivant. Le ramasse-miettes manuel
-  `Coords::gc()` opère sur ce niveau-là.
-
-C'est pourquoi un nœud reste protégé tant qu'un maillage ou un champ le
-référence, même si tous les `Node` utilisateurs ont disparu. Voir
+Les nœuds ont en plus leur propre compteur, dans les `Coords` : un nœud reste
+vivant tant qu'un maillage ou un champ l'utilise, même quand plus aucune
+variable ne le désigne. `coords.gc()` collecte ceux qui ne servent plus. Voir
 [Coordonnées](coords.md) et [Nœud](node.md).
 
-## Le motif agrégat / sous-objet
+> **Côté Rust**, chaque objet vit derrière un `Handle<T>` — une référence
+> comptée munie de son propre verrou — et la `Coords` porte un compteur par
+> nœud. Le détail est dans [Modèle mémoire](memory-model.md).
 
-La plupart des conteneurs viennent par **paires** : un objet **zone**
-(`Sub…`) et son **agrégat** (une liste de zones partageant la même grammaire
-d'accès) :
+## Agrégats et zones
+
+La plupart des conteneurs viennent par **paires** : une **zone** (`Sub…`) et
+son **agrégat**, une liste de zones qui s'utilise toujours de la même façon :
 
 | Zone | Agrégat |
 |---|---|
@@ -84,45 +67,66 @@ d'accès) :
 | `SubMatrix` | `Matrix` |
 | `SubEvolution` | `Evolution` |
 
-Tous les agrégats exposent la même interface (`len`, `[i]`, itération,
-`unit()`) et la même **composition par union `|`** (côté Rust : `union`). Les
-sous-objets ne se construisent pas directement : on construit au niveau
-parent, et on indexe (`parent[i]`) pour obtenir une **vue** sur une zone. Ce
-motif est factorisé dans le trait `Aggregate` — voir [Agrégat](aggregate.md).
+Un agrégat s'utilise comme une liste de zones : `len(mesh)`, `mesh[i]`,
+`for zone in mesh`, et `mesh.unit()` quand il n'en a qu'une. Les zones ne se
+construisent pas directement (sauf `SubEvolution`, une courbe tabulée) : on
+construit l'agrégat, et `mesh[i]` donne une **vue** sur une zone.
 
-> **Union `|`, pas `+`.** Composer deux zones, c'est l'**union** (`mesh_a |
-> mesh_b`), avec partage des sous-objets (refcount) et déduplication par
-> handle. L'opérateur `+` est réservé à l'**arithmétique des champs** (cf.
-> [Champ](field.md)).
+Deux agrégats se composent par **union** : `mesh_a | mesh_b`. Les zones y sont
+partagées, pas copiées, et une zone déjà présente n'est pas ajoutée deux fois.
+L'opérateur `+`, lui, **additionne** des valeurs — champs ou matrices — et ne
+compose jamais (cf. [Champ](field.md)).
 
-## Trois niveaux d'affichage
+> **Côté Rust**, ce motif est factorisé dans le trait `Aggregate`, et l'union
+> s'y écrit `a.union(&b)` — voir [Agrégat](aggregate.md).
 
-Chaque objet implémente trois vues, du plus court au plus complet :
+## Trois niveaux de listing
 
-- `__str__` (Rust `Display`) — **résumé** une ligne, façon listing Cast3M ;
-- `__repr__` (Rust `Debug`) — vue **structurelle** bornée, pour le
-  développement ;
-- `dump()` — **contenu intégral** (valeurs, topologie) imprimé sur la sortie
-  standard, au-delà de ce que `repr` montre.
+Tout objet pyrucast se liste à trois niveaux, du plus court au plus complet :
 
-Exemple dans [Trois niveaux de listing](installation.md#trois-niveaux-de-listing).
+- `print(x)` ou `str(x)` — le **résumé**, une ligne : le listing résumé de
+  Cast3M ;
+- `repr(x)` — la **structure** : compteurs, dimensions, noms, identifiants,
+  sans jamais le contenu ;
+- `x.dump()` — le **contenu** : valeurs, coordonnées, connectivité, comme le
+  listing complet de Cast3M. Il reste borné : au-delà de `max_rows` lignes
+  (20 par défaut), la table est coupée et la coupure annoncée.
+
+Sur des coordonnées qui portent les 11 nœuds d'une ligne de 10 éléments :
+
+```python
+{{#include ../../tests/python/test_doc_aspect_informatique.py:listing}}
+```
+
+Seule exception, `Array` — le tableau que rendent les fonctions d'échange — n'a
+pas de `dump()` : simple tampon sans homologue Rust, ce n'est pas un objet
+pyrucast à proprement parler.
+
+> **Côté Rust**, les trois niveaux sont les traits `Display`, `Debug` et
+> `Dump`.
 
 ## Erreurs
 
-Toute l'API publique renvoie `Result<T, PyrucastError>`. Côté Python,
-`PyrucastError` est converti automatiquement en `RuntimeError`. Il n'y a qu'un
-seul type d'erreur dans la librairie — voir [Conventions](conventions.md).
+En Python, une erreur signalée par pyrucast lève une `RuntimeError`, dont le
+message dit ce qui ne va pas. Les cas que Python nomme déjà gardent leur
+exception : `IndexError` pour un indice hors bornes, `ZeroDivisionError` pour
+une matrice divisée par zéro, `KeyboardInterrupt` sur un Ctrl+C.
+
+> **Côté Rust**, toute l'API publique renvoie `Result<T, PyrucastError>` : un
+> seul type d'erreur pour toute la librairie — voir [Conventions](conventions.md).
 
 ## Persistance portable
 
-Un trait unique, `Portable` (`serde` + `bincode`), fixe le contrat d'octets :
-un format binaire **identique Linux ↔ Windows**. Au-dessus, `pyrucast.save` /
-`pyrucast.load` écrivent un **graphe** d'objets et le relisent en préservant
-le partage — deux champs sur un support restent deux champs sur un support.
-Voir [Sauvegarde et relecture](sauvegarde.md), [Conventions](conventions.md)
-et [Modèle mémoire](memory-model.md).
+`pyrucast.save` / `pyrucast.load` écrivent un **graphe** d'objets et le
+relisent en préservant le partage — deux champs sur un support restent deux
+champs sur un support. Le fichier est **identique Linux ↔ Windows**. Voir
+[Sauvegarde et relecture](sauvegarde.md).
 
-## Pour le développeur
+> **Côté Rust**, ce format repose sur un trait unique, `Portable` (`serde` +
+> `bincode`) — voir [Conventions](conventions.md) et
+> [Modèle mémoire](memory-model.md).
+
+## Pour le développeur Rust
 
 L'organisation des fichiers Rust (où vit chaque morceau) est décrite dans
 [Arborescence](developper/arborescence.md).

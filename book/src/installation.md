@@ -122,25 +122,10 @@ module `pyrucast.mesh` :
 
 ### Trois niveaux de listing
 
-Tout objet pyrucast se liste à trois niveaux, du plus court au plus complet :
-
-- `print(x)` ou `str(x)` — le **résumé**, une ligne : le listing résumé de
-  Cast3M (Rust `Display`) ;
-- `repr(x)` — la **structure** : compteurs, dimensions, noms, *handles*, sans
-  jamais le contenu (Rust `Debug`) ;
-- `x.dump()` — le **contenu** : valeurs, coordonnées, connectivité, comme le
-  listing complet de Cast3M. Il reste borné : au-delà de `max_rows` lignes
-  (20 par défaut), la table est coupée et la coupure annoncée (Rust `Dump`).
-
-Seule exception, `Array` — le tableau que rendent les fonctions d'échange — n'a
-pas de `dump()` : simple tampon sans homologue Rust, ce n'est pas un objet
-pyrucast à proprement parler.
-
-Sur les coordonnées du script ci-dessus, qui portent les 11 nœuds de la ligne :
-
-```python
-{{#include ../../tests/python/test_doc_demarrage.py:listing}}
-```
+Tout objet pyrucast se liste à trois niveaux : `print(x)` donne le résumé
+d'une ligne, `repr(x)` la structure, `x.dump()` le contenu complet — les
+listings résumé et complet de Cast3M. Le détail, avec un exemple, est dans
+[Aspect informatique](aspect-informatique.md#trois-niveaux-de-listing).
 
 ### Fonctions libres et méthodes
 

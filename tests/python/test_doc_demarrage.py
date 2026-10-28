@@ -43,11 +43,6 @@ print(ligne)  # Mesh: 1 submesh(es) [#…], 10 cell(s) total
 # ANCHOR_END: premier_script
 assert ligne.cell_count() == 10
 
-# ANCHOR: listing
-print(c)  # résumé : Coords: dim=2, configs=1 (active="default"), nodes=11 …
-print(repr(c))  # structure : Coords { dim: 2, frame: Cartesian, … }
-c.dump()  # contenu : la table des 11 nœuds, coordonnées et références
-# ANCHOR_END: listing
 
 # ANCHOR: methode
 plaque = pyrucast.mesh.extrude(ligne, [0.0, 1.0], 5)  # fonction libre
