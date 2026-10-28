@@ -67,6 +67,7 @@ Conditions limites / chargement;DEPI;Impose une valeur (déplacement) à un bloc
 Conditions limites / chargement;RELA;Relation linéaire entre DDL;model.mpc
 Conditions limites / chargement;RELA INEG;Relation unilatérale (inégalité) entre DDL;model.dirichlet / model.mpc (sense=">=")
 Contact;IMPO;Contact unilatéral nœud-surface entre deux maillages;model.contact
+Contact;RFCO;Relations et jeux de contact sur la géométrie courante;model.update_contact (réapparie sur X + u, garde les multiplicateurs) ; le pas à pas l'appelle à chaque reconstruction de l'opérateur en grands déplacements
 Contact;JEU;Jeu initial entre surfaces en contact;porté par model.contact (rendu par node_field.external_forces)
 Conditions limites / chargement;FORC;Force nodale appliquée;NodeField (second membre)
 Conditions limites / chargement;PRES;Chargement de pression sur une surface;model.flux en mode normal (ligne "n", densité phi_n le long de la normale de la maille, normale de la configuration active ; évaluée sur la configuration courante posée par coords.displace_from, la pression suit la paroi, sans raideur de chargement ; une pression p qui pousse sur une paroi de normale sortante s'écrit phi_n = −p)

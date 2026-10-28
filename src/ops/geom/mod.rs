@@ -9,4 +9,5 @@ mod locate;
 mod project;
 
 pub use locate::{locate_points, Location};
+pub(crate) use project::project_points_at;
 pub use project::{project_points, Projection};

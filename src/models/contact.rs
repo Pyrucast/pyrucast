@@ -60,10 +60,10 @@ use crate::models::{
     Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation, RelationSense,
     SubModelKind, IMPOSED, MULTIPLIER,
 };
-use crate::ops::geom::project_points;
+use crate::ops::geom::project_points_at;
 use crate::ops::mesh::barycenter;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 /// The master binding of one slave node: the closest facet's nodes, the
 /// projection weights `Nᵢ(ξ)`, the unit facet normal and the initial gap.
@@ -76,7 +76,7 @@ struct Pairing {
 }
 
 /// One displacement component and the dual row its reaction lands in.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Component {
     variable: String,
     target_dual: String,
@@ -127,6 +127,9 @@ pub struct Contact {
     /// POI1 mesh of the slave nodes, one cell per relation (its cell `r` is
     /// the slave node of relation `r`).
     slave_mesh: Mesh,
+    /// The oriented master surface, kept to pair the slaves again
+    /// ([`update_contact`](crate::ops::model::update_contact())).
+    master_mesh: Mesh,
     /// POI1 mesh of the fresh multiplier nodes, colocated with the slave nodes
     /// (paired cell-for-cell).
     multiplier_mesh: Mesh,
@@ -243,39 +246,22 @@ impl Contact {
         let slave_mesh =
             Mesh::from_submesh(SubMesh::poi1_from_node_ids(coords.clone(), &slave_ids)?);
 
-        // Physical coordinates of the slave nodes, then project them.
-        let points: Vec<Vec<f64>> = {
-            let c = coords.read();
-            slave_ids
-                .iter()
-                .map(|&n| Ok(c.position(n)?.to_vec()))
-                .collect::<Result<_>>()?
-        };
-        let projections = project_points(master, &points)?;
-        let pairings: Vec<Pairing> = projections
-            .into_iter()
-            .map(|p| Pairing {
-                nodes: p.nodes,
-                weights: p.weights,
-                normal: p.normal,
-                gap: p.gap,
-            })
-            .collect();
+        // Each slave node paired with its closest master facet, on the
+        // positions as they are. A collapsed facet is the caller's mesh, and an
+        // error here.
+        let pairings = pair(&coords, &slave_ids, master, &HashMap::new())?;
+        if pairings
+            .iter()
+            .any(|p| p.normal.iter().any(|v| !v.is_finite()))
+        {
+            return Err(PyrucastError::Message(
+                "Contact: a master facet is degenerate (zero normal)".into(),
+            ));
+        }
 
         // Fresh multiplier nodes, colocated with the slave nodes.
         let multiplier_mesh = barycenter(&slave_mesh)?;
-
-        // The block support: slave nodes ∪ every paired master node, dedup'd.
-        let mut support_ids = slave_ids.clone();
-        let mut seen: HashSet<NodeId> = support_ids.iter().copied().collect();
-        for p in &pairings {
-            for &n in &p.nodes {
-                if seen.insert(n) {
-                    support_ids.push(n);
-                }
-            }
-        }
-        let support_mesh = Mesh::from_submesh(SubMesh::poi1_from_node_ids(coords, &support_ids)?);
+        let support_mesh = block_support(coords, &slave_ids, &pairings)?;
 
         let components = components
             .into_iter()
@@ -287,12 +273,72 @@ impl Contact {
 
         Ok(Self {
             slave_mesh,
+            master_mesh: same_zones(master)?,
             multiplier_mesh,
             support_mesh,
             pairings,
             components,
             target_physics,
         })
+    }
+
+    /// The same contact paired again on the positions `X + u` — `X` the active
+    /// configuration, `u` read in `displacement` on the contact's variables, a
+    /// node or a component it lacks reading zero. Slave and master meshes,
+    /// **multiplier nodes** (so the unknowns `lambda` and the rows `imposed`),
+    /// variables and nature are kept; the pairings and the block support are
+    /// recomputed. The gap is measured with the new pairing and normal on `X`
+    /// (see [`pair`]), so that the relation is the gap linearised at `X + u`,
+    /// written in total displacement. At `u = 0`, the construction again.
+    ///
+    /// The meshes were paired at construction: what could fail then cannot
+    /// now. A master facet collapsed by the displacement is not this
+    /// function's to detect; its normal is non-finite.
+    pub(crate) fn updated(&self, displacement: &NodeField) -> Self {
+        let coords = self
+            .slave_mesh
+            .coords()
+            .expect("a contact's slave mesh lives in a Coords");
+        let slave_ids: Vec<NodeId> = self
+            .slave_mesh
+            .get(0)
+            .expect("a contact has its slave submesh")
+            .read()
+            .connectivity()
+            .to_vec();
+        // `u` at every node a pairing may reach — the slaves and every master
+        // node — read once, before the projection.
+        let mut displaced: HashMap<NodeId, Vec<f64>> = HashMap::new();
+        let master_nodes: Vec<NodeId> = (&self.master_mesh)
+            .into_iter()
+            .flat_map(|sm| sm.read().connectivity().to_vec())
+            .collect();
+        for &node in slave_ids.iter().chain(&master_nodes) {
+            if displaced.contains_key(&node) {
+                continue;
+            }
+            let u: Vec<f64> = self
+                .components
+                .iter()
+                .map(|c| displacement.value_opt(node, &c.variable).unwrap_or(0.0))
+                .collect();
+            if u.iter().any(|&v| v != 0.0) {
+                displaced.insert(node, u);
+            }
+        }
+        let pairings = pair(&coords, &slave_ids, &self.master_mesh, &displaced)
+            .expect("the slave and master meshes were paired at construction");
+        let support_mesh = block_support(coords, &slave_ids, &pairings)
+            .expect("the block support is made of nodes of the paired meshes");
+        Self {
+            slave_mesh: same_zones(&self.slave_mesh).expect(SHARED),
+            master_mesh: same_zones(&self.master_mesh).expect(SHARED),
+            multiplier_mesh: same_zones(&self.multiplier_mesh).expect(SHARED),
+            support_mesh,
+            pairings,
+            components: self.components.clone(),
+            target_physics: self.target_physics,
+        }
     }
 
     /// The initial signed gaps `g₀`, one per relation (slave node), in relation
@@ -544,6 +590,106 @@ impl Constraint for Contact {
         }
         Ok(relations)
     }
+}
+
+/// Each slave node paired with its closest master facet on the positions
+/// `X + u` — `X` the active configuration, `u` given per node in `displaced`
+/// (empty: the positions `X` themselves). The gap is measured with that pairing
+/// and that normal **on `X`**, `g̃ = n·(X_s − Σ Nᵢ X_mᵢ)`: then `g̃ + C·u` is
+/// the gap of `X + u` to first order, the relation linearised there and written
+/// in total displacement from `X`.
+fn pair(
+    coords: &Handle<crate::coords::Coords>,
+    slave_ids: &[NodeId],
+    master: &Mesh,
+    displaced: &HashMap<NodeId, Vec<f64>>,
+) -> Result<Vec<Pairing>> {
+    let at = |c: &crate::coords::Coords, n: NodeId| -> Result<Vec<f64>> {
+        let mut x = c.position(n)?.to_vec();
+        if let Some(u) = displaced.get(&n) {
+            for (xa, ua) in x.iter_mut().zip(u) {
+                *xa += ua;
+            }
+        }
+        Ok(x)
+    };
+    // The guard is released before the projection, which takes its own.
+    let points: Vec<Vec<f64>> = {
+        let c = coords.read();
+        slave_ids
+            .iter()
+            .map(|&n| at(&c, n))
+            .collect::<Result<_>>()?
+    };
+    let projections = project_points_at(master, &points, at)?;
+    if displaced.is_empty() {
+        return Ok(projections
+            .into_iter()
+            .map(|p| Pairing {
+                nodes: p.nodes,
+                weights: p.weights,
+                normal: p.normal,
+                gap: p.gap,
+            })
+            .collect());
+    }
+    let c = coords.read();
+    projections
+        .into_iter()
+        .zip(slave_ids)
+        .map(|(p, &s)| {
+            let x_s = c.position(s)?;
+            let mut point = vec![0.0; x_s.len()];
+            for (&n, &w) in p.nodes.iter().zip(&p.weights) {
+                for (pa, xa) in point.iter_mut().zip(c.position(n)?) {
+                    *pa += w * xa;
+                }
+            }
+            let gap = (0..x_s.len())
+                .map(|a| (x_s[a] - point[a]) * p.normal[a])
+                .sum();
+            Ok(Pairing {
+                nodes: p.nodes,
+                weights: p.weights,
+                normal: p.normal,
+                gap,
+            })
+        })
+        .collect()
+}
+
+/// The POI1 support of the constraint blocks: the slave nodes, then every
+/// paired master node, deduplicated.
+fn block_support(
+    coords: Handle<crate::coords::Coords>,
+    slave_ids: &[NodeId],
+    pairings: &[Pairing],
+) -> Result<Mesh> {
+    let mut support_ids = slave_ids.to_vec();
+    let mut seen: HashSet<NodeId> = support_ids.iter().copied().collect();
+    for p in pairings {
+        for &n in &p.nodes {
+            if seen.insert(n) {
+                support_ids.push(n);
+            }
+        }
+    }
+    Ok(Mesh::from_submesh(SubMesh::poi1_from_node_ids(
+        coords,
+        &support_ids,
+    )?))
+}
+
+/// Why sharing the zones of one of the contact's own meshes cannot fail.
+const SHARED: &str = "the zones of one mesh go together";
+
+/// A mesh of the same zones as `mesh` — the same handles, nothing copied.
+fn same_zones(mesh: &Mesh) -> Result<Mesh> {
+    let mut out = Mesh::empty();
+    for sm in mesh {
+        out.add_sub(sm.clone())?;
+    }
+    Ok(out)
 }
 
 /// Unique node ids of a mesh, in order of first appearance across submeshes.

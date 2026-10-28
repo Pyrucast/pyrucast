@@ -207,6 +207,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::model::mpc, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::embedded, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::contact, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::model::update_contact, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::from_live_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::line, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::circle, m)?)?;

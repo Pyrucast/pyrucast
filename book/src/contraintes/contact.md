@@ -78,6 +78,54 @@ distance.
 {{#include ../../../tests/python/test_doc_contraintes.py:contact_rhs}}
 ```
 
+## Grands glissements : mettre le contact à jour
+
+L'appariement figé ne vaut que tant que le point projeté ne glisse pas :
+quand la facette change ou que la normale tourne, la relation écrite à la
+construction n'est plus le jeu. `update_contact(model, displacement)` (aussi
+`Model.update_contact(displacement)`) rend le modèle avec ses contacts
+**réappariés** sur les positions `X + u` — `X` la configuration active, `u` lu
+sur les variables du contact —, les autres sous-modèles partagés tels quels.
+
+Concrètement, pour chaque nœud esclave `s` : la facette maître la plus proche
+de `x_s = X_s + u_s`, le point projeté (donc `ξ` et les poids `Nᵢ`) et la
+normale `n` sont recalculés **sur les positions déplacées** ; le nœud
+multiplicateur, lui, ne change pas. La ligne de la matrice reste la même
+(`(multiplicateur, imposed)`, l'inconnue `lambda` aussi) ; ses coefficients
+(`+n` sur l'esclave, `−Nᵢ·n` sur les nœuds de la nouvelle facette) et son
+second membre changent.
+
+**Le jeu rangé.** Le solveur écrit toute relation en déplacement total depuis
+`X`. Mis à jour pour un déplacement `u_k`, le contact range donc le jeu du
+nouvel appariement mesuré **sur `X`** :
+
+\[
+\tilde g = n \cdot \big(X_s - \textstyle\sum_i N_i X_{m_i}\big),
+\qquad \tilde g + C\,u = g(X+u_k) + C\,(u - u_k),
+\]
+
+soit le jeu réel de `X + u_k`, linéarisé là.
+
+Exemple : un nœud parti de `Y = 1` au-dessus d'un sol `y = 0`, descendu de
+`0,7` : son jeu actuel vaut `0,3`, `g̃` vaut `1`, et la relation reste
+`u_y ≥ −1` — il ne peut pas descendre de plus de 1 depuis sa position de
+référence. Le contact mis à jour porte ce `−g̃` comme second membre ;
+`update_contact(model, 0)` redonne la construction.
+
+**Des coefficients exacts.** Pour une projection au point le plus proche, la
+variation du jeu se réduit à `n·(δx_s − Σ Nᵢ δx_mᵢ)` : le glissement du point
+projeté est tangent à la facette, et la normale reste unitaire. Seul le terme
+du second ordre — la raideur géométrique du contact — est négligé, comme dans
+Cast3M.
+
+```python
+{{#include ../../../tests/python/test_doc_contraintes.py:update_contact}}
+```
+
+Le [pas à pas](../pas-a-pas.md#grands-déplacements) s'en sert en grands
+déplacements : il met ses contacts à jour chaque fois qu'il reconstruit son
+opérateur.
+
 ## Exemple : patch test à deux blocs
 
 Deux blocs élastiques empilés (jeu initial `g₀`), `u_x` bloqué partout
@@ -95,9 +143,8 @@ Le déroulé complet (2D et 3D) est dans `tests/contact.rs` et
 
 ## Périmètre v1 et suites
 
-- **Petits glissements** : appariement et normale figés à la construction ;
-  un grand glissement demandera un ré-appariement en boucle (orchestré côté
-  Python, comme le Newton de la plasticité).
+- **Appariement à la demande** : figé à la construction, renouvelé par
+  `update_contact` ; le pas à pas le fait de lui-même en grands déplacements.
 - **Sans frottement** : seul le jeu normal est contraint, le glissement
   tangentiel est libre.
 - Nœud-surface **simple passe** : pas de traitement maître/esclave symétrique,

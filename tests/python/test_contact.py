@@ -150,3 +150,28 @@ def test_components_must_match_dimension():
     barre = pyrucast.model.truss(pyrucast.FiniteElementSpace(master))
     with pytest.raises(Exception, match="component"):
         pyrucast.model.contact(slave, master, barre, ["u_y"])
+
+
+def test_update_contact_pairs_the_slaves_again():
+    """`update_contact` pairs every slave again on `X + u`, keeping the
+    multipliers. The top block slid by half a cell to the right and pressed
+    down onto the bottom one: each slave projects where it now stands, and its
+    gap — measured on the positions at rest with the new pairing — is still
+    `G0`, the floor being flat. The method and the function agree."""
+    _c, _bottom, top, _model, contact, materials = _two_blocks()
+    u = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(top), ["u_x", "u_y"])
+    for n in top:
+        u[0].set_value(n, "u_x", 0.5 * H)
+        u[0].set_value(n, "u_y", -G0)
+    updated = pyrucast.model.update_contact(contact, u)
+    first = updated.multiplier_mesh().node(0, 0, 0)
+    assert first.id == contact.multiplier_mesh().node(0, 0, 0).id
+    gaps = pyrucast.node_field.external_forces(updated, materials)
+    by_method = pyrucast.node_field.external_forces(
+        contact.update_contact(u), materials
+    )
+    mult_mesh = updated.multiplier_mesh()
+    for r in range(N + 1):
+        m = mult_mesh.node(0, r, 0)
+        assert abs(gaps.value(m, "imposed") + G0) < TOL
+        assert gaps.value(m, "imposed") == by_method.value(m, "imposed")

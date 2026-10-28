@@ -9,7 +9,9 @@ use crate::ops::model;
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
 use crate::py::model::PyModel;
+use crate::py::node_field::PyNodeField;
 use pyo3::prelude::*;
+use pyrucast_macros::py_op;
 
 /// `model.interface_transfer(side_a, side_b, target, variables, tol=1e-9)` —
 /// the exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
@@ -171,4 +173,30 @@ pub fn contact(
 ) -> PyResult<PyModel> {
     let inner = model::contact(&slave.inner, &master.inner, &target.inner, variables)?;
     Ok(PyModel { inner })
+}
+
+/// `model.update_contact(model, displacement)` — the model with its contacts
+/// **updated** to the positions `X + u`: `X` the active configuration, `u` read
+/// in `displacement` on each contact's variables (`u_x`, `u_y`, `u_z`; a node
+/// or a component it lacks reads zero). Every other sub-model is shared as it
+/// is; a model without contact comes back unchanged.
+///
+/// Each slave node is paired again with its closest master facet on `X + u`,
+/// and its relation becomes the gap linearised there, written in total
+/// displacement from `X`: the right-hand side the contact carries is `-g~`,
+/// the gap of the new pairing measured on `X`. The multiplier nodes are kept,
+/// so the unknowns `lambda` and the rows `imposed` stay the same; at `u = 0`,
+/// the contact as it was built. A master facet collapsed by the displacement
+/// is not detected here.
+///
+/// What large displacements call for: the step-by-step loop updates its
+/// contacts each time it rebuilds its operator. See the contact chapter of the
+/// book.
+#[py_op(method_on = PyModel)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn update_contact(model: PyRef<'_, PyModel>, displacement: PyRef<'_, PyNodeField>) -> PyModel {
+    PyModel {
+        inner: model::update_contact(&model.inner, &displacement.inner),
+    }
 }

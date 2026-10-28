@@ -163,6 +163,7 @@ __all__ = [
     "triangulate_surface",
     "triangulate_volume",
     "truss",
+    "update_contact",
     "viscoplasticity_chaboche",
     "viscoplasticity_lemaitre_chaboche",
     "xtx",
@@ -2305,6 +2306,26 @@ class Model:
         (Cast3M `KTAN`). `D_alg` is evaluated **at the Gauss point**, from the same
         inputs `integrate_behavior` takes — no field of moduli is materialised, since
         this assembler would be its only reader. `prev=None` means the rest state.
+        """
+    def update_contact(self, displacement: NodeField) -> Model:
+        r"""
+        `model.update_contact(model, displacement)` — the model with its contacts
+        **updated** to the positions `X + u`: `X` the active configuration, `u` read
+        in `displacement` on each contact's variables (`u_x`, `u_y`, `u_z`; a node
+        or a component it lacks reads zero). Every other sub-model is shared as it
+        is; a model without contact comes back unchanged.
+        
+        Each slave node is paired again with its closest master facet on `X + u`,
+        and its relation becomes the gap linearised there, written in total
+        displacement from `X`: the right-hand side the contact carries is `-g~`,
+        the gap of the new pairing measured on `X`. The multiplier nodes are kept,
+        so the unknowns `lambda` and the rows `imposed` stay the same; at `u = 0`,
+        the contact as it was built. A master facet collapsed by the displacement
+        is not detected here.
+        
+        What large displacements call for: the step-by-step loop updates its
+        contacts each time it rebuilds its operator. See the contact chapter of the
+        book.
         """
     def internal_forces(self, state: ElementField, solution: NodeField, materials: ElementField) -> NodeField:
         r"""
@@ -5920,6 +5941,27 @@ def truss(fespace: FiniteElementSpace, strain_measure: builtins.str = 'linear') 
     writes the second Piola–Kirchhoff axial force `S_n`, which
     `element_field.stress_measure` turns into the nominal force vector `P_*` or
     the true force `n`).
+    """
+
+def update_contact(model: Model, displacement: NodeField) -> Model:
+    r"""
+    `model.update_contact(model, displacement)` — the model with its contacts
+    **updated** to the positions `X + u`: `X` the active configuration, `u` read
+    in `displacement` on each contact's variables (`u_x`, `u_y`, `u_z`; a node
+    or a component it lacks reads zero). Every other sub-model is shared as it
+    is; a model without contact comes back unchanged.
+    
+    Each slave node is paired again with its closest master facet on `X + u`,
+    and its relation becomes the gap linearised there, written in total
+    displacement from `X`: the right-hand side the contact carries is `-g~`,
+    the gap of the new pairing measured on `X`. The multiplier nodes are kept,
+    so the unknowns `lambda` and the rows `imposed` stay the same; at `u = 0`,
+    the contact as it was built. A master facet collapsed by the displacement
+    is not detected here.
+    
+    What large displacements call for: the step-by-step loop updates its
+    contacts each time it rebuilds its operator. See the contact chapter of the
+    book.
     """
 
 def viscoplasticity_chaboche(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:

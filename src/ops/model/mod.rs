@@ -14,7 +14,8 @@
 //!   and their named shorthands;
 //! - *structural elements* — [`truss()`], [`bernoulli()`], [`timoshenko()`],
 //!   [`shell()`];
-//! - *constraints* — [`dirichlet()`], [`mpc()`], [`embedded()`], [`contact()`].
+//! - *constraints* — [`dirichlet()`], [`mpc()`], [`embedded()`], [`contact()`],
+//!   and [`update_contact()`] to pair a contact again on a displaced configuration.
 //!
 //! None of these is exposed as a method: their first argument is the
 //! **support** the model spans, not a subject being transformed (see
@@ -88,7 +89,7 @@ pub use crate::models::radiation::radiation;
 pub use crate::models::shell::shell;
 pub use crate::models::timoshenko::timoshenko;
 pub use crate::models::truss::truss;
-pub use contact::contact;
+pub use contact::{contact, update_contact};
 pub use damage::damage;
 pub use dirichlet::dirichlet;
 pub use embedded::embedded;

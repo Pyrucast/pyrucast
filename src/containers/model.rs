@@ -2376,6 +2376,25 @@ impl Model {
         self.keep(|natures| !natures.contains(&physics))
     }
 
+    /// The model with each contact sub-model replaced by `update(contact)`,
+    /// every other sub-model shared — order kept. The core of
+    /// [`update_contact`](crate::ops::model::update_contact()).
+    pub(crate) fn map_contacts(
+        &self,
+        update: impl Fn(&crate::models::contact::Contact) -> crate::models::contact::Contact,
+    ) -> Model {
+        let mut out = Model::empty();
+        for h in self {
+            let updated = match &*h.read() {
+                SubModel::Contact(c) => Some(Handle::new(SubModel::Contact(update(c)))),
+                _ => None,
+            };
+            out.push(updated.unwrap_or_else(|| h.clone()));
+        }
+        out.post_push();
+        out
+    }
+
     /// The sub-models whose nature set passes `keep`, handles shared.
     fn keep(&self, keep: impl Fn(&[Physics]) -> bool) -> Model {
         // Built sub-model by sub-model rather than through `subset`: that one is

@@ -193,6 +193,18 @@ for r in range(N + 1):
     assert gaps.value(mult_mesh.node(0, r, 0), "imposed") == 0.0
 # ANCHOR_END: contact_rhs
 
+# ── Updating the contact to a displaced configuration ───────────────────────
+
+# ANCHOR: update_contact
+# The upper block slid by a quarter to the right: each slave node is paired
+# again on its displaced position, the multipliers stay the same unknowns.
+glisse = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(top), ["u_x", "u_y"])
+for n in top:
+    glisse[0].set_value(n, "u_x", 0.25)
+nouveau = contact.update_contact(glisse)  # or pyrucast.model.update_contact(…)
+assert nouveau.multiplier_mesh().node(0, 0, 0).id == mult_mesh.node(0, 0, 0).id
+# ANCHOR_END: update_contact
+
 
 # ── Dirichlet : l'exemple complet ───────────────────────────────────────────
 

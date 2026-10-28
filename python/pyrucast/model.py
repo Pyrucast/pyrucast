@@ -12,8 +12,10 @@ support gives N zones. Heterogeneous physics are composed with ``|``:
 
     modele = model.heat_conduction(fes) | model.dirichlet(...)
 
-None is exposed as a method: their first argument is the support the model
-covers, not a subject being transformed.
+None of the declarations is exposed as a method: their first argument is the
+support the model covers, not a subject being transformed. ``update_contact``
+is the exception: it transforms a model — its contacts paired again on a
+displaced configuration — and is also ``Model.update_contact``.
 """
 
 from ._pyrucast import (
@@ -43,6 +45,7 @@ from ._pyrucast import (
     shell,
     timoshenko,
     truss,
+    update_contact,
     viscoplasticity_chaboche,
     viscoplasticity_lemaitre_chaboche,
 )
@@ -74,6 +77,7 @@ __all__ = [
     "shell",
     "timoshenko",
     "truss",
+    "update_contact",
     "viscoplasticity_chaboche",
     "viscoplasticity_lemaitre_chaboche",
 ]

@@ -267,6 +267,7 @@ un sujet qu'on transforme.
 | `mpc(terms: &[(&Mesh, &str, f64)], target: &Model, sense: RelationSense) -> Model` | `mpc(terms, target, sense="=") -> Model` — `terms` : liste de `(mesh, variable, coefficient)` |
 | `embedded(immersed: &Mesh, host: &Mesh, target: &Model, variables: Vec<String>, tol: f64) -> Model` | `embedded(immersed, host, target, variables, tol=1e-6) -> Model` — `tol` est un jeu dans l'élément de **référence**, sans dimension ; défaut `embedded::DEFAULT_TOL` |
 | `contact(slave: &Mesh, master: &Mesh, target: &Model, variables: Vec<String>) -> Model` | `contact(slave, master, target, variables) -> Model` |
+| `update_contact(model: &Model, displacement: &NodeField) -> Model` | `update_contact(model, displacement) -> Model`, et la méthode `Model.update_contact(displacement)` |
 
 **Même ordre partout.** Le support d'abord — l'espace EF balayé, ou les
 maillages qui portent une contrainte, celui qui porte les relations en tête
