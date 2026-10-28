@@ -261,6 +261,18 @@ pause, la fenêtre de stagnation repart, et les itérations continuent. Cast3M
 compare plutôt la variation des réactions, `max|ΔR|²/max|R|²`, à la
 précision ; pyrucast garde le test qui décide déjà de la convergence.
 
+**Une maille retournée** arrête le pas. Après chaque résolution, le pas à pas
+mesure `J = det F` (`deformation(u, fes, "jacobian")`) sur les zones qui
+remplissent l'espace — une barre ou une coque n'a pas de volume à perdre. Si
+`J ≤ 0` en un point, l'itéré est rejeté : aucune loi n'y a de sens, et aucun
+sous-pas ne doit partir de là. Le pas échoue donc, depuis le dernier itéré
+encore à l'endroit ; avec `adaptive_step`, il est repris plus court, sinon le
+calcul s'arrête en le disant. Rien ne le verrait sinon : la mesure
+d'intégration est `|det J|`, et `C = FᵀF` reste défini positif quand `F`
+change de signe. En petits déplacements, une cinématique linéaire ne retourne
+pas une maille : rien n'est vérifié. Côté Cast3M, UNPAS ne teste pas le
+signe du jacobien ; seules certaines routines d'éléments le signalent.
+
 Sont refusés en grands déplacements : une loi de petites déformations à côté
 d'une loi en grandes transformations (poutres et coques n'ont pas encore de
 formulation en grandes transformations ; une barre lit `green_lagrange`, cf.

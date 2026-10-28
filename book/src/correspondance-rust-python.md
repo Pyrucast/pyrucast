@@ -195,7 +195,7 @@ par la sortie.
 | Rust (`ops::element_field::…`) | Python (`pyrucast.element_field.…`) |
 |---|---|
 | `gradient(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `gradient(field, fespace) -> ElementField` |
-| `deformation(u: &NodeField, fespace: &FiniteElementSpace, measure: StrainMeasure) -> ElementField` | `deformation(u, fespace, measure="linear") -> ElementField` (`StrainMeasure` passe par son nom : `"linear"`, `"gradient"`, `"green_lagrange"`, `"right_cauchy_green"`, `"left_cauchy_green"`, `"hencky"`, `"euler_almansi"`) |
+| `deformation(u: &NodeField, fespace: &FiniteElementSpace, measure: StrainMeasure) -> ElementField` | `deformation(u, fespace, measure="linear") -> ElementField` (`StrainMeasure` passe par son nom : `"linear"`, `"gradient"`, `"green_lagrange"`, `"right_cauchy_green"`, `"left_cauchy_green"`, `"hencky"`, `"euler_almansi"`, `"jacobian"`) |
 | `interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `interp_to_gauss(field, fespace) -> ElementField` |
 | `thermal_strain(temperature: &ElementField, material: &ElementField, fespace: &FiniteElementSpace, t_ref: f64, measure: StrainMeasure) -> ElementField` | `thermal_strain(temperature, materials, fespace, t_ref, measure="linear") -> ElementField` (la dilatation exacte dans la mesure de la loi) |
 | `strain(model: &Model, solution: &NodeField, materials: &ElementField) -> ElementField` | `strain(model, solution, materials) -> ElementField` (`EPSI` : l'entrée de chaque loi ; aussi `model.strain(…)`) |

@@ -176,6 +176,9 @@ class Problem:
     # Large displacements with contact: the contacts are updated to the
     # configuration each time the operator is rebuilt.
     updates_contact: bool = False
+    # Large displacements: the zones of ``fespace`` that fill the space, where
+    # each iterate is checked for a cell turned inside out (``J ≤ 0``).
+    volume_zones: tuple = ()
 
 
 def describe_problem(data, options):
@@ -193,7 +196,8 @@ def describe_problem(data, options):
     follower loads, and the FE space where the material axes a heat step
     reads are turned with the part. Its contacts are updated to the
     configuration of the iterate each time the operator is rebuilt
-    (``updates_contact``).
+    (``updates_contact``), and every iterate is checked for a cell turned
+    inside out (``volume_zones``).
     """
     model = data["model"]
     mechanics, mechanics_domain, mechanics_constraints = _part(model, "mechanical")
@@ -254,9 +258,13 @@ def describe_problem(data, options):
     follower_loads, step_loads = None, mechanics
     frame_fespace = None
     updates_contact = False
+    volume_zones = ()
     if large:
         follower_loads, step_loads = _follower_split(mechanics)
         updates_contact = contacts(mechanics) is not None
+        volume_zones = tuple(
+            i for i in range(len(fespace)) if fespace[i].ref_dim == fespace[i].space_dim
+        )
         if heat is not None:
             frame_fespace = _frame_fespace(model)
 
@@ -301,4 +309,5 @@ def describe_problem(data, options):
         step_loads=step_loads,
         frame_fespace=frame_fespace,
         updates_contact=updates_contact,
+        volume_zones=volume_zones,
     )

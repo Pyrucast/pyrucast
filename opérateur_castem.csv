@@ -84,7 +84,7 @@ Résolution;KRES;Résolution avec conditions (rigidité + blocages);solve
 Résolution;CONDENSATION;Élimination des relations linéaires (maître/esclave) au lieu de multiplicateurs;solve (relations="eliminate")
 Résolution;RESO (INEG);Résolution avec relations unilatérales (statut actif/inactif);solve (le sens est lu dans la matrice)
 Champs - dérivation;GRAD;Gradient d'un champ aux points de Gauss;gradient
-Champs - dérivation;EPSI;Déformations à partir d'un déplacement;strain (avec modèle : l'entrée de chaque loi, toutes physiques ; la mesure est celle de la loi, strain_measure) / deformation (sans ; measure : linéaire, F, Green–Lagrange, Cauchy-Green, Hencky, Almansi) / beam_deformation / shell_deformation
+Champs - dérivation;EPSI;Déformations à partir d'un déplacement;strain (avec modèle : l'entrée de chaque loi, toutes physiques ; la mesure est celle de la loi, strain_measure) / deformation (sans ; measure : linéaire, F, Green–Lagrange, Cauchy-Green, Hencky, Almansi, J = det F) / beam_deformation / shell_deformation
 Champs - dérivation;SIGM;Contraintes à partir des déformations;integrate_behavior
 Champs - dérivation;REAC;Réactions nodales;−internal_forces(model.filter(constraint), état, solution, matériau) (−Cᵀλ aux nœuds contraints)
 Champs - extraction;EXCO;Extrait/renomme une composante d'un champ;filter_components (extraction, str ou liste) / rename_component (renommage)

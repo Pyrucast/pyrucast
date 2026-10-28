@@ -3,8 +3,9 @@
 //!
 //! One operator, `(displacement, fespace, measure) → ElementField`. The
 //! [`StrainMeasure`] chooses *which* deformation is produced: the linearized
-//! strain `ε`, the deformation gradient `F`, or one of the finite measures
-//! built on it (Green–Lagrange, Cauchy-Green, Hencky, Euler–Almansi). The
+//! strain `ε`, the deformation gradient `F`, one of the finite measures built
+//! on it (Green–Lagrange, Cauchy-Green, Hencky, Euler–Almansi), or its
+//! determinant `J`, the volume ratio. The
 //! caller then decides which one to feed
 //! [`crate::ops::element_field::behavior::integrate`].
 
@@ -34,6 +35,7 @@ use crate::ops::element_field::gradient::AXES;
 /// | [`LeftCauchyGreen`](Self::LeftCauchyGreen) | `b = FFᵀ` | `b_` | `i ≤ j` |
 /// | [`Hencky`](Self::Hencky) | `½ ln C` | `H_` | `i ≤ j` |
 /// | [`EulerAlmansi`](Self::EulerAlmansi) | `e = ½(I − b⁻¹)` | `e_` | `i ≤ j` |
+/// | [`Jacobian`](Self::Jacobian) | `J = det F` | `J` | the scalar `J` alone |
 ///
 /// Each measure has its own prefix, so one is never read for another.
 ///
@@ -45,6 +47,7 @@ use crate::ops::element_field::gradient::AXES;
 /// // The usual one-letter names are accepted too.
 /// assert_eq!(StrainMeasure::parse("F")?, StrainMeasure::Gradient);
 /// assert_eq!(StrainMeasure::Hencky.prefix(), "H");
+/// assert_eq!(StrainMeasure::parse("J")?, StrainMeasure::Jacobian);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(
@@ -71,6 +74,9 @@ pub enum StrainMeasure {
     /// Euler–Almansi strain `e = ½(I − b⁻¹)`, the Eulerian counterpart of
     /// Green–Lagrange.
     EulerAlmansi,
+    /// The volume ratio `J = det F`, a scalar: `dv = J dV`. A cell turned
+    /// inside out has `J ≤ 0` at some point. It is not an input of a law.
+    Jacobian,
 }
 
 impl StrainMeasure {
@@ -92,6 +98,7 @@ impl StrainMeasure {
             StrainMeasure::LeftCauchyGreen => "b",
             StrainMeasure::Hencky => "H",
             StrainMeasure::EulerAlmansi => "e",
+            StrainMeasure::Jacobian => "J",
         }
     }
 
@@ -112,6 +119,7 @@ impl crate::named::Named for StrainMeasure {
         StrainMeasure::LeftCauchyGreen,
         StrainMeasure::Hencky,
         StrainMeasure::EulerAlmansi,
+        StrainMeasure::Jacobian,
     ];
 
     fn name(self) -> &'static str {
@@ -123,6 +131,7 @@ impl crate::named::Named for StrainMeasure {
             StrainMeasure::LeftCauchyGreen => "left_cauchy_green",
             StrainMeasure::Hencky => "hencky",
             StrainMeasure::EulerAlmansi => "euler_almansi",
+            StrainMeasure::Jacobian => "jacobian",
         }
     }
 
@@ -134,6 +143,7 @@ impl crate::named::Named for StrainMeasure {
             ("b", StrainMeasure::LeftCauchyGreen),
             ("log", StrainMeasure::Hencky),
             ("almansi", StrainMeasure::EulerAlmansi),
+            ("J", StrainMeasure::Jacobian),
         ]
     }
 }
@@ -179,6 +189,13 @@ fn hencky(h: &Matrix3<f64>) -> Matrix3<f64> {
     out
 }
 
+/// `det F` in the first entry, the only one read: the volume ratio `J`.
+fn jacobian(h: &Matrix3<f64>) -> Matrix3<f64> {
+    let mut m = Matrix3::zeros();
+    m[(0, 0)] = (Matrix3::identity() + h).determinant();
+    m
+}
+
 /// `½(I − b⁻¹)`, `b⁻¹` as adjugate over determinant: no `Option` to unwrap
 /// at the Gauss point — a singular `b` gives inf, its mathematical value.
 fn euler_almansi(h: &Matrix3<f64>) -> Matrix3<f64> {
@@ -212,6 +229,11 @@ fn euler_almansi(h: &Matrix3<f64>) -> Matrix3<f64> {
 /// component `<prefix>_zz` is appended: the **hoop** entry, built on
 /// `H_θθ = u_r / r`, which the meridian gradient cannot express
 /// (`eps_zz = u_r / r`, `F_zz = 1 + u_r / r`, …).
+///
+/// [`Jacobian`](StrainMeasure::Jacobian) produces the one component `J`,
+/// `det F` (the hoop stretch included on a body of revolution): a cell turned
+/// inside out has `J ≤ 0` at some point — what the step-by-step loop tests in
+/// large displacements.
 ///
 /// A degenerate deformation (`det F = 0`) gives non-finite Hencky and
 /// Almansi values: nothing is checked at the Gauss point.
@@ -308,26 +330,31 @@ pub(crate) fn deformation_zone(
         )));
     }
     // The entries (i, j) to write and their names: `i ≤ j` for a symmetric
-    // measure, every pair for F.
+    // measure, every pair for F, the scalar alone for J.
     let prefix = measure.prefix();
-    let mut slots = Vec::with_capacity(space_dim * space_dim + 1);
-    for i in 0..space_dim {
-        let first = if measure.is_symmetric() { i } else { 0 };
-        for j in first..space_dim {
-            slots.push((i, j));
+    let (slots, names) = if measure == StrainMeasure::Jacobian {
+        (vec![(0, 0)], vec![prefix.to_string()])
+    } else {
+        let mut slots = Vec::with_capacity(space_dim * space_dim + 1);
+        for i in 0..space_dim {
+            let first = if measure.is_symmetric() { i } else { 0 };
+            for j in first..space_dim {
+                slots.push((i, j));
+            }
         }
-    }
-    // On a body of revolution the hoop entry is an independent component.
-    // It is appended last and named `zz` (Cast3M's naming, x = r and y = z),
-    // free of clashes since the meridian plane only spans x and y. It is one
-    // more table entry, not a branch at the Gauss point.
-    if axisymmetric {
-        slots.push((2, 2));
-    }
-    let names = slots
-        .iter()
-        .map(|&(i, j)| format!("{prefix}_{}{}", AXES[i], AXES[j]))
-        .collect();
+        // On a body of revolution the hoop entry is an independent component.
+        // It is appended last and named `zz` (Cast3M's naming, x = r and y =
+        // z), free of clashes since the meridian plane only spans x and y. It
+        // is one more table entry, not a branch at the Gauss point.
+        if axisymmetric {
+            slots.push((2, 2));
+        }
+        let names = slots
+            .iter()
+            .map(|&(i, j)| format!("{prefix}_{}{}", AXES[i], AXES[j]))
+            .collect();
+        (slots, names)
+    };
     // The measure is chosen here, by monomorphisation: each arm compiles
     // its own kernel, with no `match` at the Gauss point.
     match measure {
@@ -344,6 +371,7 @@ pub(crate) fn deformation_zone(
         }
         StrainMeasure::Hencky => produce(sub, view, components, names, &slots, hencky),
         StrainMeasure::EulerAlmansi => produce(sub, view, components, names, &slots, euler_almansi),
+        StrainMeasure::Jacobian => produce(sub, view, components, names, &slots, jacobian),
     }
 }
 
@@ -599,6 +627,43 @@ mod tests {
             }
         }
         t
+    }
+
+    /// `J = det F` on homogeneous deformations — a stretch, a rotation, a cell
+    /// turned inside out, a general 3-D gradient and the hoop stretch of a body
+    /// of revolution — against the determinant of `I + A` worked out here.
+    #[test]
+    fn the_jacobian_is_the_volume_ratio() {
+        let j = |a: &[[f64; 3]; 3], dim: usize, axisymmetric: bool| -> f64 {
+            let (u, fes) = homogeneous(a, dim, axisymmetric);
+            let field = deformation(&u, &fes, StrainMeasure::Jacobian).unwrap();
+            let zone = field.get(0).unwrap();
+            let zone = zone.read();
+            assert_eq!(zone.components(), ["J"]);
+            zone.value(0, 0, "J").unwrap()
+        };
+        let none = [0.0; 3];
+        // Stretched by 1.5 along x and 0.8 along y: J = 1.2.
+        let stretch = [[0.5, 0.0, 0.0], [0.0, -0.2, 0.0], none];
+        assert!((j(&stretch, 2, false) - 1.2).abs() < 1e-12);
+        // Turned by 60°: J = 1, though ∇u is far from small.
+        let (c, s) = (60f64.to_radians().cos(), 60f64.to_radians().sin());
+        let turn = [[c - 1.0, -s, 0.0], [s, c - 1.0, 0.0], none];
+        assert!((j(&turn, 2, false) - 1.0).abs() < 1e-12);
+        // Turned inside out, x → −x: J = −1.
+        let mirror = [[-2.0, 0.0, 0.0], none, none];
+        assert!((j(&mirror, 2, false) + 1.0).abs() < 1e-12);
+        // 3-D, a general gradient, against det(I + A) by cofactors.
+        let a = [[0.1, 0.2, -0.3], [0.05, -0.4, 0.1], [0.2, 0.0, 0.3]];
+        let f = [[1.1, 0.2, -0.3], [0.05, 0.6, 0.1], [0.2, 0.0, 1.3]];
+        let det = f[0][0] * (f[1][1] * f[2][2] - f[1][2] * f[2][1])
+            - f[0][1] * (f[1][0] * f[2][2] - f[1][2] * f[2][0])
+            + f[0][2] * (f[1][0] * f[2][1] - f[1][1] * f[2][0]);
+        assert!((j(&a, 3, false) - det).abs() < 1e-12);
+        // A body of revolution: u_r = 0.1·r stretches the hoop as much as the
+        // radius, J = 1.1 × 1 × 1.1.
+        let radial = [[0.1, 0.0, 0.0], none, none];
+        assert!((j(&radial, 2, true) - 1.21).abs() < 1e-12);
     }
 
     #[test]

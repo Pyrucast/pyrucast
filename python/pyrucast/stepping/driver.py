@@ -155,6 +155,12 @@ def step_by_step(data):
                     f"step_by_step: no convergence at t = {instant}, step exhausted"
                 )
             continue
+        if failed and mechanics is not None and mechanics.inverted:
+            raise RuntimeError(
+                f"step_by_step: a cell turns inside out (J = det F <= 0) on the way "
+                f"to t = {instant} — take shorter steps (adaptive_step=True), or "
+                "refine where the mesh is crushed"
+            )
         if failed:
             raise RuntimeError(
                 f"step_by_step: no convergence at t = {instant} "

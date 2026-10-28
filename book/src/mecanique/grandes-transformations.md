@@ -32,7 +32,7 @@ loi (`@StrainMeasure`), code_aster à la mise en données (`DEFORMATION`).
 
 Le paramètre existe pour `elasticity`, pour les dix lois de plasticité et pour
 les trois lois d'endommagement. Deux combinaisons sont refusées : une mesure qui
-n'est pas une entrée de loi (`gradient`, Cauchy–Green, Euler–Almansi, que
+n'est pas une entrée de loi (`gradient`, Cauchy–Green, Euler–Almansi, `J`, que
 [`deformation`](../operateurs/champs.md)
 sait pourtant produire) et Hencky en contraintes planes, où `ln C` demande
 `C_zz`, que seule la loi connaît.
@@ -300,7 +300,10 @@ déduit comme plus haut, avec le déplacement enregistré. Voir
 - un nœud tiré par une barre le long d'un sol rigide brisé, un plat puis une
   rampe, quitte le plat pour la rampe : il s'arrête où l'équilibre le long de
   la rampe le place, la réaction normale à la rampe — et non où un contact
-  figé sur le plat l'aurait laissé.
+  figé sur le plat l'aurait laissé ;
+- un carré pressé à travers sa propre base se retourne (`J < 0`) : le pas
+  échoue en le disant, là où une loi de Green–Lagrange aurait calculé sans
+  broncher ; pressé à mi-hauteur, il converge, et `J = 1/2`.
 
 ## Correspondance Cast3M
 

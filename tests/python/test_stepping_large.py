@@ -678,6 +678,45 @@ def test_a_node_pulled_along_a_kinked_floor_climbs_the_ramp(times):
     assert abs(x - frozen[0]) > 0.1
 
 
+def _pressed_square(depth):
+    """A unit square in Green–Lagrange (plane strain, ν = 0), its bottom held,
+    its top edge pressed down by ``depth``: (data, fes)."""
+    _, _, fes, node, _ = _grid(1, 1, 1.0, 1.0)
+    solid = pc.model.elasticity(fes, "plane_strain", strain_measure="green_lagrange")
+    held, _ = _fix(solid, [node(0, 0), node(1, 0)], "u_y")
+    anchored, _ = _fix(solid, [node(0, 0)], "u_x")
+    pressed, at = _fix(solid, [node(0, 1), node(1, 1)], "u_y")
+    model = solid | held | anchored | pressed
+    data = {
+        "model": model,
+        "times": [0.0, 1.0],
+        "materials": pc.element_field.material_field(model, [("E", 1.0), ("nu", 0.0)]),
+        "loads": pc.Evolution(
+            [(0.0, _on(at, "imposed", 0.0)), (1.0, _on(at, "imposed", -depth))]
+        ),
+        "precision": 1e-10,
+    }
+    return data, fes
+
+
+def test_a_cell_turned_inside_out_stops_the_step():
+    """Pressed through its own base, the square turns inside out: J = det F
+    < 0, where no law means anything. The iterate is rejected and the step
+    fails, saying so — a Green–Lagrange law alone would have computed on.
+    Pressed to half its height instead, it converges, and its volume ratio,
+    measured after the fact, is the stretch, J = 1/2 (ν = 0)."""
+    data, _ = _pressed_square(1.5)
+    with pytest.raises(RuntimeError, match="inside out"):
+        pc.stepping.step_by_step(data)
+
+    data, fes = _pressed_square(0.5)
+    pc.stepping.step_by_step(data)
+    u = data["results"][-1]["displacement"].filter_components(["u_x", "u_y"])
+    jacobian = pc.element_field.deformation(u, fes, "jacobian")
+    assert jacobian.min("J") == pytest.approx(0.5, rel=1e-9)
+    assert jacobian.max("J") == pytest.approx(0.5, rel=1e-9)
+
+
 def test_what_large_displacements_do_not_offer_is_refused():
     _, _, fes, node, _ = _grid(2, 1, 2.0, 1.0)
     solid = pc.model.elasticity(fes, "plane_strain")

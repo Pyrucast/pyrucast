@@ -257,6 +257,7 @@ x, y, z). On note \\(H = \nabla u\\) et \\(F = I + H\\) :
 | `"left_cauchy_green"` (`"b"`) | \\(b = F F^\top\\) | `b_xx`, … |
 | `"hencky"` (`"log"`) | \\(\tfrac12 \ln C\\) | `H_xx`, … |
 | `"euler_almansi"` (`"almansi"`) | \\(e = \tfrac12(I - b^{-1})\\) | `e_xx`, … |
+| `"jacobian"` (`"J"`) | \\(J = \det F\\), le rapport des volumes | `J` seul |
 
 Chaque mesure a son **préfixe** : on ne peut pas en lire une à la place d'une
 autre. Une mesure symétrique produit une composante `<préfixe>_<ai><aj>` par
@@ -278,6 +279,13 @@ peut pas exprimer : `eps_zz = u_r / r`, `F_zz = 1 + u_r / r`… (cf.
 
 Une transformation dégénérée (\\(\det F = 0\\)) donne des valeurs non
 finies pour Hencky et Almansi : rien n'est vérifié au point de Gauss.
+
+`"jacobian"` rend le seul scalaire `J`, entrée orthoradiale comprise sur un
+sous-espace axisymétrique. Une maille **retournée** a `J ≤ 0` en un de ses
+points : c'est ce que le [pas à pas](../pas-a-pas.md#grands-déplacements)
+vérifie à chaque itéré en grands déplacements. Aucune autre mesure ne le voit :
+`C = FᵀF` reste défini positif quand `F` change de signe, si bien que
+Green–Lagrange et Hencky se calculent sans broncher sur une maille retournée.
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_champs.py:mesures}}

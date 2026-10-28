@@ -213,6 +213,19 @@ def mechanics_at(problem, solution):
     return problem.mechanics.update_contact(part(solution, problem.displacement_names))
 
 
+def _turned_inside_out(problem, solution):
+    """Whether a continuum cell of the mechanics is turned inside out at
+    ``solution``: ``J = det F ≤ 0`` at one of its Gauss points. Only in large
+    displacements — a linear kinematics never turns a cell over — and only on
+    the zones that fill the space: a bar or a shell has no volume to lose."""
+    if not problem.volume_zones:
+        return False
+    jacobian = element_field.deformation(
+        part(solution, problem.displacement_names), problem.fespace, "jacobian"
+    )
+    return min(jacobian[i].min("J") for i in problem.volume_zones) <= 0.0
+
+
 def _solve(operator, rhs):
     """``operator⁻¹ rhs`` — the active-set loop when the operator carries an
     inequality, a plain factorization otherwise; either stays on ``operator``."""
@@ -578,7 +591,9 @@ def equilibrium_iterations(
     them; a converged iterate is accepted only if the equilibrium still holds
     with the contacts updated to it (the usual force test, on the same
     reference), otherwise the operator is rebuilt there and the iterations go
-    on. Each iteration:
+    on. In large displacements, an iterate that turns a cell inside out
+    (``J = det F ≤ 0``) ends the iterations with the status ``"inverted"``,
+    on the last iterate still the right way out. Each iteration:
     the consistent tangent if asked, Anderson's correction every other
     iteration from the fourth, a solve, the laws integrated at the new
     iterate, the forces, and the tests of ``convergence_status``. When a stall
@@ -673,6 +688,7 @@ def equilibrium_iterations(
                 rhs = rhs - node_field.restrict_like(correction, rhs)
         increment = _solve(operator, rhs)
         previous_increment = part(increment, problem.displacement_names)
+        reached = solution
         solution = _advanced(problem, solution, increment)
         if controller is not None:
             solution = controller.after_solve(
@@ -681,6 +697,21 @@ def equilibrium_iterations(
             level = controller.pending()
             if level is not None:
                 step = control_step(level)
+        if _turned_inside_out(problem, solution):
+            # No law means anything in a cell turned inside out, and no substep
+            # may start from it: the step fails, to be taken shorter, from the
+            # last iterate that was still the right way out.
+            return Equilibrium(
+                "inverted",
+                reached,
+                behaviour,
+                strain,
+                current,
+                i,
+                accelerations,
+                step,
+                controller,
+            )
         previous_strain = strain
         strain, behaviour = integrate_increment(
             problem, solution, step, start.behaviour
@@ -822,6 +853,9 @@ class MechanicalOutcome:
     # load multiplier reached (indirect control).
     fraction: float = 1.0
     multiplier: float = 0.0
+    # An iterate turned a cell inside out (large displacements): the step
+    # failed for that, not for want of convergence.
+    inverted: bool = False
 
 
 @dataclass
@@ -1003,6 +1037,8 @@ def mechanical_step(data, problem, state, t_end, temperature, options):
             else nonlinear + node_field.restrict_like(found, nonlinear)
         )
         accelerations += result.accelerations
+        if result.status == "inverted":
+            break
         if result.status == "converged":
             iterations += result.iterations
             state.nonlinear_forces = nonlinear
@@ -1052,6 +1088,7 @@ def mechanical_step(data, problem, state, t_end, temperature, options):
         iterations,
         accelerations,
         options.max_substeps,
+        inverted=result.status == "inverted",
     )
 
 
