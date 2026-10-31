@@ -150,7 +150,7 @@ encore par leur géométrie :
 - `new_nodes=False` copie **la seule connectivité** : ce sont les mêmes nœuds,
   dont le refcount monte. Déplacer un nœud les déplace tous les deux.
 
-Dans les deux cas la copie est **descellée** ([Maillage](../mesh.md#scellement-connectivité-figée-après-consommation)),
+Dans les deux cas la copie est **descellée** ([Maillage](../mesh.md#scellement)),
 donc de nouveau modifiable même si l'original a été consommé par un espace
 éléments finis, un champ ou une matrice ; c'est la forme fonction libre de la
 méthode `duplicate()`, qui est le cas `new_nodes=False`.

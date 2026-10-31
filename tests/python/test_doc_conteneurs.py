@@ -90,24 +90,38 @@ assert abs(norme[0][n[0], "v"] - 5.0) < 1e-12
 # ANCHOR: mesh_api
 import pyrucast
 
-c = pyrucast.Coords(dim=2)
+c = pyrucast.Coords(2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
-n3 = c.add_node([0.5, 1.0])
+n3 = c.add_node([1.0, 1.0])
+n4 = c.add_node([0.0, 1.0])
+n5 = c.add_node([2.0, 0.5])
 
-# Mesh(coords, type) creates a mesh with a single submesh; unit() gives the
-# view of it, add_cell adds a cell.
-mesh = pyrucast.Mesh(c, "TRI3")
-mesh.unit().add_cell([a, b, n3])
-print(mesh)  # Mesh: 1 submesh(es), 1 cell(s) total
-print(mesh.element_types())  # ['TRI3']
-print(mesh.cell_counts())  # [1]
-
-# Composer plusieurs zones : l'union | (jamais +).
+# Mesh(coords, type) : un maillage d'une zone vide ; unit() l'atteint,
+# add_cell y pose une maille (nœuds dans l'ordre local de l'élément) et rend
+# son indice.
 quad = pyrucast.Mesh(c, "QUA4")
-# … add_cell … ;  combined = mesh | quad
+quad.unit().add_cell([a, b, n3, n4])  # 0
+tri = pyrucast.Mesh(c, "TRI3")
+tri.unit().add_cell([b, n5, n3])
+
+# Deux types d'éléments, deux zones, composées par l'union.
+mesh = quad | tri
+print(mesh.element_types())  # ['QUA4', 'TRI3']
+print(mesh.cell_counts())  # [1, 1]
+print(mesh.cell_count())  # 2
+
+# Lire : zone i, maille j, nœud k.
+cell = mesh[1][0]  # la même vue que mesh.cell(1, 0)
+print(len(cell), cell.element_type)  # 3 TRI3
+print(cell[1].position())  # [2.0, 0.5]
+print(mesh.node(0, 0, 2).id)  # 2
+print(mesh.nearest_node([1.9, 0.4]).id)  # 4
 # ANCHOR_END: mesh_api
-assert mesh.cell_counts() == [1]
+assert mesh.cell_counts() == [1, 1]
+assert mesh.cell(1, 0).index == 0
+assert [n.id for n in cell.nodes()] == [1, 4, 2]
+assert mesh.nearest_node([1.9, 0.4]).id == 4
 
 # ── scellement ─────────────────────────────────────────────
 
@@ -118,14 +132,55 @@ n3, n4 = c.add_node([0.5, 1.0]), c.add_node([1.5, 1.0])
 mesh = pyrucast.Mesh(c, "TRI3")
 mesh.unit().add_cell([a, b, n3])
 
-pyrucast.FiniteElementSpace(mesh)  # scelle mesh[0]
-assert mesh[0].is_sealed
-# mesh[0].add_cell([...])           # → RuntimeError (MeshSealed)
+pyrucast.FiniteElementSpace(mesh)  # indexe les mailles : scelle mesh[0]
+print(mesh[0].is_sealed)  # True
+# mesh[0].add_cell([b, n3, n4])  # RuntimeError: submesh is sealed: …
 
-copie = mesh.duplicate()  # neuf, modifiable
-copie.unit().add_cell([b, n3, n4])  # OK
+copie = mesh.duplicate()  # neuve, non scellée, sur les mêmes nœuds
+copie.unit().add_cell([b, n3, n4])
+print(copie.cell_count(), mesh.cell_count())  # 2 1
 # ANCHOR_END: scellement
+assert mesh[0].is_sealed
 assert copie.cell_count() == 2
+try:
+    mesh[0].add_cell([b, n3, n4])
+except RuntimeError as e:
+    assert "sealed" in str(e)
+else:
+    raise AssertionError("a sealed submesh must refuse add_cell")
+
+# ── caches ─────────────────────────────────────────────────
+
+c = pyrucast.Coords(2)
+a, b = c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0])
+n3, n4 = c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0])
+# ANCHOR: caches
+tri = pyrucast.Mesh(c, "TRI3")
+tri.unit().add_cell([a, b, n3])
+
+# Le nuage de nœuds d'une zone se calcule une fois : chaque appel rend
+# ensuite la même zone POI1.
+nuage = pyrucast.mesh.to_poi1(tri)
+print(len(nuage | pyrucast.mesh.to_poi1(tri)))  # 1 — une seule zone
+
+# Deux champs posés sur tri partagent donc leur support : ils se combinent
+# nœud à nœud.
+f = pyrucast.NodeField(tri, ["T"])
+g = pyrucast.NodeField(tri, ["T"])
+f[0].set_value(a, "T", 1.0)
+g[0].set_value(a, "T", 0.25)
+print((f - g).value(a, "T"))  # 0.75
+
+# Ajouter une maille oublie le cache : le nuage suivant est une autre zone.
+tri.unit().add_cell([b, n4, n3])
+print(len(nuage | pyrucast.mesh.to_poi1(tri)))  # 2
+print(f.node_count())  # 3 — f reste sur le nuage d'avant
+r = pyrucast.node_field.restrict(f, tri)  # le porte sur le nouveau
+print(r.node_count())  # 4
+# ANCHOR_END: caches
+assert len(nuage | pyrucast.mesh.to_poi1(tri)) == 2
+assert (f - g).value(a, "T") == 0.75
+assert r.node_count() == 4 and r.value(a, "T") == 1.0
 
 # ── aggregat ───────────────────────────────────────────────
 
