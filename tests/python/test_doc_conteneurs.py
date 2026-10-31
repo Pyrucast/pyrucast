@@ -184,11 +184,16 @@ print(a.id)  # 0
 print(a.position())  # [0.0, 0.0]
 a.set_position([0.5, 0.5])
 
-# Union de nœuds → maillage POI1 (deux points).
+# Union de nœuds → maillage POI1 (deux points), puis un point de plus.
 poi = a | b
-print(poi)  # Mesh: 1 submesh(es), 2 cell(s) total
+print(poi)  # Mesh: 1 submesh(es) [#…], 2 cell(s) total
+poi = poi | c.add_node([2.0, 0.0])
+print(poi.cell_count())  # 3
+
+print(a)  # <Node #0>
+a.dump()  # Node #0 @ (0.500, 0.500)
 # ANCHOR_END: node_api
-assert poi.cell_count() == 2
+assert poi.cell_count() == 3
 
 # ── Field at the nodes ──────────────────────────────────────────────────────
 

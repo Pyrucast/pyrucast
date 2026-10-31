@@ -44,10 +44,12 @@ fn un_maillage_minimal() -> Result<()> {
 fn un_noeud_est_un_compteur_de_references() -> Result<()> {
     let coords = Handle::new(Coords::new(2)?);
     let n = Node::create_in(coords.clone(), &[1.0, 2.0])?;
-    let m = n.clone(); // refcount = 2
-    drop(n); // refcount = 1
-    drop(m); // refcount = 0
-    coords.write().gc(); // collecte
+    let id = n.id();
+    let m = n.clone(); // une référence de plus
+    assert_eq!(coords.read().refcount(id), 2);
+    drop(n);
+    drop(m); // chaque Drop rend la sienne
+    assert_eq!(coords.read().refcount(id), 0);
     Ok(())
 }
 // ANCHOR_END: noeud

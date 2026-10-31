@@ -1,74 +1,63 @@
 # Nœud (Node)
 
-Le `Node` est l'**accesseur utilisateur** d'un nœud d'un [`Coords`](coords.md).
-Il ne stocke pas de coordonnées : il porte un `Handle<Coords>` et un `NodeId`,
-et délègue tout au `Coords` (les coordonnées lues dépendent donc de la
-configuration active). C'est l'objet qu'on passe partout où une API attend un
-nœud.
+Un `Node` désigne un nœud d'un [`Coords`](coords.md). Il ne stocke pas de
+coordonnées : il porte son `Coords` et l'identifiant du nœud, et lit tout dans
+le `Coords` — les coordonnées qu'il rend sont donc celles de la configuration
+active. C'est l'objet qu'on passe partout où une fonction attend un nœud :
+`pyrucast.mesh.line(a, b, 10)`, `pyrucast.mesh.arc(…)`, `pyrucast.mesh.circle(…)`.
 
-## Principe : un identifiant qui se protège
+## Créer et retrouver un nœud
 
-Un `Node` est conceptuellement une paire `(Coords, NodeId)`, mais avec une
-propriété de plus : il **maintient le refcount interne automatiquement**, par
-RAII.
+Un `Node` naît toujours d'un `Coords` :
 
-- `Clone` **incrémente** le refcount du nœud dans le `Coords` ;
-- `Drop` le **décrémente**.
-
-Tant qu'un `Node` (ou un objet aval — un `SubMesh`, un champ — qui a fait son
-propre `incref`) référence un `NodeId`, ce nœud est protégé du ramasse-miettes
-`Coords::gc()`. C'est le **niveau interne** du refcount à deux niveaux décrit
-dans [Coordonnées](coords.md).
-
-```rust,ignore
-{{#include ../../tests/doc_conteneurs.rs:noeud}}
-```
-
-Le code interne peut toujours manipuler directement les `NodeId` sans passer
-par `Node`, mais perd alors la protection automatique : il doit appeler
-manuellement `Coords::incref` / `Coords::decref` (c'est ce que font les
-maillages et les champs).
-
-## Création
-
-Un `Node` ne se construit jamais « dans le vide » : il naît d'un `Coords`.
-
-- **Rust** : `Node::create_in(coords_handle, &[x, y, …])` crée le nœud et rend
-  le `Node` (refcount = 1). Pour obtenir un `Node` supplémentaire sur un id
-  déjà existant, `Node::acquire(coords_handle, id)` — côté Rust le verbe est
-  porté par l'atome, côté Python par le magasin.
-- **Python** : `coords.add_node([x, y, …])` renvoie directement un
-  `pyrucast.Node`. `coords.acquire(id)` rend un accesseur de plus.
+- `coords.add_node([x, y, …])` crée le nœud et rend son `Node` ;
+- `coords.acquire(id)` rend un `Node` pour un nœud qui existe déjà — un nœud
+  posé par un mailleur, par exemple, dont on connaît l'identifiant.
 
 ## Interface
 
-Côté **Python**, le `Node` expose :
-
-- la propriété `id` — l'identifiant entier stable dans son `Coords` ;
+- `id` — l'identifiant entier, stable dans son `Coords` ;
 - `position()` — ses coordonnées dans la configuration active ;
-- `set_position([x, y, …])` — réécrit ses coordonnées (dans la configuration
-  active) ;
-- `coords()` — le `Coords` auquel il appartient ; filet de secours quand la
-  poignée a été lâchée côté Python, comme `Mesh.coords()` ;
-- l'union `node | node` → un `Mesh` POI1 unitaire sur les deux nœuds (la même
-  union `|` que les agrégats, cf. [Agrégat](aggregate.md)) ; et `mesh | node`
-  ajoute un point à un `Mesh` POI1 unitaire ;
-- les vues `repr` / `str` et `dump()`.
+- `set_position([x, y, …])` — les réécrit, dans la configuration active ;
+- `coords()` — le `Coords` auquel il appartient ;
+- `node | node` — un `Mesh` POI1 sur les deux nœuds (la même union `|` que les
+  agrégats, cf. [Agrégat](aggregate.md)), et `mesh | node` ajoute un point à un
+  `Mesh` POI1 d'une seule zone ;
+- `print(n)`, `repr(n)` et `n.dump()` — les
+  [trois niveaux de listing](aspect-informatique.md#trois-niveaux-de-listing).
 
 ```python
 {{#include ../../tests/python/test_doc_conteneurs.py:node_api}}
 ```
 
-Côté **Rust**, `Node` expose `id()`, `position()`, `set_position(&[…])`,
-`coords()` (le `Handle<Coords>` porté), plus `Clone`/`Drop` qui gèrent le
-refcount comme décrit ci-dessus.
+## Un `Node` compte comme une référence
 
-## Pourquoi un accesseur protecteur plutôt qu'un simple id ?
+Chaque `Node` compte comme une référence à son nœud, celle que
+`coords.refcount(id)` additionne avec celles des maillages et des champs :
+`add_node` et `acquire` en ajoutent une, et le `Node` la rend quand Python le
+détruit. Une seconde variable sur le même objet (`b = a`) ne compte pas deux
+fois : c'est le même `Node`.
 
-Manipuler des `NodeId` bruts est possible mais dangereux : rien n'empêche un
-nœud d'être ramassé pendant qu'on tient encore son id. Le `Node` rend la
-protection **automatique et locale** — exactement comme un `Rc`/`Arc` le ferait
-pour un objet du heap, mais ici au niveau du nœud interne d'un `Coords`. Une
-alternative (modèle « cast3m pur » où un nœud n'existe qu'au sein d'un
-maillage) est discutée dans [Modèle mémoire](memory-model.md) ; pyrucast
-conserve pour l'instant le `Node` protecteur.
+C'est ce qui le distingue d'un simple identifiant. Un entier ne dit pas à quel
+`Coords` il appartient et ne compte pour rien ; le `Node` porte son `Coords`,
+lit ses coordonnées dans la bonne configuration, et le nœud le compte parmi
+ses références tant qu'il existe.
+
+## Côté Rust
+
+En Rust, un `Node` est une paire `(Handle<Coords>, NodeId)` qui tient son
+compte par RAII : `Clone` ajoute une référence dans le `Coords`, `Drop` la rend.
+Il se crée par `Node::create_in(coords, &[x, y, …])`, et
+`Node::acquire(coords, id)` en rend un de plus pour un identifiant existant —
+le verbe que Python porte sur le `Coords`, Rust le porte sur le nœud. Il expose
+`id()`, `position()`, `set_position(&[…])` et `coords()`, qui rend le
+`Handle<Coords>` porté.
+
+```rust,ignore
+{{#include ../../tests/doc_conteneurs.rs:noeud}}
+```
+
+Le code interne peut manipuler des `NodeId` sans passer par `Node`, à condition
+de tenir lui-même le compte avec `Coords::incref` / `Coords::decref` : c'est ce
+que font les maillages et les champs. Le détail est dans
+[Modèle mémoire](memory-model.md).
