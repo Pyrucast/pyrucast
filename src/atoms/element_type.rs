@@ -60,7 +60,9 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// Supported element types. Names follow the cast3m convention.
+/// Supported element types, named by shape and node count (`TRI3`, `HEX20`).
+/// The 0-D, 1-D and 2-D names and `TET4` are Cast3M's; the other 3-D ones are
+/// not (Cast3M says `PYR5`, `PRI6`, `CUB8`, `TE10`, `PR15`, `CU20`, `CU27`).
 ///
 /// See the module-level documentation for the reference frame `ξ` and the
 /// local node numbering attached to each variant.
