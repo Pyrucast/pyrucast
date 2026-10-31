@@ -144,7 +144,7 @@ qua.unit().add_cell([ns[0], ns[1], ns[2], ns[3]])
 # Union of two meshes (zones shared by handle).
 mesh = tri | qua
 print(len(mesh))  # 2 sous-maillages
-print(mesh)  # Mesh: 2 submesh(es), 2 cell(s) total
+print(mesh)  # Mesh: 2 submesh(es) [#…, #…], 2 cell(s) total
 
 # In-place addition: `add_sub` for one zone, `add_subs` for all those of
 # another aggregate (concatenation, without deduplication).
