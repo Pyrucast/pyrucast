@@ -24,21 +24,7 @@ fn le_repere_se_choisit_a_la_construction() {
 }
 // ANCHOR_END: repere
 
-// ANCHOR: refcount
 use pyrucast::handle::Handle;
-
-#[test]
-fn un_noeud_survit_tant_qu_on_le_tient() {
-    let coords = Handle::new(Coords::new(2).unwrap());
-    // add_node initializes refcount = 1; without a decrement, the node is protected.
-    let id = coords.write().add_node(&[0.0, 0.0]).unwrap();
-    assert_eq!(coords.write().gc(), 0);
-
-    // Après décrément, gc ramasse.
-    coords.write().decref(id).unwrap();
-    assert_eq!(coords.write().gc(), 1);
-}
-// ANCHOR_END: refcount
 
 // ANCHOR: configurations
 #[test]
@@ -89,7 +75,7 @@ fn une_permutation_renumerote_pour_le_solveur() {
     coords.write().add_node(&[1.0, 0.0]).unwrap();
     coords.write().add_node(&[0.5, 1.0]).unwrap();
 
-    // Permutation set by hand (the automatic computation is still to be written).
+    // Permutation set by hand: one entry per node created.
     coords.write().set_permutation(vec![2, 0, 1]).unwrap();
     // permutation[0] = 2: the node with id 0 is at solver position 2.
     println!("{:?}", coords.read().permutation());

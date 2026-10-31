@@ -23,15 +23,14 @@
 //!   [`crate::handle::Handle`] refcount.
 //! - **Each node** inside the Coords has its own refcount,
 //!   manipulated via [`Coords::incref`] / [`Coords::decref`]
-//!   (used by [`crate::atoms::Node`] and, later, by meshes and fields).
+//!   (used by [`crate::atoms::Node`], meshes and fields).
 //!
 //! # Identity vs solver ordering
 //!
 //! An optional permutation (`Vec<u32>`) separates the **solver order**
 //! from the **identity**: `permutation[node_id]` is the solver-order index
-//! assigned to `node_id`. It is set by the caller today; a bandwidth-reducing
-//! renumbering (Cuthill–McKee) will compute it. The identity (`NodeId`) is
-//! never modified either way.
+//! assigned to `node_id`. It is set by the caller, and assembled matrices
+//! order their DOFs by it. The identity (`NodeId`) is never modified.
 //!
 //! # Multiple configurations
 //!

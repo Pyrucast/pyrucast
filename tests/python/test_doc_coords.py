@@ -13,6 +13,28 @@ complet et le code de retour non nul ; `--continue-on-collection-errors`
 Voir `book/src/developper/documentation-et-tests.md`.
 """
 
+# ── Créer des nœuds ─────────────────────────────────────────────────────────
+
+# ANCHOR: creation
+import pyrucast
+
+c = pyrucast.Coords(dim=2)
+a = c.add_node([0.0, 0.0])  # un pyrucast.Node
+b = c.add_node([1.0, 0.0])
+print(a.id, b.id)  # 0 1 — identifiants stables
+print(c)  # Coords: dim=2, configs=1 (active="default"), nodes=2 …
+
+ligne = pyrucast.mesh.line(a, b, 2)  # pose un nœud au milieu, id 2
+print(c.refcount(a.id))  # 2 — la variable a, et la maille qui le contient
+print(c.refcount(2))  # 2 — les deux mailles qui le contiennent
+milieu = c.acquire(2)  # un Node pour un id existant
+print(milieu.position())  # [0.5, 0.0]
+# ANCHOR_END: creation
+
+assert (a.id, b.id) == (0, 1)
+assert c.refcount(2) == 3  # the two cells, and `milieu`
+
+
 # ── Repère axisymétrique ────────────────────────────────────────────────────
 
 # ANCHOR: axisymetrique
@@ -90,7 +112,8 @@ c.add_node([0.0, 0.0])
 c.add_node([1.0, 0.0])
 c.add_node([0.5, 1.0])
 
-# Set a permutation by hand.
+# One entry per node created, no value twice.
+print(c.capacity())  # 3
 c.set_permutation([2, 0, 1])
 print(c.permutation())  # [2, 0, 1]
 
@@ -100,27 +123,3 @@ print(c.permutation())  # None
 # ANCHOR_END: permutation
 
 assert c.permutation() is None
-
-
-# ── Cycle de vie d'un nœud ──────────────────────────────────────────────────
-
-# ANCHOR: cycle_de_vie
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-n = c.add_node([0.0, 0.0])  # n is a pyrucast.Node; refcount = 1
-m = c.add_node([1.0, 0.0])
-
-print(c)  # Coords: dim=2, configs=1 (active="default"), nodes=2 ...
-n.set_position([0.5, 0.5])
-
-# GC touches nothing as long as at least one Python Node exists.
-assert c.gc() == 0
-
-# del + collect force le Drop côté Rust et libère le refcount.
-import gc as pygc
-
-del n
-pygc.collect()
-assert c.gc() == 1
-# ANCHOR_END: cycle_de_vie

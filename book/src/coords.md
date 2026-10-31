@@ -1,10 +1,27 @@
 # Coordonnées (Coords)
 
-Un `Coords` héberge **une ou plusieurs configurations** (jeux de coordonnées)
-pour le même ensemble de nœuds, en dimension fixée. C'est le premier objet du
-modèle pyrucast — tous les autres (Mesh, NodeField, FE space…) viennent s'y
-greffer. L'**accesseur** utilisateur d'un nœud, le [`Node`](node.md), fait
-l'objet du chapitre suivant.
+Un `Coords` est le **magasin des nœuds** : il leur donne une identité et des
+coordonnées, en dimension fixée, dans **une ou plusieurs configurations**
+(référence, déformée…). C'est le premier objet de pyrucast — maillages, champs
+et espaces éléments finis s'y rattachent. On y crée les nœuds, et chacun se
+manipule par un [`Node`](node.md), l'objet du chapitre suivant.
+
+```python
+{{#include ../../tests/python/test_doc_coords.py:creation}}
+```
+
+## Identité et durée de vie des nœuds
+
+Chaque nœud créé reçoit un identifiant (`node.id`) **stable** et **jamais
+réutilisé**, valable pour toute la vie du `Coords`. C'est par lui que les
+maillages et les champs désignent leurs nœuds.
+
+Un nœud ne se supprime pas : il n'existe aucune méthode pour le retirer, et ses
+coordonnées restent lisibles tant que le `Coords` existe. `refcount(id)` dit
+combien de références le désignent — chaque `Node` qui le tient, chaque maille
+qui le contient — et `acquire(id)` rend un nouveau `Node` pour un identifiant
+existant. Ces deux méthodes prennent un **identifiant brut**, pas un `Node` :
+passer un `Node` ajouterait la référence même qu'on cherche à compter.
 
 ## Repère de révolution
 
@@ -23,18 +40,14 @@ d'un coup — sur le corps comme sur ses bords. Le facteur \\( 2\pi \\) est celu
 de l'**anneau complet** : les masses, volumes et résultantes nodales sont ceux de
 la pièce de révolution entière.
 
-```rust,ignore
-{{#include ../../tests/doc_coords.rs:repere}}
-```
-
 ```python
 {{#include ../../tests/python/test_doc_coords.py:axisymetrique}}
 ```
 
-Un rayon négatif est refusé à l'ajout (et au `set_position`) plutôt que de
-ressortir en `|J|` négatif au fond d'une intégrale. Tout espace éléments finis
-bâti sur ces `Coords` hérite du repère, si bien qu'un corps et son bord ne
-peuvent pas diverger.
+Un rayon négatif est refusé par `add_node` comme par `set_position`, plutôt que
+de ressortir en `|J|` négatif au fond d'une intégrale. Tout espace éléments
+finis bâti sur ces `Coords` hérite du repère, si bien qu'un corps et son bord
+ne peuvent pas diverger.
 
 Côté **mécanique**, l'axisymétrie ajoute la déformation orthoradiale
 \\( \varepsilon_{\theta\theta} = u_r/r \\), qui relève du modèle et non de la
@@ -42,145 +55,90 @@ géométrie : voir [Élasticité linéaire](mecanique/elasticite.md#axisymétrie
 **thermique** n'a rien à changer.
 
 Côté **visualisation**, un tracé axisymétrique montre par défaut la section
-méridienne ; l'option `revolve` la balaie pour dessiner le corps de révolution
-lui-même — voir
+méridienne ; l'option `revolve` de `plot` la balaie pour dessiner le corps de
+révolution lui-même — voir
 [Visualisation](visualization.md#axisymétrie--section-méridienne-ou-corps-de-révolution).
-
-## Identité d'un nœud
-
-Chaque nœud créé reçoit un identifiant interne **stable** (`NodeId`), unique
-pour toute la vie du `Coords` : **aucun id n'est jamais réutilisé**, même après
-ramassage par le GC. C'est ce qui permet aux maillages et champs de référencer
-un nœud par son id sans s'inquiéter de la stabilité.
-
-## Politique de suppression : pas de suppression directe
-
-**Il n'existe aucune méthode `remove_node`.** Un nœud référencé est protégé.
-Seul le ramasse-miettes `Coords::gc()` retire les nœuds dont le refcount
-**interne** est tombé à 0.
-
-```rust,ignore
-{{#include ../../tests/doc_coords.rs:refcount}}
-```
-
-## Modèle de refcount à deux niveaux
-
-```text
-        Handle<Coords>             ◀── refcount de l'Arc
-                │                       (le Coords est-il vivant ?)
-                ▼
-        ┌──────────────────┐
-        │      Coords      │
-        └──────────────────┘
-                │
-                │ refcount par nœud
-                ▼                   ◀── refcount sur chaque NodeId interne
-        NodeId(0)  NodeId(1)  …        (le nœud est-il vivant ?)
-```
-
-Les deux niveaux sont indépendants :
-
-- tant qu'un `Handle<Coords>` existe, le `Coords` reste en mémoire ;
-- tant qu'au moins un [`Node`](node.md) (ou un objet aval comme Mesh / Field
-  via `incref`/`decref`) référence un `NodeId`, ce nœud est protégé du GC.
-
-Le détail du niveau objet est dans [Modèle mémoire](memory-model.md) ; le
-niveau nœud, dans [Nœud](node.md).
 
 ## Plusieurs configurations
 
-Utile pour basculer entre référence / déformée / prédite. La configuration
-active est désignée par index ; lire les coordonnées d'un nœud (`node.position()`
-en Python, `Coords::position` côté Rust) renvoie celles de la configuration
-active. `add_config(name)` clone la configuration active sous un nouveau nom.
-
-Rust :
-
-```rust,ignore
-{{#include ../../tests/doc_coords.rs:configurations}}
-```
-
-Python :
+Une configuration est un jeu complet de coordonnées pour les mêmes nœuds :
+référence, déformée, prédite. `add_config(nom)` clone la configuration
+**active** sous un nouveau nom et rend son indice ; `select(i)` change la
+configuration active, et `node.position()` lit toujours dans celle-là.
 
 ```python
 {{#include ../../tests/python/test_doc_coords.py:configurations}}
 ```
 
 Pour **calculer** dans une autre configuration — une matrice sur la déformée,
-une normale sur la paroi telle qu'elle est —, `in_config` l'active le temps
-d'un bloc puis rend la main à la configuration d'avant, même si le bloc échoue.
-C'est la forme à préférer à une paire `select(i)` … `select(0)`, qui laisse la
-mauvaise configuration active au premier `?` ou à la première exception. En
-Rust, une fonction qui reçoit le bloc en fermeture (l'idiome `with_*`) ; en
-Python, une méthode de `Coords` qui rend un gestionnaire de contexte,
-`with coords.in_config(i):`. Le verrou du `Coords` n'est pris qu'à
-l'entrée et à la sortie : le bloc lit et écrit les coordonnées librement, et
-peut imbriquer un autre `in_config`. La configuration active appartient au
-`Coords`, pas à l'appelant : un autre fil qui calcule sur le même `Coords`
-pendant le bloc la voit aussi.
-
-Rust :
-
-```rust,ignore
-{{#include ../../tests/doc_coords.rs:in_config}}
-```
-
-Python :
+une normale sur la paroi telle qu'elle est —, `with coords.in_config(i):`
+l'active le temps du bloc, puis rend la configuration d'avant, même si le bloc
+lève une exception. C'est la forme à préférer à une paire `select(i)` …
+`select(0)`, qui laisse la mauvaise configuration active à la première
+exception. Les blocs s'imbriquent. La configuration active appartient au
+`Coords`, pas au bloc : un autre fil qui calcule sur le même `Coords` pendant
+le bloc la voit aussi.
 
 ```python
 {{#include ../../tests/python/test_doc_coords.py:in_config}}
 ```
 
-## Pourquoi plusieurs configurations dans un `Coords` plutôt que plusieurs `Coords` ?
+## Permutation pour le solveur
 
-cast3m suit historiquement la convention inverse : un objet de coordonnées =
-une seule configuration, et on multiplie les objets. Les deux modèles ont des
-compromis distincts.
-
-| Modèle | Avantages | Limites |
-|---|---|---|
-| **Plusieurs configurations dans un `Coords`** *(pyrucast actuel)* | `NodeId 42` désigne le **même nœud physique** dans toutes les configurations. Les maillages et champs restent valides quelle que soit la configuration active (référence / déformée / prédite). Topologie, refcount, permutation **mutualisés**. `select(config)` est un simple changement d'index — pas de remapping aval. | Toutes les configurations ont le **même cardinal** de nœuds. Pas de configuration "partielle" ne couvrant qu'une portion du domaine. |
-| **Un `Coords` par configuration** *(modèle cast3m historique)* | Chaque objet est **autonome** : sérialisation et GC indépendants. Permet des jeux de tailles différentes (sous-problèmes, maillages adaptés). | `NodeId 42` dans `coords_A` ≠ `NodeId 42` dans `coords_B` : tout maillage ou champ référençant plusieurs `Coords` doit porter une **table de correspondance** explicite. Source classique de bugs (« nœud copié au lieu de partagé »). Ajouter un nœud « à tous les `Coords` équivalents » est une opération transverse non triviale. |
-
-Rien n'énumère les `Coords` vivants — chacun n'est atteignable que par les
-handles qui le désignent (cf. [Modèle mémoire](memory-model.md)) : propager un
-`add_node` « à tous les `Coords` équivalents » n'aurait de toute façon aucun
-point d'entrée.
-
-**Choix pyrucast** : un seul jeu d'identités par domaine géométrique, plusieurs
-configurations pour les variantes (référence / déformée / prédite). Des
-`Coords` distincts restent prévus pour les **vrais domaines indépendants**
-(sous-domaines, maillages adaptés de plus haute densité).
-
-## Permutation solveur
-
-Une permutation optionnelle (`Vec<u32>`, longueur = `capacity`) sépare
-l'**ordre solveur** de l'**identité** : `permutation[node_id]` donne l'ordre
-solveur associé. Elle est posée par l'appelant aujourd'hui ; une renumérotation
-réduisant la bande/profil (Cuthill–McKee) la calculera. L'identité (`NodeId`)
-n'est jamais modifiée, dans les deux cas.
-
-Rust :
-
-```rust,ignore
-{{#include ../../tests/doc_coords.rs:permutation}}
-```
-
-Python :
+Une permutation optionnelle fixe l'**ordre des nœuds pour le solveur** sans
+toucher à leur identité : `permutation[id]` est la place du nœud `id`, et les
+matrices assemblées rangent leurs degrés de liberté dans cet ordre. Elle se
+pose à la main par `set_permutation`, avec une entrée par nœud créé
+(`capacity()`) et aucune valeur en double ; `clear_permutation` revient à
+l'ordre des identifiants.
 
 ```python
 {{#include ../../tests/python/test_doc_coords.py:permutation}}
 ```
 
-## API Python
+## Inspecter un `Coords`
 
-```python
-{{#include ../../tests/python/test_doc_coords.py:cycle_de_vie}}
+`dim`, `is_axisymmetric`, `names()` et `active` décrivent le `Coords` ;
+`print(c)` le résume en une ligne, `repr(c)` en donne la structure et
+`c.dump()` la table complète des nœuds, coordonnées et références — les
+[trois niveaux de listing](aspect-informatique.md#trois-niveaux-de-listing).
+
+## Pourquoi plusieurs configurations dans un seul `Coords`
+
+L'autre conception possible serait un `Coords` par configuration. pyrucast
+garde **un seul jeu d'identités par domaine**, et plusieurs configurations
+dedans :
+
+| | Plusieurs configurations dans un `Coords` (pyrucast) | Un `Coords` par configuration |
+|---|---|---|
+| identité | l'id 42 désigne le **même nœud** dans toutes les configurations ; maillages et champs restent valides quelle que soit la configuration active | l'id 42 de deux objets désigne deux nœuds différents : tout maillage ou champ à cheval doit porter une table de correspondance |
+| changer de configuration | un changement d'indice, rien à renuméroter | un autre objet, et ce qui le référence à reconstruire |
+| limite | toutes les configurations ont les **mêmes nœuds** | des jeux de tailles différentes sont possibles |
+
+Des `Coords` distincts servent aux domaines vraiment indépendants.
+
+## Côté Rust
+
+En Rust, un `Coords` se partage par un `Handle<Coords>`, une référence comptée
+munie de son verrou, et chaque nœud porte en plus son propre compteur dans le
+`Coords` : c'est lui que `refcount` lit, et que `Node`, les maillages et les
+champs incrémentent. Le détail est dans [Modèle mémoire](memory-model.md).
+Les mêmes opérations s'écrivent ainsi :
+
+```rust,ignore
+{{#include ../../tests/doc_coords.rs:repere}}
 ```
 
-Méthodes d'inspection utiles : `node_count()` (nœuds vivants), `capacity()`
-(slots alloués, vivants + non encore collectés), `is_alive(id)` et
-`refcount(id)` — qui prennent un **id brut** (pas un `Node`) : un `Node`
-portant un refcount ne pourrait jamais être observé mort. `acquire(id)` rend un
-`Node` supplémentaire pour un id existant (refcount += 1). `dump()` imprime le
-contenu intégral (coordonnées, configurations) sur la sortie standard.
+```rust,ignore
+{{#include ../../tests/doc_coords.rs:configurations}}
+```
+
+`in_config` y reçoit le bloc en fermeture, l'idiome Rust du `with` Python :
+
+```rust,ignore
+{{#include ../../tests/doc_coords.rs:in_config}}
+```
+
+```rust,ignore
+{{#include ../../tests/doc_coords.rs:permutation}}
+```
