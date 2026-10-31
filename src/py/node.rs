@@ -36,6 +36,18 @@ impl PyNode {
     pub(crate) fn as_node(&self) -> &Node {
         &self.node
     }
+
+    /// This node's id, to index a container whose nodes live in `coords`:
+    /// refused if the node belongs to another `Coords` ([`Node::id_in`]).
+    /// `None` is an empty aggregate, which has no `Coords` and no node to
+    /// mistake this one for: the id passes, and the container answers as it
+    /// would for any absent node.
+    pub(crate) fn id_in(&self, coords: Option<&Handle<Coords>>) -> PyResult<NodeId> {
+        match coords {
+            Some(c) => Ok(self.node.id_in(c)?),
+            None => Ok(self.node.id()),
+        }
+    }
 }
 
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]

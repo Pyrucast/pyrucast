@@ -3460,7 +3460,8 @@ class SubMesh:
         """
     def add_cell(self, nodes: typing.Sequence[Node]) -> builtins.int:
         r"""
-        Append a cell from its list of nodes; returns the new cell's index.
+        Append a cell from its list of nodes, which must belong to this
+        submesh's `Coords`; returns the new cell's index.
         """
     def cell_count(self) -> builtins.int:
         r"""

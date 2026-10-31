@@ -83,9 +83,14 @@ impl PySubMesh {
         self.handle.read().element_type().name().to_string()
     }
 
-    /// Append a cell from its list of nodes; returns the new cell's index.
+    /// Append a cell from its list of nodes, which must belong to this
+    /// submesh's `Coords`; returns the new cell's index.
     fn add_cell(&self, nodes: Vec<PyRef<'_, PyNode>>) -> PyResult<usize> {
-        let nodes_typed: Vec<NodeId> = nodes.iter().map(|n| n.as_node().id()).collect();
+        let coords = self.handle.read().coords();
+        let nodes_typed = nodes
+            .iter()
+            .map(|n| n.id_in(Some(&coords)))
+            .collect::<PyResult<Vec<NodeId>>>()?;
         let idx = self.handle.write().add_cell(&nodes_typed)?;
         Ok(idx)
     }

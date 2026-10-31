@@ -2,6 +2,7 @@
 //! aggregate [`crate::containers::matrix::Matrix`].
 
 use crate::aggregate::Aggregate;
+use crate::atoms::NodeId;
 use crate::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
 use crate::handle::Handle;
 use crate::models::Physics;
@@ -44,6 +45,17 @@ pub struct PySubMatrix {
     pub(crate) handle: Handle<SubMatrix>,
 }
 
+impl PySubMatrix {
+    /// The ids of a `(row, column)` node pair, each checked against the
+    /// `Coords` of its support.
+    fn dof_nodes(&self, row: &PyNode, col: &PyNode) -> PyResult<(NodeId, NodeId)> {
+        let block = self.handle.read();
+        let rows = block.row_support().read().coords();
+        let cols = block.col_support().read().coords();
+        Ok((row.id_in(Some(&rows))?, col.id_in(Some(&cols))?))
+    }
+}
+
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubMatrix {
@@ -57,7 +69,7 @@ impl PySubMatrix {
         col_field: &str,
         value: f64,
     ) -> PyResult<()> {
-        let (rn, cn) = (row_node.as_node().id(), col_node.as_node().id());
+        let (rn, cn) = self.dof_nodes(&row_node, &col_node)?;
         self.handle
             .write()
             .add_entry(rn, row_field, cn, col_field, value)?;
@@ -74,7 +86,7 @@ impl PySubMatrix {
         col_node: PyRef<'_, PyNode>,
         col_field: &str,
     ) -> PyResult<f64> {
-        let (rn, cn) = (row_node.as_node().id(), col_node.as_node().id());
+        let (rn, cn) = self.dof_nodes(&row_node, &col_node)?;
         Ok(self.handle.read().get(rn, row_field, cn, col_field)?)
     }
 
@@ -387,7 +399,12 @@ impl PyMatrix {
         col_node: PyRef<'_, PyNode>,
         col_field: &str,
     ) -> PyResult<f64> {
-        let (rn, cn) = (row_node.as_node().id(), col_node.as_node().id());
+        // An empty matrix has no `Coords`, and reads zero everywhere.
+        let coords = self.inner.items().first().map(|b| b.read().coords());
+        let (rn, cn) = (
+            row_node.id_in(coords.as_ref())?,
+            col_node.id_in(coords.as_ref())?,
+        );
         Ok(self.inner.get(rn, row_field, cn, col_field)?)
     }
 

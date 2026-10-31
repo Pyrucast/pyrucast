@@ -742,7 +742,8 @@ impl SubMesh {
     /// Build a POI1 submesh with **one cell per [`Node`]**, in the given
     /// order. The [`Coords`] is taken from the nodes themselves
     /// (every [`Node`] carries its own — project convention). Errors if
-    /// `nodes` is empty (no Coords to attach to).
+    /// `nodes` is empty (no Coords to attach to), or if they do not all
+    /// belong to the same `Coords`.
     ///
     /// Lower-level form when you already hold the ids and the coords:
     /// [`SubMesh::poi1_from_node_ids`]. The canonical, parent-level form is
@@ -765,6 +766,9 @@ impl SubMesh {
     /// let nuage = SubMesh::poi1_from_nodes(&n)?;
     /// assert_eq!(nuage.cell_count(), 3);
     /// assert!(SubMesh::poi1_from_nodes(&[]).is_err()); // no frame to attach to
+    /// // Every node must come from the same `Coords`.
+    /// let ailleurs = Node::create_in(Handle::new(Coords::new(2)?), &[5.0, 5.0])?;
+    /// assert!(SubMesh::poi1_from_nodes(&[n[0].clone(), ailleurs]).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn poi1_from_nodes(nodes: &[Node]) -> Result<SubMesh> {
@@ -774,7 +778,10 @@ impl SubMesh {
                 PyrucastError::Message("SubMesh::poi1_from_nodes: nodes must not be empty".into())
             })?
             .coords();
-        let ids: Vec<NodeId> = nodes.iter().map(|n| n.id()).collect();
+        let ids = nodes
+            .iter()
+            .map(|n| n.id_in(&coords))
+            .collect::<Result<Vec<NodeId>>>()?;
         SubMesh::poi1_from_node_ids(coords, &ids)
     }
 
@@ -1021,9 +1028,10 @@ impl crate::dump::Dump for SubMesh {
 
 // ─── Mesh ───────────────────────────────────────────────────────────────────
 
-/// Mesh: aggregate of submeshes. Each submesh carries its own
-/// `Handle<Coords>`; the mesh itself imposes no constraint on
-/// `Coords` homogeneity.
+/// Mesh: aggregate of submeshes, all on the **same** `Coords`. Each submesh
+/// carries its own `Handle<Coords>` and the mesh holds none of its own: it
+/// reads it off its first submesh, and refuses a submesh from another
+/// `Coords` ("mismatched Coords").
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -1113,7 +1121,8 @@ impl Node {
 impl Mesh {
     /// `mesh.union_node(node)` → a unitary POI1 [`Mesh`] holding this mesh's
     /// points plus `node`. Errors unless `self` is **unitary and POI1**
-    /// (exactly one POI1 submesh). Python: `mesh | node`.
+    /// (exactly one POI1 submesh), and unless `node` belongs to the mesh's
+    /// `Coords`. Python: `mesh | node`.
     ///
     /// ```
     /// # use pyrucast::atoms::{ElementType, Node};
@@ -1140,7 +1149,7 @@ impl Mesh {
                 "Mesh | Node: expected a unitary POI1 mesh".into(),
             ));
         }
-        ids.push(node.id());
+        ids.push(node.id_in(&coords)?);
         Ok(Mesh::from_submesh(SubMesh::poi1_from_node_ids(
             coords, &ids,
         )?))
@@ -2070,6 +2079,22 @@ mod tests {
         tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         // Non-POI1 → error.
         assert!(tri.union_node(&a).is_err());
+    }
+
+    #[test]
+    fn node_unions_refuse_a_node_from_another_coords() {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        // Id 0 in its own Coords: the very id `a` carries here.
+        let elsewhere = Node::create_in(Handle::new(Coords::new(2).unwrap()), &[5.0, 5.0]).unwrap();
+        assert_eq!(elsewhere.id(), a.id());
+
+        assert!(a.union(&elsewhere).is_err());
+        let pair = a.union(&b).unwrap();
+        assert!(pair.union_node(&elsewhere).is_err());
+        // Refused before anything is counted: `a` holds its Node and `pair`.
+        assert_eq!(coords.read().refcount(a.id()), 2);
     }
 
     #[test]

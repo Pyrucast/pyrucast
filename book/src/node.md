@@ -41,7 +41,10 @@ fois : c'est le même `Node`.
 C'est ce qui le distingue d'un simple identifiant. Un entier ne dit pas à quel
 `Coords` il appartient et ne compte pour rien ; le `Node` porte son `Coords`,
 lit ses coordonnées dans la bonne configuration, et le nœud le compte parmi
-ses références tant qu'il existe.
+ses références tant qu'il existe. Porter son `Coords` lui permet aussi d'être
+refusé là où il n'a pas sa place : une maille, un champ, une matrice posés sur
+un autre `Coords` lèvent une erreur plutôt que de prendre le nœud de ce
+`Coords` qui porte le même numéro.
 
 ## Côté Rust
 

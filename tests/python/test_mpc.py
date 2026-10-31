@@ -104,12 +104,13 @@ def test_single_term_mpc_matches_dirichlet():
             pyrucast.matrix.stiffness(model, materials), rhs
         )
 
-    nodes, dir_sol = solve_dirichlet()
-    _, mpc_sol = solve_mpc()
+    # Two bars, two Coords: each solution is read through its own nodes.
+    dir_nodes, dir_sol = solve_dirichlet()
+    mpc_nodes, mpc_sol = solve_mpc()
     # Not a vacuous match: the imposed values reach the solution.
-    assert abs(dir_sol.value(nodes[-1], "T") - 1.0) < TOL
-    for node in nodes:
-        assert abs(dir_sol.value(node, "T") - mpc_sol.value(node, "T")) < TOL
+    assert abs(dir_sol.value(dir_nodes[-1], "T") - 1.0) < TOL
+    for d, m in zip(dir_nodes, mpc_nodes, strict=True):
+        assert abs(dir_sol.value(d, "T") - mpc_sol.value(m, "T")) < TOL
 
 
 def test_constraint_rhs_helper_builds_second_member():

@@ -194,10 +194,13 @@ impl PyModel {
         py: Python<'_>,
         imposed: Vec<(Py<PyNode>, f64)>,
     ) -> PyResult<PyNodeField> {
-        let pairs: Vec<(NodeId, f64)> = imposed
+        // The relations' nodes live in the multipliers' `Coords`; a model with
+        // no constraint has none, and `constraint_rhs` says so itself.
+        let coords = self.inner.multiplier_mesh()?.coords().ok();
+        let pairs = imposed
             .iter()
-            .map(|(node, g)| (node.borrow(py).as_node().id(), *g))
-            .collect();
+            .map(|(node, g)| Ok((node.borrow(py).id_in(coords.as_ref())?, *g)))
+            .collect::<PyResult<Vec<(NodeId, f64)>>>()?;
         let inner = self.inner.constraint_rhs(&pairs)?;
         Ok(PyNodeField { inner })
     }
