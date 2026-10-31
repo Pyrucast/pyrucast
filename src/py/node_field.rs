@@ -4,7 +4,10 @@
 use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::field::SubField;
+use crate::containers::mesh::SubMesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
+use crate::coords::Coords;
+use crate::error::PyrucastError;
 use crate::handle::Handle;
 use crate::py::mesh::{PyMesh, PySubMesh};
 use crate::py::node::PyNode;
@@ -15,19 +18,37 @@ use pyo3::prelude::*;
 /// batch read: a list of `Node`, a POI1 `SubMesh`, or a `Mesh` (its
 /// submeshes' nodes taken in connectivity order — one entry per point for
 /// a POI1 mesh). Order is preserved; duplicates are kept.
-fn extract_node_ids(obj: &Bound<'_, PyAny>) -> PyResult<Vec<NodeId>> {
+///
+/// The ids are meant for a field whose nodes live in `coords` (`None`: an
+/// empty field), so nodes and meshes from another `Coords` are refused.
+fn extract_node_ids(
+    obj: &Bound<'_, PyAny>,
+    coords: Option<&Handle<Coords>>,
+) -> PyResult<Vec<NodeId>> {
+    let check = |zone: &SubMesh| -> PyResult<()> {
+        match coords {
+            Some(c) if !c.same_object(&zone.coords()) => {
+                Err(PyrucastError::Message("mismatched Coords".into()).into())
+            }
+            _ => Ok(()),
+        }
+    };
     if let Ok(sm) = obj.extract::<PyRef<PySubMesh>>() {
-        return Ok(sm.handle.read().connectivity().to_vec());
+        let zone = sm.handle.read();
+        check(&zone)?;
+        return Ok(zone.connectivity().to_vec());
     }
     if let Ok(mesh) = obj.extract::<PyRef<PyMesh>>() {
         let mut ids: Vec<NodeId> = Vec::new();
         for h in &mesh.inner {
-            ids.extend_from_slice(h.read().connectivity());
+            let zone = h.read();
+            check(&zone)?;
+            ids.extend_from_slice(zone.connectivity());
         }
         return Ok(ids);
     }
     if let Ok(nodes) = obj.extract::<Vec<PyRef<'_, PyNode>>>() {
-        return Ok(nodes.iter().map(|n| n.as_node().id()).collect());
+        return nodes.iter().map(|n| n.id_in(coords)).collect();
     }
     Err(PyTypeError::new_err(
         "expected a list of Node, a SubMesh, or a Mesh",
@@ -66,13 +87,13 @@ impl PySubNodeField {
 
     /// Value at `node`, component index `comp_idx`.
     fn get_by_node(&self, node: PyRef<'_, PyNode>, comp_idx: usize) -> PyResult<f64> {
-        let nid = node.as_node().id();
+        let nid = node.id_in(Some(&self.handle.read().coords()))?;
         Ok(self.handle.read().get_by_node(nid, comp_idx)?)
     }
 
     /// Set the value at `node`, component index `comp_idx`.
     fn set_by_node(&self, node: PyRef<'_, PyNode>, comp_idx: usize, value: f64) -> PyResult<()> {
-        let nid = node.as_node().id();
+        let nid = node.id_in(Some(&self.handle.read().coords()))?;
         self.handle.write().set_by_node(nid, comp_idx, value)?;
         Ok(())
     }
@@ -98,13 +119,13 @@ impl PySubNodeField {
 
     /// Value at `node` for the named `component`.
     fn value(&self, node: PyRef<'_, PyNode>, component: &str) -> PyResult<f64> {
-        let nid = node.as_node().id();
+        let nid = node.id_in(Some(&self.handle.read().coords()))?;
         Ok(self.handle.read().value(nid, component)?)
     }
 
     /// Set the value at `node` for the named `component`.
     fn set_value(&self, node: PyRef<'_, PyNode>, component: &str, value: f64) -> PyResult<()> {
-        let nid = node.as_node().id();
+        let nid = node.id_in(Some(&self.handle.read().coords()))?;
         self.handle.write().set_value(nid, component, value)?;
         Ok(())
     }
@@ -118,7 +139,7 @@ impl PySubNodeField {
     /// `subfield[node, "UX"] = v` — raises if the node or component is absent.
     fn __setitem__(&self, key: (PyRef<'_, PyNode>, String), value: f64) -> PyResult<()> {
         let (node, comp) = key;
-        let nid = node.as_node().id();
+        let nid = node.id_in(Some(&self.handle.read().coords()))?;
         self.handle.write().set_value(nid, &comp, value)?;
         Ok(())
     }
@@ -274,7 +295,7 @@ impl PyNodeField {
     /// Value at `node` for the named `component` — the first zone
     /// defining both wins. Raises if none does.
     fn value(&self, node: PyRef<'_, PyNode>, component: &str) -> PyResult<f64> {
-        let nid = node.as_node().id();
+        let nid = node.id_in(self.inner.coords().ok().as_ref())?;
         Ok(self.inner.value(nid, component)?)
     }
 
@@ -285,7 +306,7 @@ impl PyNodeField {
     /// `(node, component)` pair wins; raises on the first node the field
     /// does not define.
     fn values(&self, nodes: &Bound<'_, PyAny>, component: &str) -> PyResult<Vec<f64>> {
-        let ids = extract_node_ids(nodes)?;
+        let ids = extract_node_ids(nodes, self.inner.coords().ok().as_ref())?;
         Ok(self.inner.values_at(&ids, component)?)
     }
 
@@ -460,7 +481,7 @@ impl PySubNodeField {
     fn __getitem__(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         // (node, component) → scalar value.
         if let Ok((node, comp)) = key.extract::<(PyRef<'_, PyNode>, String)>() {
-            let nid = node.as_node().id();
+            let nid = node.id_in(Some(&self.handle.read().coords()))?;
             let v = self.handle.read().value(nid, &comp)?;
             return Ok(v.into_pyobject(py)?.into_any().unbind());
         }

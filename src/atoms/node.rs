@@ -34,7 +34,7 @@
 //! ```
 
 use crate::coords::Coords;
-use crate::error::Result;
+use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -143,6 +143,38 @@ impl Node {
     /// ```
     pub fn id(&self) -> NodeId {
         self.id
+    }
+
+    /// This node's id **in `coords`** — refused if the node belongs to another
+    /// `Coords`.
+    ///
+    /// An id only names a node inside its own `Coords`: elsewhere the same
+    /// number is some other node, or none. Whatever turns a `Node` into the id
+    /// it stores — a cell, a field row, a matrix entry — goes through here, so
+    /// a node from another `Coords` is refused instead of silently standing
+    /// for whichever node carries its number.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// let ici = Handle::new(Coords::new(2)?);
+    /// let ailleurs = Handle::new(Coords::new(2)?);
+    /// let n = Node::create_in(ici.clone(), &[0.0, 0.0])?;
+    /// let _homonyme = Node::create_in(ailleurs.clone(), &[5.0, 5.0])?; // id 0 too
+    /// assert_eq!(n.id_in(&ici)?, n.id());
+    /// assert!(n.id_in(&ailleurs).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn id_in(&self, coords: &Handle<Coords>) -> Result<NodeId> {
+        if self.handle.same_object(coords) {
+            Ok(self.id)
+        } else {
+            Err(PyrucastError::Message(format!(
+                "node {} belongs to another Coords",
+                self.id
+            )))
+        }
     }
 
     /// Handle to the owning `Coords` (internal clone).

@@ -214,6 +214,10 @@ def test_une_etude_complete(tmp_path):
     k2 = pyrucast.matrix.stiffness(o["modele"], o["materiaux"])
     apres = pyrucast.solver.solve(k2, o["chargement"])
 
+    # The reloaded objects live in a new Coords, which kept the node ids: its
+    # nodes are reached through it, never through the original `Node`s.
+    relus = o["maillage"].coords()
     for node in nodes:
-        assert apres.value(node, "T") == avant.value(node, "T")
-        assert o["solution"].value(node, "T") == avant.value(node, "T")
+        relu = relus.acquire(node.id)
+        assert apres.value(relu, "T") == avant.value(node, "T")
+        assert o["solution"].value(relu, "T") == avant.value(node, "T")
