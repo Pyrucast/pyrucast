@@ -24,11 +24,13 @@ pub struct PySubElementField {
 #[pymethods]
 impl PySubElementField {
     /// Number of cells (elements) this field covers.
+    #[getter]
     fn cell_count(&self) -> usize {
         self.handle.read().cell_count()
     }
 
     /// Number of Gauss points per cell.
+    #[getter]
     fn gauss_count(&self) -> usize {
         self.handle.read().gauss_count()
     }
@@ -128,6 +130,7 @@ impl PySubElementField {
 
     /// Number of components stored per node, or per Gauss point for a field by
     /// elements.
+    #[getter]
     fn component_count(&self) -> usize {
         self.handle.read().component_count()
     }

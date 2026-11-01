@@ -69,6 +69,7 @@ pub struct PySubNodeField {
 #[pymethods]
 impl PySubNodeField {
     /// Number of nodes in the support.
+    #[getter]
     fn node_count(&self) -> usize {
         self.handle.read().node_count()
     }
@@ -168,6 +169,7 @@ impl PySubNodeField {
 
     /// Number of components stored per node, or per Gauss point for a field by
     /// elements.
+    #[getter]
     fn component_count(&self) -> usize {
         self.handle.read().component_count()
     }
@@ -281,6 +283,7 @@ impl PyNodeField {
     }
 
     /// Number of distinct nodes across the zones.
+    #[getter]
     fn node_count(&self) -> PyResult<usize> {
         Ok(self.inner.node_count()?)
     }

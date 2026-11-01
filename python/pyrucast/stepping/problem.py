@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from .. import element_field, node_field
 from .._pyrucast import ElementField, Evolution, FiniteElementSpace
 from .configuration import configurations
-from .fields import carried, uniform
+from .fields import carried, domain_mesh, uniform
 
 __all__ = ["Problem", "describe_problem"]
 
@@ -47,7 +47,7 @@ def _nodal_weights(domain, names):
     for zone in ones:
         for name in names:
             zone.set_uniform(name, 1.0)
-    centres = FiniteElementSpace(fespace.mesh(), quadrature="REDUCED")
+    centres = FiniteElementSpace(domain_mesh(fespace), quadrature="REDUCED")
     volumes = node_field.sum_to_nodes(element_field.cell_integral(ones, centres))
     return (volumes + 1e-300) ** -0.5
 
@@ -63,7 +63,7 @@ def _strain_measure(domain, fespace, displacement_names, materials):
     ``H_*``) — the loop only reads it. Refuses a domain mixing a measure of
     large transformations with anything else: beams and shells have no
     large-transformation formulation yet, and a bar reads Green–Lagrange."""
-    rest = uniform(fespace.mesh(), displacement_names, 0.0)
+    rest = uniform(domain_mesh(fespace), displacement_names, 0.0)
     names = carried(element_field.strain(domain, rest, materials))
     prefixes = {name.split("_")[0] for name in names}
     finite = prefixes & set(_MEASURES)

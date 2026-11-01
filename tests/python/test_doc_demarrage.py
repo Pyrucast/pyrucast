@@ -41,21 +41,21 @@ b = c.add_node([1.0, 0.0])
 ligne = pyrucast.mesh.line(a, b, 10)
 print(ligne)  # Mesh: 1 submesh(es) [#…], 10 cell(s) total
 # ANCHOR_END: premier_script
-assert ligne.cell_count() == 10
+assert ligne.cell_count == 10
 
 
 # ANCHOR: methode
 plaque = pyrucast.mesh.extrude(ligne, [0.0, 1.0], 5)  # fonction libre
 plaque = ligne.extrude([0.0, 1.0], 5)  # la même, en méthode
 # ANCHOR_END: methode
-assert plaque.cell_count() == 50
+assert plaque.cell_count == 50
 
 # ANCHOR: composition
 bord = pyrucast.mesh.border(pyrucast.mesh.extrude(ligne, [0.0, 1.0], 5))  # imbriqué
 bord = ligne.extrude([0.0, 1.0], 5).border()  # enchaîné
 print(bord)  # Mesh: 1 submesh(es) [#…], 30 cell(s) total
 # ANCHOR_END: composition
-assert bord.cell_count() == 30
+assert bord.cell_count == 30
 
 # ANCHOR: apercu
 import os

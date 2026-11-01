@@ -116,8 +116,8 @@ def test_fully_constrained_bar_thermal_stress():
     expected = -E * ALPHA * DT
     for zone in range(len(sigma)):
         sub = sigma[zone]
-        for g in range(sub.gauss_count()):
-            for cell in range(sub.cell_count()):
+        for g in range(sub.gauss_count):
+            for cell in range(sub.cell_count):
                 assert abs(sub.value(cell, g, "sigma_xx") - expected) < 1e-6 * abs(
                     expected
                 )
@@ -158,7 +158,7 @@ def test_free_bar_expands_without_stress():
     )
     for zone in range(len(sigma)):
         sub = sigma[zone]
-        for g in range(sub.gauss_count()):
-            for cell in range(sub.cell_count()):
+        for g in range(sub.gauss_count):
+            for cell in range(sub.cell_count):
                 for comp in ("sigma_xx", "sigma_yy", "sigma_xy"):
                     assert abs(sub.value(cell, g, comp)) < 1e-6

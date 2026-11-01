@@ -64,7 +64,7 @@ rhs = encastrement.constraint_rhs([(noeuds[0], 0.0)]) | butee.constraint_rhs(
 # The matrix knows which relations are inequalities: `solve` runs the active set.
 solution = pyrucast.solver.solve(k, rhs)  # active_set, max_iter, tol
 # ANCHOR_END: solve_inequalities
-assert solution.node_count() > 0
+assert solution.node_count > 0
 
 # ── Loading of a constraint ─────────────────────────────────────────────────
 
@@ -87,7 +87,7 @@ noeud_terme, g = noeuds[-1], 0.5
 rhs = dirichlet.constraint_rhs([(noeud_contraint, u_d)])
 rhs = mpc.constraint_rhs([(noeud_terme, g)])
 # ANCHOR_END: constraint_rhs
-assert rhs.node_count() > 0
+assert rhs.node_count > 0
 
 # ── constraint rhs by index ────────────────────────────────
 
@@ -103,7 +103,7 @@ index_relation, g = 0, 1.0
 # ANCHOR: constraint_rhs_by_index
 rhs = mpc.constraint_rhs_by_index([(index_relation, g)])
 # ANCHOR_END: constraint_rhs_by_index
-assert rhs.node_count() > 0
+assert rhs.node_count > 0
 
 # ── Contact nœud-surface ────────────────────────────────────────────────────
 
@@ -179,7 +179,7 @@ materials = pyrucast.element_field.material_field(
 rhs = pyrucast.node_field.external_forces(model, materials)
 solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
 # ANCHOR_END: contact
-assert solution.node_count() > 0
+assert solution.node_count > 0
 
 
 # ── The contact's geometric right-hand side ─────────────────────────────────

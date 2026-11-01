@@ -51,7 +51,7 @@ def test_sub_model_build_material_field_uniform_value():
 
     sub = pyrucast.element_field.sub_material_field(hc, [("k", 2.5)])
     # Pre-filled uniformly at every (cell, gauss).
-    for g in range(fes[0].gauss_count()):
+    for g in range(fes[0].gauss_count):
         assert sub.value(0, g, "k") == pytest.approx(2.5)
 
 
@@ -182,12 +182,12 @@ def test_model_indexed_sub_model_builds_its_own_material_field():
     # model[0] = HC zone A. Building its material there gives a
     # SubElementField on the corresponding FE subspace.
     sub_a_mat = pyrucast.element_field.sub_material_field(model[0], [("k", 7.0)])
-    for g in range(fes[0].gauss_count()):
+    for g in range(fes[0].gauss_count):
         assert sub_a_mat.value(0, g, "k") == pytest.approx(7.0)
 
     # model[1] = HC zone B.
     sub_b_mat = pyrucast.element_field.sub_material_field(model[1], [("k", 3.0)])
-    for g in range(fes[1].gauss_count()):
+    for g in range(fes[1].gauss_count):
         assert sub_b_mat.value(0, g, "k") == pytest.approx(3.0)
 
     # model[2] is the Dirichlet sub-model — no material to build.

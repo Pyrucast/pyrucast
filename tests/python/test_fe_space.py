@@ -21,9 +21,9 @@ def test_lagrange1_constructor_one_to_one_with_submeshes():
     fes = pyrucast.FiniteElementSpace(mesh)
     assert len(fes) == 2
     assert fes[0].element_type == "TRI3"
-    assert fes[0].gauss_count() == 3
+    assert fes[0].gauss_count == 3
     assert fes[1].element_type == "QUA4"
-    assert fes[1].gauss_count() == 4
+    assert fes[1].gauss_count == 4
     for sub in fes:
         assert sub.interpolation == "LAGRANGE1"
         assert sub.quadrature == "GAUSS"
@@ -143,7 +143,7 @@ def test_reference_tables_partition_of_unity():
     mesh.unit().add_cell([n0, n1, n2])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
-    for g in range(sub.gauss_count()):
+    for g in range(sub.gauss_count):
         ns = sub.n_at_g(g)
         assert abs(sum(ns) - 1.0) < 1e-12
 
@@ -161,7 +161,7 @@ def test_reference_tables_dn_dxi_sums_to_zero():
     sub = fes[0]
     n_nodes = sub.nodes_per_cell
     rd = sub.ref_dim
-    for g in range(sub.gauss_count()):
+    for g in range(sub.gauss_count):
         dn = sub.dn_at_g(g)
         for k in range(rd):
             s = sum(dn[i * rd + k] for i in range(n_nodes))
@@ -221,7 +221,7 @@ def test_gauss_weights_sum_to_reference_volume():
         mesh.unit().add_cell([n for n in nodes])
         fes = pyrucast.FiniteElementSpace(mesh)
         sub = fes[0]
-        s = sum(sub.gauss_weight(g) for g in range(sub.gauss_count()))
+        s = sum(sub.gauss_weight(g) for g in range(sub.gauss_count))
         assert abs(s - vol) < 1e-12, f"{et}: weights sum {s} ≠ {vol}"
 
 
@@ -237,7 +237,7 @@ def test_seg2_jacobian_1d():
     mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
-    for g in range(sub.gauss_count()):
+    for g in range(sub.gauss_count):
         assert abs(sub.det_jacobian(0, g) - 2.5) < 1e-12
 
 
@@ -250,7 +250,7 @@ def test_seg2_jacobian_in_plane():
     mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
-    for g in range(sub.gauss_count()):
+    for g in range(sub.gauss_count):
         jac = sub.jacobian(0, g)
         assert len(jac) == 2
         assert abs(jac[0] - 1.5) < 1e-12
@@ -268,7 +268,7 @@ def test_tri3_jacobian_planar():
     mesh.unit().add_cell([n0, n1, n2])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
-    for g in range(sub.gauss_count()):
+    for g in range(sub.gauss_count):
         assert abs(sub.det_jacobian(0, g) - 12.0) < 1e-12
 
 
@@ -285,7 +285,7 @@ def test_tri3_manifold_in_3d():
     sub = fes[0]
     assert sub.space_dim == 3
     assert sub.ref_dim == 2
-    for g in range(sub.gauss_count()):
+    for g in range(sub.gauss_count):
         assert abs(sub.det_jacobian(0, g) - 12.0) < 1e-12
 
 
@@ -301,7 +301,7 @@ def test_qua4_unit_square_integrates_to_area():
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     area = sum(
-        sub.gauss_weight(g) * sub.det_jacobian(0, g) for g in range(sub.gauss_count())
+        sub.gauss_weight(g) * sub.det_jacobian(0, g) for g in range(sub.gauss_count)
     )
     assert abs(area - 1.0) < 1e-12
 
@@ -324,7 +324,7 @@ def test_hex8_unit_cube_integrates_to_volume():
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
     vol = sum(
-        sub.gauss_weight(g) * sub.det_jacobian(0, g) for g in range(sub.gauss_count())
+        sub.gauss_weight(g) * sub.det_jacobian(0, g) for g in range(sub.gauss_count)
     )
     assert abs(vol - 1.0) < 1e-12
 
@@ -340,7 +340,7 @@ def test_tri3_dn_dx_constant_known_values():
     mesh.unit().add_cell([n0, n1, n2])
     fes = pyrucast.FiniteElementSpace(mesh)
     sub = fes[0]
-    for g in range(sub.gauss_count()):
+    for g in range(sub.gauss_count):
         dn = sub.dn_dx(0, g)
         assert abs(dn[0] - (-1.0 / 3.0)) < 1e-12  # ∂N₁/∂x
         assert abs(dn[1] - (-1.0 / 4.0)) < 1e-12  # ∂N₁/∂y

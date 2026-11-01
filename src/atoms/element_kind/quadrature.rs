@@ -35,9 +35,10 @@ pub enum QuadratureRule {
     /// Standard Gauss rule, picked per element type.
     Gauss,
     /// **Reduced** integration: a single point at the element centroid (weight
-    /// = the reference measure). Exact for constants only; used for
-    /// selective/reduced integration — e.g. the shear term of a Timoshenko
-    /// beam, to avoid shear locking.
+    /// = the reference measure). Exact for constants only; it carries one value
+    /// per cell (the target of `cell_integral`, the cell layout of the array
+    /// exchange) and the transverse shear of a thick shell, against shear
+    /// locking.
     Reduced,
 }
 

@@ -156,7 +156,7 @@ def unstructured_mesh(
     border = border[:1] | pc.mesh.invert(border[1:])
     plate = pc.mesh.triangulate_surface(border, "TRI3", size=0.01)
     show(plate, "Plaque non structurée (TRI3)", "maillage-non-structure.svg")
-    print(f"unstructured   : {plate.element_types()}, {plate.cell_count()} mailles")
+    print(f"unstructured   : {plate.element_types()}, {plate.cell_count} mailles")
     # ANCHOR_END: invert_trou
 
     # ANCHOR: extrude
@@ -313,7 +313,7 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
     # EN — Grid and ring share the right edge's nodes: `|` is enough.
     grid = sr1 | sh1
     if plot:
-        print(f"structured      : {grid.element_types()}, {grid.cell_count()} mailles")
+        print(f"structured      : {grid.element_types()}, {grid.cell_count} mailles")
         show(grid, "Plaque structurée (QUA4)", "maillage-structure.svg")
     # ANCHOR_END: sweep
 

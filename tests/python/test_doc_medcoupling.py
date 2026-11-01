@@ -36,7 +36,7 @@ bas = _meshes["bas"]
 temperature = pyrucast.NodeField(plaque, ["T"])
 froid = pyrucast.NodeField(plaque, ["T"])
 for _z in range(len(temperature)):
-    for _i in range(temperature[_z].node_count()):
+    for _i in range(temperature[_z].node_count):
         temperature[_z].set(_i, 0, 20.0 + _i)
 contraintes = pyrucast.ElementField(pyrucast.FiniteElementSpace(plaque), ["sxx"])
 

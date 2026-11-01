@@ -51,7 +51,7 @@ def test_pave_volume_is_conforming():
     seen = {}
     for sub in mesh:
         kind = sub.element_type
-        for i in range(sub.cell_count()):
+        for i in range(sub.cell_count):
             ids = [n.id for n in sub[i].nodes()]
             for f in faces[kind]:
                 key = tuple(sorted(ids[j] for j in f))

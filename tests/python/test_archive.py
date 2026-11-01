@@ -55,9 +55,9 @@ def test_le_partage_survit(tmp_path):
 
     # A single Coords for the whole file: adding a node through the mesh shows up
     # through the `coords` root.
-    avant = objets["coords"].node_count()
+    avant = objets["coords"].node_count
     objets["maillage"].coords().add_node([9.0, 9.0])
-    assert objets["coords"].node_count() == avant + 1
+    assert objets["coords"].node_count == avant + 1
 
 
 def test_les_clefs_sont_libres(tmp_path):
@@ -77,14 +77,14 @@ def test_relire_ajoute_a_cote(tmp_path):
     chemin = str(tmp_path / "a_cote.pyr")
     pyrucast.save(chemin, {"maillage": m})
 
-    avant = m[0].cell_count()
+    avant = m[0].cell_count
     relu = pyrucast.load(chemin)["maillage"]
-    assert relu[0].cell_count() == avant
+    assert relu[0].cell_count == avant
 
     # The two Coords are distinct: touching one does not touch the other.
-    n_avant = c.node_count()
+    n_avant = c.node_count
     relu.coords().add_node([42.0, 42.0])
-    assert c.node_count() == n_avant, "la session d'origine n'a pas bougé"
+    assert c.node_count == n_avant, "la session d'origine n'a pas bougé"
 
 
 # ─── The simple values ──────────────────────────────────────────────────────

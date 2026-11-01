@@ -110,7 +110,7 @@ tri.unit().add_cell([b, n5, n3])
 mesh = quad | tri
 print(mesh.element_types())  # ['QUA4', 'TRI3']
 print(mesh.cell_counts())  # [1, 1]
-print(mesh.cell_count())  # 2
+print(mesh.cell_count)  # 2
 
 # Lire : zone i, maille j, nœud k.
 cell = mesh[1][0]  # la même vue que mesh.cell(1, 0)
@@ -139,10 +139,10 @@ print(mesh[0].is_sealed)  # True
 
 copie = mesh.duplicate()  # neuve, non scellée, sur les mêmes nœuds
 copie.unit().add_cell([b, n3, n4])
-print(copie.cell_count(), mesh.cell_count())  # 2 1
+print(copie.cell_count, mesh.cell_count)  # 2 1
 # ANCHOR_END: scellement
 assert mesh[0].is_sealed
-assert copie.cell_count() == 2
+assert copie.cell_count == 2
 try:
     mesh[0].add_cell([b, n3, n4])
 except RuntimeError as e:
@@ -175,13 +175,13 @@ print((f - g).value(a, "T"))  # 0.75
 # Ajouter une maille oublie le cache : le nuage suivant est une autre zone.
 tri.unit().add_cell([b, n4, n3])
 print(len(nuage | pyrucast.mesh.to_poi1(tri)))  # 2
-print(f.node_count())  # 3 — f reste sur le nuage d'avant
+print(f.node_count)  # 3 — f reste sur le nuage d'avant
 r = pyrucast.node_field.restrict(f, tri)  # le porte sur le nouveau
-print(r.node_count())  # 4
+print(r.node_count)  # 4
 # ANCHOR_END: caches
 assert len(nuage | pyrucast.mesh.to_poi1(tri)) == 2
 assert (f - g).value(a, "T") == 0.75
-assert r.node_count() == 4 and r.value(a, "T") == 1.0
+assert r.node_count == 4 and r.value(a, "T") == 1.0
 
 # ── aggregat ───────────────────────────────────────────────
 
@@ -222,7 +222,7 @@ b = c.add_node([1.0, 0.0])
 mesh = pyrucast.mesh.line(a, b, 10)
 print(mesh)  # Mesh: 1 submesh(es) [#…], 10 cell(s) total
 # ANCHOR_END: premiers_pas
-assert mesh.cell_count() == 10
+assert mesh.cell_count == 10
 
 # ── Nœud ────────────────────────────────────────────────────────────────────
 
@@ -244,12 +244,12 @@ a.set_position([0.5, 0.5])
 poi = a | b
 print(poi)  # Mesh: 1 submesh(es) [#…], 2 cell(s) total
 poi = poi | c.add_node([2.0, 0.0])
-print(poi.cell_count())  # 3
+print(poi.cell_count)  # 3
 
 print(a)  # <Node #0>
 a.dump()  # Node #0 @ (0.500, 0.500)
 # ANCHOR_END: node_api
-assert poi.cell_count() == 3
+assert poi.cell_count == 3
 
 # ── Field at the nodes ──────────────────────────────────────────────────────
 
@@ -332,7 +332,7 @@ print(fes[1])  # SubFiniteElementSpace<SEG2, LAGRANGE1, GAUSS>: 2 Gauss point(s)
 
 # Le même maillage, un point par maille : un autre espace.
 centres = pyrucast.FiniteElementSpace(mesh, quadrature="REDUCED")
-print(centres[0].gauss_count(), centres[0].gauss_xi(0))  # 1 [0.333…, 0.333…]
+print(centres[0].gauss_count, centres[0].gauss_xi(0))  # 1 [0.333…, 0.333…]
 
 # Un couple (interpolation, quadrature) par zone.
 mixte = pyrucast.FiniteElementSpace.with_choices(
@@ -364,7 +364,7 @@ else:
 sub = fes[0]  # le sous-espace des triangles
 print(sub.element_type, sub.interpolation, sub.quadrature)  # TRI3 LAGRANGE1 GAUSS
 print(sub.ref_dim, sub.space_dim, sub.nodes_per_cell)  # 2 2 3
-print(sub.cell_count(), sub.gauss_count())  # 2 3
+print(sub.cell_count, sub.gauss_count)  # 2 3
 
 # Les tables de référence : le point de Gauss 0, son poids, N_i, ∂N_i/∂ξ_k.
 print(sub.gauss_xi(0), sub.gauss_weight(0))  # [0.5, 0.0] 0.16666666666666666
@@ -381,12 +381,19 @@ maille = fes.element(0, 1)  # ou sub[1]
 print(sum(maille.gauss_weight(g) * maille.det_jacobian(g) for g in range(3)))  # 2.0
 print(len(sub.elements()), len(fes.elements(1)))  # 2 1
 
-# L'espace rend son maillage : les zones elles-mêmes, une fois chacune.
-print(len(fes.mesh()))  # 2
+# Chaque sous-espace rend sa zone : la même, pas une copie.
+print(len(mesh | sub.submesh()))  # 2 : l'union ne la compte pas deux fois
+# mesh() rend une zone par sous-espace, dans l'ordre.
+print(len(fes.mesh()), len((fes | centres).mesh()))  # 2 4
 print(len(fes | fes), len(fes | pyrucast.FiniteElementSpace(mesh)))  # 2 4
 # ANCHOR_END: fes_lire
 assert maille.index == 1 and maille.gauss_count == 3
 assert sub[1].det_jacobian(0) == sub.det_jacobian(1, 0)
+# Zone i of the rebuilt mesh is the support of subspace i, shared.
+_both = fes | centres
+for _i in range(len(_both)):
+    assert len(_both.mesh()[_i] | _both[_i].submesh()) == 1
+assert [z.element_type for z in _both.mesh()] == ["TRI3", "SEG2", "TRI3", "SEG2"]
 
 # ── fes deplacer ───────────────────────────────────────────
 
@@ -555,7 +562,7 @@ print(len(thermique), len(conduction))  # 2 1
 # The natures say what a sub-model pins, its label what it is.
 print([sub.label() for sub in model])  # ['HeatConduction', 'Dirichlet']
 # ANCHOR_END: model_api
-assert K.n_rows() == 3
+assert K.n_rows == 3
 assert (len(thermique), len(conduction)) == (2, 1)
 assert [sub.label() for sub in model] == ["HeatConduction", "Dirichlet"]
 
@@ -584,13 +591,13 @@ bloc.add_entry(b, "q", a, "T", -1.0)
 bloc.add_entry(b, "q", b, "T", 2.0)
 k.finalize()  # required before any solver use
 
-assert k.n_rows() == 2
-assert k.n_cols() == 2
+assert k.n_rows == 2
+assert k.n_cols == 2
 assert k.symmetric is True
 
 # What it weighs, estimated: the four entries of the block, plus the assembled
 # CSR. The factorization, larger than both, cannot be counted (faer keeps the
 # size of its factors private).
-assert bloc.memory_bytes() == 4 * 24
-assert k.memory_bytes() > bloc.memory_bytes()
+assert bloc.memory_bytes == 4 * 24
+assert k.memory_bytes > bloc.memory_bytes
 # ANCHOR_END: matrix_api

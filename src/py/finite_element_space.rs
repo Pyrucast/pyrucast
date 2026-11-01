@@ -8,7 +8,7 @@ use crate::atoms::QuadratureRule;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::handle::Handle;
 use crate::py::element::PyElement;
-use crate::py::mesh::PyMesh;
+use crate::py::mesh::{PyMesh, PySubMesh};
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 
@@ -44,6 +44,15 @@ impl PySubFiniteElementSpace {
         self.handle.read().quadrature().name().to_string()
     }
 
+    /// The submesh this subspace is built on — shared, not copied, and sealed
+    /// for as long as the subspace holds it. `fes[i].submesh()` is
+    /// `fes.mesh()[i]` without rebuilding the mesh.
+    fn submesh(&self) -> PySubMesh {
+        PySubMesh {
+            handle: self.handle.read().submesh(),
+        }
+    }
+
     /// Reference (parametric) dimension of the elements.
     #[getter]
     fn ref_dim(&self) -> PyResult<usize> {
@@ -70,11 +79,13 @@ impl PySubFiniteElementSpace {
     }
 
     /// Number of elements (cells) in this subspace.
+    #[getter]
     fn cell_count(&self) -> usize {
         self.handle.read().cell_count()
     }
 
     /// Number of Gauss (quadrature) points per element.
+    #[getter]
     fn gauss_count(&self) -> usize {
         self.handle.read().gauss_count()
     }
@@ -234,8 +245,9 @@ impl PyFiniteElementSpace {
     }
 
     /// `fes.mesh()` — the `Mesh` this space spans: one submesh per subspace, in
-    /// order (shared handles, sealed while captured). The reverse of building a
-    /// `FiniteElementSpace(mesh)`.
+    /// order, so `fes.mesh()[i]` is `fes[i].submesh()` (shared handles, sealed
+    /// while captured). Two subspaces on one submesh list it twice. The reverse
+    /// of building a `FiniteElementSpace(mesh)`.
     fn mesh(&self) -> PyResult<PyMesh> {
         Ok(PyMesh {
             inner: self.inner.mesh()?,

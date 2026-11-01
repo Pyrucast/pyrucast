@@ -23,8 +23,8 @@ def _poi1_field(values, components=("T",)):
 def _values(field):
     """Flat 0/1 values of the (single) zone, node → component order."""
     sub = field[0]
-    nc = sub.component_count()
-    return [sub.get(i, j) for i in range(sub.node_count()) for j in range(nc)]
+    nc = sub.component_count
+    return [sub.get(i, j) for i in range(sub.node_count) for j in range(nc)]
 
 
 # ─── mask() ──────────────────────────────────────────────────────────────────

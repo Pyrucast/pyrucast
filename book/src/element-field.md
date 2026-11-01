@@ -60,7 +60,7 @@ bornes ou une composante inconnue lèvent une erreur.
 | `SubElementField` (zone) | |
 |---|---|
 | `support()` | son sous-espace, partagé |
-| `cell_count()`, `gauss_count()`, `component_count()` | les trois dimensions de la zone |
+| `cell_count`, `gauss_count`, `component_count` | les trois dimensions de la zone |
 | `value(maille, g, "c")`, `zone[maille, g, "c"]` | une valeur, par nom de composante |
 | `get(maille, g, rang)` | une valeur, par rang de composante |
 | `point_values(maille, g)` | toutes les composantes d'un point, dans l'ordre |

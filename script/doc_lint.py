@@ -614,6 +614,9 @@ def check_doctests(ratchet=False):
 def api_python():
     """The installed module's public surface, in three families.
 
+    A class's entries are its methods **and its properties**: `mesh.cell_count`
+    is read, not called, but it is an entry all the same — leaving properties
+    out would let an accessor drop off the ledger by losing its parentheses.
     Deduplicated by **identity**: a class is reachable as `pyrucast.Coords`
     and as `pyrucast.coords.Coords`. Methods that **take an operator's name**
     are ruled out — they are the delegations (`mesh.skin()` for
@@ -650,7 +653,10 @@ def api_python():
     methodes = {}
     for nom_classe, classe in classes.values():
         for m in dir(classe):
-            if m.startswith("_") or not callable(getattr(classe, m, None)):
+            attribut = getattr(classe, m, None)
+            if m.startswith("_") or not (
+                callable(attribut) or inspect.isdatadescriptor(attribut)
+            ):
                 continue
             if m not in verbes:  # une délégation : sa cible porte l'exemple
                 methodes.setdefault(m, set()).add(nom_classe)

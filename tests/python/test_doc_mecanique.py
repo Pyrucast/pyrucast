@@ -106,7 +106,7 @@ materials = pyrucast.element_field.material_field(
 strain = pyrucast.element_field.deformation(u, fes)
 k_t = pyrucast.matrix.tangent(model, materials, strain)
 # ANCHOR_END: drucker_prager
-assert k_t.n_rows() == k_t.n_cols()
+assert k_t.n_rows == k_t.n_cols
 
 # ── Fluage de Norton ────────────────────────────────────────────────────────
 
@@ -213,7 +213,7 @@ materials = pyrucast.element_field.material_field(
 )
 k = pyrucast.matrix.stiffness(model, materials)
 # ANCHOR_END: bernoulli_portique
-assert k.n_rows() == k.n_cols()
+assert k.n_rows == k.n_cols
 
 # ── timoshenko ─────────────────────────────────────────────
 
@@ -244,4 +244,4 @@ materials = pyrucast.element_field.material_field(
 )
 k = pyrucast.matrix.stiffness(model, materials)
 # ANCHOR_END: coques
-assert k.n_rows() == k.n_cols()
+assert k.n_rows == k.n_cols

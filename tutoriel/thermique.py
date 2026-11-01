@@ -271,10 +271,10 @@ def main() -> None:
     )
     # ANCHOR_END: resolution_complet
 
-    print(f"volume         : {volume.cell_count()} HEX8")
-    print(f"face gauche    : {face_gauche.cell_count()} QUA4")
-    print(f"face convectée : {face_basse.cell_count()} QUA4")
-    print(f"zone chauffée  : {zone_source.cell_count()} HEX8")
+    print(f"volume         : {volume.cell_count} HEX8")
+    print(f"face gauche    : {face_gauche.cell_count} QUA4")
+    print(f"face convectée : {face_basse.cell_count} QUA4")
+    print(f"zone chauffée  : {zone_source.cell_count} HEX8")
     print(
         f"étape 1 : T min = {t_conduction.min('T'):.1f} °C, "
         f"T max = {t_conduction.max('T'):.1f} °C"

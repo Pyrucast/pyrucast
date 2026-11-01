@@ -35,9 +35,9 @@ def test_empty_sub_matrix():
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     m = _make_block(c, [a, b], [a, b], ["q"], ["T"])
-    assert m.n_rows() == 2
-    assert m.n_cols() == 2
-    assert m.entry_count() == 0
+    assert m.n_rows == 2
+    assert m.n_cols == 2
+    assert m.entry_count == 0
     assert m.is_symmetric is False
 
 
@@ -67,9 +67,9 @@ def test_sub_matrix_add_entry_and_get():
     m.add_entry(a, "q", b, "T", -1.0)
     m.add_entry(b, "q", a, "T", -1.0)
     m.add_entry(b, "q", b, "T", 2.0)
-    assert m.n_rows() == 2
-    assert m.n_cols() == 2
-    assert m.entry_count() == 4
+    assert m.n_rows == 2
+    assert m.n_cols == 2
+    assert m.entry_count == 4
     assert m.get(a, "q", a, "T") == 2.0
     assert m.get(a, "q", b, "T") == -1.0
     assert m.get(b, "q", a, "T") == -1.0
@@ -81,10 +81,10 @@ def test_memory_bytes_counts_what_is_stored():
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     m = _make_block(c, [a, b], [a, b], ["q"], ["T"], symmetry="full")
-    empty = m.memory_bytes()
+    empty = m.memory_bytes
     m.add_entry(a, "q", b, "T", -1.0)
     # One entry more: a row index, a column index and a value.
-    assert m.memory_bytes() == empty + 24
+    assert m.memory_bytes == empty + 24
 
 
 def test_sub_matrix_get_unknown_returns_zero():
@@ -102,7 +102,7 @@ def test_sub_matrix_repeated_entries_sum():
     m.add_entry(a, "q", a, "T", 1.5)
     m.add_entry(a, "q", a, "T", -0.5)
     assert m.get(a, "q", a, "T") == 3.0
-    assert m.entry_count() == 3
+    assert m.entry_count == 3
 
 
 def test_sub_matrix_dense_layout_is_row_major():
@@ -190,9 +190,9 @@ def test_sub_matrix_repr_and_str():
 
 def test_empty_matrix_aggregate():
     m = pyrucast.Matrix()
-    assert m.n_rows() == 0
-    assert m.n_cols() == 0
-    assert m.entry_count() == 0
+    assert m.n_rows == 0
+    assert m.n_cols == 0
+    assert m.entry_count == 0
     assert m.symmetric is True  # vacuously
     assert len(m) == 0
 
@@ -217,8 +217,8 @@ def test_matrix_aggregates_two_blocks():
 
     assert len(k) == 2
     assert len(k) == 2
-    assert k.n_rows() == 2
-    assert k.n_cols() == 2
+    assert k.n_rows == 2
+    assert k.n_cols == 2
     # The assembled array IS symmetric, and the flag still says False: cut into
     # row slices, neither block can declare it. A rectangular block is never
     # `full`, and these two are not each other's transpose either, so no `half`
@@ -251,8 +251,8 @@ def test_matrix_compose_blocks_with_union():
     k = ba | bb
     k.finalize()
     assert len(k) == 2
-    assert k.n_rows() == 2
-    assert k.n_cols() == 2
+    assert k.n_rows == 2
+    assert k.n_cols == 2
     # Row slices again: symmetric as an array, undeclarable block by block.
     assert k.dense() == [2.0, -1.0, -1.0, 2.0]
     assert k.symmetric is False

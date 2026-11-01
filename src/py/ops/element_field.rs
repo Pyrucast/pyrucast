@@ -61,6 +61,7 @@ pub fn gradient(
 /// | `"left_cauchy_green"` (`"b"`) | `b = FFᵀ` | `b_xx`, … |
 /// | `"hencky"` (`"log"`) | `½ ln C` | `H_xx`, … |
 /// | `"euler_almansi"` (`"almansi"`) | `e = ½(I − b⁻¹)` | `e_xx`, … |
+/// | `"jacobian"` (`"J"`) | `J = det F` | `J` alone |
 ///
 /// On an axisymmetric space, the hoop entry `<prefix>_zz` is appended
 /// (`H_θθ = u_r / r`).
@@ -268,8 +269,7 @@ pub fn cell_integral(
 /// | 3-D | six | `eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z` |
 ///
 /// For an oriented element it builds the local axes, rotates the nodal triples
-/// into them, then evaluates the strains from the local DOFs. This replaces
-/// `frame_deformation`, which was the same operator for the 2-D and 3-D cases.
+/// into them, then evaluates the strains from the local DOFs.
 ///
 /// The **material** is required, and that is the honest signature: the
 /// element's interpolation depends on `Φ = 12EI/(G·A_s·L²)`, so its curvature

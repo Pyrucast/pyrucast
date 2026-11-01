@@ -271,6 +271,16 @@ class Coords:
         Whether these coordinates describe a body of revolution.
         """
     @property
+    def node_count(self) -> builtins.int:
+        r"""
+        Number of live nodes.
+        """
+    @property
+    def capacity(self) -> builtins.int:
+        r"""
+        Number of allocated node slots (live plus not-yet-collected).
+        """
+    @property
     def active(self) -> builtins.int:
         r"""
         Index of the active configuration.
@@ -288,14 +298,6 @@ class Coords:
         
         Every FE space built on it integrates over the full ring; mechanics adds
         the hoop strain through `model.elasticity(fes, "axisymmetric")`.
-        """
-    def node_count(self) -> builtins.int:
-        r"""
-        Number of live nodes.
-        """
-    def capacity(self) -> builtins.int:
-        r"""
-        Number of allocated node slots (live plus not-yet-collected).
         """
     def is_alive(self, id: builtins.int) -> builtins.bool:
         r"""
@@ -822,6 +824,11 @@ class Evolution:
     zone); or low-level by composing `SubEvolution`s with `|`. Index it
     (`evolution[i]`) to reach a `SubEvolution`.
     """
+    @property
+    def out_of_range(self) -> builtins.str:
+        r"""
+        The stored out-of-range policy name.
+        """
     def shared_abscissas(self) -> builtins.list[builtins.float]:
         r"""
         The abscissas every zone shares — the times of a series. Raises if
@@ -842,10 +849,6 @@ class Evolution:
         curve per zone. The abscissa is a float, or a tuple of floats for a
         table of several variables (`((T, phi), value)`), read hierarchically
         — see `SubEvolution`; `abscissa_type` is then a tuple of names.
-        """
-    def out_of_range(self) -> builtins.str:
-        r"""
-        The stored out-of-range policy name.
         """
     def abscissa_type(self) -> typing.Any:
         r"""
@@ -983,8 +986,9 @@ class FiniteElementSpace:
     def mesh(self) -> Mesh:
         r"""
         `fes.mesh()` — the `Mesh` this space spans: one submesh per subspace, in
-        order (shared handles, sealed while captured). The reverse of building a
-        `FiniteElementSpace(mesh)`.
+        order, so `fes.mesh()[i]` is `fes[i].submesh()` (shared handles, sealed
+        while captured). Two subspaces on one submesh list it twice. The reverse
+        of building a `FiniteElementSpace(mesh)`.
         """
     @typing.overload
     def __getitem__(self, key: int) -> SubFiniteElementSpace:
@@ -1067,6 +1071,30 @@ class Matrix:
     `finalize()` before solving. Index it (`matrix[i]`) to reach a block.
     """
     @property
+    def n_rows(self) -> builtins.int:
+        r"""
+        Total number of rows of the (finalized) global matrix.
+        """
+    @property
+    def n_cols(self) -> builtins.int:
+        r"""
+        Total number of columns of the (finalized) global matrix.
+        """
+    @property
+    def entry_count(self) -> builtins.int:
+        r"""
+        Total number of stored entries across all blocks.
+        """
+    @property
+    def memory_bytes(self) -> builtins.int:
+        r"""
+        Estimated heap bytes of the matrix: the assembled CSR (a column index
+        and a value per non-zero, an offset per row, a DOF key per row and
+        column) plus whatever the blocks store. The **factorization is not
+        counted** — it is the largest part by far, and faer keeps the size of
+        its factors private.
+        """
+    @property
     def symmetric(self) -> builtins.bool:
         r"""
         Whether the assembled matrix satisfies `A[i][j] == A[j][i]`, by adding up
@@ -1129,26 +1157,6 @@ class Matrix:
         matrix's blocks (first-seen, deduplicated). Empty if no block is tagged;
         several tags when the matrix aggregates several physics (e.g. a heat model
         with a Dirichlet → `["thermal", "constraint"]`).
-        """
-    def n_rows(self) -> builtins.int:
-        r"""
-        Total number of rows of the (finalized) global matrix.
-        """
-    def n_cols(self) -> builtins.int:
-        r"""
-        Total number of columns of the (finalized) global matrix.
-        """
-    def entry_count(self) -> builtins.int:
-        r"""
-        Total number of stored entries across all blocks.
-        """
-    def memory_bytes(self) -> builtins.int:
-        r"""
-        Estimated heap bytes of the matrix: the assembled CSR (a column index
-        and a value per non-zero, an offset per row, a DOF key per row and
-        column) plus whatever the blocks store. The **factorization is not
-        counted** — it is the largest part by far, and faer keeps the size of
-        its factors private.
         """
     def field_names(self) -> builtins.list[builtins.str]:
         r"""
@@ -1341,6 +1349,11 @@ class Mesh:
     Build with `Mesh(coords, element_type)` for one zone, compose several
     with `|`; index it (`mesh[i]`) to reach a `SubMesh`.
     """
+    @property
+    def cell_count(self) -> builtins.int:
+        r"""
+        Total number of cells across all submeshes.
+        """
     def __new__(cls, coords: Coords, element_type: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
         `Mesh(coords)` — empty mesh.
@@ -1387,10 +1400,6 @@ class Mesh:
         r"""
         `mesh.cell(submesh_idx, cell_idx)` → `Cell` view; same thing
         as `mesh[submesh_idx][cell_idx]`.
-        """
-    def cell_count(self) -> builtins.int:
-        r"""
-        Total number of cells across all submeshes.
         """
     def coords(self) -> Coords:
         r"""
@@ -2460,6 +2469,11 @@ class NodeField:
     (`field.value(node, "T")`) take the first zone defining the pair;
     `field.check()` verifies that zones agree on shared interface nodes.
     """
+    @property
+    def node_count(self) -> builtins.int:
+        r"""
+        Number of distinct nodes across the zones.
+        """
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
         Add `scalar` to `component` on every zone that defines it.
@@ -2486,10 +2500,6 @@ class NodeField:
     def with_components_per_submesh(cls, mesh: Mesh, components_per_submesh: typing.Sequence[typing.Sequence[builtins.str]]) -> NodeField:
         r"""
         Explicit `components` list per submesh of `mesh`.
-        """
-    def node_count(self) -> builtins.int:
-        r"""
-        Number of distinct nodes across the zones.
         """
     def value(self, node: Node, component: builtins.str) -> builtins.float:
         r"""
@@ -2862,13 +2872,21 @@ class SubElementField:
     the parent level, `ElementField(fes, components)` or
     `material_field(model, ...)`, composed with `|`.
     """
+    @property
     def cell_count(self) -> builtins.int:
         r"""
         Number of cells (elements) this field covers.
         """
+    @property
     def gauss_count(self) -> builtins.int:
         r"""
         Number of Gauss points per cell.
+        """
+    @property
+    def component_count(self) -> builtins.int:
+        r"""
+        Number of components stored per node, or per Gauss point for a field by
+        elements.
         """
     def support(self) -> SubFiniteElementSpace:
         r"""
@@ -2929,11 +2947,6 @@ class SubElementField:
     def components(self) -> builtins.list[builtins.str]:
         r"""
         Component names, in order.
-        """
-    def component_count(self) -> builtins.int:
-        r"""
-        Number of components stored per node, or per Gauss point for a field by
-        elements.
         """
     def component_index(self, name: builtins.str) -> typing.Optional[builtins.int]:
         r"""
@@ -3165,6 +3178,11 @@ class SubEvolution:
     is a list of `(abscissa, value)` pairs; compose several curves into an
     `Evolution` with `|`.
     """
+    @property
+    def out_of_range(self) -> builtins.str:
+        r"""
+        The stored out-of-range policy name.
+        """
     def __new__(cls, samples: typing.Sequence[tuple[typing.Any, typing.Any]], out_of_range: typing.Optional[builtins.str] = None, abscissa_type: typing.Optional[typing.Any] = None, ordinate_type: typing.Optional[builtins.str] = None) -> SubEvolution:
         r"""
         `SubEvolution(samples, out_of_range="error", abscissa_type=None,
@@ -3197,10 +3215,6 @@ class SubEvolution:
         r"""
         The sorted abscissas: floats for a curve, tuples of floats for a table
         (in lexicographic order).
-        """
-    def out_of_range(self) -> builtins.str:
-        r"""
-        The stored out-of-range policy name.
         """
     def interpolate(self, x: typing.Any, out_of_range: typing.Optional[builtins.str] = None) -> typing.Any:
         r"""
@@ -3290,13 +3304,21 @@ class SubFiniteElementSpace:
         r"""
         Number of nodes per element.
         """
+    @property
     def cell_count(self) -> builtins.int:
         r"""
         Number of elements (cells) in this subspace.
         """
+    @property
     def gauss_count(self) -> builtins.int:
         r"""
         Number of Gauss (quadrature) points per element.
+        """
+    def submesh(self) -> SubMesh:
+        r"""
+        The submesh this subspace is built on — shared, not copied, and sealed
+        for as long as the subspace holds it. `fes[i].submesh()` is
+        `fes.mesh()[i]` without rebuilding the mesh.
         """
     def gauss_xi(self, g: builtins.int) -> builtins.list[builtins.float]:
         r"""
@@ -3380,6 +3402,28 @@ class SubMatrix:
     level with `Matrix.block(...)` (a unit `Matrix`), composed with `|`.
     """
     @property
+    def n_rows(self) -> builtins.int:
+        r"""
+        Number of rows of this block.
+        """
+    @property
+    def n_cols(self) -> builtins.int:
+        r"""
+        Number of columns of this block.
+        """
+    @property
+    def entry_count(self) -> builtins.int:
+        r"""
+        Number of stored COO entries.
+        """
+    @property
+    def memory_bytes(self) -> builtins.int:
+        r"""
+        Estimated heap bytes of this block: its stored entries, each an index,
+        an index and a value. Supports and variable names, being shared, are not
+        counted; a computed block stores nothing and answers `0`.
+        """
+    @property
     def is_symmetric(self) -> builtins.bool:
         r"""
         Whether this block is symmetric **on its own**. A block that carries only
@@ -3402,24 +3446,6 @@ class SubMatrix:
         Value at row `(row_node, row_field)`, column `(col_node, col_field)`.
         Raises on a computed block, which holds no value: read the assembled
         `Matrix` it belongs to.
-        """
-    def n_rows(self) -> builtins.int:
-        r"""
-        Number of rows of this block.
-        """
-    def n_cols(self) -> builtins.int:
-        r"""
-        Number of columns of this block.
-        """
-    def entry_count(self) -> builtins.int:
-        r"""
-        Number of stored COO entries.
-        """
-    def memory_bytes(self) -> builtins.int:
-        r"""
-        Estimated heap bytes of this block: its stored entries, each an index,
-        an index and a value. Supports and variable names, being shared, are not
-        counted; a computed block stores nothing and answers `0`.
         """
     def __mul__(self, rhs: builtins.float) -> SubMatrix:
         r"""
@@ -3519,6 +3545,11 @@ class SubMesh:
         Element type name of this submesh (e.g. `"TRI3"`).
         """
     @property
+    def cell_count(self) -> builtins.int:
+        r"""
+        Number of cells in this submesh.
+        """
+    @property
     def is_sealed(self) -> builtins.bool:
         r"""
         Whether this submesh is sealed: `True` once it is used by a
@@ -3538,10 +3569,6 @@ class SubMesh:
         r"""
         Append a cell from its list of nodes, which must belong to this
         submesh's `Coords`; returns the new cell's index.
-        """
-    def cell_count(self) -> builtins.int:
-        r"""
-        Number of cells in this submesh.
         """
     def duplicate(self) -> SubMesh:
         r"""
@@ -3633,6 +3660,13 @@ class SubModel:
     level instead: `model.heat_conduction(fes)` or `model.dirichlet(...)`,
     composed with `|`.
     """
+    @property
+    def has_behavior(self) -> builtins.bool:
+        r"""
+        Whether this sub-model carries a constitutive behaviour that can be
+        integrated with `deformation` / `integrate_behavior` (`True` for
+        volumetric physics, `False` for constraints like Dirichlet).
+        """
     def primal_vars(self) -> builtins.list[builtins.str]:
         r"""
         Names of the primal (primary) variables of this sub-model.
@@ -3671,12 +3705,6 @@ class SubModel:
         Names of the material components this sub-model expects, or
         `None` for physics that don't need material data (Dirichlet, …).
         """
-    def has_behavior(self) -> builtins.bool:
-        r"""
-        Whether this sub-model carries a constitutive behaviour that can be
-        integrated with `deformation` / `integrate_behavior` (`True` for
-        volumetric physics, `False` for constraints like Dirichlet).
-        """
     def __or__(self, other: SubModel) -> Model:
         r"""
         `sub_model | sub_model` → a fresh `Model` holding both terms.
@@ -3713,6 +3741,17 @@ class SubNodeField:
     (`node_field[i]`) — never constructed directly. Build at the parent
     level instead: `NodeField(support, components)`, composed with `|`.
     """
+    @property
+    def node_count(self) -> builtins.int:
+        r"""
+        Number of nodes in the support.
+        """
+    @property
+    def component_count(self) -> builtins.int:
+        r"""
+        Number of components stored per node, or per Gauss point for a field by
+        elements.
+        """
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
         Add `scalar` to every value of `component` (in place).
@@ -3728,10 +3767,6 @@ class SubNodeField:
     def div_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
         Divide every value of `component` by `scalar` (in place).
-        """
-    def node_count(self) -> builtins.int:
-        r"""
-        Number of nodes in the support.
         """
     def get(self, node_idx: builtins.int, comp_idx: builtins.int) -> builtins.float:
         r"""
@@ -3792,11 +3827,6 @@ class SubNodeField:
     def components(self) -> builtins.list[builtins.str]:
         r"""
         Component names, in order.
-        """
-    def component_count(self) -> builtins.int:
-        r"""
-        Number of components stored per node, or per Gauss point for a field by
-        elements.
         """
     def component_index(self, name: builtins.str) -> typing.Optional[builtins.int]:
         r"""
@@ -4038,8 +4068,7 @@ def beam_deformation(field: NodeField, fespace: FiniteElementSpace, material: El
     | 3-D | six | `eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z` |
     
     For an oriented element it builds the local axes, rotates the nodal triples
-    into them, then evaluates the strains from the local DOFs. This replaces
-    `frame_deformation`, which was the same operator for the 2-D and 3-D cases.
+    into them, then evaluates the strains from the local DOFs.
     
     The **material** is required, and that is the honest signature: the
     element's interpolation depends on `Φ = 12EI/(G·A_s·L²)`, so its curvature
@@ -4397,6 +4426,7 @@ def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str
     | `"left_cauchy_green"` (`"b"`) | `b = FFᵀ` | `b_xx`, … |
     | `"hencky"` (`"log"`) | `½ ln C` | `H_xx`, … |
     | `"euler_almansi"` (`"almansi"`) | `e = ½(I − b⁻¹)` | `e_xx`, … |
+    | `"jacobian"` (`"J"`) | `J = det F` | `J` alone |
     
     On an axisymmetric space, the hoop entry `<prefix>_zz` is appended
     (`H_θθ = u_r / r`).
@@ -5907,9 +5937,7 @@ def timoshenko(fespace: FiniteElementSpace) -> Model:
     | 2-D | `u_x, u_y, r_z` | `+ A` | `N, M, V` |
     | 3-D | six | `E, A, I_y, I_z, J, G, A_sy, A_sz` | `N, M_y, M_z, T, V_y, V_z` |
     
-    This replaces `model.frame` and `model.frame3d`, which were the same
-    physics in 2-D and 3-D. Read the DOF names back with
-    `model.primal_vars()`.
+    Read the DOF names back with `model.primal_vars()`.
     
     The element is the **exact** one — the closed form driven by
     `Φ = 12EI/(G·A_s·L²)` — so one element per member suffices. Its shape

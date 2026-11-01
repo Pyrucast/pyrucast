@@ -86,25 +86,26 @@ dans la maille.
 | `FiniteElementSpace` | |
 |---|---|
 | `len(fes)`, `fes[i]`, `for sub in fes`, `unit()`, `\|` | l'interface des [agrégats](aggregate.md) |
-| `mesh()` | le maillage couvert : ses zones elles-mêmes, une fois chacune |
+| `mesh()` | le maillage couvert : la zone de chaque sous-espace, dans l'ordre |
 | `element(i, maille)`, `elements(i)` | la vue sur une maille du sous-espace `i`, ou sur toutes |
 | `dump()` | le contenu, points de Gauss compris |
 
 | `SubFiniteElementSpace` (sous-espace) | |
 |---|---|
 | `element_type`, `interpolation`, `quadrature` | le type de maille et les deux choix de la zone |
+| `submesh()` | sa zone de maillage, partagée |
 | `ref_dim`, `space_dim`, `nodes_per_cell` | la dimension de l'élément de référence, celle des `Coords`, les nœuds par maille |
 | `is_axisymmetric` | si les `Coords` décrivent un corps de révolution |
-| `cell_count()`, `gauss_count()` | les mailles, les points de Gauss par maille |
+| `cell_count`, `gauss_count` | les mailles, les points de Gauss par maille |
 | `gauss_xi(g)`, `gauss_weight(g)` | la position du point `g` dans l'élément de référence, son poids |
 | `n_at_g(g)`, `dn_at_g(g)` | \\( N_i \\) et \\( \partial N_i/\partial\xi_k \\) au point `g` |
 | `jacobian(maille, g)`, `det_jacobian(maille, g)`, `dn_dx(maille, g)` | \\( J \\), \\( \lvert J\rvert \\) et \\( \partial N_i/\partial x_a \\) d'une maille au point `g` |
 | `sub[maille]`, `element(maille)`, `elements()`, `len(sub)` | les vues sur les mailles |
 
 Une vue de maille (`Element`) donne les mêmes grandeurs sans le rang de la
-maille — `jacobian(g)`, `det_jacobian(g)`, `dn_dx(g)`… —, plus `index`,
-`cell()` et `nodes()`. Ses dimensions (`gauss_count`, `nodes_per_cell`,
-`ref_dim`, `space_dim`) sont des propriétés, sans parenthèses.
+maille — `jacobian(g)`, `det_jacobian(g)`, `dn_dx(g)`… —, les mêmes
+dimensions (`gauss_count`, `nodes_per_cell`, `ref_dim`, `space_dim`), plus
+`index`, `cell()` et `nodes()`.
 
 Les tableaux sont rendus **à plat**, ligne par ligne :
 
@@ -576,9 +577,9 @@ portent sur l'anneau entier.
 - la coloration, un `OnceLock<Vec<Vec<usize>>>` marqué `#[serde(skip)]`.
 
 `FiniteElementSpace` n'est qu'un `Vec<Handle<SubFiniteElementSpace>>` : il ne
-garde pas de `Mesh`. `mesh()` en reconstruit un à partir des zones de ses
-sous-espaces, partagées et dédoublonnées par identité, et `check_push` refuse un
-sous-espace sur d'autres `Coords` que le premier.
+garde pas de `Mesh`. `mesh()` en reconstruit un avec la zone de chaque
+sous-espace, partagée, dans l'ordre, et `check_push` refuse un sous-espace sur
+d'autres `Coords` que le premier.
 
 Les constructeurs sont `FiniteElementSpace::lagrange1(&mesh)`,
 `FiniteElementSpace::new(&mesh, interpolation)` (Gauss partout) et

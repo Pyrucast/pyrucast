@@ -31,7 +31,7 @@ def test_mesh_refuses_a_foreign_node(setup):
     c, a, b, x, _ = setup
     mesh = pyrucast.Mesh(c, "POI1")
     _refused(lambda: mesh.unit().add_cell([x]))
-    assert mesh.cell_count() == 0
+    assert mesh.cell_count == 0
     assert c.refcount(a.id) == 1  # nothing counted on the homonym
     _refused(lambda: a | x)
     _refused(lambda: (a | b) | x)

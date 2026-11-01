@@ -82,7 +82,7 @@ def test_triangulate_volume_reuses_the_envelope_nodes():
     c = pyrucast.Coords(3)
     nodes = _box(c, [0, 0, 0], [1, 1, 1])
     mesh = pyrucast.mesh.triangulate_volume(_surface(c, nodes))
-    used = {mesh.node(0, ci, k).id for ci in range(mesh.cell_count()) for k in range(4)}
+    used = {mesh.node(0, ci, k).id for ci in range(mesh.cell_count) for k in range(4)}
     assert {n.id for n in nodes} <= used
 
 
@@ -92,7 +92,7 @@ def test_triangulate_volume_leaves_the_surface_alone():
     c = pyrucast.Coords(3)
     envelope = _surface(c, _box(c, [0, 0, 0], [1, 1, 1]))
     mesh = pyrucast.mesh.triangulate_volume(envelope)
-    assert pyrucast.mesh.skin(mesh).cell_count() == 12
+    assert pyrucast.mesh.skin(mesh).cell_count == 12
 
 
 def _extruded_plate(c, per_side, size):

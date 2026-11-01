@@ -24,16 +24,16 @@ def main() -> None:
 
     # Quadrangles of edge length ~0.8; a few triangles may remain.
     quad = pc.mesh.pave_surface(contour, "QUA4", 0.8)
-    print("QUA4      :", quad.element_types(), quad.cell_count(), "cells")
+    print("QUA4      :", quad.element_types(), quad.cell_count, "cells")
 
     # Asking for it outright: no triangle at all. The contour has an even
     # number of segments, so this costs nothing here.
     strict = pc.mesh.pave_surface(contour, "QUA4", 0.8, prefer_quads=True)
-    print("prefer_quads  :", strict.element_types(), strict.cell_count(), "cells")
+    print("prefer_quads  :", strict.element_types(), strict.cell_count, "cells")
 
     # Compare with the Delaunay mesher's recombination on the same contour.
     recombined = pc.mesh.triangulate_surface(contour, "QUA4", 0.8)
-    print("recombined:", recombined.element_types(), recombined.cell_count(), "cells")
+    print("recombined:", recombined.element_types(), recombined.cell_count, "cells")
 
 
 if __name__ == "__main__":

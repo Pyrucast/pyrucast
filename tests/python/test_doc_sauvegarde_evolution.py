@@ -69,7 +69,7 @@ mesh2 = objets["maillage fin"]
 t2 = objets["T (°C)"]
 # ANCHOR_END: save_load
 
-assert mesh2.cell_count() == mesh.cell_count()
+assert mesh2.cell_count == mesh.cell_count
 assert t2.components() == ["T"]
 
 
@@ -93,7 +93,7 @@ assert len(o["T"] | o["f"]) == 1  # a single zone: the support is one object
 pyrucast.save("m.pyr", {"maillage": mesh})  # also writes the Coords and the submeshes
 # ANCHOR_END: dependances
 
-assert pyrucast.load("m.pyr")["maillage"].cell_count() == mesh.cell_count()
+assert pyrucast.load("m.pyr")["maillage"].cell_count == mesh.cell_count
 
 
 # ── What is not saved: the derived states ───────────────────────────────────
@@ -118,7 +118,7 @@ k = pyrucast.matrix.stiffness(o["modele"], o["materiaux"])  # réassemble
 u = pyrucast.solver.solve(k, o["chargement"])  # refactorise
 # ANCHOR_END: reassemblage
 
-assert u.node_count() > 0
+assert u.node_count > 0
 
 
 # ── The node counters do not cross over ─────────────────────────────────────

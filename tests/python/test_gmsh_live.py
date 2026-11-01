@@ -98,7 +98,7 @@ def test_one_coords_shared_by_every_group(session):
     coords = pyrucast.Coords(dim=3)
     regions, _ = pyrucast.mesh.from_gmsh(coords)
 
-    assert coords.node_count() == attendu
+    assert coords.node_count == attendu
     # The clamped face really is a piece of the part, not a copy.
     assert regions["encastrement"].cell_counts()[0] > 0
     assert regions["piece"].cell_counts()[0] > 0
@@ -164,7 +164,7 @@ def test_finalize_does_not_take_the_mesh_with_it(session):
     gmsh.initialize()  # the fixture will close this one
 
     assert regions["piece"].cell_counts() == counts
-    assert coords.node_count() > 0
+    assert coords.node_count > 0
 
 
 # ── Views, and the other direction: to_gmsh ────────────────────────────────
@@ -208,8 +208,8 @@ def test_element_views_become_one_point_fields(session):
     )
     regions, fields = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=2))
     zone = fields["E"][0]
-    assert zone.gauss_count() == 1
-    assert zone.cell_count() == regions["plate"].cell_count()
+    assert zone.gauss_count == 1
+    assert zone.cell_count == regions["plate"].cell_count
     assert zone.value(0, 0, "E") == 7.0
 
 
@@ -231,7 +231,7 @@ def test_to_gmsh_then_from_gmsh_gives_the_mesh_and_fields_back(session):
     plate = regions["plate"]
     temperature = pyrucast.NodeField(plate, ["T"])
     for z in range(len(temperature)):
-        for i in range(temperature[z].node_count()):
+        for i in range(temperature[z].node_count):
             temperature[z].set(i, 0, float(i))
     fes = pyrucast.FiniteElementSpace(plate)
     stress = pyrucast.ElementField(fes, ["s"])
@@ -252,10 +252,10 @@ def test_to_gmsh_then_from_gmsh_gives_the_mesh_and_fields_back(session):
     # The values follow the nodes, whatever the numbering: compare by position.
     before = {
         tuple(n.position()): temperature.value(n, "T")
-        for c in range(plate.cell_count())
+        for c in range(plate.cell_count)
         for n in plate.cell(0, c).nodes()
     }
     after = fields["T"].frames()[1]
-    for c in range(back["plate"].cell_count()):
+    for c in range(back["plate"].cell_count):
         for n in back["plate"].cell(0, c).nodes():
             assert after.value(n, "T") == before[tuple(n.position())]

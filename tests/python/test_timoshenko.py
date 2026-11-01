@@ -68,10 +68,10 @@ def test_section_forces_cantilever():
     deformation = pyrucast.element_field.beam_deformation(solution, fes, materials)
     forces = pyrucast.element_field.integrate_behavior(model, deformation, materials)
     sub = forces[0]
-    for cell in range(sub.cell_count()):
+    for cell in range(sub.cell_count):
         assert abs(abs(sub.value(cell, 0, "V")) - P) < 2e-2 * P  # V ≈ ±P (constant)
     assert abs(abs(sub.value(0, 0, "M")) - P * L) < 5e-2 * P * L  # |M(0)| ≈ P·L
-    assert abs(sub.value(sub.cell_count() - 1, 0, "M")) < 5e-2 * P * L  # |M(L)| ≈ 0
+    assert abs(sub.value(sub.cell_count - 1, 0, "M")) < 5e-2 * P * L  # |M(L)| ≈ 0
 
 
 def test_timoshenko_vars():

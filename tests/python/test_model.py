@@ -58,8 +58,8 @@ def test_heat_conduction_single_seg2_stiffness():
     k_val = 1.5
     _, _, _, _, materials, model, a, b = _seg2_heat_model(length=length, k=k_val)
     K = pyrucast.matrix.stiffness(model, materials)
-    assert K.n_rows() == 2
-    assert K.n_cols() == 2
+    assert K.n_rows == 2
+    assert K.n_cols == 2
     expected = k_val / length
     tol = 1e-12
     assert abs(K.get(a, "q", a, "T") - expected) < tol
@@ -82,8 +82,8 @@ def test_two_seg2_assembly_is_tridiagonal():
 
     model = pyrucast.model.heat_conduction(fes)
     K = pyrucast.matrix.stiffness(model, materials)
-    assert K.n_rows() == 3
-    assert K.n_cols() == 3
+    assert K.n_rows == 3
+    assert K.n_cols == 3
 
     def v(i, j):
         return K.get(i, "q", j, "T")
@@ -106,11 +106,11 @@ def test_two_seg2_assembly_is_tridiagonal():
 def test_dirichlet_creates_multiplier_node_and_writes_both_blocks():
     c, _, _, _, materials, model, a, _b = _seg2_heat_model(dirichlet_left=True)
     # The Coords now has 3 live nodes (2 real + 1 multiplier).
-    assert c.node_count() == 3
+    assert c.node_count == 3
 
     K = pyrucast.matrix.stiffness(model, materials)
-    assert K.n_rows() == 3
-    assert K.n_cols() == 3
+    assert K.n_rows == 3
+    assert K.n_cols == 3
 
     # Locate the multiplier node: the row labelled "imposed" sits on the
     # one new node id.
@@ -216,7 +216,7 @@ def test_fespace_and_mesh_recovered_from_model():
 
     m2 = recovered.mesh()
     assert len(m2) == len(mesh)
-    assert m2.unit().cell_count() == mesh.unit().cell_count()
+    assert m2.unit().cell_count == mesh.unit().cell_count
 
 
 def test_fespace_one_to_one_no_dedup():

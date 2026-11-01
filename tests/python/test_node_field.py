@@ -38,10 +38,10 @@ def test_from_mesh_zero_initialized():
     _c, _nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["T"])
     assert len(f) == 1
-    assert f.node_count() == 3
+    assert f.node_count == 3
     assert f.components() == ["T"]
     sub = f.unit()
-    assert sub.component_count() == 1
+    assert sub.component_count == 1
     for i in range(3):
         assert sub.get(i, 0) == 0.0
 
@@ -55,7 +55,7 @@ def test_non_poi1_support_uses_distinct_nodes():
     seg = pyrucast.Mesh(c, "SEG2")
     seg.unit().add_cell([a, b])
     f = pyrucast.NodeField(seg, ["T"])
-    assert f.node_count() == 2
+    assert f.node_count == 2
     assert f.value(a, "T") == 0.0
 
 
@@ -84,9 +84,9 @@ def test_one_sub_per_submesh():
     f = pyrucast.NodeField(mesh, ["T"])
     assert len(f) == 2
     # 4 distinct nodes; the interface nodes are stored once per zone.
-    assert f.node_count() == 4
-    assert f[0].node_count() == 3
-    assert f[1].node_count() == 3
+    assert f.node_count == 4
+    assert f[0].node_count == 3
+    assert f[1].node_count == 3
 
 
 def test_components_per_submesh():
@@ -254,7 +254,7 @@ def test_positions_poi1_mesh_xyz():
 
     f = pyrucast.node_field.positions(mesh)
     assert f.components() == ["X", "Y", "Z"]
-    assert f.node_count() == 2
+    assert f.node_count == 2
     assert f.value(a, "X") == 1.0
     assert f.value(a, "Y") == 2.0
     assert f.value(a, "Z") == 3.0
@@ -274,7 +274,7 @@ def test_positions_converts_non_poi1_and_deduplicates():
 
     f = pyrucast.node_field.positions(tri)
     assert f.components() == ["X", "Y"]  # 2-D ⇒ X, Y only
-    assert f.node_count() == 4  # shared nodes appear once
+    assert f.node_count == 4  # shared nodes appear once
     assert f.value(cc, "X") == 0.5
     assert f.value(d, "X") == 1.5
 
@@ -559,7 +559,7 @@ def test_merge_compatible_and_conflict():
     b[0].set_value(n2, "T", 9.0)
 
     m = pyrucast.node_field.merge(a, b)
-    assert m.node_count() == 3
+    assert m.node_count == 3
     assert m.value(n0, "T") == 5.0
     assert m.value(n1, "T") == 3.0
     assert m.value(n2, "T") == 9.0
@@ -586,7 +586,7 @@ def test_restrict_to_mesh_subset():
     mesh.unit().add_cell([nodes[2]])
 
     r = pyrucast.node_field.restrict(f, mesh)
-    assert r.node_count() == 2
+    assert r.node_count == 2
     assert r.value(nodes[0], "T") == 1.0
     assert r.value(nodes[2], "T") == 3.0
 
@@ -639,7 +639,7 @@ def test_restrict_like_lands_on_target_support():
     source[0].set_value(nodes[0], "lambda", 7.0)  # component dropped
 
     r = pyrucast.node_field.restrict_like(source, target)
-    assert r.node_count() == 2
+    assert r.node_count == 2
     assert r.value(nodes[0], "u_x") == 1.0
     assert r.value(nodes[1], "u_y") == 2.0
     assert r.value(nodes[1], "u_x") == 0.0  # absent → 0
@@ -714,7 +714,7 @@ def test_consolidate_node_keeps_distinct_supports_separate():
 
     g = pyrucast.node_field.consolidate(f)
     assert len(g) == 2
-    assert g.node_count() == 4
+    assert g.node_count == 4
     assert g.value(nodes[1], "T") == 2.0
     assert g.value(nodes[3], "T") == 4.0
 

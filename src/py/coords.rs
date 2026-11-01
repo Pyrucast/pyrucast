@@ -60,11 +60,13 @@ impl PyCoords {
     }
 
     /// Number of live nodes.
+    #[getter]
     fn node_count(&self) -> usize {
         self.handle.read().node_count()
     }
 
     /// Number of allocated node slots (live plus not-yet-collected).
+    #[getter]
     fn capacity(&self) -> usize {
         self.handle.read().capacity()
     }

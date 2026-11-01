@@ -69,7 +69,7 @@ K = pyrucast.matrix.stiffness(model, materials)
 sol = pyrucast.solver.solve(K, rhs)
 # ANCHOR_END: miroir
 
-assert sol.node_count() > 0
+assert sol.node_count > 0
 
 
 # ── Erreurs ─────────────────────────────────────────────────────────────────
