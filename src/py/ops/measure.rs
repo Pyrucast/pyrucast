@@ -92,9 +92,12 @@ pub fn xtx(x: &Bound<'_, PyAny>, components: Option<Vec<String>>) -> PyResult<f6
 /// Global scalar product `∑ xᵢ · yᵢ` of two **whole** fields — Cast3M's `XTY`.
 ///
 /// `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
-/// `ElementField` / `SubElementField`), sit on the same support/decomposition,
-/// and carry the same components (aligned by name). Returns a single float —
-/// the field inner product used for energies (`F·u`), residual norms, etc.
+/// `ElementField` / `SubElementField`). The sum runs over the supports both
+/// carry and, on each, over the components both carry (aligned by name); a
+/// support or a component on one side only has no counterpart and adds
+/// nothing. Two sub-fields must sit on the same support. Returns a single
+/// float — the field inner product used for energies (`F·u`), residual norms,
+/// etc.
 ///
 /// For the **node-by-node** scalar product (a field, one value per node),
 /// see `pyrucast.field.psca`.

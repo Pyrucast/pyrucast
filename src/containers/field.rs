@@ -286,14 +286,14 @@ pub const ABSENT_COMPONENT: u32 = u32::MAX;
 /// ```
 pub trait SubField {
     /// Type of the object backing this sub-field's support — a `SubMesh` for
-    /// node fields, a `SubFiniteElementSpace` for element fields. Its store
-    /// slot identity defines [`SubField::same_support`].
+    /// node fields, a `SubFiniteElementSpace` for element fields. Its identity
+    /// — the handle's, not its content — defines [`SubField::same_support`].
     type Support: Any + Send + Sync;
 
     /// Handle to the support backing this sub-field.
     fn support(&self) -> Handle<Self::Support>;
 
-    /// Whether `self` and `other` are backed by the **same** support slot
+    /// Whether `self` and `other` are backed by the **same** support object
     /// ([`Handle::same_object`]) — the precondition for combining them.
     fn same_support(&self, other: &Self) -> bool {
         self.support().same_object(&other.support())
@@ -1055,10 +1055,10 @@ macro_rules! __field_op {
 /// Aggregate-level view of a field.
 ///
 /// Blanket-implemented for every [`Aggregate`] whose sub-object is a
-/// [`SubField`] — `ElementField` today, `NodeField` once it becomes an
-/// aggregate. A component may exist on some subs only; `min`/`max` fold
-/// over the subs that define it and error if none does — and, called
-/// without a component, over every value of every sub.
+/// [`SubField`]: `NodeField` and `ElementField`. A component may exist on
+/// some subs only; `min`/`max` fold over the subs that define it and error if
+/// none does — and, called without a component, over every value of every
+/// sub.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -1189,8 +1189,8 @@ where
     }
 
     /// Zero-copy view of the zones, for operators doing many reads
-    /// (gradient, solver, viz, …): one read guard per sub, data read
-    /// **in place** in the store for the lifetime of the view.
+    /// (gradient, deformation, restrict, viz, …): one read guard per sub, data
+    /// read **in place** for the lifetime of the view.
     fn view(&self) -> Result<FieldView<Self::Sub>> {
         Ok(FieldView {
             components: self.components(),
@@ -1207,8 +1207,9 @@ where
     {
         // Compute the zones in parallel — `read` takes concurrent shared locks,
         // and the per-zone work itself may parallelise further (nested rayon is
-        // fine). Store mutation (`insert`) stays **serial and in order** so the
-        // result decomposition is identical to the sequential version.
+        // fine). Assembling the result (`add_sub`) stays **serial and in
+        // order** so the result decomposition is identical to the sequential
+        // version.
         let handles: Vec<&Handle<Self::Sub>> = self.iter().collect();
         let subs: Vec<Self::Sub> = handles
             .par_iter()
@@ -1313,7 +1314,7 @@ where
         Self: Sized,
         Self::Sub: Clone,
     {
-        // Snapshot the **right** side's zones (clone out of the store): they are
+        // Snapshot the **right** side's zones (clone them): they are
         // probed against every left zone, so a guard on one of them would meet
         // the left guard — and `other` may share handles with `self`. The left
         // side is read in place: a second copy of it would be a whole material
@@ -1532,8 +1533,7 @@ impl<A: Aggregate> Field for A where A::Sub: SubField {}
 /// # use pyrucast::containers::field::MapValues;
 /// # use pyrucast::ops::field;
 /// // What unifies the zone and the aggregate for element-wise mathematics:
-/// // a single definition of `sqrt` serves all four types of
-/// // champ.
+/// // a single definition of `sqrt` serves all four field types.
 /// assert_eq!(field::sqrt(&temp)?.get(0)?.read().value(n[0].id(), "T")?, 2.0);
 /// let z = temp.get(0)?;
 /// let z = z.read();
@@ -1995,7 +1995,7 @@ mod tests {
         let out = ef.filter_components("k").unwrap();
         assert_eq!(out.len(), 2);
         assert_eq!(Field::components(&out), vec!["k"]);
-        // zone0 handle shared untouched; zone1 rebuilt (fresh slot).
+        // zone0 handle shared untouched; zone1 rebuilt (a new zone).
         assert!(out.get(0).unwrap().same_object(&ef.get(0).unwrap()));
         assert!(!out.get(1).unwrap().same_object(&ef.get(1).unwrap()));
 
@@ -2140,8 +2140,8 @@ mod tests {
 
     #[test]
     fn subfield_operator_uses_union_passthrough() {
-        // The zone-level `&f + &g` operator is now union/passthrough, no longer
-        // strict on component sets.
+        // The zone-level `&f + &g` operator is union/passthrough: it does not
+        // require the same component sets.
         let (sm, nodes) = poi1_support(1);
         let mut f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         f.set_value(nodes[0].id(), "T", 5.0).unwrap();

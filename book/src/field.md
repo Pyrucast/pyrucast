@@ -63,10 +63,10 @@ mêmes noms (voir [Opérateurs sur les champs](operateurs/champs.md#réduction))
 
 ### Par un scalaire
 
-`champ + s`, `champ - s`, `champ * s` et `champ / s` appliquent l'opération à
-chaque valeur, de chaque composante, de chaque zone, et rendent un **nouveau**
-champ ; le scalaire se place d'un côté ou de l'autre. `champ ** s` élève
-chaque valeur à la puissance `s`. Il en va de même sur une zone.
+`champ + s`, `champ - s`, `champ * s`, `champ / s` et `champ ** s` appliquent
+l'opération à chaque valeur, de chaque composante, de chaque zone, et rendent
+un **nouveau** champ ; le scalaire se place d'un côté ou de l'autre. `-champ`
+change le signe de chaque valeur. Il en va de même sur une zone.
 
 ```python
 {{#include ../../tests/python/test_doc_conteneurs.py:arithmetique}}
@@ -91,8 +91,8 @@ zone ne porte `c`, et `div_to_component` refuse une division par zéro.
 {{#include ../../tests/python/test_doc_conteneurs.py:par_composante}}
 ```
 
-Sur une zone de champ aux points de Gauss, `set_uniform(c, v)` donne la valeur
-`v` à tous les points (voir [Champ aux points de Gauss](element-field.md)).
+Sur une zone, `set_uniform(c, v)` donne la valeur `v` à la composante `c` en
+chaque nœud ou point de Gauss.
 
 ### Entre deux champs
 

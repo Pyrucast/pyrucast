@@ -673,6 +673,15 @@ class ElementField:
         union with passthrough, `SubElementField` → targeted zone). The ternary
         `pow(x, y, z)` modulo form is rejected.
         """
+    def __rpow__(self, base: builtins.float, modulo: typing.Any = None) -> ElementField:
+        r"""
+        `scalar ** field` — the scalar raised to every value. Any other left
+        operand is refused (`TypeError`), and so is a modulo.
+        """
+    def __neg__(self) -> ElementField:
+        r"""
+        `-field` — every value negated, in a new field.
+        """
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
         Add `scalar` to `component` on every zone that defines it.
@@ -2710,6 +2719,15 @@ class NodeField:
         union with passthrough, `SubNodeField` → targeted zone). The ternary
         `pow(x, y, z)` modulo form is rejected.
         """
+    def __rpow__(self, base: builtins.float, modulo: typing.Any = None) -> NodeField:
+        r"""
+        `scalar ** field` — the scalar raised to every value. Any other left
+        operand is refused (`TypeError`), and so is a modulo.
+        """
+    def __neg__(self) -> NodeField:
+        r"""
+        `-field` — every value negated, in a new field.
+        """
     def gradient(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
         Gradient `∇f` of a node `field` at the Gauss points of `fespace`.
@@ -3073,6 +3091,15 @@ class SubElementField:
         operators (float exponent → broadcast; `SubElementField` on the same
         subspace → per-component union with passthrough). The ternary
         `pow(x, y, z)` modulo form is rejected (meaningless on floats).
+        """
+    def __rpow__(self, base: builtins.float, modulo: typing.Any = None) -> SubElementField:
+        r"""
+        `scalar ** field` — the scalar raised to every value. Any other left
+        operand is refused (`TypeError`), and so is a modulo.
+        """
+    def __neg__(self) -> SubElementField:
+        r"""
+        `-field` — every value negated, in a new sub-field.
         """
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
@@ -3804,6 +3831,10 @@ class SubNodeField:
         r"""
         Set the value at `node` for the named `component`.
         """
+    def set_uniform(self, component: builtins.str, value: builtins.float) -> None:
+        r"""
+        Set `component` to `value` at every node of the zone.
+        """
     def __setitem__(self, key: tuple[Node, builtins.str], value: builtins.float) -> None:
         r"""
         `subfield[node, "UX"] = v` — raises if the node or component is absent.
@@ -3952,6 +3983,15 @@ class SubNodeField:
         operators (float exponent → broadcast; `SubNodeField` on the same
         support → per-component union with passthrough). The ternary
         `pow(x, y, z)` modulo form is rejected (meaningless on floats).
+        """
+    def __rpow__(self, base: builtins.float, modulo: typing.Any = None) -> SubNodeField:
+        r"""
+        `scalar ** field` — the scalar raised to every value. Any other left
+        operand is refused (`TypeError`), and so is a modulo.
+        """
+    def __neg__(self) -> SubNodeField:
+        r"""
+        `-field` — every value negated, in a new sub-field.
         """
     def abs(self) -> SubNodeField:
         r"""
@@ -6137,9 +6177,12 @@ def xty(x: typing.Any, y: typing.Any) -> builtins.float:
     Global scalar product `∑ xᵢ · yᵢ` of two **whole** fields — Cast3M's `XTY`.
     
     `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
-    `ElementField` / `SubElementField`), sit on the same support/decomposition,
-    and carry the same components (aligned by name). Returns a single float —
-    the field inner product used for energies (`F·u`), residual norms, etc.
+    `ElementField` / `SubElementField`). The sum runs over the supports both
+    carry and, on each, over the components both carry (aligned by name); a
+    support or a component on one side only has no counterpart and adds
+    nothing. Two sub-fields must sit on the same support. Returns a single
+    float — the field inner product used for energies (`F·u`), residual norms,
+    etc.
     
     For the **node-by-node** scalar product (a field, one value per node),
     see `pyrucast.field.psca`.

@@ -924,14 +924,31 @@ def test_a_scalar_on_the_left_mirrors_the_right():
     # Not commutative: the scalar on the left is the left operand.
     assert (1.0 - f).value(a, "T") == -0.5
     assert (3.0 / f).value(a, "T") == 2.0
+    assert (4.0**f).value(a, "T") == 8.0  # 4 ** 1.5
+    assert (-f).value(a, "T") == -1.5
     zone = f[0]
     assert [(2 * zone).value(a, "T"), (2 + zone).value(a, "T")] == [3.0, 3.5]
     assert [(1 - zone).value(a, "T"), (3 / zone).value(a, "T")] == [-0.5, 2.0]
+    assert [(4**zone).value(a, "T"), (-zone).value(a, "T")] == [8.0, -1.5]
     for call in (
         lambda: "x" * f,
         lambda: "x" + f,
+        lambda: "x" ** f,
         lambda: "x" - zone,
         lambda: "x" / zone,
+        lambda: "x" ** zone,
     ):
         with pytest.raises(TypeError):
             call()
+
+
+def test_set_uniform_sets_one_component_on_every_node():
+    c = pyrucast.Coords(1)
+    a, b = c.add_node([0.0]), c.add_node([1.0])
+    f = pyrucast.NodeField(a | b, ["T", "q"])
+    f[0].set_value(a, "q", 7.0)
+    f[0].set_uniform("T", 20.0)
+    assert [f.value(a, "T"), f.value(b, "T")] == [20.0, 20.0]
+    assert [f.value(a, "q"), f.value(b, "q")] == [7.0, 0.0]  # q untouched
+    with pytest.raises(RuntimeError, match="unknown component"):
+        f[0].set_uniform("p", 1.0)

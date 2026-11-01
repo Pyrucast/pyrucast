@@ -58,12 +58,14 @@ plus_chaud = champ + 5.0  # un nouveau champ : chaque valeur + 5
 ecart = 100.0 - champ  # le scalaire se place d'un côté ou de l'autre
 carre = champ**2.0  # puissance, valeur par valeur
 print(plus_chaud.max("T"), ecart.min("T"), carre.max("q"))  # 35.0 70.0 25.0
+print((-champ).min("T"), (2.0**champ).max("q"))  # -30.0 32.0
 
 garde = champ
 champ += 1.0  # un nouveau champ, rangé sous le même nom
 print(champ.max("T"), garde.max("T"))  # 31.0 30.0 : `garde` a l'ancien
 # ANCHOR_END: arithmetique
 assert (plus_chaud.max("T"), ecart.min("T"), carre.max("q")) == (35.0, 70.0, 25.0)
+assert ((-garde).min("T"), (2.0**garde).max("q")) == (-30.0, 32.0)
 assert (champ.max("T"), garde.max("T")) == (31.0, 30.0)
 
 # ── par composante ─────────────────────────────────────────
