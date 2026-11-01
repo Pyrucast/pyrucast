@@ -49,6 +49,7 @@ bornes ou une composante inconnue lèvent une erreur.
 | `ElementField` | |
 |---|---|
 | `len(champ)`, `champ[i]`, `for zone in champ`, `unit()`, `\|` | l'interface des [agrégats](aggregate.md) |
+| `support()` | l'espace de ses zones, partagé |
 | `components()` | l'union des composantes des zones |
 | `min(c)`, `max(c)`, `sum(c)` | sur toutes les zones qui portent `c` |
 | `champ["c"]`, `filter_components([…])`, `rename_component(a, b)` | un champ réduit à ces composantes, ou une composante renommée |
@@ -58,6 +59,7 @@ bornes ou une composante inconnue lèvent une erreur.
 
 | `SubElementField` (zone) | |
 |---|---|
+| `support()` | son sous-espace, partagé |
 | `cell_count()`, `gauss_count()`, `component_count()` | les trois dimensions de la zone |
 | `value(maille, g, "c")`, `zone[maille, g, "c"]` | une valeur, par nom de composante |
 | `get(maille, g, rang)` | une valeur, par rang de composante |
@@ -101,8 +103,12 @@ Deux champs se combinent **point à point** seulement s'ils sont posés sur le
 `FiniteElementSpace(mesh)` sur un même maillage créent deux espaces distincts,
 et leurs champs restent côte à côte au lieu de s'additionner (voir l'exemple
 ci-dessous). On construit donc un espace une fois et on le passe à tous les
-opérateurs ; le modèle rend le sien par `modele.fespace()`, et
-`material_field(modele, …)` s'en sert.
+opérateurs ; `material_field(modele, …)` pose ses zones sur les sous-espaces
+des sous-modèles, ceux-là mêmes.
+
+Un champ rend aussi le sien : `champ.support()` donne l'espace de ses zones, et
+`zone.support()` le sous-espace d'une zone. C'est le même objet, pas une copie :
+un champ construit dessus se combine point à point avec le premier.
 
 Un champ reste sur sa quadrature : aucun opérateur ne transporte des valeurs
 d'une quadrature à une autre. Pour obtenir un champ sur un autre espace, on
@@ -118,8 +124,8 @@ maillage qui les compte (voir [Maillage](mesh.md#un-maillage-compte-ses-nœuds))
 
 Les opérations suivent les règles de [Champ](field.md#opération-arithmétique) :
 
-- `champ * 1.1`, `champ + 2.0`… appliquent le scalaire à toutes les valeurs et
-  rendent un nouveau champ (le scalaire s'écrit à droite) ;
+- une opération par un scalaire (`champ * 1.1`, `champ + 2.0`…) s'applique à
+  toutes les valeurs et rend un nouveau champ ;
 - `a + b`, `a - b`, `a * b`, `a / b`, `a ** b` entre deux champs combinent,
   sur chaque espace porté des deux côtés, les composantes présentes des deux
   côtés ; une composante ou une zone présente d'un seul côté passe telle

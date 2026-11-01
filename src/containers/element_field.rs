@@ -30,11 +30,12 @@
 //! - `component_count` — chosen by the caller.
 //!
 //! The internal buffer is sized accordingly and **never reallocated**. The
-//! mesh topology underlying the FE space is expected to stay frozen for
-//! the lifetime of the field (per the contract documented on
-//! [`crate::containers::finite_element_space::FiniteElementSpace`]). The Gauss-point coordinates
-//! and weights are kept as reference data on the `SubFiniteElementSpace` itself and
-//! may be re-read on demand; only the user data lives here.
+//! FE subspace has sealed its `SubMesh` (see
+//! [`mesh::seal`](fn@crate::containers::mesh::seal)): no cell can be added to it, so the
+//! captured `cell_count` stays the submesh's. The nodes may still move; the
+//! values are unaffected. The Gauss-point coordinates and weights are kept as
+//! reference data on the `SubFiniteElementSpace` itself; only the user data
+//! lives here.
 //!
 //! # Layout
 //!
@@ -706,6 +707,18 @@ pub struct ElementField {
 }
 
 crate::impl_aggregate!(ElementField, SubElementField, subfield, "subfield(s)", {
+    /// Refuse a zone whose FE subspace stands on another `Coords` than the
+    /// first zone's: node ids, hence the whole field, only mean something
+    /// inside one `Coords`.
+    fn check_push(&self, h: &Handle<SubElementField>) -> Result<()> {
+        let Some(first) = self.subs.first() else {
+            return Ok(());
+        };
+        let a = first.read().support().read().coords();
+        let b = h.read().support().read().coords();
+        crate::coords::ensure_same_coords(&a, &b)
+    }
+
     /// Validate the zone decomposition after a union (`a | b`): **no component
     /// may be carried by two zones on the same support**. Zones on the same
     /// support with disjoint components are kept side by side (no fusion, no new
@@ -721,9 +734,10 @@ crate::impl_aggregate_dump!(ElementField);
 
 // ─── Operators ElementField OP {ElementField, f64} ─────────────────────────
 //
-// `&a + &b` (zone by zone, same decomposition) via `Field::merge_field`;
-// `&a + 2.0` (scalar broadcast) via `Field::combine_scalar`. Fallible (store
-// reads, zone pairing) ⇒ output `Result<ElementField>`.
+// `&a + &b` (per support and component, union with passthrough) via
+// `Field::merge_field`; `&a + 2.0` (scalar broadcast) via
+// `Field::combine_scalar`, and `2.0 * &a` its mirror. Fallible (zone pairing)
+// ⇒ output `Result<ElementField>`.
 
 crate::impl_field_ops!(ElementField);
 
@@ -802,8 +816,8 @@ impl ElementField {
     /// if no sub-field of the aggregate lives on `fespace` (a missing per-zone
     /// material / deformation is always a caller error, never a silent skip),
     /// **and also if more than one zone lives on the support** — it never
-    /// silently returns the first of many (that footgun once let `strain | state`
-    /// drop the state). When a support may carry several zones, use
+    /// silently returns the first of many, which would let `strain | state`
+    /// drop the state. When a support may carry several zones, use
     /// [`subs_for_fespace`](Self::subs_for_fespace) or fuse them with
     /// [`crate::ops::element_field::consolidate`].
     pub(crate) fn sub_for_fespace(
@@ -959,6 +973,42 @@ impl ElementField {
         Ok(Self { subs })
     }
 
+    /// The finite-element space this field lives on: each zone's subspace,
+    /// once, in first-seen order — shared, not copied. A field built by
+    /// [`ElementField::new`] on `fes` gives back `fes`'s subspaces, so a field
+    /// created on the result combines point by point with this one.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::ElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// let k = ElementField::new(&fes, vec!["k".into()])?;
+    /// // Back from the field to its space: the same subspace, not a copy.
+    /// assert!(k.support().get(0)?.same_object(&fes.get(0)?));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn support(&self) -> FiniteElementSpace {
+        let mut fes = FiniteElementSpace::empty();
+        for h in self {
+            let sub = h.read().support();
+            if !fes.iter().any(|s| s.same_object(&sub)) {
+                // Same `Coords` for every zone (`check_push`), hence for the space.
+                fes.push(sub);
+            }
+        }
+        fes
+    }
+
     /// Visualize this field on its own support: each zone knows its
     /// submesh through its FE subspace, so the mesh is reconstructed
     /// (shared, not copied) and coloured by `component` — per-element
@@ -996,8 +1046,9 @@ impl ElementField {
 /// Zero-copy view of an [`ElementField`]'s zones — the
 /// [`crate::containers::field::FieldView`] aggregate view specialised
 /// to Gauss-point fields (built by `Field::view`). A zone is resolved
-/// from its support submesh by handle identity (idx + generation),
-/// the reciprocal of [`ElementField::sub_for_fespace`].
+/// from its support submesh by handle identity
+/// ([`Handle::same_object`]), the reciprocal of
+/// [`ElementField::sub_for_fespace`].
 pub(crate) type ElementFieldView = crate::containers::field::FieldView<SubElementField>;
 
 impl ElementFieldView {
@@ -1438,5 +1489,54 @@ mod tests {
         let s = format!("{}", ef);
         assert!(s.contains("ElementField"));
         assert!(s.contains("2 subfield"));
+    }
+
+    #[test]
+    fn ef_refuses_a_zone_on_another_coords() {
+        // Each helper call builds its own Coords: the same cell ids would name
+        // two different triangles.
+        let ici = SubElementField::new(make_tri3_subfespace(), vec!["k".into()]).unwrap();
+        let ailleurs = SubElementField::new(make_tri3_subfespace(), vec!["E".into()]).unwrap();
+        let mut f = ElementField::empty();
+        f.add_sub(Handle::new(ici)).unwrap();
+        let err = f.add_sub(Handle::new(ailleurs)).unwrap_err();
+        assert!(err.to_string().contains("mismatched Coords"), "{err}");
+        assert_eq!(f.len(), 1);
+    }
+
+    #[test]
+    fn a_scalar_on_the_left_mirrors_the_right() {
+        let zone = SubElementField::from_uniform_per_component(
+            make_tri3_subfespace(),
+            vec!["k".into()],
+            &[1.5],
+        )
+        .unwrap();
+        assert_eq!((2.0 * &zone).values(), (&zone * 2.0).values());
+        assert_eq!((2.0 + &zone).values(), (&zone + 2.0).values());
+        // Not commutative: the scalar on the left is the left operand.
+        assert_eq!((1.0 - &zone).value(0, 0, "k").unwrap(), -0.5);
+        assert_eq!((3.0 / &zone).value(0, 0, "k").unwrap(), 2.0);
+        let mut f = ElementField::empty();
+        f.add_sub(Handle::new(zone)).unwrap();
+        let read = |g: ElementField| g.get(0).unwrap().read().value(0, 0, "k").unwrap();
+        assert_eq!(read((2.0 * &f).unwrap()), 3.0);
+        assert_eq!(read((2.0 + &f).unwrap()), 3.5);
+        assert_eq!(read((1.0 - &f).unwrap()), -0.5);
+        assert_eq!(read((3.0 / &f).unwrap()), 2.0);
+    }
+
+    #[test]
+    fn support_gives_back_the_zones_subspaces_once() {
+        let fes = FiniteElementSpace::lagrange1(&make_mesh_with_tri_and_qua()).unwrap();
+        let mat = ElementField::with(&fes, &[vec!["k".into()], vec!["E".into()]]).unwrap();
+        // A second zone on the first subspace: the space still lists it once.
+        let extra = SubElementField::new(fes.get(0).unwrap(), vec!["nu".into()]).unwrap();
+        let f = mat.union_sub(&Handle::new(extra)).unwrap();
+        let back = f.support();
+        assert_eq!(back.len(), 2);
+        for i in 0..2 {
+            assert!(back.get(i).unwrap().same_object(&fes.get(i).unwrap()));
+        }
     }
 }

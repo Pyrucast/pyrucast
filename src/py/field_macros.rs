@@ -122,12 +122,21 @@ macro_rules! impl_subfield_transform_pymethod {
 /// `binary` dispatcher each flavour defines in its inherent block.
 ///
 /// Arguments: the documentation as `///`, the list of types, the slot name, and
-/// the closure applied term by term.
+/// the closure applied term by term. An optional second part — its
+/// documentation, the reflected slot name and its closure — adds, in the same
+/// block, the reflected slot taking a **scalar** on the left (`2.0 * field`);
+/// any other left operand falls back to `NotImplemented`.
 ///
 /// ```ignore
 /// impl_field_binary_pyslot! {
 ///     /// `field + other` — element-wise sum.
 ///     [PyNodeField], __add__, |a, b| a + b
+/// }
+/// impl_field_binary_pyslot! {
+///     /// `field * other` — element-wise product.
+///     [PyNodeField], __mul__, |a, b| a * b,
+///     /// `scalar * field` — the mirror of `field * scalar`.
+///     __rmul__, |v, s| s * v
 /// }
 /// ```
 ///
@@ -145,6 +154,21 @@ macro_rules! impl_field_binary_pyslot {
             }
         });
     };
+    ($(#[doc = $doc:literal])* [$($T:ident),+ $(,)?], $nom:ident, $f:expr,
+     $(#[doc = $rdoc:literal])* $rnom:ident, $rf:expr) => {
+        $crate::impl_pymethods_for_each!(stub [$($T),+] {
+            $(#[doc = $doc])*
+            fn $nom(&self, rhs: &::pyo3::Bound<'_, ::pyo3::PyAny>) -> ::pyo3::PyResult<Self> {
+                self.binary(rhs, $f)
+            }
+            $(#[doc = $rdoc])*
+            fn $rnom(&self, lhs: f64) -> ::pyo3::PyResult<Self> {
+                Ok(Self {
+                    inner: $crate::containers::field::Field::combine_scalar(&self.inner, $rf, lhs)?,
+                })
+            }
+        });
+    };
 }
 
 /// The same, on a **sub-container**: its dispatcher is called
@@ -157,6 +181,26 @@ macro_rules! impl_subfield_binary_pyslot {
             $(#[doc = $doc])*
             fn $nom(&self, rhs: &::pyo3::Bound<'_, ::pyo3::PyAny>) -> ::pyo3::PyResult<Self> {
                 self.scalar_or_combine(rhs, $f)
+            }
+        });
+    };
+    ($(#[doc = $doc:literal])* [$($T:ident),+ $(,)?], $nom:ident, $f:expr,
+     $(#[doc = $rdoc:literal])* $rnom:ident, $rf:expr) => {
+        $crate::impl_pymethods_for_each!(stub [$($T),+] {
+            $(#[doc = $doc])*
+            fn $nom(&self, rhs: &::pyo3::Bound<'_, ::pyo3::PyAny>) -> ::pyo3::PyResult<Self> {
+                self.scalar_or_combine(rhs, $f)
+            }
+            $(#[doc = $rdoc])*
+            fn $rnom(&self, lhs: f64) -> ::pyo3::PyResult<Self> {
+                let op: fn(f64, f64) -> f64 = $rf;
+                let out = $crate::containers::field::SubField::map_all(
+                    &*self.handle.read(),
+                    move |v| op(v, lhs),
+                );
+                Ok(Self {
+                    handle: $crate::handle::Handle::new(out),
+                })
             }
         });
     };

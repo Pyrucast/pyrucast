@@ -882,7 +882,9 @@ fn fold_component<S: SubField + ?Sized>(
 
 /// Generate `Add/Sub/Mul/Div<f64>` for a [`SubField`] container: the
 /// consuming versions mutate every value in place and return `self`
-/// (zero-copy); the reference versions clone first.
+/// (zero-copy); the reference versions clone first. The scalar may stand on
+/// the left too: `2.0 * field`, `1.0 - field`, `1.0 / field` apply
+/// `s ∘ value` to every value.
 ///
 /// # Usage
 /// ```ignore
@@ -917,6 +919,23 @@ macro_rules! __subfield_scalar_op {
             type Output = $T;
             fn $method(self, rhs: f64) -> $T {
                 std::ops::$Trait::$method(self.clone(), rhs)
+            }
+        }
+        // The scalar on the left: `s ∘ value`.
+        impl std::ops::$Trait<$T> for f64 {
+            type Output = $T;
+            fn $method(self, mut rhs: $T) -> $T {
+                $crate::parallel::map_inplace(
+                    $crate::containers::field::SubField::values_mut(&mut rhs),
+                    move |v| self $op v,
+                );
+                rhs
+            }
+        }
+        impl std::ops::$Trait<&$T> for f64 {
+            type Output = $T;
+            fn $method(self, rhs: &$T) -> $T {
+                std::ops::$Trait::$method(self, rhs.clone())
             }
         }
     };
@@ -967,8 +986,9 @@ macro_rules! __subfield_field_op {
 /// Generate `Add/Sub/Mul/Div` for an aggregate [`Field`], both **field ∘ field**
 /// (via [`Field::merge_field`], per `(support, component)` with passthrough) and
 /// **field ∘ scalar** (via [`Field::combine_scalar`], broadcast over every
-/// value). Both go through the store (fallible reads) so the output is a
-/// [`Result`]: `(&a + &b)?`, `(&a * 2.0)?`.
+/// value), the scalar standing on either side (`&a - 1.0`, `1.0 - &a`).
+/// Rebuilding the aggregate can fail, so the output is a [`Result`]:
+/// `(&a + &b)?`, `(&a * 2.0)?`.
 ///
 /// # Usage
 /// ```ignore
@@ -1012,6 +1032,19 @@ macro_rules! __field_op {
             type Output = $crate::error::Result<$T>;
             fn $method(self, rhs: f64) -> Self::Output {
                 $crate::containers::field::Field::combine_scalar(&self, |a, b| a $op b, rhs)
+            }
+        }
+        // scalar ∘ field: `combine_scalar` hands the value first, the scalar second.
+        impl std::ops::$Trait<&$T> for f64 {
+            type Output = $crate::error::Result<$T>;
+            fn $method(self, rhs: &$T) -> Self::Output {
+                $crate::containers::field::Field::combine_scalar(rhs, |v, s| s $op v, self)
+            }
+        }
+        impl std::ops::$Trait<$T> for f64 {
+            type Output = $crate::error::Result<$T>;
+            fn $method(self, rhs: $T) -> Self::Output {
+                $crate::containers::field::Field::combine_scalar(&rhs, |v, s| s $op v, self)
             }
         }
     };
@@ -2370,9 +2403,12 @@ mod tests {
 
     #[test]
     fn field_merge_field_disjoint_supports_unions() {
-        // Distinct supports ⇒ union: both zones pass through unchanged.
-        let f = ElementField::new(&one_tri3_fes(), vec!["E".into()]).unwrap();
-        let g = ElementField::new(&one_tri3_fes(), vec!["E".into()]).unwrap();
+        // Distinct supports ⇒ union: both zones pass through unchanged. Two
+        // spaces on one mesh are two supports on one `Coords`.
+        let fes = one_tri3_fes();
+        let other = FiniteElementSpace::lagrange1(&fes.mesh().unwrap()).unwrap();
+        let f = ElementField::new(&fes, vec!["E".into()]).unwrap();
+        let g = ElementField::new(&other, vec!["E".into()]).unwrap();
         f.get(0).unwrap().write().set_uniform("E", 3.0).unwrap();
         g.get(0).unwrap().write().set_uniform("E", 4.0).unwrap();
         let s = f.merge_field(&g, |a, b| a + b).unwrap();

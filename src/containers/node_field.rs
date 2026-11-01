@@ -482,71 +482,6 @@ impl SubNodeField {
         support.node_index().get(&nid).copied()
     }
 
-    /// Build a new POI1 [`SubMesh`] whose cells are exactly the support nodes
-    /// of this field, in the same order. Each node is increfed by the new
-    /// submesh independently of this field's own increfs.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use pyrucast::aggregate::Aggregate;
-    /// use pyrucast::coords::Coords;
-    /// use pyrucast::atoms::ElementType;
-    /// use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// use pyrucast::atoms::Node;
-    /// use pyrucast::containers::node_field::SubNodeField;
-    /// use pyrucast::handle::Handle;
-    ///
-    /// let coords = Handle::new(Coords::new(2).unwrap());
-    /// let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
-    /// let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
-    ///
-    /// let sm_handle = {
-    ///     let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
-    ///     sm.add_cell(&[a.id()]).unwrap();
-    ///     sm.add_cell(&[b.id()]).unwrap();
-    ///     Handle::new(sm)
-    /// };
-    ///
-    /// let field = SubNodeField::from_poi1(&sm_handle, vec!["T".into()]).unwrap();
-    /// let sm2 = field.support_submesh().unwrap();
-    /// assert_eq!(sm2.cell_count(), 2);
-    /// // Verify node order via Mesh::node (public API).
-    /// let mut m = Mesh::empty();
-    /// m.add_sub(Handle::new(sm2)).unwrap();
-    /// assert_eq!(m.node(0, 0, 0).unwrap().id(), a.id());
-    /// assert_eq!(m.node(0, 1, 0).unwrap().id(), b.id());
-    /// ```
-    pub fn support_submesh(&self) -> Result<SubMesh> {
-        let support = self.support.read();
-        SubMesh::poi1_from_node_ids(support.coords(), self.nodes_with(&support))
-    }
-
-    /// Build a [`Mesh`] with a single POI1 submesh mirroring the support of
-    /// this field.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::Node;
-    /// # use pyrucast::containers::node_field::SubNodeField;
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
-    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
-    /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
-    /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
-    /// // The support seen as an aggregate — another field's projection target.
-    /// assert_eq!(u.support_mesh().unwrap().cell_count(), 2);
-    /// ```
-    pub fn support_mesh(&self) -> Result<Mesh> {
-        let sm_handle = Handle::new(self.support_submesh()?);
-        let mut mesh = Mesh::empty();
-        mesh.add_sub(sm_handle)?;
-        Ok(mesh)
-    }
-
     /// All values of node `node_idx`, in component order.
     ///
     /// ```
@@ -867,13 +802,7 @@ crate::impl_aggregate!(NodeField, SubNodeField, subfield, "subfield(s)", {
         if self.is_empty() {
             return Ok(());
         }
-        let a = self.coords()?;
-        let b = h.read().coords();
-        if !a.same_object(&b) {
-            Err(PyrucastError::Message("mismatched Coords".into()))
-        } else {
-            Ok(())
-        }
+        crate::coords::ensure_same_coords(&self.coords()?, &h.read().coords())
     }
 
     /// Fuse zones sharing the same support `SubMesh` (union of components,
@@ -888,13 +817,46 @@ crate::impl_aggregate_dump!(NodeField);
 
 // ─── NodeField OP {NodeField, f64} operators ────────────────────────────────
 //
-// `&a + &b` (zone by zone, same decomposition) via `Field::merge_field`;
-// `&a + 2.0` (scalar broadcast) via `Field::combine_scalar`. Fallible (reading
-// in the store, matching the zones) ⇒ output `Result<NodeField>`.
+// `&a + &b` (per support and component, union with passthrough) via
+// `Field::merge_field`; `&a + 2.0` (scalar broadcast) via
+// `Field::combine_scalar`, and `2.0 * &a` its mirror. Fallible (zone pairing)
+// ⇒ output `Result<NodeField>`.
 
 crate::impl_field_ops!(NodeField);
 
 impl NodeField {
+    /// The mesh this field lives on: each zone's POI1 support, once, in
+    /// first-seen order — shared, not copied. A field built on the result
+    /// combines node by node with this one.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// let poi1 = mesh::poi1_from_nodes(&[a, b])?;
+    /// let t = NodeField::new(&poi1, vec!["T".into()])?;
+    /// // Back from the field to its support: the same zone, not a copy.
+    /// assert!(t.support().get(0)?.same_object(&poi1.get(0)?));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn support(&self) -> Mesh {
+        let mut mesh = Mesh::empty();
+        for h in self {
+            let sub = h.read().support();
+            if !mesh.iter().any(|s| s.same_object(&sub)) {
+                // Same `Coords` for every zone (`check_push`), hence for the mesh.
+                mesh.push(sub);
+            }
+        }
+        mesh
+    }
+
     /// Zero-copy view of this field's zones for read-heavy operators
     /// (`deformation`, `restrict`, viz, …). One read guard per zone **and**
     /// per zone support is held for the view's lifetime, so every
@@ -1886,25 +1848,18 @@ mod tests {
     }
 
     #[test]
-    fn support_submesh_mirrors_field_nodes() {
+    fn support_shares_the_zones_supports_once() {
         let (coords, nodes, sm) = make_poi1_with(3);
-        let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
-        // refcount before: Node + SubMesh = 2 each (the field shares
-        // the user's SubMesh, no extra per-node incref).
-        assert_eq!(coords.read().refcount(nodes[0].id()), 2);
-
-        let sm2 = f.support_submesh().unwrap();
-        // the freshly built SubMesh adds one incref each → 3
-        assert_eq!(coords.read().refcount(nodes[0].id()), 3);
-
-        assert_eq!(sm2.cell_count(), 3);
-        let conn = sm2.connectivity();
-        for (i, n) in nodes.iter().enumerate() {
-            assert_eq!(conn[i], n.id());
-        }
-
-        drop(sm2);
-        // back to 2
+        let f = NodeField::from_sub(SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap());
+        // A second zone on the same support: the mesh still lists it once.
+        let q = SubNodeField::from_poi1(&sm, vec!["q".into()]).unwrap();
+        let mut two = NodeField::empty();
+        two.push(f.get(0).unwrap());
+        two.push(Handle::new(q));
+        let support = two.support();
+        assert_eq!(support.len(), 1);
+        assert!(support.get(0).unwrap().same_object(&sm));
+        // Shared, not rebuilt: no node gained a reference (Node + SubMesh).
         assert_eq!(coords.read().refcount(nodes[0].id()), 2);
     }
 

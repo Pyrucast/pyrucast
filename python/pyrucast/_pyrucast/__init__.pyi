@@ -466,8 +466,8 @@ class Element:
 @typing.final
 class ElementField:
     r"""
-    A field of per-element values (e.g. material properties), one block per
-    finite-element zone.
+    A field of values per cell and Gauss point (material properties, internal
+    variables, strains, stresses…), one zone per finite-element subspace.
     
     Build with `ElementField(fes, components)` or `material_field(model, ...)`;
     index it (`field[i]`) to reach a `SubElementField`, compose zones
@@ -495,6 +495,12 @@ class ElementField:
         `vmax` / `cmap` / `smooth` / `title` semantics as `Mesh.plot`.
         `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
         of revolution — see `SubMesh.plot`.
+        """
+    def support(self) -> FiniteElementSpace:
+        r"""
+        The finite-element space this field lives on: each zone's subspace,
+        once, in first-seen order — shared, not copied. A field built on it
+        combines point by point with this one.
         """
     def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
         r"""
@@ -625,24 +631,44 @@ class ElementField:
         r"""
         `field + other` — element-wise sum.
         """
+    def __radd__(self, lhs: builtins.float) -> ElementField:
+        r"""
+        `scalar + field` — the mirror of `field + scalar`. Any other left operand is
+        refused (`TypeError`).
+        """
     def __sub__(self, rhs: typing.Any) -> ElementField:
         r"""
         `field - other` — element-wise difference.
+        """
+    def __rsub__(self, lhs: builtins.float) -> ElementField:
+        r"""
+        `scalar - field` — the scalar minus every value. Any other left operand is
+        refused (`TypeError`).
         """
     def __mul__(self, rhs: typing.Any) -> ElementField:
         r"""
         `field * other` — element-wise product.
         """
+    def __rmul__(self, lhs: builtins.float) -> ElementField:
+        r"""
+        `scalar * field` — the mirror of `field * scalar`. Any other left
+        operand is refused (`TypeError`).
+        """
     def __truediv__(self, rhs: typing.Any) -> ElementField:
         r"""
         `field / other` — element-wise quotient.
         """
+    def __rtruediv__(self, lhs: builtins.float) -> ElementField:
+        r"""
+        `scalar / field` — the scalar divided by every value (`inf` on a zero). Any other left operand is
+        refused (`TypeError`).
+        """
     def __pow__(self, exponent: typing.Any, modulo: typing.Any = None) -> ElementField:
         r"""
         `field ** exponent` — element-wise power, same dispatch as the other
-        operators (float → scalar, `ElementField` → strict same-decomposition,
-        `SubElementField` → targeted zone). The ternary `pow(x, y, z)` modulo
-        form is rejected.
+        operators (float → scalar, `ElementField` → per support and component,
+        union with passthrough, `SubElementField` → targeted zone). The ternary
+        `pow(x, y, z)` modulo form is rejected.
         """
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
@@ -2094,11 +2120,12 @@ class Model:
         """
     def fespace(self) -> FiniteElementSpace:
         r"""
-        `Model.fespace()` — the `FiniteElementSpace` this model integrates on,
-        rebuilt from the behaviour subspaces of its domain sub-models (constraints
-        skipped), deduplicated in first-seen order (shared handles). Raises if the
-        model has no domain sub-model. Combined with `FiniteElementSpace.mesh()`,
-        lets a caller recover the FE space and mesh from the model alone.
+        `Model.fespace()` — the `FiniteElementSpace` this model integrates on:
+        the behaviour subspace of each domain sub-model (constraints skipped), in
+        order, one per sub-model — two physics on one subspace list it twice.
+        The subspaces are shared, not copied. Raises if the model has no domain
+        sub-model. Combined with `FiniteElementSpace.mesh()`, lets a caller
+        recover the FE space and mesh from the model alone.
         """
     def filter(self, physics: builtins.str) -> Model:
         r"""
@@ -2496,10 +2523,11 @@ class NodeField:
         `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
         of revolution — see `SubMesh.plot`.
         """
-    def support_mesh(self) -> Mesh:
+    def support(self) -> Mesh:
         r"""
-        A `Mesh` mirroring this field's supports — the zones' POI1
-        support submeshes, shared (not copied).
+        The mesh this field lives on: each zone's POI1 support, once, in
+        first-seen order — shared, not copied. A field built on it combines
+        node by node with this one.
         """
     def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
         r"""
@@ -2630,24 +2658,44 @@ class NodeField:
         r"""
         `field + other` — element-wise sum.
         """
+    def __radd__(self, lhs: builtins.float) -> NodeField:
+        r"""
+        `scalar + field` — the mirror of `field + scalar`. Any other left operand is
+        refused (`TypeError`).
+        """
     def __sub__(self, rhs: typing.Any) -> NodeField:
         r"""
         `field - other` — element-wise difference.
+        """
+    def __rsub__(self, lhs: builtins.float) -> NodeField:
+        r"""
+        `scalar - field` — the scalar minus every value. Any other left operand is
+        refused (`TypeError`).
         """
     def __mul__(self, rhs: typing.Any) -> NodeField:
         r"""
         `field * other` — element-wise product.
         """
+    def __rmul__(self, lhs: builtins.float) -> NodeField:
+        r"""
+        `scalar * field` — the mirror of `field * scalar`. Any other left
+        operand is refused (`TypeError`).
+        """
     def __truediv__(self, rhs: typing.Any) -> NodeField:
         r"""
         `field / other` — element-wise quotient.
         """
+    def __rtruediv__(self, lhs: builtins.float) -> NodeField:
+        r"""
+        `scalar / field` — the scalar divided by every value (`inf` on a zero). Any other left operand is
+        refused (`TypeError`).
+        """
     def __pow__(self, exponent: typing.Any, modulo: typing.Any = None) -> NodeField:
         r"""
         `field ** exponent` — element-wise power, same dispatch as the other
-        operators (float → scalar, `NodeField` → strict same-decomposition,
-        `SubNodeField` → targeted zone). The ternary `pow(x, y, z)` modulo
-        form is rejected.
+        operators (float → scalar, `NodeField` → per support and component,
+        union with passthrough, `SubNodeField` → targeted zone). The ternary
+        `pow(x, y, z)` modulo form is rejected.
         """
     def gradient(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
@@ -2807,9 +2855,11 @@ class NodeField:
 @typing.final
 class SubElementField:
     r"""
-    A **view** into one zone of an `ElementField`, obtained by indexing
-    (`element_field[i]`) — never constructed directly. Build at the parent
-    level instead: `ElementField(fes, components)` or
+    One zone of an `ElementField`: the values at the Gauss points of one
+    finite-element subspace. Indexing a field (`element_field[i]`) gives a
+    **view** on its zone; operators on a zone (`zone["E"]`, `zone * 2.0`,
+    `sub_material_field`) give a fresh one. There is no constructor: build at
+    the parent level, `ElementField(fes, components)` or
     `material_field(model, ...)`, composed with `|`.
     """
     def cell_count(self) -> builtins.int:
@@ -2819,6 +2869,11 @@ class SubElementField:
     def gauss_count(self) -> builtins.int:
         r"""
         Number of Gauss points per cell.
+        """
+    def support(self) -> SubFiniteElementSpace:
+        r"""
+        The finite-element subspace this zone lives on — shared, not copied:
+        a zone built on it combines point by point with this one.
         """
     def get(self, cell: builtins.int, gauss: builtins.int, comp: builtins.int) -> builtins.float:
         r"""
@@ -2907,7 +2962,8 @@ class SubElementField:
     def __getitem__(self, key: tuple[int, int, str]) -> float:
         r"""
         `field[cell, gauss, "name"]` → the value at that Gauss point of that
-        cell, for that component. `ValueError` if any of the three is unknown.
+        cell, for that component. `RuntimeError` if any of the three is
+        unknown, like `value`.
         """
     @typing.overload
     def __getitem__(self, key: str) -> SubElementField:
@@ -2963,24 +3019,44 @@ class SubElementField:
         r"""
         `field + other` — element-wise sum.
         """
+    def __radd__(self, lhs: builtins.float) -> SubElementField:
+        r"""
+        `scalar + field` — the mirror of `field + scalar`. Any other left operand is
+        refused (`TypeError`).
+        """
     def __sub__(self, rhs: typing.Any) -> SubElementField:
         r"""
         `field - other` — element-wise difference.
+        """
+    def __rsub__(self, lhs: builtins.float) -> SubElementField:
+        r"""
+        `scalar - field` — the scalar minus every value. Any other left operand is
+        refused (`TypeError`).
         """
     def __mul__(self, rhs: typing.Any) -> SubElementField:
         r"""
         `field * other` — element-wise product.
         """
+    def __rmul__(self, lhs: builtins.float) -> SubElementField:
+        r"""
+        `scalar * field` — the mirror of `field * scalar`. Any other left
+        operand is refused (`TypeError`).
+        """
     def __truediv__(self, rhs: typing.Any) -> SubElementField:
         r"""
         `field / other` — element-wise quotient.
         """
+    def __rtruediv__(self, lhs: builtins.float) -> SubElementField:
+        r"""
+        `scalar / field` — the scalar divided by every value (`inf` on a zero). Any other left operand is
+        refused (`TypeError`).
+        """
     def __pow__(self, exponent: typing.Any, modulo: typing.Any = None) -> SubElementField:
         r"""
         `field ** exponent` — element-wise power, same dispatch as the other
-        operators (float exponent → broadcast; `SubElementField` → strict
-        element-by-element). The ternary `pow(x, y, z)` modulo form is
-        rejected (meaningless on floats).
+        operators (float exponent → broadcast; `SubElementField` on the same
+        subspace → per-component union with passthrough). The ternary
+        `pow(x, y, z)` modulo form is rejected (meaningless on floats).
         """
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
@@ -3677,13 +3753,10 @@ class SubNodeField:
         r"""
         All component values at node index `node_idx`, in order.
         """
-    def support_submesh(self) -> SubMesh:
+    def support(self) -> SubMesh:
         r"""
-        The POI1 `SubMesh` this sub-field is supported on.
-        """
-    def support_mesh(self) -> Mesh:
-        r"""
-        The POI1 `Mesh` this sub-field is supported on.
+        The POI1 `SubMesh` this zone lives on — shared, not copied: a zone
+        built on it combines node by node with this one.
         """
     def value(self, node: Node, component: builtins.str) -> builtins.float:
         r"""
@@ -3808,24 +3881,44 @@ class SubNodeField:
         r"""
         `field + other` — element-wise sum.
         """
+    def __radd__(self, lhs: builtins.float) -> SubNodeField:
+        r"""
+        `scalar + field` — the mirror of `field + scalar`. Any other left operand is
+        refused (`TypeError`).
+        """
     def __sub__(self, rhs: typing.Any) -> SubNodeField:
         r"""
         `field - other` — element-wise difference.
+        """
+    def __rsub__(self, lhs: builtins.float) -> SubNodeField:
+        r"""
+        `scalar - field` — the scalar minus every value. Any other left operand is
+        refused (`TypeError`).
         """
     def __mul__(self, rhs: typing.Any) -> SubNodeField:
         r"""
         `field * other` — element-wise product.
         """
+    def __rmul__(self, lhs: builtins.float) -> SubNodeField:
+        r"""
+        `scalar * field` — the mirror of `field * scalar`. Any other left
+        operand is refused (`TypeError`).
+        """
     def __truediv__(self, rhs: typing.Any) -> SubNodeField:
         r"""
         `field / other` — element-wise quotient.
         """
+    def __rtruediv__(self, lhs: builtins.float) -> SubNodeField:
+        r"""
+        `scalar / field` — the scalar divided by every value (`inf` on a zero). Any other left operand is
+        refused (`TypeError`).
+        """
     def __pow__(self, exponent: typing.Any, modulo: typing.Any = None) -> SubNodeField:
         r"""
         `field ** exponent` — element-wise power, same dispatch as the other
-        operators (float exponent → broadcast; `SubNodeField` → strict
-        element-by-element). The ternary `pow(x, y, z)` modulo form is
-        rejected (meaningless on floats).
+        operators (float exponent → broadcast; `SubNodeField` on the same
+        support → per-component union with passthrough). The ternary
+        `pow(x, y, z)` modulo form is rejected (meaningless on floats).
         """
     def abs(self) -> SubNodeField:
         r"""

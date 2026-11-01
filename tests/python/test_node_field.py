@@ -841,15 +841,17 @@ def test_op_bad_operand_raises_type_error():
             raise AssertionError("expected TypeError for str operand")
 
 
-def test_support_submesh_is_the_zone_the_field_was_built_on():
+def test_support_is_the_zone_the_field_was_built_on():
     # The support handed back is a POI1 zone whose cells name exactly the
     # nodes the field was built on — read from the support's own cells.
     _c, nodes, mesh = _poi1_with(3)
     f = pyrucast.NodeField(mesh, ["T"])
-    support = f[0].support_submesh()
+    support = f[0].support()
     assert support.element_type == "POI1"
     ids = sorted(n.id for cell in support for n in cell)
     assert ids == sorted(n.id for n in nodes)
+    # Shared, not copied: a field built on it combines node by node with f.
+    assert len(pyrucast.NodeField(f.support(), ["T"]) + f) == 1
 
 
 def _square(n):
@@ -898,3 +900,26 @@ def test_project_refuses_a_field_off_its_mesh():
     field = pyrucast.NodeField(mesh, ["T"])
     with pytest.raises(RuntimeError, match="different Coords"):
         pyrucast.node_field.project(field, other, mesh)
+
+
+def test_a_scalar_on_the_left_mirrors_the_right():
+    c = pyrucast.Coords(1)
+    a, b = c.add_node([0.0]), c.add_node([1.0])
+    f = pyrucast.NodeField(a | b, ["T"])
+    f[0].set_value(a, "T", 1.5)
+    assert (2.0 * f).value(a, "T") == (f * 2.0).value(a, "T") == 3.0
+    assert (2.0 + f).value(a, "T") == (f + 2.0).value(a, "T") == 3.5
+    # Not commutative: the scalar on the left is the left operand.
+    assert (1.0 - f).value(a, "T") == -0.5
+    assert (3.0 / f).value(a, "T") == 2.0
+    zone = f[0]
+    assert [(2 * zone).value(a, "T"), (2 + zone).value(a, "T")] == [3.0, 3.5]
+    assert [(1 - zone).value(a, "T"), (3 / zone).value(a, "T")] == [-0.5, 2.0]
+    for call in (
+        lambda: "x" * f,
+        lambda: "x" + f,
+        lambda: "x" - zone,
+        lambda: "x" / zone,
+    ):
+        with pytest.raises(TypeError):
+            call()

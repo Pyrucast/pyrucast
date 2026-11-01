@@ -360,6 +360,9 @@ print(len(somme), somme.unit().value(0, 0, "k"))  # 1 2.5
 autre = pyrucast.ElementField(pyrucast.FiniteElementSpace(mesh), ["k"])
 print(len(k1 + autre))  # 2
 
+# L'espace d'un champ, rendu tel quel : un champ posé dessus s'y combine.
+print(len(pyrucast.ElementField(k1.support(), ["k"]) + k1))  # 1
+
 # L'union garde côte à côte deux zones aux composantes disjointes ;
 # consolidate les fond en une.
 tout = k1 | mat

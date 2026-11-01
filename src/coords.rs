@@ -65,6 +65,7 @@
 
 use crate::atoms::NodeId;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -174,6 +175,19 @@ pub struct Coords {
     refcount: Vec<u32>,
     /// Solver permutation (length == capacity) or `None` for identity.
     permutation: Option<Vec<u32>>,
+}
+
+/// Refuse two `Coords` that are not the same object (« mismatched Coords »).
+///
+/// A node id only names a node inside its own `Coords`, so every zone of an
+/// aggregate — mesh, FE space, field, matrix, model — must share one: this is
+/// the check their `Aggregate::check_push` runs on each new zone.
+pub(crate) fn ensure_same_coords(a: &Handle<Coords>, b: &Handle<Coords>) -> Result<()> {
+    if a.same_object(b) {
+        Ok(())
+    } else {
+        Err(PyrucastError::Message("mismatched Coords".into()))
+    }
 }
 
 impl Coords {

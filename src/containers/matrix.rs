@@ -2679,6 +2679,24 @@ pub struct Matrix {
 }
 
 crate::impl_aggregate!(Matrix, SubMatrix, sub_matrix, "sub-matrix(es)", {
+    /// Refuse a block whose row and column supports stand on two `Coords`, or
+    /// on another `Coords` than the first block's: a degree of freedom is a
+    /// node id, which only means something inside one `Coords`.
+    fn check_push(&self, h: &Handle<SubMatrix>) -> Result<()> {
+        let (row, col) = {
+            let b = h.read();
+            (
+                b.row_support().read().coords(),
+                b.col_support().read().coords(),
+            )
+        };
+        crate::coords::ensure_same_coords(&row, &col)?;
+        let Some(first) = self.subs.first() else {
+            return Ok(());
+        };
+        let a = first.read().coords();
+        crate::coords::ensure_same_coords(&a, &row)
+    }
     fn post_push(&mut self) {
         self.assembled = None;
         // The matrix content changed ⇒ any cached factorization is stale.
@@ -6826,10 +6844,11 @@ mod tests {
 
     #[test]
     fn aggregate_entries_concatenates_blocks() {
-        let (_cfg_a, nodes_a, sup_a) = make_poi1(1);
-        let (_cfg_b, nodes_b, sup_b) = make_poi1(1);
-        let na = nodes_a[0].id();
-        let nb = nodes_b[0].id();
+        // Two blocks, one node each, on one `Coords`.
+        let (_cfg, nodes, _) = make_poi1(2);
+        let (na, nb) = (nodes[0].id(), nodes[1].id());
+        let sup_a = Handle::new(SubMesh::poi1_from_node_ids(nodes[0].coords(), &[na]).unwrap());
+        let sup_b = Handle::new(SubMesh::poi1_from_node_ids(nodes[1].coords(), &[nb]).unwrap());
 
         let mut a = SubMatrix::new(
             sup_a.clone(),

@@ -323,8 +323,9 @@ mod tests {
 
     #[test]
     fn distinct_supports_stay_separate() {
+        // Two spaces on one mesh: two supports, one `Coords`.
         let fes_a = one_tri3_fes();
-        let fes_b = one_tri3_fes();
+        let fes_b = FiniteElementSpace::lagrange1(&fes_a.mesh().unwrap()).unwrap();
         let a = field_on(&fes_a, vec!["E".into()]);
         let b = field_on(&fes_b, vec!["nu".into()]);
         let c = a.union(&b).unwrap();

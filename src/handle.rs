@@ -22,17 +22,15 @@
 //!
 //! # Why not a slab of numbered slots
 //!
-//! There used to be one: a registry per [`std::any::TypeId`], a slab of
-//! generational slots, a hand-written refcount, and a disk-swap path. Every
-//! piece of it duplicated something `Arc` already does — the hand refcount
-//! tracked what the `Arc`'s tracked, and the generation only protected handles
-//! rebuilt from bytes, which the swap alone produced.
+//! A registry of numbered slots — one slab per type, a generation per slot, a
+//! hand-written refcount — would duplicate what `Arc` already does: the count
+//! is the `Arc`'s, and a handle cannot outlive its object, so there is no
+//! stale number for a generation to catch.
 //!
-//! What the registry offered beyond that was **enumeration** (« list every live
-//! mesh ») and a **stable number** per object. Neither had ever reached a user.
-//! Should enumeration become wanted — a cast3m-style listing, a whole-session
-//! save — it costs a `Vec<Weak<_>>` registered in [`Handle::new`], which is why
-//! that constructor is the single funnel through which objects are created.
+//! What such a registry adds is **enumeration** (« list every live mesh ») and
+//! a **stable number** per object; pyrucast offers neither. Every object is
+//! created through [`Handle::new`], the one place where a `Vec<Weak<_>>` would
+//! register them if enumeration were needed.
 //!
 //! # Concurrency
 //!

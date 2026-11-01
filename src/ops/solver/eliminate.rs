@@ -692,7 +692,7 @@ mod tests {
         }
 
         // Any change to the matrix drops what was cached.
-        let other = Handle::new(Coords::new(1).unwrap());
+        let other = nodes[0].coords();
         let b = Node::create_in(other.clone(), &[0.0]).unwrap();
         let bsm = {
             let mut bsm = SubMesh::new(other, ElementType::POI1);

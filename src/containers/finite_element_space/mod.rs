@@ -1108,7 +1108,17 @@ crate::impl_aggregate!(
     FiniteElementSpace,
     SubFiniteElementSpace,
     subspace,
-    "subspace(s)"
+    "subspace(s)",
+    {
+        /// Refuse a subspace on another `Coords` than the first one's.
+        fn check_push(&self, h: &Handle<SubFiniteElementSpace>) -> Result<()> {
+            let Some(first) = self.subs.first() else {
+                return Ok(());
+            };
+            let a = first.read().coords();
+            crate::coords::ensure_same_coords(&a, &h.read().coords())
+        }
+    }
 );
 crate::impl_aggregate_dump!(FiniteElementSpace);
 
