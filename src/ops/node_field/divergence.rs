@@ -19,6 +19,7 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
+use crate::containers::field::add_partials;
 use crate::containers::field::SubField;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
@@ -98,7 +99,12 @@ use crate::ops::element_field::gradient::AXES;
 pub fn divergence(field: &ElementField, prefix: &str) -> Result<NodeField> {
     let mut out = NodeField::empty();
     for sub in field {
-        out.add_sub(Handle::new(subspace_divergence(sub, prefix)?))?;
+        // Two subspaces on one cell list share its nodes' support: their
+        // terms add up there, and keep it.
+        out = add_partials(
+            &out,
+            &NodeField::from_sub(subspace_divergence(sub, prefix)?),
+        )?;
     }
     // A node on the seam between two subspaces receives from both: added, not
     // stacked side by side.

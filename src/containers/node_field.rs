@@ -635,6 +635,9 @@ impl crate::containers::field::SubField for SubNodeField {
     fn same_support_with(&self, components: Vec<String>) -> Result<Self> {
         Self::from_support(&self.support, components)
     }
+    fn row_points(&self) -> Option<Vec<NodeId>> {
+        Some(self.node_ids())
+    }
 }
 
 impl fmt::Debug for SubNodeField {
@@ -805,6 +808,13 @@ crate::impl_aggregate!(NodeField, SubNodeField, subfield, "subfield(s)", {
         crate::coords::ensure_same_coords(&self.coords()?, &h.read().coords())
     }
 
+    /// Refuse a zone carrying, on its support, a component a zone of the field
+    /// already carries there: on one support, each component lives in one
+    /// zone.
+    fn check_add(&self, h: &Handle<SubNodeField>) -> Result<()> {
+        crate::containers::field::check_component_free(self, h)
+    }
+
     /// Fuse zones sharing the same support `SubMesh` (union of components,
     /// shared values verified). Runs at the end of every union (`a | b`).
     /// See [`crate::ops::node_field::consolidate`](fn@crate::ops::node_field::consolidate).
@@ -903,6 +913,13 @@ impl NodeField {
             ));
         }
         crate::containers::field::check_components("SubNodeField", &components)?;
+        if let Some((first, i)) = crate::aggregate::repeated_sub(mesh) {
+            return Err(PyrucastError::Message(format!(
+                "NodeField: zones {first} and {i} of the mesh are the same zone, and a \
+                 field carries each component once on a zone — take each zone once \
+                 with a union (`mesh | mesh`)"
+            )));
+        }
         let mut field = Self::default();
         for h in mesh {
             let sub = SubNodeField::from_support(h, components.clone())?;
@@ -1270,10 +1287,11 @@ impl NodeField {
     /// Verify zone coherence: every `(node, component)` stored by several
     /// subs must hold the **same** value (exact comparison) everywhere.
     ///
-    /// Reads tolerate divergence (first sub wins); this is the on-demand
-    /// verification — call it before trusting a field assembled from
-    /// independently mutated zones. `ops::node_field::consolidate` runs the
-    /// same verification while deduplicating.
+    /// Reads do not check it (first sub wins). A union
+    /// (`ops::node_field::consolidate`) and an operation whose zones were not
+    /// all obtained the same way ([`Field::merge_field`](crate::containers::field::Field::merge_field))
+    /// run it; writing into one zone can still break it — call it before
+    /// trusting a field whose zones were written one by one.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -1292,84 +1310,7 @@ impl NodeField {
     /// u.check().unwrap();
     /// ```
     pub fn check(&self) -> Result<()> {
-        use crate::containers::field::SubField;
-        use std::collections::{HashMap, HashSet};
-        // A lone zone agrees with itself. This runs at the end of every union,
-        // whose common case is exactly that.
-        if self.len() < 2 {
-            return Ok(());
-        }
-
-        // Which nodes are carried by more than one zone: one hash per node,
-        // not per value. Zones on disjoint node clouds stop here, without ever
-        // touching a value buffer.
-        let total: usize = self.iter().map(|h| h.read().node_count()).sum();
-        let mut seen_nodes: HashSet<NodeId> = HashSet::with_capacity(total);
-        let mut shared: HashSet<NodeId> = HashSet::new();
-        for h in self {
-            let s = h.read();
-            let support = s.support();
-            let support = support.read();
-            for &nid in s.nodes_with(&support) {
-                if !seen_nodes.insert(nid) {
-                    shared.insert(nid);
-                }
-            }
-        }
-        if shared.is_empty() {
-            return Ok(());
-        }
-        drop(seen_nodes);
-
-        // Only a shared node can disagree. Component names are interned once
-        // per zone: keyed by name, the map would allocate a `String` per
-        // value — a copy of the whole field, on every union.
-        let mut ids: HashMap<String, u32> = HashMap::new();
-        let mut seen: HashMap<(NodeId, u32), f64> = HashMap::new();
-        for h in self {
-            let s = h.read();
-            let support = s.support();
-            let support = support.read();
-            let (nodes, comps, values) = (
-                s.nodes_with(&support),
-                SubField::components(&*s),
-                s.values(),
-            );
-            let ncomp = comps.len();
-            let gids: Vec<u32> = comps
-                .iter()
-                .map(|c| {
-                    let next = ids.len() as u32;
-                    *ids.entry(c.clone()).or_insert(next)
-                })
-                .collect();
-            for (ni, &nid) in nodes.iter().enumerate() {
-                if !shared.contains(&nid) {
-                    continue;
-                }
-                let row = &values[ni * ncomp..(ni + 1) * ncomp];
-                for (ci, &gid) in gids.iter().enumerate() {
-                    let v = row[ci];
-                    match seen.entry((nid, gid)) {
-                        std::collections::hash_map::Entry::Occupied(e) => {
-                            if *e.get() != v {
-                                return Err(PyrucastError::Message(format!(
-                                    "incoherent NodeField: node {}, component {}: {} \u{2260} {}",
-                                    nid,
-                                    comps[ci],
-                                    e.get(),
-                                    v
-                                )));
-                            }
-                        }
-                        std::collections::hash_map::Entry::Vacant(e) => {
-                            e.insert(v);
-                        }
-                    }
-                }
-            }
-        }
-        Ok(())
+        crate::containers::field::check_points_agree(self, None)
     }
 
     /// Read the values at `dofs` (`(node, component)` pairs) into a dense

@@ -591,10 +591,11 @@ réduit** et donc par le **type du résultat** :
 
 Les deux exigent la **même saveur** d'opérandes (`NodeField`, `SubNodeField`,
 `ElementField`, `SubElementField`), alignent les composantes **par nom** (l'ordre
-peut différer) et suivent la **même règle d'union** que l'arithmétique de
-[Champ](../field.md) : la somme ne porte que sur les `(support, composante)`
-**partagés** par les deux champs ; un support ou une composante d'un seul côté n'a
-pas de vis-à-vis et **ne contribue pas**.
+peut différer) et associent les valeurs comme l'arithmétique de
+[Champ](../field.md#entre-deux-champs) : la somme ne porte que sur les
+`(support, composante)` **partagés** par les deux champs ; un support ou une
+composante d'un seul côté n'a pas de vis-à-vis et **ne contribue pas**. Un nœud
+que plusieurs zones portent compte une fois dans `xty`.
 
 - `xty` (produit scalaire **global**, `dot` / `dot_field`) → un `float` ;
 - `psca` (`pscal` / `pscal_field`) → un **champ** (composante `"psca"`), une zone
@@ -608,7 +609,8 @@ Produit scalaire **global** des deux champs entiers :
 x \cdot y = \sum_i \sum_c x_{i,c}\\, y_{i,c},
 \\]
 
-la somme parcourant **toutes** les valeurs. Le résultat est un unique `float` :
+la somme parcourant **toutes** les valeurs, un nœud que plusieurs zones portent
+compté une fois. Le résultat est un unique `float` :
 le produit scalaire qui sert au calcul d'énergie (`F·u`), aux normes de résidu,
 etc. L'addition flottante n'étant pas associative, le total dépend du nombre de
 threads jusqu'au dernier ULP — comme le solveur, ce n'est pas reproductible
@@ -672,9 +674,10 @@ méthode, à côté de `min` / `max` :
 | `xtx(field)` | toutes les valeurs au carré (`Σ v²`, `XTX`) | un `float` |
 | `xtx(field, components=[…])` | seules ces composantes au carré | un `float` |
 
-`sum` et `xtx` regroupent la somme en parallèle : dépendantes du nombre de
-threads au dernier ULP (contrairement à `min` / `max`, exactes quel que soit
-l'ordre).
+Sur un champ aux nœuds, `sum` et `xtx` comptent une fois un nœud que plusieurs
+zones portent : il n'y a qu'une valeur (voir [Champ](../field.md#les-règles-de-cohérence)).
+Elles regroupent la somme en parallèle : dépendantes du nombre de threads au
+dernier ULP (contrairement à `min` / `max`, exactes quel que soit l'ordre).
 
 Appelées **sans argument**, `min` et `max` lisent le champ comme la liste plate
 de ses valeurs — toutes composantes confondues, et, au niveau agrégat, toutes

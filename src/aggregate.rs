@@ -280,9 +280,20 @@ pub trait Aggregate: Default {
     /// The default is a no-op.
     fn post_push(&mut self) {}
 
-    /// Check compatibility (via [`Aggregate::check_push`]) then append a single handle.
+    /// Hook called by [`Aggregate::add_sub`] after
+    /// [`Aggregate::check_push`]: what a sub must meet to join the aggregate
+    /// **as it is** (e.g. a field's component already carried on the same
+    /// support). A union skips it — its [`Aggregate::finalize`] fuses or
+    /// validates the whole result instead. The default accepts everything.
+    fn check_add(&self, _h: &Handle<Self::Sub>) -> crate::error::Result<()> {
+        Ok(())
+    }
+
+    /// Check compatibility (via [`Aggregate::check_push`] and
+    /// [`Aggregate::check_add`]) then append a single handle.
     fn add_sub(&mut self, h: Handle<Self::Sub>) -> crate::error::Result<()> {
         self.check_push(&h)?;
+        self.check_add(&h)?;
         self.push(h);
         self.post_push();
         Ok(())
@@ -354,6 +365,17 @@ pub trait Aggregate: Default {
         }
         Ok(())
     }
+}
+
+/// The first two positions of `agg` holding the same sub
+/// ([`Handle::same_object`]), in order — `None` when each sub is held once.
+pub(crate) fn repeated_sub<A: Aggregate>(agg: &A) -> Option<(usize, usize)> {
+    for (i, h) in agg.iter().enumerate() {
+        if let Some(first) = agg.iter().take(i).position(|z| z.same_object(h)) {
+            return Some((first, i));
+        }
+    }
+    None
 }
 
 // ─── Debug helper: recurse into each sub-object ─────────────────────────────

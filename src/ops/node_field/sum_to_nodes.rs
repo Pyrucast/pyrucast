@@ -10,10 +10,10 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::ElementField;
+use crate::containers::field::add_partials;
 use crate::containers::field::SubField;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
-use crate::handle::Handle;
 use crate::models::kernel;
 
 /// The nodal sum of a field carrying **one point per cell**.
@@ -84,7 +84,9 @@ pub fn sum_to_nodes(field: &ElementField) -> Result<NodeField> {
             },
         )?;
         drop(guard);
-        out.add_sub(Handle::new(summed))?;
+        // Two zones on one cell list — a space listing it twice — add up
+        // there and keep its support.
+        out = add_partials(&out, &NodeField::from_sub(summed))?;
     }
     // Two zones meeting at a node both surround it: added, not side by side.
     out.summed()
@@ -99,6 +101,7 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
+    use crate::handle::Handle;
     use crate::ops::element_field::cell_integral;
 
     /// An `nx × ny` grid of unit QUA4, split in two zones (left and right

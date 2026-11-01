@@ -38,12 +38,14 @@
 //! ```
 
 use crate::aggregate::Aggregate;
+use crate::atoms::NodeId;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::handle::{Handle, ReadGuard};
 use crate::parallel::*;
 use std::any::Any;
+use std::sync::Arc;
 
 /// Validate a component-name list: non-empty, no duplicate names.
 /// `kind` names the container in the error message.
@@ -437,6 +439,35 @@ pub trait SubField {
     fn same_support_with(&self, components: Vec<String>) -> Result<Self>
     where
         Self: Sized;
+
+    /// The point each row stands at, when two zones of one field can share
+    /// one — a node, for a nodal field. `None`, the default, when they never
+    /// can: two subspaces have no Gauss point in common.
+    ///
+    /// What lets a field count a point once however many zones carry it
+    /// ([`Field::sum`], [`Field::xtx`], [`Field::dot_field`]), and check that
+    /// those zones agree on its value.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::SubNodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()])?;
+    /// let t = SubNodeField::from_poi1(&support.get(0)?, vec!["T".into()])?;
+    /// // A nodal row stands at a node, the one of the support in that place.
+    /// assert_eq!(t.row_points(), Some(vec![a.id(), b.id()]));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    fn row_points(&self) -> Option<Vec<NodeId>> {
+        None
+    }
 
     /// Add `scalar` to every entry of the named component.
     fn add_to_component(&mut self, component: &str, scalar: f64) -> Result<()> {
@@ -1124,59 +1155,94 @@ where
         fold_subs(self, component, "max", f64::max)
     }
 
-    /// Sum of `component` across the subs defining it (`Σ` over the whole field
+    /// Sum of `component` over the field's points (`Σ` over the whole field
     /// — e.g. the resultant of a nodal force field, one component at a time).
+    /// A point several zones carry counts **once**: a node on the seam between
+    /// two zones holds one value, whichever zone stores it.
     ///
     /// Errors if no sub defines the component; a defining sub with an empty
     /// support contributes `0.0`. Thread-count-dependent to the last ULP.
     fn sum(&self, component: &str) -> Result<f64> {
-        let handles: Vec<&Handle<Self::Sub>> = self.iter().collect();
-        let per_sub: Vec<Option<f64>> = handles
-            .par_iter()
-            .map(|h| -> Result<Option<f64>> {
-                let s = h.read();
-                if s.component_index(component).is_none() {
-                    Ok(None)
-                } else {
-                    Ok(Some(SubField::sum(&*s, component)?))
-                }
-            })
-            .collect::<Result<_>>()?;
-        let defining: Vec<f64> = per_sub.into_iter().flatten().collect();
-        if defining.is_empty() {
+        let guards: Vec<ReadGuard<Self::Sub>> = self.iter().map(|h| h.read()).collect();
+        let zones: Vec<&Self::Sub> = guards.iter().map(|g| &**g).collect();
+        let skip = repeated_rows(&zones, |z, c| zones[z].components()[c] == component);
+        let mut acc = 0.0;
+        let mut defining = false;
+        for (z, zone) in zones.iter().enumerate() {
+            let Some(ci) = zone.component_index(component) else {
+                continue;
+            };
+            defining = true;
+            acc += column_sum(*zone, ci, skip[z][ci].as_deref(), |v| v);
+        }
+        if !defining {
             return Err(PyrucastError::Message(format!(
                 "sum: no sub-field defines component {}",
                 component
             )));
         }
-        Ok(defining.into_iter().sum())
+        Ok(acc)
     }
 
-    /// Squared Euclidean norm `xᵀx = Σ v²` over every value of every zone
-    /// (Cast3M `XTX`). Thread-count-dependent to the last ULP.
+    /// Squared Euclidean norm `xᵀx = Σ v²` over every value of the field
+    /// (Cast3M `XTX`), a point several zones carry counted once, as in
+    /// [`Field::sum`]. Thread-count-dependent to the last ULP.
     fn xtx(&self) -> f64 {
+        let guards: Vec<ReadGuard<Self::Sub>> = self.iter().map(|h| h.read()).collect();
+        let zones: Vec<&Self::Sub> = guards.iter().map(|g| &**g).collect();
+        let skip = repeated_rows(&zones, |_, _| true);
         let mut acc = 0.0;
-        for h in self.iter() {
-            acc += SubField::xtx(&*h.read());
+        for (z, zone) in zones.iter().enumerate() {
+            let masks = &skip[z];
+            if masks.iter().all(Option::is_none) {
+                acc += SubField::xtx(*zone);
+                continue;
+            }
+            // Every column leaving out the same rows: one pass over the zone.
+            if let Some(Some(first)) = masks.first() {
+                if masks
+                    .iter()
+                    .all(|m| m.as_ref().is_some_and(|m| Arc::ptr_eq(m, first)))
+                {
+                    acc += rows_sum_sq(*zone, first);
+                    continue;
+                }
+            }
+            for (ci, rows) in masks.iter().enumerate() {
+                acc += column_sum(*zone, ci, rows.as_deref(), |v| v * v);
+            }
         }
         acc
     }
 
     /// Squared Euclidean norm restricted to the named `components`, summed over
     /// every zone that carries any of them (the aggregate twin of
-    /// [`SubField::xtx_components`]). A component may be spread across zones;
-    /// each zone contributes the squares of whichever selected components it
-    /// holds. Errors if **no** zone defines **any** of `components`.
+    /// [`SubField::xtx_components`]), a point several zones carry counted once.
+    /// A component may be spread across zones; each zone contributes the
+    /// squares of whichever selected components it holds. Errors if **no**
+    /// zone defines **any** of `components`.
     fn xtx_components(&self, components: &[&str]) -> Result<f64> {
+        let guards: Vec<ReadGuard<Self::Sub>> = self.iter().map(|h| h.read()).collect();
+        let zones: Vec<&Self::Sub> = guards.iter().map(|g| &**g).collect();
+        let selected = |z: usize, c: usize| components.contains(&zones[z].components()[c].as_str());
+        let skip = repeated_rows(&zones, selected);
         let mut acc = 0.0;
         let mut any = false;
-        for h in self.iter() {
-            let s = h.read();
+        for (z, zone) in zones.iter().enumerate() {
             // A zone missing all selected components contributes nothing;
             // one carrying some contributes their squares.
-            if components.iter().any(|c| s.component_index(c).is_some()) {
-                acc += s.xtx_components(components)?;
-                any = true;
+            if !components.iter().any(|c| zone.component_index(c).is_some()) {
+                continue;
+            }
+            any = true;
+            if skip[z].iter().all(Option::is_none) {
+                acc += zone.xtx_components(components)?;
+                continue;
+            }
+            for (ci, rows) in skip[z].iter().enumerate() {
+                if selected(z, ci) {
+                    acc += column_sum(*zone, ci, rows.as_deref(), |v| v * v);
+                }
             }
         }
         if !any {
@@ -1297,127 +1363,161 @@ where
     /// union/passthrough semantics. The two fields need **not** share the same
     /// zone decomposition:
     ///
-    /// - The output covers the **union** of the operands' supports.
-    /// - On a support carried by both, the zones are combined component-wise
-    ///   ([`SubField::merge_components`]): a component defined on both sides
-    ///   becomes `op(self, other)`; a component on only one side **passes
-    ///   through unchanged** (raw, for every operator).
-    /// - A support carried by only one side has its zone(s) **passed through**
-    ///   unchanged.
+    /// - A component both sides carry on one support becomes `op(self, other)`,
+    ///   wherever on that support each side keeps it.
+    /// - A component only one side carries on a support **passes through
+    ///   unchanged** (raw, for every operator: `a - b`'s `b`-only component is
+    ///   `b`, not `-b`). That is what lets `u + du` move `u_x` alone when `du`
+    ///   carries `u_x` only.
+    /// - The result keeps `self`'s zones, in order. A component only `other`
+    ///   carries joins `self`'s zone on that support when `self` has one zone
+    ///   there; it keeps a zone of its own otherwise, as does a support only
+    ///   `other` carries.
     ///
-    /// Operands are assumed to satisfy the field invariant (at most one zone per
-    /// `(support, component)`, as a union enforces), so each support pairs at
-    /// most one zone per side; the result inherits the invariant by
-    /// construction.
+    /// A support carries each component in one zone, on each side and in the
+    /// result. On a nodal field, a node two supports share must also come out
+    /// with one value: a value passed through on one support next to a value
+    /// computed on another would break it, and is an error — bring both fields
+    /// onto the same supports first (`restrict_like`). The check only runs
+    /// when a component was obtained differently from one zone to the next.
     fn merge_field(&self, other: &Self, op: fn(f64, f64) -> f64) -> Result<Self>
     where
         Self: Sized,
         Self::Sub: Clone,
     {
-        // Snapshot the **right** side's zones (clone them): they are
-        // probed against every left zone, so a guard on one of them would meet
-        // the left guard — and `other` may share handles with `self`. The left
-        // side is read in place: a second copy of it would be a whole material
-        // field cloned to be looked at once.
+        // Snapshot the **right** side's zones (clone them): `other` may share
+        // handles with `self`, whose zones are read in place throughout.
         let rights: Vec<Self::Sub> = other.iter().map(|h| (*h.read()).clone()).collect();
-
-        let mut out = Self::default();
-        let mut right_used = vec![false; rights.len()];
-        // Each left zone: combine with the right zone on the same support if
-        // any, else pass through unchanged.
-        for h in self.iter() {
-            let l = h.read();
-            match rights.iter().position(|r| l.same_support(r)) {
-                Some(j) => {
-                    out.add_sub(Handle::new(l.merge_components(&rights[j], op)?))?;
-                    right_used[j] = true;
-                }
-                None => out.add_sub(Handle::new((*l).clone()))?,
-            }
-        }
-        // Right zones whose support was absent on the left: pass through.
-        for (j, r) in rights.iter().enumerate() {
-            if !right_used[j] {
-                out.add_sub(Handle::new(r.clone()))?;
-            }
-        }
+        let (out, mixed) = merge_zones(self, &rights, op)?;
+        check_merged(&out, &mixed)?;
         Ok(out)
     }
 
-    /// Scalar product of two fields, summed over the zones they **share** by
-    /// support. Mirrors [`SubField::dot`]'s union spirit at the aggregate level:
-    /// each support carried by both sides contributes its [`SubField::dot`]
-    /// (shared components only); a support — or component — present on only one
-    /// side has no counterpart and contributes nothing. The reduction behind
-    /// Cast3M's `XTY`/`PSCA`.
+    /// Scalar product of two fields: `Σ x·y` over the components both carry on
+    /// a support both carry (paired as in [`Field::merge_field`]), a point
+    /// several zones carry counted once, as in [`Field::sum`]. A support — or
+    /// component — present on only one side has no counterpart and contributes
+    /// nothing. The reduction behind Cast3M's `XTY`.
     fn dot_field(&self, other: &Self) -> Result<f64>
     where
         Self::Sub: Clone,
     {
-        // Snapshot other's zones so we never hold two guards at once — safe
-        // even when `other` shares handles with `self` (mirrors merge_field).
-        let others: Vec<Self::Sub> = other.iter().map(|h| (*h.read()).clone()).collect();
+        // Snapshot other's zones so we never hold two guards on one zone —
+        // `other` may share handles with `self`.
+        let rights: Vec<Self::Sub> = other.iter().map(|h| (*h.read()).clone()).collect();
+        let guards: Vec<ReadGuard<Self::Sub>> = self.iter().map(|h| h.read()).collect();
+        let zones: Vec<&Self::Sub> = guards.iter().map(|g| &**g).collect();
+        let pairs = partners(&zones, &rights);
+        let skip = repeated_rows(&zones, |z, c| pairs[z][c].is_some());
         let mut acc = 0.0;
-        for h in self.iter() {
-            let s = h.read();
-            // At most one right zone shares the support (field invariant).
-            if let Some(os) = others.iter().find(|os| s.same_support(os)) {
-                acc += s.dot(os)?;
+        for (z, zone) in zones.iter().enumerate() {
+            for (ci, pair) in pairs[z].iter().enumerate() {
+                if let Some((j, rc)) = *pair {
+                    acc += column_dot(*zone, ci, &rights[j], rc, skip[z][ci].as_deref());
+                }
             }
         }
         Ok(acc)
     }
 
-    /// Per-node/-point scalar product of two fields — Cast3M's `PSCA`. Each zone
-    /// of `self` carried on a support **shared** with `other` is reduced over
-    /// its shared components ([`SubField::pscal`]); the result is a new field
-    /// with one `"psca"` zone per shared support. Mirrors [`Field::dot_field`]'s
-    /// union spirit: a support (or component) present on only one side has no
-    /// counterpart and yields no contribution.
+    /// Per-node/-point scalar product of two fields — Cast3M's `PSCA`. On each
+    /// support both sides carry, one `"psca"` zone holding `Σ x·y` over the
+    /// components both carry there (paired as in [`Field::merge_field`]); a
+    /// support — or component — present on only one side has no counterpart
+    /// and yields no contribution. On a nodal field, two supports summing
+    /// different components may not disagree at a node they share.
     fn pscal_field(&self, other: &Self) -> Result<Self>
     where
         Self: Sized,
         Self::Sub: Clone,
     {
-        // Snapshot other's zones so we never hold two guards at once — safe
-        // even when `other` shares handles with `self` (mirrors merge_field).
-        let others: Vec<Self::Sub> = other.iter().map(|h| (*h.read()).clone()).collect();
+        let rights: Vec<Self::Sub> = other.iter().map(|h| (*h.read()).clone()).collect();
+        let guards: Vec<ReadGuard<Self::Sub>> = self.iter().map(|h| h.read()).collect();
+        let zones: Vec<&Self::Sub> = guards.iter().map(|g| &**g).collect();
+        let pairs = partners(&zones, &rights);
         let mut out = Self::default();
-        for h in self.iter() {
-            let s = h.read();
-            // At most one right zone shares the support (field invariant).
-            if let Some(os) = others.iter().find(|os| s.same_support(os)) {
-                out.add_sub(Handle::new(s.pscal(os)?))?;
+        // Per output zone, the components its product sums.
+        let mut summed: Vec<Vec<String>> = Vec::new();
+        let mut done = vec![false; zones.len()];
+        for z in 0..zones.len() {
+            if done[z] {
+                continue;
             }
+            // Every zone of `self` on this support: their components add up
+            // into the one product of the support.
+            let support = zones[z].support();
+            let group: Vec<usize> = (z..zones.len())
+                .filter(|&k| zones[k].support().same_object(&support))
+                .collect();
+            for &k in &group {
+                done[k] = true;
+            }
+            if !rights.iter().any(|r| r.support().same_object(&support)) {
+                continue;
+            }
+            let mut terms: Vec<(&[f64], usize, usize, &[f64], usize, usize)> = Vec::new();
+            let mut names: Vec<String> = Vec::new();
+            for &k in &group {
+                for (ci, pair) in pairs[k].iter().enumerate() {
+                    if let Some((j, rc)) = *pair {
+                        let (l, r) = (zones[k], &rights[j]);
+                        terms.push((
+                            l.values(),
+                            l.component_count(),
+                            ci,
+                            r.values(),
+                            r.component_count(),
+                            rc,
+                        ));
+                        names.push(l.components()[ci].clone());
+                    }
+                }
+            }
+            // Same support ⇒ identical row layout on every zone of the group,
+            // on the right and on the fresh output. Each output slot is
+            // written once ⇒ the result is independent of the thread count.
+            let mut psca = zones[z].same_support_with(vec!["psca".to_string()])?;
+            psca.values_mut()
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(row, o)| {
+                    let mut acc = 0.0;
+                    for &(lv, ln, lc, rv, rn, rc) in &terms {
+                        acc += lv[row * ln + lc] * rv[row * rn + rc];
+                    }
+                    *o = acc;
+                });
+            names.sort();
+            summed.push(names);
+            out.add_sub(Handle::new(psca))?;
+        }
+        if summed.windows(2).any(|w| w[0] != w[1]) {
+            check_merged(&out, &["psca".to_string()])?;
         }
         Ok(out)
     }
 
-    /// Targeted update: merge `sub` into the zone(s) of `self` sharing its
-    /// support ([`SubField::merge_components`], union of components with
-    /// passthrough); every other zone is carried **unchanged**. Errors if no
-    /// zone shares the support.
+    /// Targeted update: `self op sub`, `sub` being a zone on a support of
+    /// `self` — paired as in [`Field::merge_field`], every other zone carried
+    /// **unchanged**. Errors if no zone shares the support, and, on a nodal
+    /// field, if the updated zone and an untouched one would disagree at a node
+    /// they share.
     fn merge_subfield(&self, sub: &Self::Sub, op: fn(f64, f64) -> f64) -> Result<Self>
     where
         Self: Sized,
         Self::Sub: Clone,
     {
-        let mut out = Self::default();
-        let mut matched = false;
-        for h in self.iter() {
-            let s = h.read();
-            if s.same_support(sub) {
-                out.add_sub(Handle::new(s.merge_components(sub, op)?))?;
-                matched = true;
-            } else {
-                out.add_sub(Handle::new((*s).clone()))?;
-            }
-        }
-        if !matched {
+        let support = sub.support();
+        if !self
+            .iter()
+            .any(|h| h.read().support().same_object(&support))
+        {
             return Err(PyrucastError::Message(
                 "merge_subfield: no zone shares the sub-field's support".into(),
             ));
         }
+        let (out, mixed) = merge_zones(self, std::slice::from_ref(sub), op)?;
+        check_merged(&out, &mixed)?;
         Ok(out)
     }
 
@@ -1676,6 +1776,485 @@ where
     })
 }
 
+// ─── Points, pairing and the two rules of a field ───────────────────────────
+//
+// A field obeys two rules, which every operation keeps:
+//
+// 1. on one support, a component lives in one zone;
+// 2. a point several zones carry — a node, two supports meeting — holds one
+//    value per component.
+//
+// The helpers below are what keeps them: a reduction counts a shared point
+// once, an operation pairs zones per (support, component), and a result that
+// could break the second rule is checked.
+
+/// The rows of one zone a reduction leaves out, shared by every column that
+/// leaves out the same ones.
+type Repeated = Option<Arc<[bool]>>;
+
+/// Per zone and per component column, the rows a field must not count again:
+/// those standing at a point an earlier zone already carries with that
+/// component. `None` where nothing repeats — every entry, for a field whose
+/// zones share no point. `counts(z, c)` says whether column `c` of zone `z`
+/// takes part; a column left out neither repeats nor is repeated.
+fn repeated_rows<S: SubField>(
+    zones: &[&S],
+    counts: impl Fn(usize, usize) -> bool,
+) -> Vec<Vec<Repeated>> {
+    let mut out: Vec<Vec<Repeated>> = zones
+        .iter()
+        .map(|z| vec![None; z.component_count()])
+        .collect();
+    if zones.len() < 2 {
+        return out;
+    }
+    let points: Vec<Option<Vec<NodeId>>> = zones.iter().map(|z| z.row_points()).collect();
+    let Some(len) = points
+        .iter()
+        .flatten()
+        .flat_map(|p| p.iter())
+        .map(|id| id.0 as usize + 1)
+        .max()
+    else {
+        return out;
+    };
+    let mut names: Vec<&str> = Vec::new();
+    for z in zones {
+        for c in z.components() {
+            if !names.contains(&c.as_str()) {
+                names.push(c);
+            }
+        }
+    }
+    // Components counted by the same zones repeat on the same rows: one pass
+    // and one mask per zone serve them all — every component, in the usual
+    // field whose zones carry the same ones.
+    let mut groups: Vec<(Vec<usize>, Vec<(usize, usize)>)> = Vec::new();
+    for name in names {
+        let cols: Vec<(usize, usize)> = zones
+            .iter()
+            .enumerate()
+            .filter_map(|(z, zone)| {
+                let ci = zone.component_index(name)?;
+                (points[z].is_some() && counts(z, ci)).then_some((z, ci))
+            })
+            .collect();
+        if cols.len() < 2 {
+            continue;
+        }
+        let key: Vec<usize> = cols.iter().map(|&(z, _)| z).collect();
+        match groups.iter_mut().find(|(k, _)| *k == key) {
+            Some((_, held)) => held.extend(cols),
+            None => groups.push((key, cols)),
+        }
+    }
+    // One stamp per point: the 1-based rank of the last group that counted
+    // it, so the array never needs clearing between groups.
+    let mut stamp = vec![0u32; len];
+    for (g, (key, cols)) in groups.iter().enumerate() {
+        let mark = g as u32 + 1;
+        let masks: Vec<Repeated> = key
+            .iter()
+            .map(|&z| {
+                let rows = points[z]
+                    .as_ref()
+                    .expect("zones without points are left out");
+                let mut repeated: Option<Vec<bool>> = None;
+                for (row, p) in rows.iter().enumerate() {
+                    let s = &mut stamp[p.0 as usize];
+                    if *s == mark {
+                        repeated.get_or_insert_with(|| vec![false; rows.len()])[row] = true;
+                    } else {
+                        *s = mark;
+                    }
+                }
+                repeated.map(Arc::from)
+            })
+            .collect();
+        for &(z, ci) in cols {
+            let k = key
+                .iter()
+                .position(|&held| held == z)
+                .expect("in its own group");
+            out[z][ci] = masks[k].clone();
+        }
+    }
+    out
+}
+
+/// `Σ v²` over the rows of `zone` not flagged in `skip`, every column.
+fn rows_sum_sq<S: SubField + ?Sized>(zone: &S, skip: &[bool]) -> f64 {
+    let nc = zone.component_count().max(1);
+    zone.values()
+        .par_chunks(nc)
+        .with_min_len((MIN_PARALLEL_LEN / nc).max(1))
+        .zip(skip.par_iter())
+        .map(|(row, &out)| {
+            if out {
+                0.0
+            } else {
+                row.iter().map(|v| v * v).sum::<f64>()
+            }
+        })
+        .sum()
+}
+
+/// `Σ f(v)` down column `ci` of `zone`, the rows flagged in `skip` left out.
+/// Thread-count-dependent to the last ULP, like every parallel sum here.
+fn column_sum<S: SubField + ?Sized>(
+    zone: &S,
+    ci: usize,
+    skip: Option<&[bool]>,
+    f: impl Fn(f64) -> f64 + Sync + Send,
+) -> f64 {
+    let nc = zone.component_count().max(1);
+    let rows = zone
+        .values()
+        .par_chunks(nc)
+        .with_min_len((MIN_PARALLEL_LEN / nc).max(1));
+    match skip {
+        None => rows.map(|row| f(row[ci])).sum(),
+        Some(skip) => rows
+            .zip(skip.par_iter())
+            .map(|(row, &out)| if out { 0.0 } else { f(row[ci]) })
+            .sum(),
+    }
+}
+
+/// `Σ x·y` of column `lc` of `left` against column `rc` of `right`, two zones
+/// on one support (same rows, same order), the rows flagged in `skip` left out.
+fn column_dot<S: SubField + ?Sized>(
+    left: &S,
+    lc: usize,
+    right: &S,
+    rc: usize,
+    skip: Option<&[bool]>,
+) -> f64 {
+    let (ln, rn) = (
+        left.component_count().max(1),
+        right.component_count().max(1),
+    );
+    let (lv, rv) = (left.values(), right.values());
+    (0..lv.len() / ln)
+        .into_par_iter()
+        .with_min_len(MIN_PARALLEL_LEN)
+        .map(|row| {
+            if skip.is_some_and(|s| s[row]) {
+                0.0
+            } else {
+                lv[row * ln + lc] * rv[row * rn + rc]
+            }
+        })
+        .sum()
+}
+
+/// For each column of each left zone, the right zone carrying that component
+/// on the same support and its column there — `None` when none does. One at
+/// most: on a support, a component lives in one zone.
+fn partners<S: SubField>(lefts: &[&S], rights: &[S]) -> Vec<Vec<Option<(usize, usize)>>> {
+    lefts
+        .iter()
+        .map(|l| {
+            let support = l.support();
+            let there: Vec<usize> = (0..rights.len())
+                .filter(|&j| rights[j].support().same_object(&support))
+                .collect();
+            l.components()
+                .iter()
+                .map(|name| {
+                    there
+                        .iter()
+                        .find_map(|&j| rights[j].component_index(name).map(|rc| (j, rc)))
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// How a column of a combined zone was obtained. Two zones whose columns of
+/// one component were obtained the same way agree wherever they meet — each
+/// side holds one value per point; only a component obtained differently from
+/// one zone to the next can break the second rule.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Taken {
+    Both,
+    Left,
+    Right,
+}
+
+/// `left op rights`, paired per (support, component) — the body of
+/// [`Field::merge_field`] and [`Field::merge_subfield`]. Returns the result and
+/// the components obtained differently from one zone to the next (see
+/// [`Taken`]), which alone can break the second rule.
+fn merge_zones<A>(left: &A, rights: &[A::Sub], op: fn(f64, f64) -> f64) -> Result<(A, Vec<String>)>
+where
+    A: Aggregate,
+    A::Sub: SubField + Clone,
+{
+    let guards: Vec<ReadGuard<A::Sub>> = left.iter().map(|h| h.read()).collect();
+    let lefts: Vec<&A::Sub> = guards.iter().map(|g| &**g).collect();
+    let pairs = partners(&lefts, rights);
+    let mut used: Vec<Vec<bool>> = rights
+        .iter()
+        .map(|r| vec![false; r.component_count()])
+        .collect();
+    let mut how: Vec<(String, Taken, bool)> = Vec::new();
+    let mut note = |name: &str, t: Taken| match how.iter_mut().find(|(n, _, _)| n == name) {
+        Some((_, first, mixed)) => *mixed |= *first != t,
+        None => how.push((name.to_string(), t, false)),
+    };
+    let mut out = A::empty();
+    for (z, l) in lefts.iter().enumerate() {
+        let support = l.support();
+        let alone = lefts
+            .iter()
+            .filter(|k| k.support().same_object(&support))
+            .count()
+            == 1;
+        let mut components = l.components().to_vec();
+        let mut cols: Vec<(Option<usize>, Option<(usize, usize)>)> = Vec::new();
+        for (lc, pair) in pairs[z].iter().enumerate() {
+            cols.push((Some(lc), *pair));
+            note(
+                &components[lc],
+                if pair.is_some() {
+                    Taken::Both
+                } else {
+                    Taken::Left
+                },
+            );
+            if let Some((j, rc)) = *pair {
+                used[j][rc] = true;
+            }
+        }
+        // What only the right carries on this support joins the left zone
+        // when it is the only one there; with several, none is *the* zone.
+        if alone {
+            for (j, r) in rights.iter().enumerate() {
+                if !r.support().same_object(&support) {
+                    continue;
+                }
+                for (rc, name) in r.components().iter().enumerate() {
+                    if !used[j][rc] {
+                        used[j][rc] = true;
+                        note(name, Taken::Right);
+                        components.push(name.clone());
+                        cols.push((None, Some((j, rc))));
+                    }
+                }
+            }
+        }
+        let zone = if cols.iter().all(|(_, r)| r.is_none()) {
+            (**l).clone()
+        } else {
+            combine_columns(*l, rights, components, &cols, op)?
+        };
+        out.add_sub(Handle::new(zone))?;
+    }
+    for (j, r) in rights.iter().enumerate() {
+        let rest: Vec<String> = r
+            .components()
+            .iter()
+            .enumerate()
+            .filter(|&(rc, _)| !used[j][rc])
+            .map(|(_, name)| name.clone())
+            .collect();
+        if rest.is_empty() {
+            continue;
+        }
+        for name in &rest {
+            note(name, Taken::Right);
+        }
+        let zone = if rest.len() == r.component_count() {
+            r.clone()
+        } else {
+            r.select_components(rest)?
+        };
+        out.add_sub(Handle::new(zone))?;
+    }
+    let mixed = how
+        .into_iter()
+        .filter(|(_, _, mixed)| *mixed)
+        .map(|(name, _, _)| name)
+        .collect();
+    Ok((out, mixed))
+}
+
+/// A zone on `left`'s support whose column `k` is named `components[k]` and
+/// filled, row by row, from `cols[k]`: `op(left, right)` when it reads both
+/// sides, the one value it reads otherwise. Same support ⇒ same rows in the
+/// same order on every zone read.
+fn combine_columns<S: SubField>(
+    left: &S,
+    rights: &[S],
+    components: Vec<String>,
+    cols: &[(Option<usize>, Option<(usize, usize)>)],
+    op: fn(f64, f64) -> f64,
+) -> Result<S> {
+    let mut out = left.same_support_with(components)?;
+    let nc = out.component_count();
+    let (lv, ln) = (left.values(), left.component_count());
+    let src: Vec<(Option<usize>, Option<(&[f64], usize, usize)>)> = cols
+        .iter()
+        .map(|&(l, r)| {
+            (
+                l,
+                r.map(|(j, rc)| (rights[j].values(), rights[j].component_count(), rc)),
+            )
+        })
+        .collect();
+    // Each output row is written by one task alone, so the result does not
+    // depend on the thread count.
+    out.values_mut()
+        .par_chunks_mut(nc.max(1))
+        .with_min_len((MIN_PARALLEL_LEN / nc.max(1)).max(1))
+        .enumerate()
+        .for_each(|(row, dst)| {
+            for (k, &(l, r)) in src.iter().enumerate() {
+                dst[k] = match (l, r) {
+                    (Some(lc), Some((rv, rn, rc))) => op(lv[row * ln + lc], rv[row * rn + rc]),
+                    (Some(lc), None) => lv[row * ln + lc],
+                    (None, Some((rv, rn, rc))) => rv[row * rn + rc],
+                    (None, None) => unreachable!("a column reads at least one side"),
+                };
+            }
+        });
+    Ok(out)
+}
+
+/// The second rule on the result of an operation, for the `components`
+/// obtained differently from one zone to the next — the only ones that can
+/// break it.
+fn check_merged<A>(out: &A, components: &[String]) -> Result<()>
+where
+    A: Aggregate,
+    A::Sub: SubField,
+{
+    if components.is_empty() {
+        return Ok(());
+    }
+    check_points_agree(out, Some(components)).map_err(|e| {
+        PyrucastError::Message(format!(
+            "{e}: the two fields do not carry this component on the same \
+             supports, so the zones meeting at this node were not combined alike \
+             — bring both fields onto the same supports first (restrict_like)"
+        ))
+    })
+}
+
+/// The second rule: every point several zones of `field` carry holds one value
+/// per component, compared exactly. `only` limits the check to some
+/// components. A field whose zones share no point passes at once. Errors on
+/// the first point where two zones disagree.
+pub(crate) fn check_points_agree<A>(field: &A, only: Option<&[String]>) -> Result<()>
+where
+    A: Aggregate,
+    A::Sub: SubField,
+{
+    if field.len() < 2 {
+        return Ok(());
+    }
+    let guards: Vec<ReadGuard<A::Sub>> = field.iter().map(|h| h.read()).collect();
+    let points: Vec<Option<Vec<NodeId>>> = guards.iter().map(|g| g.row_points()).collect();
+    let Some(len) = points
+        .iter()
+        .flatten()
+        .flat_map(|p| p.iter())
+        .map(|id| id.0 as usize + 1)
+        .max()
+    else {
+        return Ok(());
+    };
+    let mut names: Vec<&str> = Vec::new();
+    for g in &guards {
+        for c in g.components() {
+            let wanted = only.is_none_or(|o| o.contains(c));
+            if wanted && !names.contains(&c.as_str()) {
+                names.push(c);
+            }
+        }
+    }
+    // Per point, the first (zone, row) that held it, for the component at hand.
+    const UNSEEN: u32 = u32::MAX;
+    let mut first = vec![(UNSEEN, 0u32); len];
+    for name in names {
+        first.fill((UNSEEN, 0));
+        for (z, g) in guards.iter().enumerate() {
+            let (Some(ci), Some(rows)) = (g.component_index(name), &points[z]) else {
+                continue;
+            };
+            let (nc, values) = (g.component_count(), g.values());
+            for (row, p) in rows.iter().enumerate() {
+                let v = values[row * nc + ci];
+                let slot = &mut first[p.0 as usize];
+                if slot.0 == UNSEEN {
+                    *slot = (z as u32, row as u32);
+                    continue;
+                }
+                let held = &guards[slot.0 as usize];
+                let ci0 = held.component_index(name).expect("held the component");
+                let w = held.values()[slot.1 as usize * held.component_count() + ci0];
+                if w != v {
+                    return Err(PyrucastError::Message(format!(
+                        "incoherent {}: node {}, component {}: {} \u{2260} {}",
+                        A::type_name(),
+                        p,
+                        name,
+                        w,
+                        v
+                    )));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The first rule, for a zone about to join `field`: refuse it when a zone of
+/// `field` already carries one of its components on its support.
+pub(crate) fn check_component_free<A>(field: &A, zone: &Handle<A::Sub>) -> Result<()>
+where
+    A: Aggregate,
+    A::Sub: SubField,
+{
+    // Read the newcomer once, guard dropped: it may already be in `field`.
+    let (support, components) = {
+        let z = zone.read();
+        (z.support(), z.components().to_vec())
+    };
+    for (i, h) in field.iter().enumerate() {
+        let held = h.read();
+        if !held.support().same_object(&support) {
+            continue;
+        }
+        if let Some(c) = components
+            .iter()
+            .find(|c| held.component_index(c).is_some())
+        {
+            return Err(PyrucastError::Message(format!(
+                "{}: zone {i} already carries {c} on this support — on one support, \
+                 each component lives in one zone",
+                A::type_name()
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// `a + b` between partial sums on their way to an assembly
+/// ([`NodeField::summed`]): what two terms load on one support adds up, the
+/// rest stays side by side, and a node two supports share keeps one partial
+/// sum in each — what the assembly adds next. Not a field yet, so the second
+/// rule is not checked.
+pub(crate) fn add_partials<A>(a: &A, b: &A) -> Result<A>
+where
+    A: Aggregate,
+    A::Sub: SubField + Clone,
+{
+    let rights: Vec<A::Sub> = b.iter().map(|h| (*h.read()).clone()).collect();
+    Ok(merge_zones(a, &rights, |x, y| x + y)?.0)
+}
+
 // ─── Unit tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1685,7 +2264,7 @@ mod tests {
     use crate::containers::element_field::ElementField;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Mesh, SubMesh};
-    use crate::containers::node_field::SubNodeField;
+    use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::coords::Coords;
     use crate::handle::Handle;
 
@@ -2568,5 +3147,193 @@ mod tests {
         let scaled = (&f - 1.0).unwrap();
         let zs = scaled.get(0).unwrap().read();
         assert_eq!(zs.value(0, 0, "E").unwrap(), 2.0);
+    }
+
+    /// A unit square cut along its diagonal into two TRI3 zones that share
+    /// nodes 1 and 2: the left zone, the right one, and the two together.
+    fn square_in_two() -> (Mesh, Mesh, Mesh, Vec<Node>) {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]]
+            .iter()
+            .map(|p| Node::create_in(coords.clone(), p).unwrap())
+            .collect();
+        let zone = |a: usize, b: usize, c: usize| {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+            sm.add_cell(&[n[a].id(), n[b].id(), n[c].id()]).unwrap();
+            Mesh::from_submesh(sm)
+        };
+        let (left, right) = (zone(0, 1, 2), zone(1, 3, 2));
+        let both = left.union(&right).unwrap();
+        (left, right, both, n)
+    }
+
+    #[test]
+    fn a_node_two_zones_share_counts_once_in_the_reductions() {
+        let (_, _, both, _) = square_in_two();
+        let u = NodeField::new(&both, vec!["T".into()]).unwrap();
+        u.add_to_component("T", 1.0).unwrap();
+        // Four nodes, two of them in both zones: each counted once.
+        assert_eq!(Field::sum(&u, "T").unwrap(), 4.0);
+        assert_eq!(Field::xtx(&u), 4.0);
+        assert_eq!(Field::xtx_components(&u, &["T"]).unwrap(), 4.0);
+        assert_eq!(u.dot_field(&u).unwrap(), 4.0);
+        // The same values in a single zone give the same numbers.
+        let one = NodeField::new(
+            &crate::ops::mesh::poi1_from_nodes(&square_in_two().3).unwrap(),
+            vec!["T".into()],
+        )
+        .unwrap();
+        one.add_to_component("T", 1.0).unwrap();
+        assert_eq!(Field::sum(&one, "T").unwrap(), 4.0);
+    }
+
+    #[test]
+    fn regions_meeting_at_a_node_cannot_be_combined_unlike() {
+        let (left, _, both, n) = square_in_two();
+        let g = NodeField::new(&left, vec!["T".into()]).unwrap();
+        g.add_to_component("T", 1.0).unwrap();
+        let c = NodeField::new(&both, vec!["T".into()]).unwrap();
+        c.add_to_component("T", 10.0).unwrap();
+        // Left zone: computed from both fields; right zone: `c` alone. At the
+        // shared nodes the two would disagree (11 against 10).
+        let err = (&g + &c).unwrap_err().to_string();
+        assert!(err.contains("restrict_like"), "{err}");
+        // On the same supports, the sum is computed everywhere alike.
+        let g_on_both = crate::ops::node_field::restrict(&g, &both).unwrap();
+        let s = (&g_on_both + &c).unwrap();
+        assert_eq!(s.value(n[1].id(), "T").unwrap(), 11.0);
+        for z in &s {
+            assert_eq!(z.read().value(n[1].id(), "T").unwrap(), 11.0);
+        }
+    }
+
+    #[test]
+    fn a_component_moved_on_every_zone_needs_no_check() {
+        let (_, _, both, n) = square_in_two();
+        let u = NodeField::new(&both, vec!["u_x".into(), "u_y".into()]).unwrap();
+        u.add_to_component("u_y", 5.0).unwrap();
+        let du = NodeField::new(&both, vec!["u_x".into()]).unwrap();
+        du.add_to_component("u_x", 1.0).unwrap();
+        // `u_x` computed in every zone, `u_y` passed through in every zone.
+        let s = (&u + &du).unwrap();
+        assert_eq!(s.len(), 2);
+        assert_eq!(s.value(n[1].id(), "u_x").unwrap(), 1.0);
+        assert_eq!(s.value(n[1].id(), "u_y").unwrap(), 5.0);
+    }
+
+    #[test]
+    fn side_by_side_element_zones_pair_per_component() {
+        let fes = one_tri3_fes();
+        let left = ElementField::new(&fes, vec!["E".into(), "k".into()]).unwrap();
+        {
+            let mut z = left.get(0).unwrap().write();
+            z.set_uniform("E", 10.0).unwrap();
+            z.set_uniform("k", 20.0).unwrap();
+        }
+        let a = ElementField::new(&fes, vec!["E".into(), "nu".into()]).unwrap();
+        {
+            let mut z = a.get(0).unwrap().write();
+            z.set_uniform("E", 1.0).unwrap();
+            z.set_uniform("nu", 0.3).unwrap();
+        }
+        let b = ElementField::new(&fes, vec!["k".into()]).unwrap();
+        b.get(0).unwrap().write().set_uniform("k", 2.0).unwrap();
+        // Two zones on one subspace, each component in one of them.
+        let right = a.union(&b).unwrap();
+        assert_eq!(right.len(), 2);
+
+        let s = (&left + &right).unwrap();
+        assert_eq!(s.len(), 1, "the right's extras join the left's only zone");
+        let z = s.get(0).unwrap().read();
+        assert_eq!(z.value(0, 0, "E").unwrap(), 11.0);
+        assert_eq!(z.value(0, 0, "k").unwrap(), 22.0);
+        assert_eq!(z.value(0, 0, "nu").unwrap(), 0.3);
+        drop(z);
+        // Paired the same way from both ends: the product is symmetric.
+        let points = left.get(0).unwrap().read().gauss_count() as f64;
+        assert_eq!(left.dot_field(&right).unwrap(), 50.0 * points);
+        assert_eq!(right.dot_field(&left).unwrap(), 50.0 * points);
+        // One product per subspace, over every component both carry.
+        let p = left.pscal_field(&right).unwrap();
+        assert_eq!(p.len(), 1);
+        assert_eq!(p.get(0).unwrap().read().value(0, 0, "psca").unwrap(), 50.0);
+        let p = right.pscal_field(&left).unwrap();
+        assert_eq!(p.len(), 1);
+        assert_eq!(p.get(0).unwrap().read().value(0, 0, "psca").unwrap(), 50.0);
+    }
+
+    #[test]
+    fn extras_keep_a_zone_of_their_own_when_the_left_has_several() {
+        let fes = one_tri3_fes();
+        let left = ElementField::new(&fes, vec!["E".into()])
+            .unwrap()
+            .union(&ElementField::new(&fes, vec!["k".into()]).unwrap())
+            .unwrap();
+        let right = ElementField::new(&fes, vec!["E".into(), "alpha".into()]).unwrap();
+        right
+            .get(0)
+            .unwrap()
+            .write()
+            .set_uniform("alpha", 1e-5)
+            .unwrap();
+        let s = (&left + &right).unwrap();
+        // The left's two zones, then `alpha` alone: no zone is *the* one.
+        let comps: Vec<Vec<String>> = s.iter().map(|h| h.read().components().to_vec()).collect();
+        assert_eq!(
+            comps,
+            vec![
+                vec!["E".to_string()],
+                vec!["k".into()],
+                vec!["alpha".into()]
+            ]
+        );
+    }
+
+    #[test]
+    fn a_component_joins_a_support_once() {
+        let (left, _, _, _) = square_in_two();
+        let mut f = NodeField::new(&left, vec!["T".into()]).unwrap();
+        let again = NodeField::new(&left, vec!["T".into(), "q".into()]).unwrap();
+        let err = f.add_sub(again.get(0).unwrap()).unwrap_err().to_string();
+        assert!(err.contains("already carries T"), "{err}");
+        // Another component on the same support is welcome.
+        f.add_sub(
+            NodeField::new(&left, vec!["q".into()])
+                .unwrap()
+                .get(0)
+                .unwrap(),
+        )
+        .unwrap();
+
+        let fes = one_tri3_fes();
+        let mut e = ElementField::new(&fes, vec!["E".into()]).unwrap();
+        let twice = ElementField::new(&fes, vec!["E".into()]).unwrap();
+        assert!(e.add_sub(twice.get(0).unwrap()).is_err());
+    }
+
+    #[test]
+    fn a_field_is_not_built_on_a_zone_listed_twice() {
+        let (left, _, _, _) = square_in_two();
+        let mut twice = Mesh::empty();
+        twice.add_sub(left.get(0).unwrap()).unwrap();
+        twice.add_sub(left.get(0).unwrap()).unwrap();
+        let err = NodeField::new(&twice, vec!["T".into()])
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("zones 0 and 1"), "{err}");
+        // Two component lists on the twice-listed zone: two zones, each its own.
+        let f = NodeField::with(&twice, &[vec!["T".into()], vec!["q".into()]]).unwrap();
+        assert_eq!(f.len(), 2);
+        assert!(NodeField::with(&twice, &[vec!["T".into()], vec!["T".into()]]).is_err());
+
+        let fes = one_tri3_fes();
+        let mut fes_twice = FiniteElementSpace::empty();
+        fes_twice.add_sub(fes.get(0).unwrap()).unwrap();
+        fes_twice.add_sub(fes.get(0).unwrap()).unwrap();
+        let err = ElementField::new(&fes_twice, vec!["E".into()])
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("subspaces 0 and 1"), "{err}");
+        assert!(ElementField::with(&fes_twice, &[vec!["E".into()], vec!["E".into()]]).is_err());
     }
 }

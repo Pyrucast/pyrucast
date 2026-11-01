@@ -519,10 +519,9 @@ class ElementField:
         """
     def sum(self, component: builtins.str) -> builtins.float:
         r"""
-        Sum of `component` across the zones defining it (Σ over the whole field)
-        — the resultant of a nodal force field, one component at a time. A node
-        carried by several zones counts once per zone that stores it. Errors if
-        no zone defines the component.
+        Sum of `component` over the Gauss points of the field (Σ over the whole
+        field), across the zones defining it. Errors if no zone defines the
+        component.
         """
     def components(self) -> builtins.list[builtins.str]:
         r"""
@@ -2565,10 +2564,10 @@ class NodeField:
         """
     def sum(self, component: builtins.str) -> builtins.float:
         r"""
-        Sum of `component` across the zones defining it (Σ over the whole field)
+        Sum of `component` over the nodes of the field (Σ over the whole field)
         — the resultant of a nodal force field, one component at a time. A node
-        carried by several zones counts once per zone that stores it. Errors if
-        no zone defines the component.
+        that several zones carry counts once. Errors if no zone defines the
+        component.
         """
     def components(self) -> builtins.list[builtins.str]:
         r"""
@@ -6165,8 +6164,9 @@ def viscoplasticity_lemaitre_chaboche(fespace: FiniteElementSpace, kinematics: b
 def xtx(x: typing.Any, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:
     r"""
     Squared Euclidean norm `xᵀx = Σ v²` of a field (Cast3M `XTX`) — the sum of
-    squares over every value of every zone. Accepts a `NodeField`,
-    `SubNodeField`, `ElementField` or `SubElementField`.
+    squares over every value of the field, a node that several zones carry
+    counted once. Accepts a `NodeField`, `SubNodeField`, `ElementField` or
+    `SubElementField`.
     
     With `components` given, the sum is restricted to those components only
     (the rest ignored); by default every component is taken.
@@ -6178,11 +6178,11 @@ def xty(x: typing.Any, y: typing.Any) -> builtins.float:
     
     `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
     `ElementField` / `SubElementField`). The sum runs over the supports both
-    carry and, on each, over the components both carry (aligned by name); a
-    support or a component on one side only has no counterpart and adds
-    nothing. Two sub-fields must sit on the same support. Returns a single
-    float — the field inner product used for energies (`F·u`), residual norms,
-    etc.
+    carry and, on each, over the components both carry (aligned by name), a
+    node that several zones carry counted once; a support or a component on one
+    side only has no counterpart and adds nothing. Two sub-fields must sit on
+    the same support. Returns a single float — the field inner product used for
+    energies (`F·u`), residual norms, etc.
     
     For the **node-by-node** scalar product (a field, one value per node),
     see `pyrucast.field.psca`.

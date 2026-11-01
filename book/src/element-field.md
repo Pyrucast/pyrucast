@@ -124,15 +124,16 @@ maillage qui les compte (voir [Maillage](mesh.md#un-maillage-compte-ses-nœuds))
 
 ## Combiner des champs
 
-Les opérations suivent les règles de [Champ](field.md#opération-arithmétique) :
+Les opérations suivent les règles de [Champ](field.md#calculer-avec-des-champs) :
 
 - une opération par un scalaire (`champ * 1.1`, `champ + 2.0`…) s'applique à
   toutes les valeurs et rend un nouveau champ ;
-- `a + b`, `a - b`, `a * b`, `a / b`, `a ** b` entre deux champs combinent,
-  sur chaque espace porté des deux côtés, les composantes présentes des deux
-  côtés ; une composante ou une zone présente d'un seul côté passe telle
-  quelle ;
-- `champ + zone` ne touche que la zone du champ posée sur le même sous-espace ;
+- `a + b`, `a - b`, `a * b`, `a / b`, `a ** b` entre deux champs combinent
+  une composante que les deux portent sur un même sous-espace, même quand
+  chaque côté la range dans une autre de ses zones sur ce sous-espace ; une
+  composante ou une zone présente d'un seul côté passe telle quelle ;
+- `champ + zone` ne touche que les zones du champ posées sur le même
+  sous-espace ;
 - entre deux zones, les sous-espaces doivent être les mêmes, sinon c'est une
   erreur ;
 - `abs`, `sqrt`, `exp`, `cos`… s'appliquent valeur par valeur, et `champ >= s`
@@ -168,7 +169,11 @@ champs](operateurs/champs.md), [Construction](operateurs/construction.md) et
 
 `material_field` crée une zone par sous-modèle qui consomme du matériau, sur
 l'espace de ce sous-modèle, et ignore les autres (Dirichlet…). Il refuse une
-liste à laquelle manque une composante qu'une physique attend.
+liste à laquelle manque une composante qu'une physique attend. Deux
+sous-modèles posés sur un même sous-espace qui lisent une même composante — une
+conduction et une élasticité qui lisent toutes deux `rho` — partagent une seule
+zone, puisqu'un sous-espace porte chaque composante dans une seule zone ; avec
+`material_field_per_sub_model`, ils doivent alors lui donner la même valeur.
 
 Ces champs sont ensuite **consommés** par l'assemblage (`stiffness`, `mass`,
 `tangent`, `internal_forces`, `external_forces`, cf.

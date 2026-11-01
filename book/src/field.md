@@ -25,6 +25,34 @@ Un champ est un [agrégat](aggregate.md) de **zones**. Chaque zone :
 - range une valeur par composante et par **ligne** de son support : un nœud,
   ou un couple (maille, point de Gauss).
 
+## Les règles de cohérence
+
+Tout champ respecte deux règles, que chaque opération garde :
+
+1. **Une composante par support.** Sur un même support, une composante est
+   portée par une seule zone. Plusieurs zones peuvent partager un support si
+   leurs composantes diffèrent : les matériaux de deux physiques sur un même
+   maillage, par exemple.
+2. **Une valeur par nœud.** Un nœud que plusieurs zones portent y a la même
+   valeur, pour chaque composante qu'elles ont en commun. Deux zones de
+   maillage qui se touchent partagent leurs nœuds de frontière : le champ y a
+   une valeur, rangée dans chacune. La règle ne concerne que le champ aux
+   nœuds, car deux sous-espaces n'ont aucun point de Gauss en commun.
+
+La première se vérifie à l'entrée. `NodeField(maillage, …)` refuse un maillage
+qui liste deux fois la même zone, et `ElementField(espace, …)` un espace qui
+liste deux fois le même sous-espace : l'union `maillage | maillage` garde
+chaque zone une fois. `add_sub` refuse une zone qui porterait une composante
+déjà portée sur son support.
+
+La seconde se vérifie à l'union, et en sortie d'une opération entre deux champs
+quand c'est nécessaire ([plus bas](#entre-deux-champs)). Seule l'écriture dans
+une zone peut encore la rompre : `champ[i].set_value(…)` ne touche pas les
+autres zones qui portent le même nœud. Sur un champ aux nœuds, `champ.check()`
+la vérifie à la demande.
+
+## Lire un champ
+
 Les zones d'un même champ n'ont pas forcément les mêmes composantes. L'exemple
 coupe un carré en deux zones de maillage, `gauche` et `droite`, qui partagent
 la diagonale : la température `T` est connue sur les deux, le flux `q` sur
@@ -39,7 +67,7 @@ celle de droite seulement.
 | `components()` | toutes les composantes du champ, dans l'ordre où les zones les présentent |
 | `min(c)`, `max(c)` | la plus petite ou la plus grande valeur de `c`, cherchée dans toutes les zones qui portent `c` |
 | `min()`, `max()` | la même chose sur toutes les valeurs, toutes composantes confondues : un nombre, pas une grandeur physique quand les unités diffèrent |
-| `sum(c)` | la somme des valeurs de `c`, zone par zone, sans poids |
+| `sum(c)` | la somme des valeurs de `c`, sans poids, un nœud que plusieurs zones portent compté une fois |
 | `champ["c"]`, `filter_components([…])` | un champ réduit à ces composantes |
 | `rename_component(a, b)` | un champ où `a` s'appelle `b` |
 
@@ -51,11 +79,12 @@ d'origine, sans copie : écrire dans l'une modifie l'autre. Une zone dont il fau
 retirer des composantes est recopiée. `rename_component` partage de même les
 zones qui ne portent pas `a`.
 
-`sum(c)` ajoute les valeurs de chaque zone : un nœud que deux zones partagent
-compte une fois par zone. Ce n'est pas une intégrale, qui pèse chaque valeur
-par la taille des mailles : c'est `pyrucast.measure.integral`. Deux autres
-réductions s'appliquent aux deux familles : `pyrucast.measure.xtx(champ)`, la
-somme des carrés des valeurs, et `pyrucast.measure.xty(a, b)`, la somme des
+`sum(c)` ajoute une valeur par nœud : un nœud que deux zones partagent n'a
+qu'une valeur (deuxième règle), et compte une fois. Ce n'est pas une intégrale,
+qui pèse chaque valeur par la taille des mailles : c'est
+`pyrucast.measure.integral`. Deux autres réductions s'appliquent aux deux
+familles, et comptent de même un nœud une fois : `pyrucast.measure.xtx(champ)`,
+la somme des carrés des valeurs, et `pyrucast.measure.xty(a, b)`, la somme des
 produits des valeurs que `a` et `b` portent sur les mêmes supports et sous les
 mêmes noms (voir [Opérateurs sur les champs](operateurs/champs.md#réduction)).
 
@@ -97,13 +126,21 @@ chaque nœud ou point de Gauss.
 ### Entre deux champs
 
 `a + b`, `a - b`, `a * b`, `a / b` et `a ** b` combinent les valeurs de deux
-champs de la même famille. Les zones s'associent par support :
+champs de la même famille. Les valeurs s'associent par support et par
+composante :
 
-- sur un support que les deux champs portent, les composantes présentes des
-  deux côtés se combinent valeur à valeur. Une composante présente d'un seul
-  côté passe telle quelle, quelle que soit l'opération : `a - b` rend `b`, et
-  non `-b`, sur une composante que seul `b` porte ;
-- une zone dont le support n'existe que d'un côté passe telle quelle.
+- une composante que les deux champs portent sur un même support se combine
+  valeur à valeur, quelle que soit la zone de ce support qui la range de
+  chaque côté ;
+- une composante qu'un seul des deux porte sur un support passe telle quelle,
+  quelle que soit l'opération : `a - b` rend `b`, et non `-b`, sur une
+  composante que seul `b` porte. C'est ce qui permet de ne toucher qu'à une
+  composante : `u + du`, où `du` ne porte que `u_x`, laisse `u_y` tel quel, et
+  `u * f`, où `f` ne porte que `u_x`, ne multiplie que `u_x` ;
+- le résultat garde les zones de `a`, dans l'ordre. Une composante que seul
+  `b` porte rejoint la zone de `a` sur ce support quand `a` n'en a qu'une ;
+  sinon elle garde une zone à elle, comme une zone de `b` dont le support
+  n'existe pas dans `a`.
 
 Les deux champs n'ont donc besoin ni des mêmes composantes, ni des mêmes
 zones :
@@ -112,21 +149,25 @@ zones :
 {{#include ../../tests/python/test_doc_conteneurs.py:champ_binaire}}
 ```
 
-`champ + zone` ne combine que la zone du champ posée sur le même support que
-`zone`, et recopie les autres ; il lève une erreur si aucune ne l'est. Entre
-deux zones, les supports doivent être les mêmes, sinon c'est une erreur.
+`champ + zone` combine `zone`, selon les mêmes règles, avec les zones du champ
+posées sur son support, et recopie les autres ; il lève une erreur si aucune
+ne l'est. Entre deux zones, les supports doivent être les mêmes, sinon c'est
+une erreur.
 
-Ces règles supposent qu'un support porte chaque composante dans une seule zone
-du champ : c'est ce que vérifie l'union `|` ([plus bas](#lunion-)).
+Le résultat respecte les règles de cohérence. Une composante peut toutefois ne
+pas avoir été obtenue de la même façon d'une zone à l'autre : calculée ici,
+passée telle quelle là. Deux zones de ce genre qui partagent un nœud n'y
+donneraient pas la même valeur. Dans ce seul cas, le résultat est vérifié, et
+l'opération lève une erreur si deux zones ne s'accordent pas en un nœud.
 
 ### Même support veut dire même objet
 
 Deux zones s'associent quand leurs supports sont **le même objet**, jamais en
 comparant leurs nœuds. Deux régions qui se touchent, construites chacune sur
 sa zone de maillage, ont des supports distincts, même là où elles partagent
-des nœuds : `g + dr` les met côte à côte sans rien additionner à la frontière.
-À la lecture d'un nœud que les deux zones portent, `value` rend la valeur de la
-première ; l'autre ne compte pas, et rien ne le signale.
+des nœuds : `g + dr` laisserait chaque zone telle quelle, et un nœud de la
+frontière vaudrait 1 dans l'une et 2 dans l'autre. L'opération lève donc une
+erreur, qui renvoie à `restrict_like`.
 
 Pour additionner deux régions, on les ramène d'abord sur les mêmes supports.
 `restrict(champ, maillage)` pose un champ aux nœuds sur les zones de
@@ -164,7 +205,8 @@ les valeurs : `champ == 0.0` vaut `False`.
 ## L'union `|`
 
 L'union compose des zones sans toucher aux valeurs ; c'est l'arithmétique qui
-combine des valeurs. Elle traite les deux familles différemment :
+combine des valeurs. Elle respecte les règles de cohérence, à sa manière pour
+chaque famille :
 
 - **champ aux nœuds** : les zones posées sur un même support sont fondues en
   une. Un nœud doit avoir la même valeur dans toutes les zones qui le portent,
@@ -212,13 +254,24 @@ les opérateurs décrits plus haut, présents sur les quatre classes.
   `component_index`, `min`, `max`, `sum`, `xtx`, `dot`, `pscal`, `map_all`,
   `add_to_component`…, `merge_components`, `select_components`,
   `rename_component`. `SubNodeField` et `SubElementField` l'implémentent.
+  `SubNodeField` fournit en plus `row_points()`, le nœud de chaque ligne :
+  c'est ce qui permet de compter un nœud une fois et de vérifier la deuxième
+  règle. Une zone aux points de Gauss garde la réponse par défaut, `None`.
 - **`Field`**, l'agrégat. Il est implémenté d'office pour tout
   [`Aggregate`](aggregate.md) dont la zone est un `SubField` : `NodeField` et
-  `ElementField` le reçoivent sans une ligne de code. Chaque opération y est
-  faite zone par zone, puis les résultats sont réunis : `components`, `min`,
+  `ElementField` le reçoivent sans une ligne de code : `components`, `min`,
   `max`, `sum`, `map_subs`, `combine_scalar`, `map_all`, `merge_field`,
   `merge_subfield`, `dot_field`, `pscal_field`, `filter_components`,
-  `rename_component`.
+  `rename_component`. Les réductions comptent une fois un nœud que plusieurs
+  zones portent ; `merge_field`, `merge_subfield`, `dot_field` et
+  `pscal_field` associent les valeurs par support et par composante.
+- **Règles de cohérence.** `add_sub` refuse une zone qui porterait une
+  composante déjà portée sur son support : c'est le crochet `check_add`, qu'une
+  union ne passe pas, puisque son `finalize` vérifie ou fond le résultat
+  entier. Les opérateurs qui empilent des contributions partielles avant de
+  les additionner nœud à nœud (divergence, forces internes et externes,
+  `sum_to_nodes`) ne vérifient pas la deuxième règle en chemin : ce ne sont
+  pas encore des champs.
 
 Le contrat ne dit pas ce qu'est une ligne — un nœud pour `SubNodeField`, un
 couple (maille, point de Gauss) pour `SubElementField`. Il fixe seulement la
