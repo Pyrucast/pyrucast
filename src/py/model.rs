@@ -129,11 +129,12 @@ impl PyModel {
         self.inner.dual_of(variable)
     }
 
-    /// `Model.fespace()` — the `FiniteElementSpace` this model integrates on,
-    /// rebuilt from the behaviour subspaces of its domain sub-models (constraints
-    /// skipped), deduplicated in first-seen order (shared handles). Raises if the
-    /// model has no domain sub-model. Combined with `FiniteElementSpace.mesh()`,
-    /// lets a caller recover the FE space and mesh from the model alone.
+    /// `Model.fespace()` — the `FiniteElementSpace` this model integrates on:
+    /// the behaviour subspace of each domain sub-model (constraints skipped), in
+    /// order, one per sub-model — two physics on one subspace list it twice.
+    /// The subspaces are shared, not copied. Raises if the model has no domain
+    /// sub-model. Combined with `FiniteElementSpace.mesh()`, lets a caller
+    /// recover the FE space and mesh from the model alone.
     fn fespace(&self) -> PyResult<PyFiniteElementSpace> {
         Ok(PyFiniteElementSpace {
             inner: self.inner.fespace()?,

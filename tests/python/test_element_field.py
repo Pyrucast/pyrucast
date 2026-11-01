@@ -1,6 +1,7 @@
 """Python tests for ElementField (Phase 2 step 6)."""
 
 import pyrucast
+import pytest
 
 
 def _tri3_subspace(n_cells=1):
@@ -27,6 +28,12 @@ def _tri3_subspace(n_cells=1):
             mesh.unit().add_cell([apex, perim[i], perim[i + 1]])
     fes = pyrucast.FiniteElementSpace(mesh)
     return c, mesh, fes
+
+
+def _two_spaces():
+    """Two distinct FE spaces on one mesh: two supports, one `Coords`."""
+    _, mesh, fes = _tri3_subspace()
+    return fes, pyrucast.FiniteElementSpace(mesh)
 
 
 def _subfield(fes, components):
@@ -268,8 +275,7 @@ def test_min_max_per_component():
 def test_union_distinct_supports_stay_separate():
     # Two element fields on distinct FE spaces (distinct supports) → the
     # union keeps both zones.
-    _, _, fes_a = _tri3_subspace()
-    _, _, fes_b = _tri3_subspace()
+    fes_a, fes_b = _two_spaces()
     a = pyrucast.ElementField(fes_a, ["E"])
     b = pyrucast.ElementField(fes_b, ["nu"])
     f = a | b
@@ -308,15 +314,14 @@ def test_union_same_support_conflict_raises():
 
 def test_subfield_union_subfield_builds_aggregate():
     # `sub | sub` → a fresh ElementField holding both (distinct supports here).
-    _, _, fes_a = _tri3_subspace()
-    _, _, fes_b = _tri3_subspace()
+    fes_a, fes_b = _two_spaces()
     sa = pyrucast.ElementField(fes_a, ["E"])[0]
     sb = pyrucast.ElementField(fes_b, ["nu"])[0]
     f = sa | sb
     assert len(f) == 2
 
 
-# ─── Arithmetic operators (binary, strict) ───────────────────────────────────
+# ─── Arithmetic operators (binary, union with passthrough) ──────────────────
 
 
 def test_subfield_plus_subfield_same_support():
@@ -347,8 +352,7 @@ def test_subfield_plus_subfield_disjoint_components_passes_through():
 
 
 def test_subfield_plus_subfield_distinct_support_raises():
-    _, _, fa = _tri3_subspace()
-    _, _, fb = _tri3_subspace()
+    fa, fb = _two_spaces()
     a = pyrucast.ElementField(fa, ["E"])[0]
     b = pyrucast.ElementField(fb, ["E"])[0]
     try:
@@ -371,8 +375,7 @@ def test_subfield_div_by_zero_is_inf():
 
 
 def test_field_scalar_op_hits_every_zone():
-    _, _, fes_a = _tri3_subspace()
-    _, _, fes_b = _tri3_subspace()
+    fes_a, fes_b = _two_spaces()
     a = pyrucast.ElementField(fes_a, ["E"])
     b = pyrucast.ElementField(fes_b, ["E"])
     a[0].set_uniform("E", 1.0)
@@ -396,8 +399,7 @@ def test_field_plus_field_same_decomposition():
 def test_field_plus_field_distinct_decomposition_aggregates():
     # Field-level union/passthrough: two fields over distinct supports do not
     # overlap, so they aggregate into a two-zone field (no error).
-    _, _, fa = _tri3_subspace()
-    _, _, fb = _tri3_subspace()
+    fa, fb = _two_spaces()
     a = pyrucast.ElementField(fa, ["E"])
     a[0].set_uniform("E", 3.0)
     b = pyrucast.ElementField(fb, ["E"])
@@ -407,8 +409,7 @@ def test_field_plus_field_distinct_decomposition_aggregates():
 
 
 def test_field_plus_subfield_targets_matching_zone():
-    _, _, fa = _tri3_subspace()
-    _, _, fb = _tri3_subspace()
+    fa, fb = _two_spaces()
     a = pyrucast.ElementField(fa, ["E"])
     b = pyrucast.ElementField(fb, ["E"])
     a[0].set_uniform("E", 1.0)
@@ -468,3 +469,53 @@ def test_consolidate_element_fuses_component_disjoint_zones():
     assert set(sub.components()) == {"k", "E"}
     assert sub.value(0, 0, "k") == 2.0
     assert sub.value(0, 0, "E") == 5.0
+
+
+# ─── Back to the space, scalar on the left, one error type ──────────────────
+
+
+def test_support_gives_back_the_shared_space():
+    _, mesh, fes = _tri3_subspace(n_cells=2)
+    k = pyrucast.ElementField(fes, ["k"])
+    k[0].set_uniform("k", 2.0)
+    # A field built on the space read back combines point by point with k.
+    e = pyrucast.ElementField(k.support(), ["k"]) + 1.0
+    assert len(k + e) == 1
+    zone = pyrucast.ElementField(fes, ["E"])[0]
+    assert len(zone.support() | k.support()[0]) == 1  # one subspace, not two
+    # Another space on the same mesh is another support.
+    autre = pyrucast.FiniteElementSpace(mesh)
+    assert len(pyrucast.ElementField(autre, ["k"]) + k) == 2
+
+
+def test_a_scalar_on_the_left_mirrors_the_right():
+    _, _, fes = _tri3_subspace()
+    f = pyrucast.ElementField(fes, ["k"])
+    f[0].set_uniform("k", 1.5)
+    assert (2.0 * f)[0].value(0, 0, "k") == (f * 2.0)[0].value(0, 0, "k") == 3.0
+    assert (2.0 + f)[0].value(0, 0, "k") == (f + 2.0)[0].value(0, 0, "k") == 3.5
+    # Not commutative: the scalar on the left is the left operand.
+    assert (1.0 - f)[0].value(0, 0, "k") == -0.5
+    assert (3.0 / f)[0].value(0, 0, "k") == 2.0
+    zone = f[0]
+    assert [(2 * zone).value(0, 1, "k"), (2 + zone).value(0, 1, "k")] == [3.0, 3.5]
+    assert [(1 - zone).value(0, 1, "k"), (3 / zone).value(0, 1, "k")] == [-0.5, 2.0]
+    for call in (
+        lambda: "x" * f,
+        lambda: "x" + f,
+        lambda: "x" - zone,
+        lambda: "x" / zone,
+    ):
+        with pytest.raises(TypeError):
+            call()
+
+
+def test_subscript_raises_like_value():
+    _, _, fes = _tri3_subspace()
+    zone = pyrucast.ElementField(fes, ["k"])[0]
+    for call in (lambda: zone[0, 0, "rho"], lambda: zone.value(0, 0, "rho")):
+        with pytest.raises(RuntimeError, match="unknown component"):
+            call()
+    for call in (lambda: zone[5, 0, "k"], lambda: zone.value(5, 0, "k")):
+        with pytest.raises(RuntimeError, match="cell index 5"):
+            call()

@@ -4,13 +4,15 @@
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
 use crate::handle::Handle;
-use crate::py::finite_element_space::PyFiniteElementSpace;
-use pyo3::exceptions::{PyTypeError, PyValueError};
+use crate::py::finite_element_space::{PyFiniteElementSpace, PySubFiniteElementSpace};
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 
-/// A **view** into one zone of an `ElementField`, obtained by indexing
-/// (`element_field[i]`) — never constructed directly. Build at the parent
-/// level instead: `ElementField(fes, components)` or
+/// One zone of an `ElementField`: the values at the Gauss points of one
+/// finite-element subspace. Indexing a field (`element_field[i]`) gives a
+/// **view** on its zone; operators on a zone (`zone["E"]`, `zone * 2.0`,
+/// `sub_material_field`) give a fresh one. There is no constructor: build at
+/// the parent level, `ElementField(fes, components)` or
 /// `material_field(model, ...)`, composed with `|`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SubElementField")]
@@ -29,6 +31,14 @@ impl PySubElementField {
     /// Number of Gauss points per cell.
     fn gauss_count(&self) -> usize {
         self.handle.read().gauss_count()
+    }
+
+    /// The finite-element subspace this zone lives on — shared, not copied:
+    /// a zone built on it combines point by point with this one.
+    fn support(&self) -> PySubFiniteElementSpace {
+        PySubFiniteElementSpace {
+            handle: crate::containers::field::SubField::support(&*self.handle.read()),
+        }
     }
 
     /// Value at `(cell, gauss)` for component index `comp`.
@@ -183,8 +193,8 @@ impl PySubElementField {
     }
 }
 
-/// A field of per-element values (e.g. material properties), one block per
-/// finite-element zone.
+/// A field of values per cell and Gauss point (material properties, internal
+/// variables, strains, stresses…), one zone per finite-element subspace.
 ///
 /// Build with `ElementField(fes, components)` or `material_field(model, ...)`;
 /// index it (`field[i]`) to reach a `SubElementField`, compose zones
@@ -263,10 +273,20 @@ impl PyElementField {
 
     // ── Per-component scalar ops (in place, on every zone defining it) ──
 
+    /// The finite-element space this field lives on: each zone's subspace,
+    /// once, in first-seen order — shared, not copied. A field built on it
+    /// combines point by point with this one.
+    fn support(&self) -> PyFiniteElementSpace {
+        PyFiniteElementSpace {
+            inner: self.inner.support(),
+        }
+    }
+
     // ── Arithmetic operators (return a new field) ───────────────────────
     //
-    // `rhs`: a float (scalar over every zone), an `ElementField` (same
-    // decomposition, strict), or a `SubElementField` (targeted zone update).
+    // `rhs`: a float (scalar over every zone), an `ElementField` (per support
+    // and component, union with passthrough), or a `SubElementField` (targeted
+    // zone update).
 
     /// Smallest value of `component` across the zones defining it — or, called
     /// without a component, the smallest value of the **whole** field, every
@@ -373,11 +393,7 @@ impl PySubElementField {
     fn __getitem__(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         // (cell, gauss, component) → scalar value.
         if let Ok((cell, gauss, comp)) = key.extract::<(usize, usize, String)>() {
-            let v = self
-                .handle
-                .read()
-                .value(cell, gauss, &comp)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            let v = self.handle.read().value(cell, gauss, &comp)?;
             return Ok(v.into_pyobject(py)?.into_any().unbind());
         }
         // "name" or ["a", …] → component selection (a new sub-field).
@@ -417,7 +433,8 @@ class PySubElementField:
     @overload
     def __getitem__(self, key: tuple[int, int, str]) -> float:
         """`field[cell, gauss, "name"]` → the value at that Gauss point of that
-        cell, for that component. `ValueError` if any of the three is unknown."""
+        cell, for that component. `RuntimeError` if any of the three is
+        unknown, like `value`."""
     @overload
     def __getitem__(self, key: str) -> pyo3_stub_gen.RustType["PySubElementField"]:
         """`field["sig_xx"]` → a fresh `SubElementField` on the same support,
@@ -490,43 +507,67 @@ crate::impl_dump_pymethod!(handle PySubElementField, handle);
 
 crate::impl_field_binary_pyslot! {
     /// `field + other` — element-wise sum.
-    [PyElementField], __add__, |a, b| a + b
+    [PyElementField], __add__, |a, b| a + b,
+    /// `scalar + field` — the mirror of `field + scalar`. Any other left operand is
+    /// refused (`TypeError`).
+    __radd__, |v, s| s + v
 }
 crate::impl_subfield_binary_pyslot! {
     /// `field + other` — element-wise sum.
-    [PySubElementField], __add__, |a, b| a + b
+    [PySubElementField], __add__, |a, b| a + b,
+    /// `scalar + field` — the mirror of `field + scalar`. Any other left operand is
+    /// refused (`TypeError`).
+    __radd__, |v, s| s + v
 }
 crate::impl_field_binary_pyslot! {
     /// `field - other` — element-wise difference.
-    [PyElementField], __sub__, |a, b| a - b
+    [PyElementField], __sub__, |a, b| a - b,
+    /// `scalar - field` — the scalar minus every value. Any other left operand is
+    /// refused (`TypeError`).
+    __rsub__, |v, s| s - v
 }
 crate::impl_subfield_binary_pyslot! {
     /// `field - other` — element-wise difference.
-    [PySubElementField], __sub__, |a, b| a - b
+    [PySubElementField], __sub__, |a, b| a - b,
+    /// `scalar - field` — the scalar minus every value. Any other left operand is
+    /// refused (`TypeError`).
+    __rsub__, |v, s| s - v
 }
 crate::impl_field_binary_pyslot! {
     /// `field * other` — element-wise product.
-    [PyElementField], __mul__, |a, b| a * b
+    [PyElementField], __mul__, |a, b| a * b,
+    /// `scalar * field` — the mirror of `field * scalar`. Any other left
+    /// operand is refused (`TypeError`).
+    __rmul__, |v, s| s * v
 }
 crate::impl_subfield_binary_pyslot! {
     /// `field * other` — element-wise product.
-    [PySubElementField], __mul__, |a, b| a * b
+    [PySubElementField], __mul__, |a, b| a * b,
+    /// `scalar * field` — the mirror of `field * scalar`. Any other left
+    /// operand is refused (`TypeError`).
+    __rmul__, |v, s| s * v
 }
 crate::impl_field_binary_pyslot! {
     /// `field / other` — element-wise quotient.
-    [PyElementField], __truediv__, |a, b| a / b
+    [PyElementField], __truediv__, |a, b| a / b,
+    /// `scalar / field` — the scalar divided by every value (`inf` on a zero). Any other left operand is
+    /// refused (`TypeError`).
+    __rtruediv__, |v, s| s / v
 }
 crate::impl_subfield_binary_pyslot! {
     /// `field / other` — element-wise quotient.
-    [PySubElementField], __truediv__, |a, b| a / b
+    [PySubElementField], __truediv__, |a, b| a / b,
+    /// `scalar / field` — the scalar divided by every value (`inf` on a zero). Any other left operand is
+    /// refused (`TypeError`).
+    __rtruediv__, |v, s| s / v
 }
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyElementField {
     /// `field ** exponent` — element-wise power, same dispatch as the other
-    /// operators (float → scalar, `ElementField` → strict same-decomposition,
-    /// `SubElementField` → targeted zone). The ternary `pow(x, y, z)` modulo
-    /// form is rejected.
+    /// operators (float → scalar, `ElementField` → per support and component,
+    /// union with passthrough, `SubElementField` → targeted zone). The ternary
+    /// `pow(x, y, z)` modulo form is rejected.
     fn __pow__(&self, exponent: &Bound<'_, PyAny>, modulo: &Bound<'_, PyAny>) -> PyResult<Self> {
         crate::py::field_slots::reject_modulo(modulo)?;
         self.binary(exponent, |a, b| a.powf(b))
@@ -537,9 +578,9 @@ impl PyElementField {
 #[pymethods]
 impl PySubElementField {
     /// `field ** exponent` — element-wise power, same dispatch as the other
-    /// operators (float exponent → broadcast; `SubElementField` → strict
-    /// element-by-element). The ternary `pow(x, y, z)` modulo form is
-    /// rejected (meaningless on floats).
+    /// operators (float exponent → broadcast; `SubElementField` on the same
+    /// subspace → per-component union with passthrough). The ternary
+    /// `pow(x, y, z)` modulo form is rejected (meaningless on floats).
     fn __pow__(&self, exponent: &Bound<'_, PyAny>, modulo: &Bound<'_, PyAny>) -> PyResult<Self> {
         crate::py::field_slots::reject_modulo(modulo)?;
         self.scalar_or_combine(exponent, |a, b| a.powf(b))

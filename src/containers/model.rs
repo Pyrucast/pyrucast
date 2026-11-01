@@ -128,6 +128,7 @@ use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteEleme
 use crate::containers::matrix::AssemblyPattern;
 use crate::containers::mesh::Mesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
+use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::symmetry::MaterialSymmetry;
@@ -1783,6 +1784,18 @@ impl SubModel {
         self.as_kind().as_behavior().map(|b| b.behavior_fespace())
     }
 
+    /// The `Coords` this sub-model's nodes live in: its FE subspace's for a
+    /// domain, its multipliers' for a constraint (they are minted beside the
+    /// nodes they constrain). `None` for a constraint with no multiplier yet.
+    pub(crate) fn coords(&self) -> Option<Handle<Coords>> {
+        let kind = self.as_kind();
+        if let Some(d) = kind.as_domain() {
+            return Some(d.material_fespace().read().coords());
+        }
+        kind.as_constraint()
+            .and_then(|c| c.multiplier_mesh().coords().ok())
+    }
+
     /// Integrate this sub-model's constitutive law (Cast3m `COMP`), stepping
     /// A → B. The caller ([`crate::ops::element_field::behavior::integrate`]) supplies the
     /// matching per-zone end-of-step `deformation` ε(B) (from
@@ -1920,6 +1933,18 @@ pub struct Model {
 }
 
 crate::impl_aggregate!(Model, SubModel, sub_model, "sub-model(s)", {
+    /// Refuse a sub-model on another `Coords` than the sub-models already
+    /// there: the model's degrees of freedom are node ids, which only mean
+    /// something inside one `Coords`.
+    fn check_push(&self, h: &Handle<SubModel>) -> Result<()> {
+        let Some(b) = h.read().coords() else {
+            return Ok(());
+        };
+        match self.subs.iter().find_map(|s| s.read().coords()) {
+            Some(a) => crate::coords::ensure_same_coords(&a, &b),
+            None => Ok(()),
+        }
+    }
     fn post_push(&mut self) {
         // The block set changed ⇒ every cached sparsity is stale.
         self.matrix_patterns = Default::default();

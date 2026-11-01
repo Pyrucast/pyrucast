@@ -210,7 +210,7 @@ assert abs(materiau[0].value(0, 0, "sigma_y") - _attendu) < 1e-3
 # ── Every form of interpolation ─────────────────────────────────────────────
 
 champ_t0 = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(_n), ["T"])
-champ_t1 = pyrucast.NodeField(champ_t0.support_mesh(), ["T"])
+champ_t1 = pyrucast.NodeField(champ_t0.support(), ["T"])
 
 # ANCHOR: interpolate
 import pyrucast as pc

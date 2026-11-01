@@ -1103,7 +1103,7 @@ mod tests {
         assert_eq!(s1.value(a, "T").unwrap(), s2.value(a, "T").unwrap());
 
         // Mutating the matrix invalidates the cache.
-        let coords = Handle::new(Coords::new(1).unwrap());
+        let coords = m.iter().next().unwrap().read().coords();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::POI1);

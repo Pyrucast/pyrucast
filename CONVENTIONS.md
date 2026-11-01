@@ -625,9 +625,10 @@ waiver, recorded in `tests/python/test_mirror_completeness.py`.
   those are not operators.
 - `mul_dense(self, x: &[f64])` → **method** (`x` is a slice, not a heavy
   container: a single-container matrix-vector product).
-- `support_submesh` / `support_mesh` on `NodeField` → **methods** (view of the
-  support of a single field). Renamed from `to_poi1_submesh` / `to_poi1_mesh` so
-  as not to be confused with the operator `ops::mesh::to_poi1(mesh)`.
+- `support()` on every field → **method**, the same name for both families and
+  both levels: the `Mesh` (`SubMesh`) of POI1 zones a node field (zone) lives
+  on, the `FiniteElementSpace` (`SubFiniteElementSpace`) of a field at the
+  Gauss points — shared, not copied. It mirrors Rust's `SubField::support()`.
 - `coords()` is reserved for the **return to the container**: on `Mesh`,
   `SubMesh`, `NodeField`, `Matrix` and `Node`, it returns the `Coords` carried.
   The *values* are therefore called **position** everywhere: `position()` /

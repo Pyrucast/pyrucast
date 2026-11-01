@@ -62,5 +62,4 @@ row_dofs
 set_by_node
 stiffness_matrix
 sub_to_component
-support_submesh
 tangent_matrix

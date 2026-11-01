@@ -1,7 +1,6 @@
 //! Python wrappers for [`crate::containers::node_field::SubNodeField`] and
 //! [`crate::containers::node_field::NodeField`].
 
-use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::field::SubField;
 use crate::containers::mesh::SubMesh;
@@ -103,18 +102,12 @@ impl PySubNodeField {
         Ok(self.handle.read().node_values(node_idx)?.to_vec())
     }
 
-    /// The POI1 `SubMesh` this sub-field is supported on.
-    fn support_submesh(&self) -> PyResult<PySubMesh> {
-        let sm = self.handle.read().support_submesh()?;
-        Ok(PySubMesh {
-            handle: Handle::new(sm),
-        })
-    }
-
-    /// The POI1 `Mesh` this sub-field is supported on.
-    fn support_mesh(&self) -> PyResult<PyMesh> {
-        let mesh = self.handle.read().support_mesh()?;
-        Ok(PyMesh { inner: mesh })
+    /// The POI1 `SubMesh` this zone lives on — shared, not copied: a zone
+    /// built on it combines node by node with this one.
+    fn support(&self) -> PySubMesh {
+        PySubMesh {
+            handle: SubField::support(&*self.handle.read()),
+        }
     }
 
     /// Value at `node` for the named `component`.
@@ -358,23 +351,22 @@ impl PyNodeField {
         Ok(())
     }
 
-    /// A `Mesh` mirroring this field's supports — the zones' POI1
-    /// support submeshes, shared (not copied).
-    fn support_mesh(&self) -> PyResult<PyMesh> {
-        let mut mesh = crate::containers::mesh::Mesh::empty();
-        for h in &self.inner {
-            let sm = h.read().support();
-            mesh.add_sub(sm)?;
+    /// The mesh this field lives on: each zone's POI1 support, once, in
+    /// first-seen order — shared, not copied. A field built on it combines
+    /// node by node with this one.
+    fn support(&self) -> PyMesh {
+        PyMesh {
+            inner: self.inner.support(),
         }
-        Ok(PyMesh { inner: mesh })
     }
 
     // ── Per-component scalar ops (in place, on every zone defining it) ──
 
     // ── Arithmetic operators (return a new field) ───────────────────────
     //
-    // `rhs`: a float (scalar over every zone), a `NodeField` (same
-    // decomposition, strict), or a `SubNodeField` (targeted zone update).
+    // `rhs`: a float (scalar over every zone), a `NodeField` (per support and
+    // component, union with passthrough), or a `SubNodeField` (targeted zone
+    // update).
 
     /// Smallest value of `component` across the zones defining it — or, called
     /// without a component, the smallest value of the **whole** field, every
@@ -594,43 +586,67 @@ class PySubNodeField:
 
 crate::impl_field_binary_pyslot! {
     /// `field + other` — element-wise sum.
-    [PyNodeField], __add__, |a, b| a + b
+    [PyNodeField], __add__, |a, b| a + b,
+    /// `scalar + field` — the mirror of `field + scalar`. Any other left operand is
+    /// refused (`TypeError`).
+    __radd__, |v, s| s + v
 }
 crate::impl_subfield_binary_pyslot! {
     /// `field + other` — element-wise sum.
-    [PySubNodeField], __add__, |a, b| a + b
+    [PySubNodeField], __add__, |a, b| a + b,
+    /// `scalar + field` — the mirror of `field + scalar`. Any other left operand is
+    /// refused (`TypeError`).
+    __radd__, |v, s| s + v
 }
 crate::impl_field_binary_pyslot! {
     /// `field - other` — element-wise difference.
-    [PyNodeField], __sub__, |a, b| a - b
+    [PyNodeField], __sub__, |a, b| a - b,
+    /// `scalar - field` — the scalar minus every value. Any other left operand is
+    /// refused (`TypeError`).
+    __rsub__, |v, s| s - v
 }
 crate::impl_subfield_binary_pyslot! {
     /// `field - other` — element-wise difference.
-    [PySubNodeField], __sub__, |a, b| a - b
+    [PySubNodeField], __sub__, |a, b| a - b,
+    /// `scalar - field` — the scalar minus every value. Any other left operand is
+    /// refused (`TypeError`).
+    __rsub__, |v, s| s - v
 }
 crate::impl_field_binary_pyslot! {
     /// `field * other` — element-wise product.
-    [PyNodeField], __mul__, |a, b| a * b
+    [PyNodeField], __mul__, |a, b| a * b,
+    /// `scalar * field` — the mirror of `field * scalar`. Any other left
+    /// operand is refused (`TypeError`).
+    __rmul__, |v, s| s * v
 }
 crate::impl_subfield_binary_pyslot! {
     /// `field * other` — element-wise product.
-    [PySubNodeField], __mul__, |a, b| a * b
+    [PySubNodeField], __mul__, |a, b| a * b,
+    /// `scalar * field` — the mirror of `field * scalar`. Any other left
+    /// operand is refused (`TypeError`).
+    __rmul__, |v, s| s * v
 }
 crate::impl_field_binary_pyslot! {
     /// `field / other` — element-wise quotient.
-    [PyNodeField], __truediv__, |a, b| a / b
+    [PyNodeField], __truediv__, |a, b| a / b,
+    /// `scalar / field` — the scalar divided by every value (`inf` on a zero). Any other left operand is
+    /// refused (`TypeError`).
+    __rtruediv__, |v, s| s / v
 }
 crate::impl_subfield_binary_pyslot! {
     /// `field / other` — element-wise quotient.
-    [PySubNodeField], __truediv__, |a, b| a / b
+    [PySubNodeField], __truediv__, |a, b| a / b,
+    /// `scalar / field` — the scalar divided by every value (`inf` on a zero). Any other left operand is
+    /// refused (`TypeError`).
+    __rtruediv__, |v, s| s / v
 }
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyNodeField {
     /// `field ** exponent` — element-wise power, same dispatch as the other
-    /// operators (float → scalar, `NodeField` → strict same-decomposition,
-    /// `SubNodeField` → targeted zone). The ternary `pow(x, y, z)` modulo
-    /// form is rejected.
+    /// operators (float → scalar, `NodeField` → per support and component,
+    /// union with passthrough, `SubNodeField` → targeted zone). The ternary
+    /// `pow(x, y, z)` modulo form is rejected.
     fn __pow__(&self, exponent: &Bound<'_, PyAny>, modulo: &Bound<'_, PyAny>) -> PyResult<Self> {
         crate::py::field_slots::reject_modulo(modulo)?;
         self.binary(exponent, |a, b| a.powf(b))
@@ -641,9 +657,9 @@ impl PyNodeField {
 #[pymethods]
 impl PySubNodeField {
     /// `field ** exponent` — element-wise power, same dispatch as the other
-    /// operators (float exponent → broadcast; `SubNodeField` → strict
-    /// element-by-element). The ternary `pow(x, y, z)` modulo form is
-    /// rejected (meaningless on floats).
+    /// operators (float exponent → broadcast; `SubNodeField` on the same
+    /// support → per-component union with passthrough). The ternary
+    /// `pow(x, y, z)` modulo form is rejected (meaningless on floats).
     fn __pow__(&self, exponent: &Bound<'_, PyAny>, modulo: &Bound<'_, PyAny>) -> PyResult<Self> {
         crate::py::field_slots::reject_modulo(modulo)?;
         self.scalar_or_combine(exponent, |a, b| a.powf(b))

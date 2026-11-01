@@ -1069,13 +1069,7 @@ crate::impl_aggregate!(Mesh, SubMesh, submesh, "submesh(es)", {
         if self.is_empty() {
             return Ok(());
         }
-        let a = self.coords()?;
-        let b = h.read().coords();
-        if !a.same_object(&b) {
-            Err(PyrucastError::Message("mismatched Coords".into()))
-        } else {
-            Ok(())
-        }
+        crate::coords::ensure_same_coords(&self.coords()?, &h.read().coords())
     }
 });
 

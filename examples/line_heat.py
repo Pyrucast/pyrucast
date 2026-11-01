@@ -8,7 +8,7 @@ print(lab)
 # lab.plot()
 xc = pc.node_field.positions(lab)
 print(xc)
-for idx in range(len(xc[0].support_submesh())):
+for idx in range(len(xc[0].support())):
     print(idx, xc[0].get(idx, 0))
 fes = pc.FiniteElementSpace(lab, "LAGRANGE1", "GAUSS")
 print(fes)
