@@ -854,6 +854,18 @@ def test_support_is_the_zone_the_field_was_built_on():
     assert len(pyrucast.NodeField(f.support(), ["T"]) + f) == 1
 
 
+def test_support_lists_one_support_per_zone():
+    # Two zones on one support: the mesh lists it twice, zone i ↔ support i.
+    _c, _nodes, mesh = _poi1_with(3)
+    two = pyrucast.NodeField(mesh, ["T"])
+    two.add_sub(pyrucast.NodeField(mesh, ["q"])[0])
+    support = two.support()
+    assert len(support) == 2
+    for i in range(2):
+        assert len(support[i] | two[i].support()) == 1  # the same zone
+    assert len(support | support) == 1  # the union keeps it once
+
+
 def _square(n):
     """An n×n grid of QUA4 on the unit square: (mesh, nodes row by row)."""
     c = pyrucast.Coords(2)

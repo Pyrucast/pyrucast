@@ -63,9 +63,10 @@ fn edge_key(u: NodeId, v: NodeId) -> (NodeId, NodeId) {
 /// loop (no splitting) — the default.
 ///
 /// POI1 submeshes are ignored (a point has no edge). Errors if the mesh has
-/// no surface cells, if it carries cells that are neither POI1, TRI3 nor
-/// QUA4 (1-D and 3-D borders are not handled here — see
-/// [`skin()`](fn@crate::ops::mesh::skin) for the boundary of a volume),
+/// no surface cells, if it lists one zone twice (every edge would sit under
+/// two cells, the border would be empty), if it carries cells that are
+/// neither POI1, TRI3 nor QUA4 (1-D and 3-D borders are not handled here —
+/// see [`skin()`](fn@crate::ops::mesh::skin) for the boundary of a volume),
 /// or if the boundary is not a clean set of closed loops (an open or
 /// non-manifold edge).
 ///
@@ -90,6 +91,7 @@ fn edge_key(u: NodeId, v: NodeId) -> (NodeId, NodeId) {
 /// ```
 pub fn border(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
     let coords = mesh.coords()?;
+    mesh.check_zones_once("border")?;
 
     // 1. Count every element edge across all surface submeshes. A boundary
     //    edge is one whose undirected key occurs exactly once.
@@ -480,6 +482,31 @@ mod tests {
         assert_eq!(coords.read().refcount(a.id()), 4);
         drop(ct);
         assert_eq!(coords.read().refcount(a.id()), 2);
+    }
+
+    #[test]
+    fn a_zone_listed_twice_is_refused() {
+        // Twice the same zone puts every edge under two cells: the border
+        // would come out empty. The entry check refuses it instead.
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+        m.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        let mut twice = Mesh::empty();
+        twice.add_sub(m.get(0).unwrap()).unwrap();
+        twice.add_sub(m.get(0).unwrap()).unwrap();
+
+        let err = border(&twice, None).unwrap_err().to_string();
+        assert!(err.contains("border") && err.contains("same zone"), "{err}");
+        // Each zone once, it is a triangle again.
+        assert_eq!(
+            border(&twice.union(&twice).unwrap(), None)
+                .unwrap()
+                .cell_count(),
+            3
+        );
     }
 
     #[test]

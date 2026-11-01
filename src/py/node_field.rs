@@ -354,9 +354,11 @@ impl PyNodeField {
         Ok(())
     }
 
-    /// The mesh this field lives on: each zone's POI1 support, once, in
-    /// first-seen order — shared, not copied. A field built on it combines
-    /// node by node with this one.
+    /// The mesh this field lives on: each zone's POI1 support, one per zone,
+    /// in order — `f.support()[i]` is `f[i].support()`, shared, not copied.
+    /// Two zones on one support list it twice; `s | s` keeps each once. A
+    /// field built on the supports, each once, combines node by node with
+    /// this one.
     fn support(&self) -> PyMesh {
         PyMesh {
             inner: self.inner.support(),

@@ -974,9 +974,11 @@ impl ElementField {
     }
 
     /// The finite-element space this field lives on: each zone's subspace,
-    /// once, in first-seen order — shared, not copied. A field built by
-    /// [`ElementField::new`] on `fes` gives back `fes`'s subspaces, so a field
-    /// created on the result combines point by point with this one.
+    /// **one per zone, in order** — `f.support()[i]` is `f[i].support()`,
+    /// shared, not copied. A field built by [`ElementField::new`] on `fes`
+    /// gives back `fes`'s subspaces, so a field created on the result combines
+    /// point by point with this one. Two zones on one subspace list it twice;
+    /// a union of the result with itself keeps each subspace once.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -995,16 +997,17 @@ impl ElementField {
     /// let k = ElementField::new(&fes, vec!["k".into()])?;
     /// // Back from the field to its space: the same subspace, not a copy.
     /// assert!(k.support().get(0)?.same_object(&fes.get(0)?));
+    /// // One subspace per zone: a second zone on it lists it a second time.
+    /// let both = k.union(&ElementField::new(&fes, vec!["E".into()])?)?;
+    /// assert_eq!(both.support().len(), 2);
+    /// assert_eq!(both.support().union(&both.support())?.len(), 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn support(&self) -> FiniteElementSpace {
         let mut fes = FiniteElementSpace::empty();
         for h in self {
-            let sub = h.read().support();
-            if !fes.iter().any(|s| s.same_object(&sub)) {
-                // Same `Coords` for every zone (`check_push`), hence for the space.
-                fes.push(sub);
-            }
+            // Same `Coords` for every zone (`check_push`), hence for the space.
+            fes.push(h.read().support());
         }
         fes
     }
@@ -1527,16 +1530,17 @@ mod tests {
     }
 
     #[test]
-    fn support_gives_back_the_zones_subspaces_once() {
+    fn support_gives_back_each_zones_subspace_in_order() {
         let fes = FiniteElementSpace::lagrange1(&make_mesh_with_tri_and_qua()).unwrap();
         let mat = ElementField::with(&fes, &[vec!["k".into()], vec!["E".into()]]).unwrap();
-        // A second zone on the first subspace: the space still lists it once.
+        // A second zone on the first subspace: the space lists it a second time.
         let extra = SubElementField::new(fes.get(0).unwrap(), vec!["nu".into()]).unwrap();
         let f = mat.union_sub(&Handle::new(extra)).unwrap();
         let back = f.support();
-        assert_eq!(back.len(), 2);
-        for i in 0..2 {
-            assert!(back.get(i).unwrap().same_object(&fes.get(i).unwrap()));
+        assert_eq!(back.len(), 3);
+        for (i, zone) in f.iter().enumerate() {
+            assert!(back.get(i).unwrap().same_object(&zone.read().support()));
         }
+        assert!(back.get(2).unwrap().same_object(&fes.get(0).unwrap()));
     }
 }
