@@ -952,3 +952,72 @@ def test_set_uniform_sets_one_component_on_every_node():
     assert [f.value(a, "q"), f.value(b, "q")] == [7.0, 0.0]  # q untouched
     with pytest.raises(RuntimeError, match="unknown component"):
         f[0].set_uniform("p", 1.0)
+
+
+def _square_in_two():
+    """A unit square cut along its diagonal into two TRI3 zones sharing nodes
+    1 and 2: (left, right, both, nodes)."""
+    c = pyrucast.Coords(2)
+    n = [c.add_node(p) for p in ([0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0])]
+    left = pyrucast.Mesh(c, "TRI3")
+    left.unit().add_cell([n[0], n[1], n[2]])
+    right = pyrucast.Mesh(c, "TRI3")
+    right.unit().add_cell([n[1], n[3], n[2]])
+    return left, right, left | right, n
+
+
+def test_a_node_two_zones_share_counts_once():
+    _, _, both, _ = _square_in_two()
+    u = pyrucast.NodeField(both, ["T"])
+    u.add_to_component("T", 1.0)
+    # Four nodes, two of them in both zones: each counted once.
+    assert u.sum("T") == 4.0
+    assert pyrucast.measure.xtx(u) == 4.0
+    assert pyrucast.measure.xty(u, u) == 4.0
+
+
+def test_regions_meeting_at_a_node_are_brought_onto_the_same_supports_first():
+    left, right, both, n = _square_in_two()
+    g = pyrucast.NodeField(left, ["T"])
+    g.add_to_component("T", 1.0)
+    d = pyrucast.NodeField(right, ["T"])
+    d.add_to_component("T", 2.0)
+    # Side by side, n1 would read 1 in one zone and 2 in the other.
+    with pytest.raises(RuntimeError, match="restrict_like"):
+        g + d
+    s = g.restrict(both) + d.restrict(both)
+    assert [s[i].value(n[1], "T") for i in range(len(s))] == [3.0, 3.0]
+    # A field on part of the zones, too: n1 would read 1 + 10 and 10.
+    c = pyrucast.NodeField(both, ["T"])
+    c.add_to_component("T", 10.0)
+    with pytest.raises(RuntimeError, match="restrict_like"):
+        g + c
+    assert (pyrucast.node_field.restrict_like(g, c) + c).value(n[1], "T") == 11.0
+
+
+def test_a_component_moved_on_every_zone_needs_no_check():
+    _, _, both, n = _square_in_two()
+    u = pyrucast.NodeField(both, ["u_x", "u_y"])
+    u.add_to_component("u_y", 5.0)
+    du = pyrucast.NodeField(both, ["u_x"])
+    du.add_to_component("u_x", 1.0)
+    s = u + du  # u_x computed in every zone, u_y passed through in every zone
+    assert (s.value(n[1], "u_x"), s.value(n[1], "u_y")) == (1.0, 5.0)
+
+
+def test_a_component_joins_a_support_once():
+    left, _, _, _ = _square_in_two()
+    f = pyrucast.NodeField(left, ["T"])
+    with pytest.raises(RuntimeError, match="already carries T"):
+        f.add_sub(pyrucast.NodeField(left, ["T", "q"])[0])
+    f.add_sub(pyrucast.NodeField(left, ["q"])[0])  # another component: welcome
+    assert len(f) == 2
+
+
+def test_a_field_is_not_built_on_a_zone_listed_twice():
+    left, _, _, _ = _square_in_two()
+    fes = pyrucast.FiniteElementSpace(left) | pyrucast.FiniteElementSpace(left)
+    twice = fes.mesh()  # one zone per subspace: the zone twice
+    with pytest.raises(RuntimeError, match="zones 0 and 1"):
+        pyrucast.NodeField(twice, ["T"])
+    assert len(pyrucast.NodeField(twice | twice, ["T"])) == 1

@@ -719,6 +719,13 @@ crate::impl_aggregate!(ElementField, SubElementField, subfield, "subfield(s)", {
         crate::coords::ensure_same_coords(&a, &b)
     }
 
+    /// Refuse a zone carrying, on its support, a component a zone of the field
+    /// already carries there: on one support, each component lives in one
+    /// zone.
+    fn check_add(&self, h: &Handle<SubElementField>) -> Result<()> {
+        crate::containers::field::check_component_free(self, h)
+    }
+
     /// Validate the zone decomposition after a union (`a | b`): **no component
     /// may be carried by two zones on the same support**. Zones on the same
     /// support with disjoint components are kept side by side (no fusion, no new
@@ -776,6 +783,13 @@ impl ElementField {
             ));
         }
         crate::containers::field::check_components("SubElementField", &components)?;
+        if let Some((first, i)) = crate::aggregate::repeated_sub(fespace) {
+            return Err(PyrucastError::Message(format!(
+                "ElementField: subspaces {first} and {i} of the FE space are the same \
+                 subspace, and a field carries each component once on a subspace — take \
+                 each subspace once with a union (`fes | fes`)"
+            )));
+        }
         let mut subs = Vec::with_capacity(n_sub);
         for i in 0..n_sub {
             let sub = fespace.get(i)?;
@@ -964,13 +978,14 @@ impl ElementField {
                 n_sub
             )));
         }
-        let mut subs = Vec::with_capacity(n_sub);
+        // Through `add_sub`: a subspace listed twice may carry two component
+        // lists, never the same component twice.
+        let mut field = Self::default();
         for (i, comps) in components_per_subspace.iter().enumerate() {
             let sub = fespace.get(i)?;
-            let sf = SubElementField::new(sub, comps.clone())?;
-            subs.push(Handle::new(sf));
+            field.add_sub(Handle::new(SubElementField::new(sub, comps.clone())?))?;
         }
-        Ok(Self { subs })
+        Ok(field)
     }
 
     /// The finite-element space this field lives on: each zone's subspace,

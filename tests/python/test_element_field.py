@@ -536,3 +536,33 @@ def test_subscript_raises_like_value():
     for call in (lambda: zone[5, 0, "k"], lambda: zone.value(5, 0, "k")):
         with pytest.raises(RuntimeError, match="cell index 5"):
             call()
+
+
+def test_side_by_side_zones_pair_per_component():
+    _, _, fes = _tri3_subspace()
+    left = pyrucast.ElementField(fes, ["E", "k"])
+    left[0].set_uniform("E", 10.0)
+    left[0].set_uniform("k", 20.0)
+    a = pyrucast.ElementField(fes, ["E", "nu"])
+    a[0].set_uniform("E", 1.0)
+    a[0].set_uniform("nu", 0.3)
+    b = pyrucast.ElementField(fes, ["k"])
+    b[0].set_uniform("k", 2.0)
+    right = a | b  # two zones on one subspace, each component in one of them
+    s = left + right
+    assert len(s) == 1  # the right's extras join the left's only zone
+    assert [s[0].value(0, 0, c) for c in ("E", "k", "nu")] == [11.0, 22.0, 0.3]
+    points = left[0].gauss_count
+    assert (
+        pyrucast.measure.xty(left, right)
+        == pyrucast.measure.xty(right, left)
+        == 50.0 * points
+    )
+
+
+def test_a_field_is_not_built_on_a_subspace_listed_twice():
+    _, _, fes = _tri3_subspace()
+    fes.add_sub(fes[0])  # concatenation, no deduplication: the subspace twice
+    with pytest.raises(RuntimeError, match="subspaces 0 and 1"):
+        pyrucast.ElementField(fes, ["E"])
+    assert len(pyrucast.ElementField(fes | fes, ["E"])) == 1

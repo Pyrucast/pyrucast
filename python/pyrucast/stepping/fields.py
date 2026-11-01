@@ -65,8 +65,9 @@ def infinity_norm(field, names):
 def domain_mesh(fespace):
     """The mesh ``fespace`` spans, each zone once. ``fespace.mesh()`` gives one
     zone per subspace, and a model's space has one subspace per sub-model: two
-    physics on one zone — a convection and a radiation on the same boundary —
-    would carry it twice. The union keeps each zone once."""
+    physics on one zone — a conduction and a radiation on the same rod, a fin
+    radiating along its length — would carry it twice, and a field cannot be
+    built on a zone listed twice. The union keeps each zone once."""
     mesh = fespace.mesh()
     return mesh | mesh
 

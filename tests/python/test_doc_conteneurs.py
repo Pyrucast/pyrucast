@@ -103,15 +103,18 @@ g[0].add_to_component("T", 1.0)
 dr = pyrucast.NodeField(droite, ["T"])
 dr[0].add_to_component("T", 2.0)
 
-cote_a_cote = g + dr  # deux supports distincts : rien ne s'additionne
-print(len(cote_a_cote), cote_a_cote.value(n[1], "T"))  # 2 1.0 : la 1re zone lue
+try:
+    g + dr  # deux supports distincts : n1 vaudrait 1 dans une zone, 2 dans l'autre
+except RuntimeError as erreur:
+    message = str(erreur)
+    print(message)  # incoherent NodeField: node 1, component T: 1 ≠ 2: …
 
 carre = gauche | droite
 somme = g.restrict(carre) + dr.restrict(carre)  # les mêmes supports des deux côtés
 print(somme.value(n[0], "T"), somme.value(n[1], "T"), somme.value(n[3], "T"))
 # 1.0 3.0 2.0 : la diagonale reçoit les deux
 # ANCHOR_END: meme_support
-assert (len(cote_a_cote), cote_a_cote.value(n[1], "T")) == (2, 1.0)
+assert "restrict_like" in message
 assert [somme.value(n[i], "T") for i in (0, 1, 3)] == [1.0, 3.0, 2.0]
 assert (dr.restrict_like(g) + g).value(n[1], "T") == 3.0
 

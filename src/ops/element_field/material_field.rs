@@ -1,5 +1,6 @@
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
+use crate::containers::field::SubField;
 use crate::containers::model::{Model, SubModel};
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
@@ -104,6 +105,9 @@ pub fn sub_material_field(
 /// Build a material [`ElementField`] applying the same uniform
 /// `(component, value)` pairs to **every** material-hungry sub-model of
 /// `model`. Sub-models that need no material (`Dirichlet`, …) are skipped.
+/// Two sub-models on one subspace that both read a component — `rho`, for a
+/// heat capacity and for a mass — share one zone there, since a subspace
+/// carries each component in one zone.
 ///
 /// ```
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -152,7 +156,7 @@ pub fn material_field(
             }
         };
         if let Some(sub) = opt_sub {
-            out.add_sub(Handle::new(sub))?;
+            add_material_zone(&mut out, sub)?;
         }
     }
     Ok(out)
@@ -162,7 +166,9 @@ pub fn material_field(
 /// `(component, value)` list.
 ///
 /// `per_sub_model.len()` must equal `model.len()`. An empty
-/// slot (`&[]`) skips that sub-model — typical for `Dirichlet`.
+/// slot (`&[]`) skips that sub-model — typical for `Dirichlet`. Two
+/// sub-models on one subspace that both read a component share one zone there,
+/// and must then give it the same value.
 ///
 /// ```
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -218,9 +224,52 @@ pub fn material_field_per_sub_model(
             continue;
         }
         let sub = sub_material_field(&h.read(), spec)?;
-        out.add_sub(Handle::new(sub))?;
+        add_material_zone(&mut out, sub)?;
     }
     Ok(out)
+}
+
+/// Add one sub-model's material `zone` to `out`. Zones of `out` on the same
+/// subspace that share a component with it — a conduction and an elasticity
+/// both reading `rho` — are fused with it, the shared values having to agree:
+/// a subspace carries each component in one zone, and each sub-model still
+/// finds every component it reads in one zone. Zones with nothing in common
+/// stay side by side.
+fn add_material_zone(out: &mut ElementField, zone: SubElementField) -> Result<()> {
+    let support = zone.support();
+    let shared: Vec<usize> = out
+        .iter()
+        .enumerate()
+        .filter(|(_, h)| {
+            let held = h.read();
+            held.support().same_object(&support)
+                && zone
+                    .components()
+                    .iter()
+                    .any(|c| held.component_index(c).is_some())
+        })
+        .map(|(i, _)| i)
+        .collect();
+    if shared.is_empty() {
+        return out.add_sub(Handle::new(zone));
+    }
+    let mut group = ElementField::empty();
+    for &i in &shared {
+        group.push(out.get(i)?);
+    }
+    group.push(Handle::new(zone));
+    let fused = crate::ops::element_field::consolidate(&group)?.get(0)?;
+    // The fused zone takes the place of the first it absorbs.
+    let mut rebuilt = ElementField::empty();
+    for (i, h) in out.iter().enumerate() {
+        if i == shared[0] {
+            rebuilt.push(fused.clone());
+        } else if !shared.contains(&i) {
+            rebuilt.push(h.clone());
+        }
+    }
+    *out = rebuilt;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -494,5 +543,69 @@ mod tests {
         assert!(res.is_err());
         let msg = format!("{}", res.unwrap_err());
         assert!(msg.contains("1") && msg.contains("2"));
+    }
+
+    /// Heat conduction and plane-stress elasticity on one TRI3 subspace: two
+    /// physics that may both read `rho`.
+    fn thermo_mechanical_model() -> Model {
+        use crate::models::tensor::Kinematics;
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+            .iter()
+            .map(|p| Node::create_in(coords.clone(), p).unwrap())
+            .collect();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
+        mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let mut model = Model::empty();
+        for sub in [
+            SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic).unwrap(),
+            SubModel::elasticity(
+                fes.get(0).unwrap(),
+                Kinematics::PlaneStress,
+                MaterialSymmetry::Isotropic,
+                StrainMeasure::Linear,
+            )
+            .unwrap(),
+        ] {
+            model.add_sub(Handle::new(sub)).unwrap();
+        }
+        model
+    }
+
+    #[test]
+    fn two_physics_reading_one_component_share_one_zone() {
+        let model = thermo_mechanical_model();
+        let pairs = [
+            ("k", 1.0),
+            ("rho", 2.0),
+            ("cp", 3.0),
+            ("E", 4.0),
+            ("nu", 0.3),
+        ];
+        let mat = material_field(&model, &pairs).unwrap();
+        // `rho` once on the subspace, in the zone both physics read.
+        assert_eq!(mat.len(), 1);
+        crate::ops::element_field::check_unique_component_per_support(&mat).unwrap();
+        let z = mat.get(0).unwrap();
+        for c in ["k", "rho", "cp", "E", "nu"] {
+            assert!(z.read().component_index(c).is_some(), "{c}");
+        }
+        // Without a shared component, each physics keeps its own zone.
+        let apart =
+            material_field_per_sub_model(&model, &[&[("k", 1.0)], &[("E", 4.0), ("nu", 0.3)]])
+                .unwrap();
+        assert_eq!(apart.len(), 2);
+        // One component, one value on a subspace.
+        let msg = material_field_per_sub_model(
+            &model,
+            &[
+                &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)],
+                &[("E", 4.0), ("nu", 0.3), ("rho", 7.0)],
+            ],
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(msg.contains("rho"), "{msg}");
     }
 }

@@ -598,10 +598,15 @@ waiver, recorded in `tests/python/test_mirror_completeness.py`.
   composition of zones), not an `ops::field::add`. The `+ - * /` operators (zone
   to zone **and** aggregate to aggregate) combine **by `(support, component)`**
   in union/passthrough (a component or support on one side only = raw value
-  unchanged); the operands need neither the same set of components nor the same
-  decomposition. Primitives: `SubField::merge_components` (zone) /
-  `Field::merge_field` (aggregate), `Field::merge_subfield` (targeted update of
-  one zone). Where a component mismatch must be an error (`Evolution`
+  unchanged — what lets `u + du` move `u_x` alone); the operands need neither
+  the same set of components nor the same decomposition. A component is paired
+  wherever each side keeps it on the support, even with several zones there.
+  The result keeps both rules of a field — on one support, a component lives
+  in one zone; a node several zones carry holds one value — and is checked for
+  the second when a component was obtained differently from one zone to the
+  next (computed here, passed through there). Primitives:
+  `SubField::merge_components` (zone) / `Field::merge_field` (aggregate),
+  `Field::merge_subfield` (targeted update of one zone). Where a component mismatch must be an error (`Evolution`
   interpolation), `SubField::check_same_components` guards `merge_components`
   upstream.
 - matrix+matrix addition → **operator `+`** (algebraic sum of two operators),

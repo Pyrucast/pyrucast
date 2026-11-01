@@ -310,10 +310,9 @@ impl PyElementField {
         Ok(Field::max(&self.inner, component)?)
     }
 
-    /// Sum of `component` across the zones defining it (Σ over the whole field)
-    /// — the resultant of a nodal force field, one component at a time. A node
-    /// carried by several zones counts once per zone that stores it. Errors if
-    /// no zone defines the component.
+    /// Sum of `component` over the Gauss points of the field (Σ over the whole
+    /// field), across the zones defining it. Errors if no zone defines the
+    /// component.
     fn sum(&self, component: &str) -> PyResult<f64> {
         use crate::containers::field::Field;
         Ok(Field::sum(&self.inner, component)?)

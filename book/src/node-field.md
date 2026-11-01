@@ -86,9 +86,12 @@ fois par zone**. Trois règles régissent cette duplication :
 - **écriture** : il n'y a **pas** d'écriture au niveau agrégat ; toute
   mutation passe par les zones (`field[i]`), exactement comme
   `ElementField` ;
-- **cohérence à la demande** : `field.check()` vérifie que toutes les
-  zones stockant un même couple `(nœud, composante)` portent la **même**
-  valeur (comparaison exacte) ; `node_field.consolidate(field)` fait cette
+- **cohérence** : toutes les zones stockant un même couple `(nœud,
+  composante)` portent la **même** valeur (deuxième règle de
+  [Champ](field.md#les-règles-de-cohérence)). L'union et les opérations entre
+  champs la vérifient quand c'est nécessaire ; une écriture dans une zone ne
+  touche pas les autres, et `field.check()` vérifie la règle à la demande
+  (comparaison exacte) ; `node_field.consolidate(field)` fait cette
   vérification puis **fusionne par support** — les zones définies sur le
   **même** `SubMesh` (identité de handle) deviennent une seule zone portant
   l'union de leurs composantes (valeurs des composantes communes vérifiées),

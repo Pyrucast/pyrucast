@@ -27,6 +27,7 @@
 use crate::aggregate::Aggregate;
 use crate::atoms::{ElementType, NodeId};
 use crate::containers::element_field::ElementField;
+use crate::containers::field::add_partials;
 use crate::containers::field::SubField;
 use crate::containers::mesh::SubMesh;
 use crate::containers::model::Model;
@@ -165,13 +166,14 @@ pub fn internal_forces(
             zones
         };
         for zone in built {
-            out = (&out + &zone)?;
+            out = add_partials(&out, &zone)?;
         }
     }
     // `r = Σ rᵢ` is a **sum**, not a stack: two terms may load the same node in
     // the same component — two materials meeting at a seam, a support and the
-    // body it holds — and `+` only adds zones that share a support. The rest is
-    // added node by node here, or a reader would see one partial sum.
+    // body it holds — and `add_partials` only adds zones that share a support.
+    // The rest is added node by node here, or a reader would see one partial
+    // sum.
     out.summed()
 }
 

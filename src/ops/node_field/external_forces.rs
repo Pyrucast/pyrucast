@@ -20,6 +20,7 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::ElementField;
+use crate::containers::field::add_partials;
 use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
@@ -115,11 +116,12 @@ pub fn external_forces(model: &Model, materials: &ElementField) -> Result<NodeFi
         for zone in built {
             let mut one = NodeField::empty();
             one.add_sub(zone)?;
-            out = (&out + &one)?;
+            out = add_partials(&out, &one)?;
         }
     }
     // `r = Σ rᵢ` is a **sum**, not a stack: two terms may load the same node in
-    // the same component, and `+` only adds zones that share a support. The rest
-    // is added node by node here, or a reader would see one partial sum.
+    // the same component, and `add_partials` only adds zones that share a
+    // support. The rest is added node by node here, or a reader would see one
+    // partial sum.
     out.summed()
 }

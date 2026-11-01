@@ -273,11 +273,13 @@ mod tests {
         ElementField::new(fes, comps).unwrap()
     }
 
-    /// Two-zone field built without triggering the union's finalize.
+    /// Two-zone field built without any check: neither the union's finalize
+    /// nor `add_sub`'s refusal of a component carried twice on one support —
+    /// what the validators under test must catch themselves.
     fn two_zone(a: &ElementField, b: &ElementField) -> ElementField {
         let mut f = ElementField::default();
-        f.add_sub(a.get(0).unwrap()).unwrap();
-        f.add_sub(b.get(0).unwrap()).unwrap();
+        f.push(a.get(0).unwrap());
+        f.push(b.get(0).unwrap());
         f
     }
 
