@@ -1,4 +1,4 @@
-# Matrice creuse (`Matrix`)
+# Matrice creuse (Matrix/SubMatrix)
 
 `Matrix` est le **conteneur de sortie** d'un assemblage : c'est ce que produisent les opérateurs `matrix::stiffness(model, materials)` / `matrix::mass(model, materials)` à partir d'un [`Model`](model.md). Elle représente une matrice creuse dont les lignes et les colonnes sont identifiées par des **DOFs nommés**.
 

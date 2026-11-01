@@ -1,4 +1,4 @@
-# Agrégat
+# Agrégat (Aggregate)
 
 La plupart des conteneurs de pyrucast viennent par **paires** : une **zone**
 (`SubMesh`, `SubFiniteElementSpace`, `SubNodeField`, `SubElementField`,

@@ -1,4 +1,4 @@
-# Maillage (Mesh / SubMesh)
+# Maillage (Mesh/SubMesh)
 
 Un maillage est un [agrégat](aggregate.md) de **zones** :
 

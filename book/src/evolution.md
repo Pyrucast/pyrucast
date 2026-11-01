@@ -1,4 +1,4 @@
-# Évolution (`Evolution` / `SubEvolution`)
+# Évolution (Evolution/SubEvolution)
 
 Une **évolution** associe une série de **valeurs** à une **variable** (souvent
 le temps, mais pas nécessairement) et **interpole linéairement** entre les

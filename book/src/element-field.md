@@ -1,4 +1,4 @@
-# Champ aux points de Gauss (ElementField / SubElementField)
+# Champ aux points de Gauss (ElementField/SubElementField)
 
 Un champ aux points de Gauss porte des valeurs **par maille et par point de
 Gauss** : là où un [champ aux nœuds](node-field.md) donne une valeur à chaque

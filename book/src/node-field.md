@@ -1,4 +1,4 @@
-# Champ aux nœuds (`NodeField` / `SubNodeField`)
+# Champ aux nœuds (NodeField/SubNodeField)
 
 Un champ aux nœuds porte une ou plusieurs valeurs **par nœud**. Il suit la
 même grammaire d'agrégat que tous les conteneurs de pyrucast (cf.

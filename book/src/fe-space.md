@@ -1,4 +1,4 @@
-# Espace éléments finis (`FiniteElementSpace`)
+# Espace éléments finis (FiniteElementSpace/SubFiniteElementSpace)
 
 Ce chapitre couvre `FiniteElementSpace` et son objet associé `SubFiniteElementSpace` : la couche **éléments finis** posée par-dessus la couche **géométrique** (`Mesh` / `SubMesh`). Le `Mesh` reste purement géométrique ; le `FiniteElementSpace` lui ajoute la **formulation** (fonctions de forme, points de Gauss, dérivées). Cette séparation permet de réutiliser un même maillage avec plusieurs formulations, et — plus tard — d'admettre un déplacement du maillage tout en réévaluant correctement les grandeurs physiques.
 

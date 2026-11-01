@@ -1,4 +1,4 @@
-# Modèle physique (`Model`)
+# Modèle physique (Model/SubModel)
 
 Un **`Model`** est l'objet orchestrateur qui décrit un problème physique et **produit les matrices** (raideur, masse) à la demande de l'utilisateur. Il vient se poser sur la couche éléments finis ([`FiniteElementSpace`](fe-space.md)), elle-même posée sur le maillage géométrique.
 

@@ -1,4 +1,4 @@
-# Champ (`Field` / `SubField`)
+# Champ (Field/SubField)
 
 Les deux familles de champs de pyrucast — le [champ aux nœuds](node-field.md)
 et le [champ aux points de Gauss](element-field.md) — partagent un **contrat
