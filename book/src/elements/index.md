@@ -83,10 +83,11 @@ nœuds de face et/ou de volume nécessaires au produit tensoriel \\( Q2 \\) comp
 Le catalogue ci-dessus ne montre, par élément, que la règle **par défaut**
 (`GAUSS`). Une deuxième règle existe — `REDUCED` (intégration réduite : un seul
 point au centroïde, poids = mesure du domaine de référence, exacte pour les
-constantes seulement ; utilisée par exemple pour désamorcer le verrouillage en
-cisaillement de la [poutre de Timoshenko](../mecanique/timoshenko.md)). Le
-tableau croisé suivant donne, pour chaque couple (élément, règle), le nombre de
-points d'intégration \\( n_g \\) si le couple est supporté :
+constantes seulement). Elle porte une valeur par maille, et les
+[coques](../mecanique/coques.md) épaisses y intègrent leur cisaillement
+transverse ; voir [l'espace éléments finis](../fe-space.md#construire-un-espace).
+Le tableau croisé suivant donne, pour chaque couple (élément, règle), le nombre
+de points d'intégration \\( n_g \\) si le couple est supporté :
 
 | Élément | GAUSS | REDUCED |
 |---|:---:|:---:|
@@ -110,13 +111,7 @@ points d'intégration \\( n_g \\) si le couple est supporté :
 `POI1` n'a pas de repère de référence (ce n'est pas un élément fini) : les deux
 règles y sont rejetées (`QuadratureRule::is_compatible_with` renvoie `false`,
 `points`/`point_count` renvoient une erreur). Pour tout autre `ElementType`,
-les deux règles sont actuellement définies — le tableau est donc plein sauf
-sur cette ligne. Il est conservé tel quel pour documenter la compatibilité au
-fur et à mesure que de nouvelles règles (ordres supérieurs, quadratures
-spécialisées) seront ajoutées : celles-ci pourront être incompatibles avec
-certains éléments (p. ex. une règle calibrée pour un degré d'exactitude
-indisponible sur un élément sérendipité), et ce tableau sera le seul endroit à
-mettre à jour.
+les deux règles sont définies : le tableau est plein sauf sur cette ligne.
 
 ## Propriétés communes (vérifiées par les tests)
 

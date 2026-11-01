@@ -1,7 +1,7 @@
 //! Per-physics parallel drivers — the bridge that lifts parallelism **above**
 //! the constitutive/element kernels.
 //!
-//! A physics implementation never mentions rayon, the store, or a lock. It
+//! A physics implementation never mentions rayon or a lock. It
 //! supplies two kinds of **pure, sequential kernels**:
 //!
 //! - a **point kernel** at one Gauss point, driven either over an element-field
@@ -15,7 +15,7 @@
 //!   several (sharing one mesh, differing by quadrature) for a multi-quadrature
 //!   element such as a shear-deformable beam or a shell.
 //!
-//! These drivers own the fan-out (rayon), the zero-copy borrowing of store data
+//! These drivers own the fan-out (rayon), the zero-copy borrowing of the data
 //! (read guards held across the parallel region, slices borrowed in place — no
 //! per-cell snapshot copies), and the deterministic write-back / scatter. See
 //! the book chapter *« Parallélisme »* and *« Ajouter une physique »*.
@@ -111,11 +111,11 @@ pub fn require_field_basis(fespace: &Handle<SubFiniteElementSpace>, what: &str) 
     Ok(())
 }
 
-/// Reference-element data of an FE subspace, snapshotted **once** before the
-/// parallel loop (it would otherwise re-read the store on every call — through
-/// `element_type()` — and serialise all threads on the global store lock).
-/// Shape values, reference derivatives and weights at each Gauss point, plus the
-/// fixed dimensions. Shared read-only across threads.
+/// Reference-element data of an FE subspace, gathered **once** before the
+/// parallel loop: the fallible accessors (`gauss_xi`, `ref_dim`, …) are resolved
+/// and the `MAX_CELL_DOFS` bound is checked there, so nothing at a Gauss point
+/// validates or fails. Shape values, reference derivatives and weights at each
+/// Gauss point, plus the fixed dimensions. Shared read-only across threads.
 struct RefData {
     n_nodes: usize,
     n_gauss: usize,
@@ -136,8 +136,8 @@ struct RefData {
     /// interpolation, where each node carries a value *and* a slope.
     shape_count: usize,
     /// Field `N_i(ξ_g)` and `∂²N_i/∂ξ²(ξ_g)` per Gauss point. Empty unless the
-    /// field basis differs from the geometric one, so a Lagrange space
-    /// snapshots exactly what it did before.
+    /// field basis differs from the geometric one: a Lagrange space carries
+    /// the geometric tables alone.
     field_n_ref: Vec<Vec<f64>>,
     field_d2n_ref: Vec<Vec<f64>>,
     /// Whether the space declares **no** field basis (the formulation owns it).
@@ -209,10 +209,11 @@ fn scale_slope_slots_into(row: &[f64], j: f64, out: &mut [f64]) {
     }
 }
 
-/// Geometry of one cell, computed **without touching the store**: coordinates
-/// come from a held `Coords` guard, reference data is shared. Every accessor is
-/// a pure local computation, so a kernel may call them while the driver runs the
-/// cells in parallel — the kernel sees only this, never rayon or the store.
+/// Geometry of one cell, computed **without taking a lock**: coordinates come
+/// from a `Coords` guard the driver holds, reference data is shared. Every
+/// accessor is a pure local computation, so a kernel may call them while the
+/// driver runs the cells in parallel — the kernel sees only this, never rayon or
+/// a lock.
 ///
 /// The cell's node coordinates are gathered **lazily** (only `dn_dx` / `det_j_w`
 /// need them), so a point-local kernel that never asks for geometry (most
@@ -251,8 +252,8 @@ fn scale_slope_slots_into(row: &[f64], j: f64, out: &mut [f64]) {
 /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
 /// #     ).map(|_| ())
 /// # };
-/// // The geometry of a cell, without ever touching the store: the kernel
-/// // sees only this — no radius, no lock.
+/// // The geometry of a cell: the kernel sees only this — no radius, no
+/// // lock.
 /// noyau(&|geom| {
 ///     assert_eq!(geom.n_nodes, 3);
 ///     assert_eq!(geom.space_dim, 2);
@@ -388,7 +389,7 @@ impl<'a> CellGeom<'a> {
     }
 
     /// Fill the lazy `cell_coords` cache on first use (gather from the held
-    /// `Coords`, no store access).
+    /// `Coords` guard, no lock taken).
     fn ensure_cell_coords(&self) {
         let mut cc = self.cell_coords.borrow_mut();
         if cc.is_none() {
@@ -678,8 +679,8 @@ impl<'a> CellGeom<'a> {
     /// Field second derivatives `∂²N_i/∂x²` at Gauss point `g`, acting on
     /// physical degrees of freedom — the **curvature operator** of a C¹ element.
     ///
-    /// Defined for a straight 1-D reference element, which is where a C¹ basis
-    /// exists today. The chain rule is then simply `∂²/∂x² = J⁻² ∂²/∂ξ²`: the
+    /// Defined for a straight 1-D reference element, the only one with a C¹
+    /// basis (`HERMITE3` on `SEG2`). The chain rule is then simply `∂²/∂x² = J⁻² ∂²/∂ξ²`: the
     /// `∂J/∂ξ` term that would appear on a curved element vanishes, because a
     /// `SEG2` has a constant Jacobian by construction.
     ///
@@ -1269,7 +1270,7 @@ pub fn element_pointwise(
     let mut out = SubElementField::new(fespace.clone(), out_components)?;
 
     // Guards held for the whole parallel region — slices borrowed, not copied.
-    // Reference data snapshotted once (no per-cell store reads inside the loop).
+    // Reference data gathered once: nothing inside the loop validates or fails.
     let fe = fespace.read();
     let submesh = fe.submesh();
     let sm = submesh.read();
@@ -2865,8 +2866,8 @@ fn local_positions(ids: &[NodeId], pos: &HashMap<NodeId, u32>, side: &str) -> Re
 /// (`fe[li * n_dual + di]`, `di` indexing `dual_vars`) — from the cell geometry
 /// (one [`CellGeom`] per FE subspace of `fespaces`, same order). Its integrand
 /// (a stress field, a flux density, …) is **captured by the closure**, borrowed
-/// in place; the driver itself is agnostic to it. `element` never sees rayon, the
-/// store, or a lock.
+/// in place; the driver itself is agnostic to it. `element` never sees rayon or a
+/// lock.
 ///
 /// Each cell's vector is built and **scattered in the same parallel pass**, colour
 /// by colour (the primary FE subspace's cached cell colouring): within a colour
@@ -3035,7 +3036,7 @@ pub fn scatter_to_nodes(
 ///
 /// The per-cell geometry is the same lock-free [`CellGeom`] (reference data
 /// snapshotted once, coordinates/connectivity borrowed in place), so `cell`
-/// never touches rayon or the store. Its integrand (a nodal field, an element
+/// never touches rayon or a lock. Its integrand (a nodal field, an element
 /// field, …) is **captured by the closure**.
 ///
 /// Determinism: the sum is an adaptive parallel reduction, so — like
