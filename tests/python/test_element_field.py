@@ -509,14 +509,19 @@ def test_a_scalar_on_the_left_mirrors_the_right():
     # Not commutative: the scalar on the left is the left operand.
     assert (1.0 - f)[0].value(0, 0, "k") == -0.5
     assert (3.0 / f)[0].value(0, 0, "k") == 2.0
+    assert (4.0**f)[0].value(0, 0, "k") == 8.0  # 4 ** 1.5
+    assert (-f)[0].value(0, 0, "k") == -1.5
     zone = f[0]
     assert [(2 * zone).value(0, 1, "k"), (2 + zone).value(0, 1, "k")] == [3.0, 3.5]
     assert [(1 - zone).value(0, 1, "k"), (3 / zone).value(0, 1, "k")] == [-0.5, 2.0]
+    assert [(4**zone).value(0, 1, "k"), (-zone).value(0, 1, "k")] == [8.0, -1.5]
     for call in (
         lambda: "x" * f,
         lambda: "x" + f,
+        lambda: "x" ** f,
         lambda: "x" - zone,
         lambda: "x" / zone,
+        lambda: "x" ** zone,
     ):
         with pytest.raises(TypeError):
             call()

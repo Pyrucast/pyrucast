@@ -124,6 +124,13 @@ impl PySubNodeField {
         Ok(())
     }
 
+    /// Set `component` to `value` at every node of the zone.
+    fn set_uniform(&self, component: &str, value: f64) -> PyResult<()> {
+        use crate::containers::field::SubField;
+        self.handle.write().set_uniform(component, value)?;
+        Ok(())
+    }
+
     // ── Arithmetic operators (return a new sub-field) ───────────────────
     //
     // `rhs` may be a float (scalar broadcast over every node × component) or
@@ -656,6 +663,26 @@ impl PyNodeField {
         crate::py::field_slots::reject_modulo(modulo)?;
         self.binary(exponent, |a, b| a.powf(b))
     }
+
+    /// `scalar ** field` — the scalar raised to every value. Any other left
+    /// operand is refused (`TypeError`), and so is a modulo.
+    fn __rpow__(&self, base: f64, modulo: &Bound<'_, PyAny>) -> PyResult<Self> {
+        crate::py::field_slots::reject_modulo(modulo)?;
+        Ok(Self {
+            inner: crate::containers::field::Field::combine_scalar(
+                &self.inner,
+                |v, s| s.powf(v),
+                base,
+            )?,
+        })
+    }
+
+    /// `-field` — every value negated, in a new field.
+    fn __neg__(&self) -> PyResult<Self> {
+        Ok(Self {
+            inner: crate::containers::field::Field::map_all(&self.inner, |v| -v)?,
+        })
+    }
 }
 
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
@@ -668,6 +695,26 @@ impl PySubNodeField {
     fn __pow__(&self, exponent: &Bound<'_, PyAny>, modulo: &Bound<'_, PyAny>) -> PyResult<Self> {
         crate::py::field_slots::reject_modulo(modulo)?;
         self.scalar_or_combine(exponent, |a, b| a.powf(b))
+    }
+
+    /// `scalar ** field` — the scalar raised to every value. Any other left
+    /// operand is refused (`TypeError`), and so is a modulo.
+    fn __rpow__(&self, base: f64, modulo: &Bound<'_, PyAny>) -> PyResult<Self> {
+        crate::py::field_slots::reject_modulo(modulo)?;
+        let out = crate::containers::field::SubField::map_all(&*self.handle.read(), move |v| {
+            base.powf(v)
+        });
+        Ok(Self {
+            handle: crate::handle::Handle::new(out),
+        })
+    }
+
+    /// `-field` — every value negated, in a new sub-field.
+    fn __neg__(&self) -> PyResult<Self> {
+        let out = crate::containers::field::SubField::map_all(&*self.handle.read(), |v| -v);
+        Ok(Self {
+            handle: crate::handle::Handle::new(out),
+        })
     }
 }
 
