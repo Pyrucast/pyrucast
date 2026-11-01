@@ -24,9 +24,7 @@ mul_dense
 node_values
 ordinate_type
 out_of_range
-point_values
 pyrucast.coords.displace
-pyrucast.element_field.interp_to_gauss
 pyrucast.element_field.sub_material_field
 pyrucast.element_field.thermal_strain
 pyrucast.field.cosh
@@ -62,7 +60,6 @@ pyrucast.node_field.divergence
 pyrucast.node_field.restrict_like
 row_dofs
 set_by_node
-set_cell_uniform
 stiffness_matrix
 sub_to_component
 support_submesh

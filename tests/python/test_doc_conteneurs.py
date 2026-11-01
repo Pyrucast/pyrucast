@@ -310,41 +310,100 @@ assert f.components() == ["T", "UX", "UY"]
 # ANCHOR: element_field_api
 import pyrucast
 
-# Maillage + FE space — préparation.
-c = pyrucast.Coords(dim=2)
+# Deux triangles et leur espace éléments finis : 3 points de Gauss par TRI3.
+c = pyrucast.Coords(2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
-c2 = c.add_node([0.0, 1.0])
+d = c.add_node([1.0, 1.0])
+e = c.add_node([0.0, 1.0])
 mesh = pyrucast.Mesh(c, "TRI3")
-mesh.unit().add_cell([a, b, c2])
+mesh.unit().add_cell([a, b, d])
+mesh.unit().add_cell([a, d, e])
 fes = pyrucast.FiniteElementSpace(mesh)
 
-# Material field: one zone per subspace of `fes`.
+# Une zone par sous-espace de fes, toutes les valeurs à zéro.
 mat = pyrucast.ElementField(fes, ["E", "nu"])
-print(mat)  # ElementField: 1 subfield(s)
-print(mat.unit())  # SubElementField: 1 cell(s) × 3 gauss × 2 component(s) [E, nu]
+z = mat.unit()  # la zone, une vue : écrire dans z, c'est écrire dans mat
+print(z)  # SubElementField: 2 cell(s) × 3 gauss × 2 component(s) [E, nu]
 
-# Writing through the zone; reading through the zone (or the aggregate stats).
-z = mat.unit()  # the only zone (an error if there were several)
+# Écrire : toute la zone, une maille entière, un point.
 z.set_uniform("E", 210e9)
 z.set_uniform("nu", 0.3)
-assert z.value(0, 0, "E") == 210e9
+z.set_cell_uniform(1, "E", 70e9)  # la maille 1, à tous ses points de Gauss
+z[1, 2, "nu"] = 0.33  # la maille 1, son point de Gauss 2
 
-# Dictionary-like access on the zone — `sub[cell, gauss, "name"]`.
-z[0, 2, "nu"] = 0.28
-assert z[0, 2, "nu"] == 0.28
+# Lire : par nom, par indice de composante, ou un point entier.
+print(z.value(0, 0, "E"))  # 210000000000.0
+print(z[1, 2, "nu"])  # 0.33
+print(z.get(1, 0, 0))  # 70000000000.0
+print(z.point_values(1, 2))  # [70000000000.0, 0.33]
+print(mat.max("E"), mat.min("E"))  # 210000000000.0 70000000000.0
 
-# Stats and arithmetic at the aggregate level.
-print(mat.min("E"), mat.max("E"))  # 210000000000.0 210000000000.0
-print(mat.sum("E"))  # Σ over the Gauss points
-mat.mul_to_component("E", 0.95)  # en place, seulement "E"
-scaled = mat * 1.1  # nouveau champ
-
-# Components per subspace (multiphysics / multi-material).
-ef = pyrucast.ElementField.with_components_per_subspace(fes, [["E", "nu"]])
-print(ef.components())  # ['E', 'nu']
+# Une liste de composantes par sous-espace (fes n'en a qu'un).
+cond = pyrucast.ElementField.with_components_per_subspace(fes, [["k"]])
+print(cond.components())  # ['k']
 # ANCHOR_END: element_field_api
-assert ef.components() == ["E", "nu"]
+assert mat[0].value(1, 1, "E") == 70e9
+assert mat.components() == ["E", "nu"]
+
+# ANCHOR: element_field_combiner
+# Deux champs posés sur le même espace se combinent point à point.
+k1 = pyrucast.ElementField(fes, ["k"])
+k2 = pyrucast.ElementField(fes, ["k"])
+k1.unit().set_uniform("k", 2.0)
+k2.unit().set_uniform("k", 0.5)
+somme = k1 + k2
+print(len(somme), somme.unit().value(0, 0, "k"))  # 1 2.5
+
+# Un second espace, même sur le même maillage, est un autre support : les
+# zones restent côte à côte, rien n'est additionné.
+autre = pyrucast.ElementField(pyrucast.FiniteElementSpace(mesh), ["k"])
+print(len(k1 + autre))  # 2
+
+# L'union garde côte à côte deux zones aux composantes disjointes ;
+# consolidate les fond en une.
+tout = k1 | mat
+print(len(tout), tout.components())  # 2 ['k', 'E', 'nu']
+print(len(tout.consolidate()))  # 1
+# ANCHOR_END: element_field_combiner
+assert (k1 + autre)[1].value(0, 0, "k") == 0.0
+try:
+    k1.unit() + autre.unit()
+except RuntimeError as err:
+    assert "same support" in str(err)
+else:
+    raise AssertionError("two zones on distinct supports must not combine")
+
+# ANCHOR: element_field_operateurs
+# Le matériau d'un modèle : une zone par sous-modèle qui en consomme.
+elasticite = pyrucast.model.elasticity(fes, "plane_stress")
+modele = elasticite | pyrucast.model.heat_conduction(fes)
+materiau = pyrucast.element_field.material_field(
+    modele, [("E", 210e9), ("nu", 0.3), ("k", 45.0)]
+)
+print([zone.components() for zone in materiau])  # [['E', 'nu'], ['k']]
+
+# Une température T = x aux nœuds, portée aux points de Gauss.
+T = pyrucast.NodeField(mesh, ["T"])
+for n in (a, b, d, e):
+    T[0].set_value(n, "T", n.position()[0])
+T_g = pyrucast.element_field.interp_to_gauss(T, fes)
+print([T_g.unit().value(0, g, "T") for g in range(3)])  # [0.5, 1.0, 0.5]
+grad = pyrucast.element_field.gradient(T, fes)
+print(grad.components())  # ['grad_T_x', 'grad_T_y']
+print(grad.unit().point_values(0, 0))  # [1.0, 0.0]
+
+# Une somme sur les points de Gauss n'est pas une intégrale : l'intégrale
+# par maille se pose sur un espace à un point par maille.
+un = pyrucast.ElementField(fes, ["un"]) + 1.0
+centres = pyrucast.FiniteElementSpace(mesh, quadrature="REDUCED")
+aires = pyrucast.element_field.cell_integral(un, centres)
+print(un.sum("un"), aires.sum("un"))  # 6.0 1.0
+# ANCHOR_END: element_field_operateurs
+assert all(
+    grad.unit().value(cell, g, "grad_T_x") == 1.0 for cell in range(2) for g in range(3)
+)
+assert abs(aires.unit().value(1, 0, "un") - 0.5) < 1e-15
 
 # ── Modèle ──────────────────────────────────────────────────────────────────
 
