@@ -57,7 +57,6 @@ pyrucast.model.plasticity_isotropic
 pyrucast.model.viscoplasticity_chaboche
 pyrucast.model.viscoplasticity_lemaitre_chaboche
 pyrucast.node_field.divergence
-pyrucast.node_field.restrict_like
 row_dofs
 set_by_node
 stiffness_matrix

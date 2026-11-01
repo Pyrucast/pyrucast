@@ -1,6 +1,6 @@
 //! Source of the Rust examples on the book's container pages.
 //!
-//! Couvre `introduction.md`, `node.md`, `mesh.md`, `node-field.md`,
+//! Couvre `introduction.md`, `node.md`, `mesh.md`, `field.md`, `node-field.md`,
 //! `element-field.md`, `evolution.md`, `sauvegarde.md`, `compilation.md` et
 //! `operateurs/assemblage.md`. The pages pull these functions through
 //! `{{#include …:anchor}}` and `cargo test` runs them. The anchor covers the
@@ -104,6 +104,38 @@ fn un_champ_aux_noeuds_s_ecrit_par_zone_et_se_lit_par_agregat() -> Result<()> {
     Ok(())
 }
 // ANCHOR_END: champ_nodal
+
+// ANCHOR: champ_contrat
+#[test]
+fn le_contrat_des_champs_s_ecrit_une_fois() -> Result<()> {
+    let coords = Handle::new(Coords::new(1)?);
+    let a = Node::create_in(coords.clone(), &[0.0])?;
+    let b = Node::create_in(coords, &[1.0])?;
+    let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()])?;
+
+    let t = NodeField::new(&support, vec!["T".into()])?;
+    t.add_to_component("T", 2.0)?; // Field : en place, sur chaque zone qui porte T
+    let tq = NodeField::new(&support, vec!["T".into(), "q".into()])?;
+    tq.add_to_component("T", 3.0)?;
+
+    // Les opérateurs rendent un `Result` : combiner deux champs peut échouer.
+    let s = (&t + &tq)?; // même support : T se combine, q passe tel quel
+    assert_eq!(s.value(a.id(), "T")?, 5.0);
+    assert_eq!((2.0 * &t)?.value(b.id(), "T")?, 4.0);
+
+    // Rust n'a pas d'opérateur de puissance : on passe par les primitives.
+    let carre = t.combine_scalar(f64::powf, 2.0)?;
+    let puissance = t.merge_field(&tq, f64::powf)?; // 2³
+    assert_eq!(carre.value(a.id(), "T")?, 4.0);
+    assert_eq!(puissance.value(a.id(), "T")?, 8.0);
+
+    // Une zone se lit par le trait `SubField`.
+    let zone = t.get(0)?;
+    assert_eq!(zone.read().component_index("T"), Some(0));
+    assert_eq!(SubField::max(&*zone.read(), Some("T"))?, 2.0);
+    Ok(())
+}
+// ANCHOR_END: champ_contrat
 
 // ANCHOR: champ_gauss
 #[test]

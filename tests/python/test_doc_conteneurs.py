@@ -16,72 +16,119 @@ full traceback and a non-zero exit code.
 
 import pyrucast
 
+# ── Champ : le contrat commun ───────────────────────────────────────────────
 
-def _triangle_et_fes():
-    c = pyrucast.Coords(2)
-    n = [c.add_node(p) for p in ([0.0, 0.0], [1.0, 0.0], [0.0, 1.0])]
-    mesh = pyrucast.Mesh(c, "TRI3")
-    mesh.unit().add_cell(n)
-    return c, mesh, pyrucast.FiniteElementSpace(mesh), n
+# Un carré coupé en deux zones de maillage, `gauche` et `droite`, qui partagent
+# la diagonale (nœuds 1 et 2).
+_c = pyrucast.Coords(2)
+n = [_c.add_node(p) for p in ([0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0])]
+gauche = pyrucast.Mesh(_c, "TRI3")
+gauche.unit().add_cell([n[0], n[1], n[2]])
+droite = pyrucast.Mesh(_c, "TRI3")
+droite.unit().add_cell([n[1], n[3], n[2]])
 
+# ── lire ───────────────────────────────────────────────────
 
-def _champ_materiau(composantes, valeur=1.0):
-    _, _, fes, _ = _triangle_et_fes()
-    f = pyrucast.ElementField(fes, composantes)
-    for comp in composantes:
-        f[0].set_uniform(comp, valeur)
-    return f
+# ANCHOR: champ_lire
+# T sur les deux zones, q sur celle de droite seulement.
+t = pyrucast.NodeField(gauche, ["T"])
+for noeud, valeur in zip(n[:3], (0.0, 10.0, 20.0)):
+    t[0].set_value(noeud, "T", valeur)
+tq = pyrucast.NodeField(droite, ["T", "q"])
+for noeud, valeur in zip((n[1], n[3], n[2]), (10.0, 30.0, 20.0)):
+    tq[0].set_value(noeud, "T", valeur)
+tq[0].add_to_component("q", 5.0)
+champ = t | tq
 
+print(champ.components())  # ['T', 'q'] : les composantes de toutes les zones
+print(champ.min("T"), champ.max("T"))  # 0.0 30.0 : cherchés dans les deux zones
+print(champ.min())  # 0.0 : toutes les valeurs, toutes composantes confondues
+print(champ.sum("q"))  # 15.0 : les trois nœuds de droite, à 5
+print(len(champ["q"]), champ["q"].components())  # 1 ['q'] : la zone sans q disparaît
+# ANCHOR_END: champ_lire
+assert champ.components() == ["T", "q"]
+assert (champ.min("T"), champ.max("T"), champ.min()) == (0.0, 30.0, 0.0)
+assert champ.sum("q") == 15.0
+assert len(champ["q"]) == 1
 
-def _champ_nodal(noeuds, composantes, valeur=1.0, support=None):
-    support = support or pyrucast.mesh.poi1_from_nodes(noeuds)
-    f = pyrucast.NodeField(support, composantes)
-    for comp in composantes:
-        for noeud in noeuds:
-            f[0].set_value(noeud, comp, valeur)
-    return f
+# ── par un scalaire ────────────────────────────────────────
 
-
-# ── Champ : arithmétique ────────────────────────────────────────────────────
-
-
-# ── arithmetique ───────────────────────────────────────────
-
-_, _, _, n = _triangle_et_fes()
-mat = _champ_materiau(["E", "nu"], 2.0)
-u = _champ_nodal(n, ["u_x"], 7.0)
 # ANCHOR: arithmetique
-scaled = mat * 1.1  # nouveau champ, toutes composantes × 1.1
-shifted = u - 5.0  # nouveau champ
-energy = u**2.0  # element-wise power (fractional exponent is fine)
+plus_chaud = champ + 5.0  # un nouveau champ : chaque valeur + 5
+ecart = 100.0 - champ  # le scalaire se place d'un côté ou de l'autre
+carre = champ**2.0  # puissance, valeur par valeur
+print(plus_chaud.max("T"), ecart.min("T"), carre.max("q"))  # 35.0 70.0 25.0
+
+garde = champ
+champ += 1.0  # un nouveau champ, rangé sous le même nom
+print(champ.max("T"), garde.max("T"))  # 31.0 30.0 : `garde` a l'ancien
 # ANCHOR_END: arithmetique
-assert energy[0][n[0], "u_x"] == 49.0
+assert (plus_chaud.max("T"), ecart.min("T"), carre.max("q")) == (35.0, 70.0, 25.0)
+assert (champ.max("T"), garde.max("T")) == (31.0, 30.0)
 
-# ── mul to component ───────────────────────────────────────
+# ── par composante ─────────────────────────────────────────
 
-mat = _champ_materiau(["E", "nu"], 100.0)
-# ANCHOR: mul_to_component
-mat.mul_to_component("E", 0.95)  # scales "E" only
-# ANCHOR_END: mul_to_component
-assert mat.unit().value(0, 0, "E") == 95.0
-assert mat.unit().value(0, 0, "nu") == 100.0
+# ANCHOR: par_composante
+champ.add_to_component("T", -1.0)  # en place : T seulement, sur ses deux zones
+champ.mul_to_component("q", 2.0)
+print(champ.max("T"), champ.max("q"))  # 30.0 12.0
+# ANCHOR_END: par_composante
+assert (champ.max("T"), champ.max("q")) == (30.0, 12.0)
 
-# ── maths de champ ─────────────────────────────────────────
+# ── entre deux champs ──────────────────────────────────────
 
-_, _, _, n = _triangle_et_fes()
-support = pyrucast.mesh.poi1_from_nodes(n)
-champ1 = _champ_nodal(n, ["v"], 0.5, support)
-u = _champ_nodal(n, ["v"], -1.0, support)
-sx = _champ_nodal(n, ["v"], 3.0, support)
-sy = _champ_nodal(n, ["v"], 4.0, support)
+# ANCHOR: champ_binaire
+# a porte T et q, b porte T et p, sur la même zone.
+a = pyrucast.NodeField(gauche, ["T", "q"])
+a[0].add_to_component("T", 10.0)
+a[0].add_to_component("q", 1.0)
+b = pyrucast.NodeField(gauche, ["T", "p"])
+b[0].add_to_component("T", 3.0)
+b[0].add_to_component("p", 4.0)
+
+d = a - b  # T se combine ; q et p, d'un seul côté, passent tels quels
+print(d.components())  # ['T', 'q', 'p']
+print(d.value(n[0], "T"), d.value(n[0], "q"), d.value(n[0], "p"))  # 7.0 1.0 4.0
+# ANCHOR_END: champ_binaire
+assert (d.value(n[0], "T"), d.value(n[0], "q"), d.value(n[0], "p")) == (7.0, 1.0, 4.0)
+
+# ── même support ───────────────────────────────────────────
+
+# ANCHOR: meme_support
+# Deux régions qui se touchent par la diagonale, chacune sur sa zone.
+g = pyrucast.NodeField(gauche, ["T"])
+g[0].add_to_component("T", 1.0)
+dr = pyrucast.NodeField(droite, ["T"])
+dr[0].add_to_component("T", 2.0)
+
+cote_a_cote = g + dr  # deux supports distincts : rien ne s'additionne
+print(len(cote_a_cote), cote_a_cote.value(n[1], "T"))  # 2 1.0 : la 1re zone lue
+
+carre = gauche | droite
+somme = g.restrict(carre) + dr.restrict(carre)  # les mêmes supports des deux côtés
+print(somme.value(n[0], "T"), somme.value(n[1], "T"), somme.value(n[3], "T"))
+# 1.0 3.0 2.0 : la diagonale reçoit les deux
+# ANCHOR_END: meme_support
+assert (len(cote_a_cote), cote_a_cote.value(n[1], "T")) == (2, 1.0)
+assert [somme.value(n[i], "T") for i in (0, 1, 3)] == [1.0, 3.0, 2.0]
+assert (dr.restrict_like(g) + g).value(n[1], "T") == 3.0
+
+# ── fonctions et masques ───────────────────────────────────
+
 # ANCHOR: maths_champ
 import pyrucast as pc
 
-champ2 = pc.field.cos(champ1)  # cosine of every value
-e = pc.field.exp(pc.field.abs(u) * -1.0)  # they compose freely
-norme = pc.field.sqrt(sx**2.0 + sy**2.0)
+amorti = pc.field.exp(champ * -0.1)  # e^(-0.1 v), valeur par valeur
+print(round(amorti.min("T"), 4))  # 0.0498 : e^-3, au nœud le plus chaud
+print(pc.field.cos(champ).max("T"))  # 1.0 : cos 0, au nœud à 0
+print(champ.sqrt().max("T"))  # 5.477… : chaque fonction est aussi une méthode
+
+chaud = champ >= 15.0  # 1 où la valeur atteint 15, 0 ailleurs
+print(chaud.value(n[0], "T"), chaud.value(n[3], "T"))  # 0.0 1.0
 # ANCHOR_END: maths_champ
-assert abs(norme[0][n[0], "v"] - 5.0) < 1e-12
+assert round(amorti.min("T"), 4) == 0.0498
+assert pc.field.cos(champ).max("T") == 1.0
+assert (chaud.value(n[0], "T"), chaud.value(n[3], "T")) == (0.0, 1.0)
 
 # ── Maillage ────────────────────────────────────────────────────────────────
 

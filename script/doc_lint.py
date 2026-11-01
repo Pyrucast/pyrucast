@@ -123,6 +123,19 @@ TYPES_EXTERNES = {
     "CsrMatrix",
     "CscMatrix",
     "CooMatrix",
+    # The primitive types: `f64::powf` is a path of the language, not a module
+    # of the crate.
+    "f64",
+    "f32",
+    "i32",
+    "i64",
+    "u32",
+    "u64",
+    "usize",
+    "isize",
+    "bool",
+    "char",
+    "str",
 }
 
 # ── Utilitaires ─────────────────────────────────────────────────────────────
