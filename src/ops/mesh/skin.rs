@@ -119,8 +119,9 @@ fn facet_normal(c: &Coords, nodes: &[NodeId]) -> Result<[f64; 3]> {
 /// quadrilateral sides). The original nodes are reused (and re-referenced).
 ///
 /// POI1 submeshes are ignored. Errors if the mesh has no volume cells, if it
-/// carries cells of a lower topological dimension, or if the coordinate space
-/// is not 3-D.
+/// lists one zone twice (every facet would sit under two cells, the skin
+/// would be empty), if it carries cells of a lower topological dimension, or
+/// if the coordinate space is not 3-D.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -147,6 +148,7 @@ pub fn skin(mesh: &Mesh, angle_deg: f64) -> Result<Mesh> {
     let cos_tol = angle_deg.to_radians().cos();
 
     let coords = mesh.coords()?;
+    mesh.check_zones_once("skin")?;
     {
         let c = coords.read();
         if c.dim() != 3 {
@@ -595,6 +597,25 @@ mod tests {
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
         m.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         assert!(skin(&m, DEFAULT_ANGLE_DEG).is_err());
+    }
+
+    #[test]
+    fn a_zone_listed_twice_is_refused() {
+        // Twice the same zone puts every facet under two cells: the skin
+        // would come out empty. The entry check refuses it instead.
+        let coords = Handle::new(Coords::new(3).unwrap());
+        let n = cube_nodes(&coords);
+        let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::HEX8));
+        m.add_cell(&n).unwrap();
+        let mut twice = Mesh::empty();
+        twice.add_sub(m.get(0).unwrap()).unwrap();
+        twice.add_sub(m.get(0).unwrap()).unwrap();
+
+        let err = skin(&twice, DEFAULT_ANGLE_DEG).unwrap_err().to_string();
+        assert!(err.contains("skin") && err.contains("same zone"), "{err}");
+        // Each zone once, it is a cube again.
+        let once = twice.union(&twice).unwrap();
+        assert_eq!(skin(&once, DEFAULT_ANGLE_DEG).unwrap().cell_count(), 6);
     }
 
     #[test]

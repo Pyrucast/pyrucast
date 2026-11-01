@@ -488,6 +488,18 @@ def test_support_gives_back_the_shared_space():
     assert len(pyrucast.ElementField(autre, ["k"]) + k) == 2
 
 
+def test_support_lists_one_subspace_per_zone():
+    # The union keeps k and E side by side on one subspace: the space lists
+    # it twice, zone i ↔ subspace i.
+    _, _mesh, fes = _tri3_subspace(n_cells=2)
+    both = pyrucast.ElementField(fes, ["k"]) | pyrucast.ElementField(fes, ["E"])
+    support = both.support()
+    assert len(support) == 2
+    for i in range(2):
+        assert len(support[i] | both[i].support()) == 1  # the same subspace
+    assert len(support | support) == 1  # the union keeps it once
+
+
 def test_a_scalar_on_the_left_mirrors_the_right():
     _, _, fes = _tri3_subspace()
     f = pyrucast.ElementField(fes, ["k"])

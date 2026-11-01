@@ -3,6 +3,7 @@
 import gc as pygc
 
 import pyrucast
+import pytest
 
 
 def test_submesh_poi1_is_node_list():
@@ -705,6 +706,17 @@ def test_skin_large_angle_merges_all_faces():
     sk = pyrucast.mesh.skin(_hex_cube(), angle_deg=180.0)
     assert sk.element_types() == ["QUA4"]
     assert sk.cell_count == 6
+
+
+def test_skin_refuses_a_zone_listed_twice():
+    # The same zone twice puts every facet under two cells: the skin would be
+    # empty. The entry check refuses it instead.
+    cube = _hex_cube()
+    twice = cube[0:1]
+    twice.add_sub(cube[0])
+    with pytest.raises(RuntimeError, match="same zone"):
+        pyrucast.mesh.skin(twice)
+    assert pyrucast.mesh.skin(twice | twice).cell_count == 6
 
 
 def test_skin_rejects_surface_mesh():

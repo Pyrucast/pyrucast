@@ -825,9 +825,11 @@ crate::impl_aggregate_dump!(NodeField);
 crate::impl_field_ops!(NodeField);
 
 impl NodeField {
-    /// The mesh this field lives on: each zone's POI1 support, once, in
-    /// first-seen order — shared, not copied. A field built on the result
-    /// combines node by node with this one.
+    /// The mesh this field lives on: each zone's POI1 support, **one per zone,
+    /// in order** — `f.support()[i]` is `f[i].support()`, shared, not copied.
+    /// Two zones on one support list it twice; a union of the result with
+    /// itself keeps each support once. A field built on the supports, each
+    /// once, combines node by node with this one.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -843,16 +845,19 @@ impl NodeField {
     /// let t = NodeField::new(&poi1, vec!["T".into()])?;
     /// // Back from the field to its support: the same zone, not a copy.
     /// assert!(t.support().get(0)?.same_object(&poi1.get(0)?));
+    /// // One support per zone: a second zone on it lists it a second time.
+    /// let mut both = NodeField::empty();
+    /// both.add_sub(t.get(0)?)?;
+    /// both.add_sub(NodeField::new(&poi1, vec!["q".into()])?.get(0)?)?;
+    /// assert_eq!(both.support().len(), 2);
+    /// assert_eq!(both.support().union(&both.support())?.len(), 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn support(&self) -> Mesh {
         let mut mesh = Mesh::empty();
         for h in self {
-            let sub = h.read().support();
-            if !mesh.iter().any(|s| s.same_object(&sub)) {
-                // Same `Coords` for every zone (`check_push`), hence for the mesh.
-                mesh.push(sub);
-            }
+            // Same `Coords` for every zone (`check_push`), hence for the mesh.
+            mesh.push(h.read().support());
         }
         mesh
     }
@@ -1848,17 +1853,20 @@ mod tests {
     }
 
     #[test]
-    fn support_shares_the_zones_supports_once() {
+    fn support_lists_each_zones_support_in_order() {
         let (coords, nodes, sm) = make_poi1_with(3);
         let f = NodeField::from_sub(SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap());
-        // A second zone on the same support: the mesh still lists it once.
+        // A second zone on the same support: the mesh lists it a second time.
         let q = SubNodeField::from_poi1(&sm, vec!["q".into()]).unwrap();
         let mut two = NodeField::empty();
         two.push(f.get(0).unwrap());
         two.push(Handle::new(q));
         let support = two.support();
-        assert_eq!(support.len(), 1);
-        assert!(support.get(0).unwrap().same_object(&sm));
+        assert_eq!(support.len(), 2);
+        for (i, zone) in two.iter().enumerate() {
+            assert!(support.get(i).unwrap().same_object(&zone.read().support()));
+            assert!(support.get(i).unwrap().same_object(&sm));
+        }
         // Shared, not rebuilt: no node gained a reference (Node + SubMesh).
         assert_eq!(coords.read().refcount(nodes[0].id()), 2);
     }

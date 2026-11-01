@@ -501,8 +501,9 @@ class ElementField:
     def support(self) -> FiniteElementSpace:
         r"""
         The finite-element space this field lives on: each zone's subspace,
-        once, in first-seen order — shared, not copied. A field built on it
-        combines point by point with this one.
+        one per zone, in order — `f.support()[i]` is `f[i].support()`, shared,
+        not copied. A field built on it combines point by point with this one.
+        Two zones on one subspace list it twice; `s | s` keeps each once.
         """
     def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
         r"""
@@ -2535,9 +2536,11 @@ class NodeField:
         """
     def support(self) -> Mesh:
         r"""
-        The mesh this field lives on: each zone's POI1 support, once, in
-        first-seen order — shared, not copied. A field built on it combines
-        node by node with this one.
+        The mesh this field lives on: each zone's POI1 support, one per zone,
+        in order — `f.support()[i]` is `f[i].support()`, shared, not copied.
+        Two zones on one support list it twice; `s | s` keeps each once. A
+        field built on the supports, each once, combines node by node with
+        this one.
         """
     def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
         r"""

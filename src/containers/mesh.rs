@@ -1199,6 +1199,23 @@ impl Mesh {
         Ok(sm.read().coords())
     }
 
+    /// Refuse a mesh listing one zone twice, for an operator `op` that finds
+    /// the boundary by counting the cells around each edge or facet: a zone
+    /// given twice puts every edge under two cells, and the boundary would come
+    /// out empty without a word. Zones are compared by identity.
+    pub(crate) fn check_zones_once(&self, op: &str) -> Result<()> {
+        for (i, zone) in self.iter().enumerate() {
+            if let Some(first) = self.iter().take(i).position(|z| z.same_object(zone)) {
+                return Err(PyrucastError::Message(format!(
+                    "{op}: zones {first} and {i} are the same zone — each of its cells \
+                     would count twice and nothing would be left on the boundary; take \
+                     each zone once with a union (`mesh | mesh`)"
+                )));
+            }
+        }
+        Ok(())
+    }
+
     /// Create a mesh wrapping a single `SubMesh`. Config-free at the Mesh
     /// level: the submesh already carries its `Coords` (a Mesh is a
     /// pure aggregate of submeshes). The submesh is moved into the store.

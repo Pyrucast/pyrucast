@@ -49,7 +49,7 @@ bornes ou une composante inconnue lèvent une erreur.
 | `ElementField` | |
 |---|---|
 | `len(champ)`, `champ[i]`, `for zone in champ`, `unit()`, `\|` | l'interface des [agrégats](aggregate.md) |
-| `support()` | l'espace de ses zones, partagé |
+| `support()` | le sous-espace de chaque zone, dans l'ordre, partagé |
 | `components()` | l'union des composantes des zones |
 | `min(c)`, `max(c)`, `sum(c)` | sur toutes les zones qui portent `c` |
 | `champ["c"]`, `filter_components([…])`, `rename_component(a, b)` | un champ réduit à ces composantes, ou une composante renommée |
@@ -106,9 +106,11 @@ ci-dessous). On construit donc un espace une fois et on le passe à tous les
 opérateurs ; `material_field(modele, …)` pose ses zones sur les sous-espaces
 des sous-modèles, ceux-là mêmes.
 
-Un champ rend aussi le sien : `champ.support()` donne l'espace de ses zones, et
-`zone.support()` le sous-espace d'une zone. C'est le même objet, pas une copie :
-un champ construit dessus se combine point à point avec le premier.
+Un champ rend aussi le sien : `champ.support()` donne le sous-espace de chaque
+zone, dans l'ordre (`champ.support()[i]` est `champ[i].support()`), et
+`zone.support()` celui d'une zone. C'est le même objet, pas une copie : un champ
+construit dessus se combine point à point avec le premier. Deux zones posées sur
+un même sous-espace le citent deux fois ; `s | s` le garde une fois.
 
 Un champ reste sur sa quadrature : aucun opérateur ne transporte des valeurs
 d'une quadrature à une autre. Pour obtenir un champ sur un autre espace, on

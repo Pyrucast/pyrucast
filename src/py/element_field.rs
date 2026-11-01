@@ -277,8 +277,9 @@ impl PyElementField {
     // ── Per-component scalar ops (in place, on every zone defining it) ──
 
     /// The finite-element space this field lives on: each zone's subspace,
-    /// once, in first-seen order — shared, not copied. A field built on it
-    /// combines point by point with this one.
+    /// one per zone, in order — `f.support()[i]` is `f[i].support()`, shared,
+    /// not copied. A field built on it combines point by point with this one.
+    /// Two zones on one subspace list it twice; `s | s` keeps each once.
     fn support(&self) -> PyFiniteElementSpace {
         PyFiniteElementSpace {
             inner: self.inner.support(),

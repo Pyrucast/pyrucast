@@ -1,6 +1,7 @@
 """`border`: a surface's border, with optional splitting into edges by angle."""
 
 import pyrucast
+import pytest
 
 
 def _unit_square_quad():
@@ -28,3 +29,16 @@ def test_border_angle_splits_into_open_aretes():
     b = pyrucast.mesh.border(mesh, angle_deg=45.0)
     assert len(b) == 4
     assert b.cell_counts() == [1, 1, 1, 1]
+
+
+def test_border_refuses_a_zone_listed_twice():
+    # Two subspaces on one zone: the space's mesh lists the zone twice, and
+    # every edge would sit under two cells — an empty border, said nowhere.
+    mesh = _unit_square_quad()
+    fes = pyrucast.FiniteElementSpace(mesh)
+    both = fes | pyrucast.FiniteElementSpace(mesh)
+    with pytest.raises(RuntimeError, match="same zone"):
+        pyrucast.mesh.border(both.mesh())
+    # Each zone once, the square has its four sides again.
+    zones = both.mesh()
+    assert pyrucast.mesh.border(zones | zones).cell_count == 4
