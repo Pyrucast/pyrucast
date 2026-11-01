@@ -8,7 +8,7 @@ et la **règle de quadrature** associée.
 La machinerie **commune** à tous les éléments (transformation isoparamétrique,
 Jacobien, gradient physique \\( \partial N_i/\partial x_a \\), passage à la
 matrice élémentaire) est décrite une fois pour toutes au chapitre
-[Espace éléments finis](../fe-space.md#théorie--élément-isoparamétrique) ; les
+[Espace éléments finis](../fe-space.md#théorie) ; les
 fiches ci-dessous ne répètent que ce qui est **propre** à chaque élément. Le code
 source de chaque élément tient dans **un fichier**,
 `atoms/element_kind/<nom>.rs` : fonctions de forme, points de Gauss, facettes,

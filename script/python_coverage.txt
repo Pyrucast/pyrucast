@@ -8,8 +8,6 @@ component_count
 component_index
 dense
 div_to_component
-element
-elements
 entries
 entry_count
 fespace

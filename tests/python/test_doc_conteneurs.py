@@ -1,8 +1,9 @@
 """Source of the Python examples on the book's container pages.
 
-Couvre `field.md`, `mesh.md`, `node.md`, `node-field.md`, `element-field.md`,
-`aggregate.md`, `introduction.md`, `model.md` and `matrix.md`. Every block of
-those pages comes from here through `{{#include …:anchor}}`, and pytest runs it.
+Couvre `field.md`, `mesh.md`, `node.md`, `node-field.md`, `fe-space.md`,
+`element-field.md`, `aggregate.md`, `introduction.md`, `model.md` and
+`matrix.md`. Every block of those pages comes from here through
+`{{#include …:anchor}}`, and pytest runs it.
 
 Voir `book/src/developper/documentation-et-tests.md`.
 
@@ -301,6 +302,113 @@ g = pyrucast.node_field.consolidate(f)  # merge as tightly as possible
 # ANCHOR_END: node_field_api
 assert u.value(a, "UX") == 1.5
 assert f.components() == ["T", "UX", "UY"]
+
+# ── Finite element space ────────────────────────────────────────────────────
+
+
+# ── fes construire ─────────────────────────────────────────
+
+# ANCHOR: fes_construire
+import pyrucast
+
+# Un carré de côté 2 en deux triangles (zone 0), et son côté bas (zone 1).
+c = pyrucast.Coords(2)
+a = c.add_node([0.0, 0.0])
+b = c.add_node([2.0, 0.0])
+d = c.add_node([2.0, 2.0])
+e = c.add_node([0.0, 2.0])
+carre = pyrucast.Mesh(c, "TRI3")
+carre.unit().add_cell([a, b, d])
+carre.unit().add_cell([a, d, e])
+bas = pyrucast.Mesh(c, "SEG2")
+bas.unit().add_cell([a, b])
+mesh = carre | bas
+
+# Lagrange-1 et la quadrature de Gauss, sur chaque zone.
+fes = pyrucast.FiniteElementSpace(mesh)
+print(len(fes))  # 2
+print(fes[0])  # SubFiniteElementSpace<TRI3, LAGRANGE1, GAUSS>: 3 Gauss point(s)
+print(fes[1])  # SubFiniteElementSpace<SEG2, LAGRANGE1, GAUSS>: 2 Gauss point(s)
+
+# Le même maillage, un point par maille : un autre espace.
+centres = pyrucast.FiniteElementSpace(mesh, quadrature="REDUCED")
+print(centres[0].gauss_count(), centres[0].gauss_xi(0))  # 1 [0.333…, 0.333…]
+
+# Un couple (interpolation, quadrature) par zone.
+mixte = pyrucast.FiniteElementSpace.with_choices(
+    mesh, [("LAGRANGE1", "GAUSS"), ("LAGRANGE1", "REDUCED")]
+)
+print([sub.quadrature for sub in mixte])  # ['GAUSS', 'REDUCED']
+
+# Les zones portent maintenant un espace : leurs mailles sont figées.
+print(carre.unit().is_sealed)  # True
+# ANCHOR_END: fes_construire
+assert len(pyrucast.FiniteElementSpace.lagrange1(mesh)) == 2
+for _interpolation in ("LAGRANGE2", "HERMITE3"):
+    try:
+        pyrucast.FiniteElementSpace(carre, interpolation=_interpolation)
+    except RuntimeError as err:
+        assert "not compatible" in str(err)
+    else:
+        raise AssertionError(f"{_interpolation} must be refused on TRI3")
+try:
+    carre.unit().add_cell([b, d, e])
+except RuntimeError as err:
+    assert "sealed" in str(err)
+else:
+    raise AssertionError("a submesh captured by a space must be sealed")
+
+# ── fes lire ───────────────────────────────────────────────
+
+# ANCHOR: fes_lire
+sub = fes[0]  # le sous-espace des triangles
+print(sub.element_type, sub.interpolation, sub.quadrature)  # TRI3 LAGRANGE1 GAUSS
+print(sub.ref_dim, sub.space_dim, sub.nodes_per_cell)  # 2 2 3
+print(sub.cell_count(), sub.gauss_count())  # 2 3
+
+# Les tables de référence : le point de Gauss 0, son poids, N_i, ∂N_i/∂ξ_k.
+print(sub.gauss_xi(0), sub.gauss_weight(0))  # [0.5, 0.0] 0.16666666666666666
+print(sub.n_at_g(0))  # [0.5, 0.5, 0.0]
+print(sub.dn_at_g(0))  # [-1.0, -1.0, 1.0, 0.0, 0.0, 1.0]
+
+# La maille 0 au point 0 : J, |J| et ∂N_i/∂x_a, tirés de ses nœuds.
+print(sub.jacobian(0, 0))  # [2.0, 2.0, 0.0, 2.0]
+print(sub.det_jacobian(0, 0))  # 4.0
+print(sub.dn_dx(0, 0))  # [-0.5, 0.0, 0.5, -0.5, 0.0, 0.5]
+
+# Une maille vue seule : son aire est la somme des w_g |J_g|.
+maille = fes.element(0, 1)  # ou sub[1]
+print(sum(maille.gauss_weight(g) * maille.det_jacobian(g) for g in range(3)))  # 2.0
+print(len(sub.elements()), len(fes.elements(1)))  # 2 1
+
+# L'espace rend son maillage : les zones elles-mêmes, une fois chacune.
+print(len(fes.mesh()))  # 2
+print(len(fes | fes), len(fes | pyrucast.FiniteElementSpace(mesh)))  # 2 4
+# ANCHOR_END: fes_lire
+assert maille.index == 1 and maille.gauss_count == 3
+assert sub[1].det_jacobian(0) == sub.det_jacobian(1, 0)
+
+# ── fes deplacer ───────────────────────────────────────────
+
+# ANCHOR: fes_deplacer
+# Allonger le côté bas : les deux zones voient la nouvelle position de b.
+b.set_position([4.0, 0.0])
+print(fes[0].det_jacobian(0, 0))  # 8.0, au lieu de 4.0
+print(fes[1].det_jacobian(0, 0))  # 2.0, au lieu de 1.0
+# ANCHOR_END: fes_deplacer
+# |J| is a magnitude: an inverted cell measures like the upright one, a flat
+# one measures zero and has no physical gradient.
+b.set_position([-2.0, 0.0])
+assert fes[1].det_jacobian(0, 0) == 1.0
+b.set_position([2.0, 2.0])
+assert fes[0].det_jacobian(0, 0) == 0.0
+try:
+    fes[0].dn_dx(0, 0)
+except RuntimeError as err:
+    assert "singular" in str(err)
+else:
+    raise AssertionError("a flat cell has no physical gradient")
+b.set_position([2.0, 0.0])
 
 # ── Field at the Gauss points ───────────────────────────────────────────────
 

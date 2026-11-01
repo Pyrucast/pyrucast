@@ -30,7 +30,7 @@ En convention de **Voigt** (déformation *ingénieur* \\( \gamma = 2\varepsilon 
 le champ discret \\( u_h = \sum_i N_i u_i \\) donne \\( \varepsilon = B\\,u_e \\),
 avec la matrice **déformation-déplacement** \\( B \\) bâtie des dérivées
 physiques \\( \partial N_i/\partial x_a \\) (voir
-[`dn_dx`](../fe-space.md#théorie--jacobien-et-grandeurs-physiques)). En 2-D
+[`dn_dx`](../fe-space.md#jacobien-et-grandeurs-physiques)). En 2-D
 (\\( \varepsilon = [\varepsilon_{xx}, \varepsilon_{yy}, \gamma_{xy}]^\top \\)),
 le bloc du nœud \\( i \\) est
 

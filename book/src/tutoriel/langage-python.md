@@ -11,7 +11,7 @@ Détail complet : [Correspondance Rust ↔ Python](../developper/correspondance-
 ## Empaquetage
 
 ```python
-{{#include ../../../tests/python/test_doc_tutoriel_fespace.py:import}}
+{{#include ../../../tests/python/test_doc_tutoriel.py:import}}
 ```
 
 `pyrucast` est un paquet **mixed Rust/Python** (maturin) : l'extension
@@ -32,7 +32,7 @@ Chaque **conteneur** — l'équivalent des « objets » Gibiane (`MAILLAGE`,
 **même nom que la structure Rust** :
 
 ```python
-{{#include ../../../tests/python/test_doc_tutoriel_fespace.py:objets}}
+{{#include ../../../tests/python/test_doc_tutoriel.py:objets}}
 ```
 
 Onze conteneurs couvrent tout : `Coords`, `Node`, `Mesh`, `FiniteElementSpace`,
@@ -69,7 +69,7 @@ Sept conteneurs partagent un même protocole d'**agrégat** — la notion la
 plus proche de Gibiane `ET` :
 
 ```python
-{{#include ../../../tests/python/test_doc_tutoriel_fespace.py:composer}}
+{{#include ../../../tests/python/test_doc_tutoriel.py:composer}}
 ```
 
 `|` unit deux agrégats du même type (`Mesh | Mesh`, `Model | Model`,
@@ -97,7 +97,7 @@ degré de liberté — `u_x`/`f_x` (déplacement/force), `T`/`q`
 Un blocage Dirichlet cible toujours la **variable duale** :
 
 ```python
-{{#include ../../../tests/python/test_doc_tutoriel_fespace.py:bloquer}}
+{{#include ../../../tests/python/test_doc_tutoriel.py:bloquer}}
 ```
 
 `model.dual_of("u_x")` renvoie `"f_x"` sans avoir à la mémoriser — utile

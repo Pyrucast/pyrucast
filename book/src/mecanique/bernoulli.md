@@ -79,7 +79,7 @@ mauvaise.
 L'équation étant du quatrième ordre, sa forme faible demande une interpolation
 **\\( C^1 \\)** : le déplacement *et* sa pente doivent être continus d'un élément
 au suivant. C'est exactement ce que fournit la famille
-**[`Hermite3`](../fe-space.md#fonctions-de-forme-cubiques-dhermite-hermite-3)**,
+**[`Hermite3`](../fe-space.md#fonctions-de-forme-dhermite-hermite3)**,
 qui prend pour degrés de liberté la flèche et la pente à chaque extrémité — deux
 fonctions de forme par nœud au lieu d'une.
 
