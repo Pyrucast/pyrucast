@@ -60,8 +60,8 @@ chauds = pyrucast.mesh.select(temperature, ge=20.0, le=80.0)
 # Cellules dont la contrainte de von Mises dépasse un seuil (borne basse seule).
 critiques = pyrucast.mesh.select(sigma, ge=250e6, components=["vm"])
 # ANCHOR_END: select
-assert chauds.cell_count() == 3  # 50, 30, 70
-assert critiques.cell_count() == 2
+assert chauds.cell_count == 3  # 50, 30, 70
+assert critiques.cell_count == 2
 
 # ── Mask: same structure, values rewritten ──────────────────────────────────
 
@@ -116,7 +116,7 @@ val = champ[0][node, "u_x"]  # unchanged: the value at the node
 # ANCHOR_END: indexation
 assert ux.components() == ["u_x"]
 assert depl.components() == ["u_x", "u_y"]
-assert zone.node_count() == 6
+assert zone.node_count == 6
 assert val == 0.1
 
 # ── alignement de composantes ──────────────────────────────

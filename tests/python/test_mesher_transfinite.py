@@ -20,14 +20,14 @@ def test_transfinite_default_qua4():
     side1, side2, side3, side4 = _rectangle(4, 2)
     mesh = pyrucast.mesh.transfinite(side1, side2, side3, side4)
     assert mesh.element_types() == ["QUA4"]
-    assert mesh.cell_count() == 8
+    assert mesh.cell_count == 8
 
 
 def test_transfinite_tri3():
     side1, side2, side3, side4 = _rectangle(4, 2)
     mesh = pyrucast.mesh.transfinite(side1, side2, side3, side4, element_type="TRI3")
     assert mesh.element_types() == ["TRI3"]
-    assert mesh.cell_count() == 16
+    assert mesh.cell_count == 16
 
 
 def test_transfinite_boundary_matches_input_corners():

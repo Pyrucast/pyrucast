@@ -91,16 +91,19 @@ impl PySubMatrix {
     }
 
     /// Number of rows of this block.
+    #[getter]
     fn n_rows(&self) -> usize {
         self.handle.read().n_rows()
     }
 
     /// Number of columns of this block.
+    #[getter]
     fn n_cols(&self) -> usize {
         self.handle.read().n_cols()
     }
 
     /// Number of stored COO entries.
+    #[getter]
     fn entry_count(&self) -> usize {
         self.handle.read().entry_count()
     }
@@ -108,6 +111,7 @@ impl PySubMatrix {
     /// Estimated heap bytes of this block: its stored entries, each an index,
     /// an index and a value. Supports and variable names, being shared, are not
     /// counted; a computed block stores nothing and answers `0`.
+    #[getter]
     fn memory_bytes(&self) -> usize {
         self.handle.read().memory_bytes()
     }
@@ -332,16 +336,19 @@ impl PyMatrix {
     }
 
     /// Total number of rows of the (finalized) global matrix.
+    #[getter]
     fn n_rows(&self) -> PyResult<usize> {
         Ok(self.inner.n_rows()?)
     }
 
     /// Total number of columns of the (finalized) global matrix.
+    #[getter]
     fn n_cols(&self) -> PyResult<usize> {
         Ok(self.inner.n_cols()?)
     }
 
     /// Total number of stored entries across all blocks.
+    #[getter]
     fn entry_count(&self) -> usize {
         self.inner.entry_count()
     }
@@ -351,6 +358,7 @@ impl PyMatrix {
     /// column) plus whatever the blocks store. The **factorization is not
     /// counted** — it is the largest part by far, and faer keeps the size of
     /// its factors private.
+    #[getter]
     fn memory_bytes(&self) -> usize {
         self.inner.memory_bytes()
     }

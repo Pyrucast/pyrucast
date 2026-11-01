@@ -38,7 +38,7 @@ Plusieurs types se composent par l'union `|`.
 |---|---|
 | `len(mesh)`, `mesh[i]`, `for zone in mesh`, `unit()`, `\|` | l'interface des [agrégats](aggregate.md) |
 | `element_types()`, `cell_counts()` | le type et le nombre de mailles de chaque zone |
-| `cell_count()` | le nombre total de mailles |
+| `cell_count` | le nombre total de mailles |
 | `cell(i, j)` | la maille `j` de la zone `i` (= `mesh[i][j]`) |
 | `node(i, j, k)` | le nœud `k` de cette maille, un [`Node`](node.md) |
 | `nearest_node(point)` | le nœud du maillage le plus proche d'un point |
@@ -50,7 +50,7 @@ Plusieurs types se composent par l'union `|`.
 | `SubMesh` (zone) | |
 |---|---|
 | `element_type` | le type d'élément, `"TRI3"` |
-| `cell_count()`, `len(zone)` | le nombre de mailles |
+| `cell_count`, `len(zone)` | le nombre de mailles |
 | `zone[j]` | la maille `j` |
 | `add_cell([nœuds])` | pose une maille, rend son indice |
 | `is_sealed` | la zone est-elle scellée ? |

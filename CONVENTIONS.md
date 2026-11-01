@@ -245,7 +245,12 @@ name does not move: `mesh::consolidate(m)` and `m.consolidate()`.
 
 - free function `ops::<theme>::f` → **top-level** Python function
   `pyrucast.f(...)`;
-- Rust method `Type::m` → Python method `obj.m(...)`;
+- Rust method `Type::m` → Python method `obj.m(...)`, except an accessor
+  without argument that returns a **scalar** (a size, a dimension, a name, a
+  flag): it becomes a Python **property**, read without parentheses
+  (`mesh.cell_count`, `sub.element_type`, `submesh.is_sealed`) — Python's idiom
+  for a value read off an object. An accessor returning a list or another
+  object stays a method (`components()`, `coords()`, `mesh()`);
 - Rust operator overload → Python dunder (`__add__`, `__getitem__`, …);
 - Rust named constructor → Python `classmethod`.
 

@@ -259,11 +259,11 @@ def test_chaining_actually_works():
     # méthode, puis méthode, puis méthode — la forme libre ferait trois appels
     # calls to read from the inside out.
     contour = quad.border().consolidate()
-    assert contour.cell_count() == 4
+    assert contour.cell_count == 4
 
     xs = quad.positions(["X"])
     droite = xs.select(ge=1.0)  # champ nodal → Mesh : le module suit la sortie
-    assert droite.cell_count() == 2  # two POI1, the nodes at x = 1
+    assert droite.cell_count == 2  # two POI1, the nodes at x = 1
 
     # renommage et filtrage de composantes, eux aussi chaînables
     assert xs.rename_component("X", "abscisse").components() == ["abscisse"]

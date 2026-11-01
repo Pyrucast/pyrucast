@@ -86,11 +86,11 @@ def test_read_returns_dict_by_group(src):
 
     plate = groups["plate"]
     assert plate.element_types() == ["TRI3"]
-    assert plate.cell_count() == 2
+    assert plate.cell_count == 2
 
     bottom = groups["bottom"]
     assert bottom.element_types() == ["SEG2"]
-    assert bottom.cell_count() == 1
+    assert bottom.cell_count == 1
 
 
 @pytest.mark.parametrize("src", [SQUARE_V2, SQUARE_V4], ids=["v2.2", "v4.1"])
@@ -99,7 +99,7 @@ def test_reads_into_the_given_coords(src):
     # shared between groups is shared, not duplicated (4 corners total).
     coords = pyrucast.Coords(dim=2)
     pyrucast.mesh.read_gmsh_str(coords, src)
-    assert coords.node_count() == 4
+    assert coords.node_count == 4
 
 
 @pytest.mark.parametrize("src", [SQUARE_V2, SQUARE_V4], ids=["v2.2", "v4.1"])
@@ -108,8 +108,8 @@ def test_mesh_coords_recovers_the_handle(src):
     # back — and every group reports the very same Coords.
     groups = pyrucast.mesh.read_gmsh_str(pyrucast.Coords(dim=2), src)
     recovered = groups["plate"].coords()
-    assert recovered.node_count() == 4
-    assert groups["bottom"].coords().node_count() == 4
+    assert recovered.node_count == 4
+    assert groups["bottom"].coords().node_count == 4
 
 
 def test_coords_dimension_decides_kept_coordinates():

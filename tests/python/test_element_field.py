@@ -49,9 +49,9 @@ def _subfield(fes, components):
 def test_new_zero_initialized():
     _, _, fes = _tri3_subspace()
     f = _subfield(fes, ["E", "nu"])
-    assert f.cell_count() == 1
-    assert f.gauss_count() == 3  # TRI3 Hammer
-    assert f.component_count() == 2
+    assert f.cell_count == 1
+    assert f.gauss_count == 3  # TRI3 Hammer
+    assert f.component_count == 2
     assert f.components() == ["E", "nu"]
     for g in range(3):
         assert f.get(0, g, 0) == 0.0
@@ -96,7 +96,7 @@ def test_uniform_per_component_via_set_uniform():
 def test_get_set_roundtrip_multi_cell():
     _, _, fes = _tri3_subspace(n_cells=3)
     f = _subfield(fes, ["sigma_xx", "sigma_yy"])
-    assert f.cell_count() == 3
+    assert f.cell_count == 3
     f.set(0, 0, 0, 1.0)
     f.set(1, 2, 1, -3.5)
     assert f.get(0, 0, 0) == 1.0

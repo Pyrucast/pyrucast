@@ -89,7 +89,7 @@ Une permutation optionnelle fixe l'**ordre des nœuds pour le solveur** sans
 toucher à leur identité : `permutation[id]` est la place du nœud `id`, et les
 matrices assemblées rangent leurs degrés de liberté dans cet ordre. Elle se
 pose à la main par `set_permutation`, avec une entrée par nœud créé
-(`capacity()`) et aucune valeur en double ; `clear_permutation` revient à
+(`capacity`) et aucune valeur en double ; `clear_permutation` revient à
 l'ordre des identifiants.
 
 ```python

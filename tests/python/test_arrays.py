@@ -106,7 +106,7 @@ def test_arrays_share_one_coords():
     tags, coords, blocks = square_arrays()
     c = pyrucast.Coords(dim=2)
     groups = meshes(c, tags, coords, blocks)
-    assert c.node_count() == 4
+    assert c.node_count == 4
     assert len(groups) == 2
 
 
@@ -116,7 +116,7 @@ def test_arrays_ignore_unreferenced_nodes():
     coords = coords + [7.0, 7.0, 0.0]
     c = pyrucast.Coords(dim=2)
     meshes(c, tags, coords, [("TRI3", [1, 2, 3], ["plate"])])
-    assert c.node_count() == 3
+    assert c.node_count == 3
 
 
 def test_arrays_two_coordinates_per_node():
@@ -126,7 +126,7 @@ def test_arrays_two_coordinates_per_node():
         c, [1, 2, 3], [0.0, 0.0, 2.0, 0.0, 0.0, 2.0], [("TRI3", [1, 2, 3], ["t"])]
     )
     assert groups["t"].cell_counts() == [1]
-    assert c.node_count() == 3
+    assert c.node_count == 3
 
 
 def test_arrays_med_order():
@@ -163,7 +163,7 @@ def test_arrays_fields_come_back_in_order():
     node = groups["plate"].node(0, 1, 1)  # second node of the second cell
     assert nodal[0].value(node, "T") == 3.0
     zone = elem[0][0]
-    assert zone.gauss_count() == 1
+    assert zone.gauss_count == 1
     assert [zone.value(k, 0, "E") for k in range(2)] == [5.0, 6.0]
 
 

@@ -7,7 +7,7 @@ next step's predictor needs — gathered in one mutable ``State``.
 
 from dataclasses import dataclass, field
 
-from .fields import uniform
+from .fields import domain_mesh, uniform
 from .materials import materials_at
 
 __all__ = ["State", "initial_state"]
@@ -77,7 +77,7 @@ def initial_state(data, problem, options):
         temperature = initial.get("temperature")
         if temperature is None:
             temperature = uniform(
-                problem.heat_domain.fespace().mesh(), ["T"], options.t_ref
+                domain_mesh(problem.heat_domain.fespace()), ["T"], options.t_ref
             )
     else:
         temperature = problem.prescribed_temperature_at(t0)
@@ -86,7 +86,7 @@ def initial_state(data, problem, options):
     state.temperature = temperature
 
     if problem.mechanics is not None:
-        mesh = problem.fespace.mesh()
+        mesh = domain_mesh(problem.fespace)
         names = problem.displacement_names
         at_rest = lambda key: (
             initial[key] if initial.get(key) is not None else uniform(mesh, names, 0.0)

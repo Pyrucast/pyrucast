@@ -22,4 +22,4 @@ print(c)  # résumé : Coords: dim=2, configs=1 (active="default"), nodes=11 …
 print(repr(c))  # structure : Coords { dim: 2, frame: Cartesian, … }
 c.dump()  # contenu : la table des 11 nœuds, coordonnées et références
 # ANCHOR_END: listing
-assert ligne.cell_count() == 10
+assert ligne.cell_count == 10

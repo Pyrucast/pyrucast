@@ -8,8 +8,8 @@ import pyrucast
 def test_create_coords():
     c = pyrucast.Coords(dim=2)
     assert c.dim == 2
-    assert c.node_count() == 0
-    assert c.capacity() == 0
+    assert c.node_count == 0
+    assert c.capacity == 0
     assert c.active == 0
     assert c.names() == ["default"]
 
@@ -19,7 +19,7 @@ def test_add_node_returns_node():
     n = c.add_node([1.0, 2.0])
     assert n.id == 0
     assert n.position() == [1.0, 2.0]
-    assert c.node_count() == 1
+    assert c.node_count == 1
     assert c.refcount(n.id) == 1
 
 
@@ -48,7 +48,7 @@ def test_ids_are_stable_after_gc():
     m = c.add_node([1.0])
     assert m.id != first_id
     assert m.id == 1
-    assert c.capacity() == 2
+    assert c.capacity == 2
 
 
 def test_set_position_via_node():

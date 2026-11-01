@@ -71,7 +71,7 @@ print(surf.element_types())  # ['QUA4']
 line3 = pyrucast.mesh.line(a, b, 4, "SEG3")
 print(line3.element_types())  # ['SEG3']
 # ANCHOR_END: line
-assert line.cell_count() == 4
+assert line.cell_count == 4
 assert surf.element_types() == ["QUA4"]
 assert line3.element_types() == ["SEG3"]
 
@@ -90,7 +90,7 @@ print(centres.node(0, 0, 0).position(), centres.node(0, 1, 0).position())
 multiplicateurs = pyrucast.mesh.barycenter(pyrucast.mesh.poi1_from_nodes([p, q]))
 print(multiplicateurs.node(0, 0, 0).position())  # [0.0, 0.0], a node other than p
 # ANCHOR_END: barycenter
-assert centres.element_types() == ["POI1"] and centres.cell_count() == 2
+assert centres.element_types() == ["POI1"] and centres.cell_count == 2
 assert centres.node(0, 1, 0).position() == [3.0, 0.0]
 assert multiplicateurs.node(0, 0, 0).position() == p.position()
 assert multiplicateurs.node(0, 0, 0).id != p.id
@@ -134,10 +134,10 @@ side3 = pyrucast.mesh.line(p2, p3, 4)  # top,    4 elements (= side1)
 side4 = pyrucast.mesh.line(p3, p0, 2)  # left,   2 elements (= side2)
 
 surf = pyrucast.mesh.transfinite(side1, side2, side3, side4)
-print(surf.element_types(), surf.cell_count())  # ['QUA4'] 8
+print(surf.element_types(), surf.cell_count)  # ['QUA4'] 8
 # ANCHOR_END: transfinite
 assert surf.element_types() == ["QUA4"]
-assert surf.cell_count() == 8
+assert surf.cell_count == 8
 
 # ── Transformations: translation, rotation, symmetry ────────────────────────
 
@@ -180,7 +180,7 @@ def _face_et_copies():
 face, haut, tournee, autre_moitie = _face_et_copies()
 for m in (haut, tournee, autre_moitie):
     assert m.element_types() == ["TRI3"]
-    assert m.cell_count() == 1
+    assert m.cell_count == 1
 
 # ── copy ───────────────────────────────────────────────────
 
@@ -197,7 +197,7 @@ calque = face.copy(new_nodes=False)
 assert jumelle.node(0, 0, 0).id != face.node(0, 0, 0).id
 assert jumelle.node(0, 0, 0).position() == face.node(0, 0, 0).position()
 assert calque.node(0, 0, 0).id == face.node(0, 0, 0).id
-assert calque.cell_count() == face.cell_count()
+assert calque.cell_count == face.cell_count
 
 # ── sweep solid ────────────────────────────────────────────
 
@@ -227,7 +227,7 @@ b = c.add_node([2.0, 0.0])
 # 32 QUA4 sectors — closed back on itself, with no seam.
 rayon = pyrucast.mesh.line(a, b, 4)
 couronne = pyrucast.mesh.revolve(rayon, 2 * math.pi, 32, [0.0, 0.0])
-print(couronne.element_types(), couronne.cell_count())  # ['QUA4'] 128
+print(couronne.element_types(), couronne.cell_count)  # ['QUA4'] 128
 
 # In 3D: a quarter of a tube, the QUA4 section swept about the z axis.
 c3 = pyrucast.Coords(dim=3)
@@ -243,7 +243,7 @@ section.unit().add_cell(
 quart = pyrucast.mesh.revolve(section, math.pi / 2, 8, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
 print(quart.element_types())  # ['HEX8']
 # ANCHOR_END: revolve
-assert couronne.cell_count() == 128
+assert couronne.cell_count == 128
 assert quart.element_types() == ["HEX8"]
 
 # ── Order raising, type change ──────────────────────────────────────────────
@@ -319,13 +319,13 @@ combined = outer | hole
 
 # TRI3 mesh of size ~0.5 (area = 16 - 4 = 12).
 tri = pyrucast.mesh.triangulate_surface(combined, "TRI3", size=0.5)
-print(tri.element_types(), tri.cell_count())
+print(tri.element_types(), tri.cell_count)
 
 # Quad-dominant variant.
 quad = pyrucast.mesh.triangulate_surface(combined, "QUA4", size=0.5)
 print(quad.element_types())  # ['QUA4', 'TRI3'] in general
 # ANCHOR_END: triangulate_surface
-assert tri.cell_count() > 0
+assert tri.cell_count > 0
 assert set(quad.element_types()) <= {"QUA4", "TRI3"}
 
 # ── Grid oriented on the contour ────────────────────────────────────────────
@@ -354,10 +354,10 @@ contour = pc.mesh.consolidate(contour)
 
 maillage = pc.mesh.grid_surface(contour, "QUA4", size=H)
 print(maillage.element_types())  # ['QUA4'] — not a single triangle
-print(maillage.cell_count())  # 450: the exact grid of the L shape
+print(maillage.cell_count)  # 450: the exact grid of the L shape
 # ANCHOR_END: grid_surface
 assert maillage.element_types() == ["QUA4"]
-assert maillage.cell_count() == 450
+assert maillage.cell_count == 450
 
 
 def _contour_en_L(H=0.02):
@@ -383,7 +383,7 @@ maillage = pc.mesh.grid_surface2(contour, "QUA4", size=H)
 # or, as a method:
 maillage = contour.grid_surface2("QUA4", size=H)
 # ANCHOR_END: grid_surface2
-assert maillage.cell_count() > 0
+assert maillage.cell_count > 0
 
 # ── Border and skin ─────────────────────────────────────────────────────────
 
@@ -452,8 +452,8 @@ surf = pyrucast.mesh.triangulate_surface(contour, "TRI3")
 propre = pyrucast.mesh.orient(surf)  # every cell made consistent
 trou_dedans = pyrucast.mesh.invert(propre)  # reversed sense (inside/outside)
 # ANCHOR_END: orient
-assert propre.cell_count() == surf.cell_count()
-assert trou_dedans.cell_count() == surf.cell_count()
+assert propre.cell_count == surf.cell_count
+assert trou_dedans.cell_count == surf.cell_count
 
 
 def _surface_triangulee(taille=0.5):
@@ -480,7 +480,7 @@ suite = pyrucast.mesh.chain(bord)  # or bord.chain()
 for maille in suite[0]:
     print([n.id for n in maille])
 # ANCHOR_END: chain
-assert suite.cell_count() == bord.cell_count()
+assert suite.cell_count == bord.cell_count
 
 # ── Selections ──────────────────────────────────────────────────────────────
 
@@ -501,13 +501,13 @@ mesh.unit().add_cell([nodes[1], nodes[3], nodes[2]])  # cell 1
 pts = pyrucast.mesh.poi1_from_nodes([nodes[0], nodes[1], nodes[2]])
 
 strict = pyrucast.mesh.elements_on(mesh, pts, strict=True)
-print(strict.cell_count())  # 1  (cell 0)
+print(strict.cell_count)  # 1  (cell 0)
 
 loose = pyrucast.mesh.elements_on(mesh, pts, strict=False)
-print(loose.cell_count())  # 2  (both touch a node of pts)
+print(loose.cell_count)  # 2  (both touch a node of pts)
 # ANCHOR_END: elements_on
-assert strict.cell_count() == 1
-assert loose.cell_count() == 2
+assert strict.cell_count == 1
+assert loose.cell_count == 2
 
 # ── geometric selections ───────────────────────────────────
 
@@ -535,7 +535,7 @@ blocage = pyrucast.model.dirichlet(gauche, mecanique, "u_x")
 # here to go back up to the elements carried by the selection.
 bande = pyrucast.mesh.elements_on(plaque, conge, strict=True)
 # ANCHOR_END: selections
-assert gauche.cell_count() > 0
+assert gauche.cell_count > 0
 assert len(blocage) == 1
 
 # ── Welding of colocated nodes ──────────────────────────────────────────────
@@ -560,7 +560,7 @@ mesh.unit().add_cell([b2, d])
 
 joined = pyrucast.mesh.merge_nodes(mesh, 1e-6)  # b2 is welded onto b
 # ANCHOR_END: merge_nodes
-assert joined.cell_count() == 2
+assert joined.cell_count == 2
 
 # ── merge nodes in place ───────────────────────────────────
 
@@ -612,7 +612,7 @@ chanfrein = pyrucast.mesh.points_on_cone(piece, [0.0, 0.0, 0.0], [0.0, 0.0, 8.0]
 gorge = pyrucast.mesh.points_in_torus(piece, [0.0, 0.0, 3.0], [0.0, 0.0, 1.0], 5.0, 1.0)
 # ANCHOR_END: selections_courbes
 
-assert alesage.cell_count() > 0
+assert alesage.cell_count > 0
 
 
 # ── Tetrahedralisation of a volume ──────────────────────────────────────────
@@ -643,7 +643,7 @@ if solide.element_types() == ["TET4", "POI1"]:
     print(f"{ajoutes} node(s) laid on the skin")
 # ANCHOR_END: surface_nodes_compte
 
-assert solide.cell_count() > 0
+assert solide.cell_count > 0
 
 
 # ── Quadrangular paving, then extrusion into hexahedra ──────────────────────
@@ -780,11 +780,11 @@ regions = pyrucast.mesh.read_gmsh(coords, "piece.msh")
 
 plate = regions["plate"]
 print(plate.element_types())  # e.g. ['TRI3']
-print(plate.cell_count())
+print(plate.cell_count)
 # ANCHOR_END: read_gmsh
 
 assert plate.element_types() == ["TRI3"]
-assert plate.cell_count() == 2
+assert plate.cell_count == 2
 
 os.chdir(_CWD)
 
@@ -804,12 +804,12 @@ blocs = [
 coords = pyrucast.Coords(dim=2)
 regions, _, _ = pyrucast.mesh.from_arrays(coords, tags, xyz, blocs)
 print(regions["plate"].element_types())  # ['TRI3']
-print(coords.node_count())  # 4 — a single Coords for both groups
+print(coords.node_count)  # 4 — a single Coords for both groups
 # ANCHOR_END: from_arrays
 
 assert regions["plate"].element_types() == ["TRI3"]
-assert regions["plate"].cell_count() == 2
-assert coords.node_count() == 4
+assert regions["plate"].cell_count == 2
+assert coords.node_count == 4
 
 # ANCHOR: to_arrays
 # The way back: the same flat shape, ready for any other tool.

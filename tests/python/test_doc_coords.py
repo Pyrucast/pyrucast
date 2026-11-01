@@ -49,7 +49,7 @@ except RuntimeError as erreur:
     print(erreur)
 # ANCHOR_END: axisymetrique
 
-assert c.node_count() == 1
+assert c.node_count == 1
 
 
 # ── Configurations ──────────────────────────────────────────────────────────
@@ -113,7 +113,7 @@ c.add_node([1.0, 0.0])
 c.add_node([0.5, 1.0])
 
 # One entry per node created, no value twice.
-print(c.capacity())  # 3
+print(c.capacity)  # 3
 c.set_permutation([2, 0, 1])
 print(c.permutation())  # [2, 0, 1]
 

@@ -178,6 +178,7 @@ impl PySubEvolution {
     }
 
     /// The stored out-of-range policy name.
+    #[getter]
     fn out_of_range(&self) -> String {
         self.handle.read().out_of_range().name().to_string()
     }
@@ -417,6 +418,7 @@ impl PyEvolution {
     }
 
     /// The stored out-of-range policy name.
+    #[getter]
     fn out_of_range(&self) -> String {
         self.inner.out_of_range().name().to_string()
     }

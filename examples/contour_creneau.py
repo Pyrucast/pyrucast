@@ -92,7 +92,7 @@ def main() -> None:
 
     print(f"angles       : {len(points)}")
     print(f"taille visée : {h:.6f}")
-    print(f"contour      : {contour.cell_count()} SEG2, {coords.node_count()} nœuds")
+    print(f"contour      : {contour.cell_count} SEG2, {coords.node_count} nœuds")
 
     # Check: the elements' real length, from shortest to longest.
     lengths = sorted(

@@ -35,7 +35,7 @@ def test_lagrange2_fe_space_on_tri6():
     sub = fes[0]
     assert sub.element_type == "TRI6"
     assert sub.interpolation == "LAGRANGE2"
-    assert sub.gauss_count() == 6  # degree-4 triangle rule
+    assert sub.gauss_count == 6  # degree-4 triangle rule
 
 
 def test_degree_must_match_element_type():
@@ -67,7 +67,7 @@ def test_qua9_biquadratic_fe_space():
     fes = pyrucast.FiniteElementSpace(m, interpolation="LAGRANGE2")
     sub = fes[0]
     assert sub.element_type == "QUA9"
-    assert sub.gauss_count() == 9
+    assert sub.gauss_count == 9
 
 
 def test_hex27_triquadratic_fe_space():
@@ -110,7 +110,7 @@ def test_hex27_triquadratic_fe_space():
     fes = pyrucast.FiniteElementSpace(m, interpolation="LAGRANGE2")
     sub = fes[0]
     assert sub.element_type == "HEX27"
-    assert sub.gauss_count() == 27
+    assert sub.gauss_count == 27
 
 
 def test_export_vtk_quadratic(tmp_path):

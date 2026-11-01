@@ -57,8 +57,8 @@ materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 K = pyrucast.matrix.stiffness(model, materials)
 print(K)  # Matrix: n row(s) × n col(s), …
 # ANCHOR_END: stiffness
-assert K.n_rows() == K.n_cols()
-assert K.n_rows() > 0
+assert K.n_rows == K.n_cols
+assert K.n_rows > 0
 
 # ── Mass, and its diagonal version ──────────────────────────────────────────
 
@@ -72,7 +72,7 @@ materials = pyrucast.element_field.material_field(
 )
 M = pyrucast.matrix.mass(model, materials)
 # ANCHOR_END: mass
-assert M.n_rows() == M.n_cols()
+assert M.n_rows == M.n_cols
 
 # ── lump ───────────────────────────────────────────────────
 
@@ -84,7 +84,7 @@ materials = pyrucast.element_field.material_field(
 M = pyrucast.matrix.mass(model, materials)
 M_lumped = pyrucast.matrix.lump(M)  # diagonale
 # ANCHOR_END: lump
-assert M_lumped.n_rows() == M.n_rows()
+assert M_lumped.n_rows == M.n_rows
 
 # ── Composition de matrices ─────────────────────────────────────────────────
 
@@ -100,7 +100,7 @@ k = pyrucast.matrix.stiffness(model, materials)
 k.add_sub(bloc_supplementaire)
 k.assemble()
 # ANCHOR_END: assemble
-assert k.n_rows() == k_ref.n_rows()
+assert k.n_rows == k_ref.n_rows
 
 # ── somme de matrices ──────────────────────────────────────
 
@@ -116,7 +116,7 @@ rhs[0].set_value(multiplier.node(0, 0, 0), "imposed", 1.0)
 sys = m / dt + k  # assemblée : se résout telle quelle
 u = pyrucast.solver.solve(sys, rhs)
 # ANCHOR_END: somme
-assert u.node_count() > 0
+assert u.node_count > 0
 
 # ── somme sur deux configurations ──────────────────────────
 
@@ -158,7 +158,7 @@ stress[0].set_uniform("sigma_xy", 0.0)
 # ANCHOR: geometric
 Kg = pyrucast.matrix.geometric(model, materials, stress)
 # ANCHOR_END: geometric
-assert Kg.n_rows() == Kg.n_cols()
+assert Kg.n_rows == Kg.n_cols
 
 # ── Tangente cohérente ──────────────────────────────────────────────────────
 
@@ -180,7 +180,7 @@ for noeud, x in zip(noeuds, [0.0, 1.0, 1.0, 0.0]):
 strain = pyrucast.element_field.deformation(u, fes)
 Kt = pyrucast.matrix.tangent(model, materials, strain)
 # ANCHOR_END: tangent
-assert Kt.n_rows() == Kt.n_cols()
+assert Kt.n_rows == Kt.n_cols
 
 # ── Chargement réparti ──────────────────────────────────────────────────────
 
@@ -207,4 +207,4 @@ densite = pyrucast.element_field.material_field(charge, [("phi_q", Q)])
 load = pyrucast.node_field.external_forces(charge, densite)
 rhs = load | other_loads
 # ANCHOR_END: flux
-assert rhs.node_count() > 0
+assert rhs.node_count > 0

@@ -1279,8 +1279,9 @@ impl FiniteElementSpace {
         Ok(ElementIter::new(sub, n))
     }
 
-    /// Rebuild the [`Mesh`] this space spans: one submesh per subspace, in
-    /// order, deduplicated by object identity. Submesh handles are **shared** (no
+    /// Rebuild the [`Mesh`] this space spans: exactly one submesh per subspace,
+    /// in order, so zone `i` of the mesh is the support of subspace `i` — two
+    /// subspaces on one submesh list it twice. Submesh handles are **shared** (no
     /// copy); they are sealed (frozen) as long as this space captures them.
     ///
     /// ```
@@ -1301,15 +1302,17 @@ impl FiniteElementSpace {
     /// // The mesh is **rebuilt**, but its zones are shared: nothing is copied,
     /// // and the identity of the supports is preserved.
     /// assert!(H::same_object(&fes.mesh()?.get(0)?, &maillage.get(0)?));
+    /// // Two subspaces on one zone: the zone comes back twice, so zone `i`
+    /// // stays the support of subspace `i`.
+    /// let centres = FiniteElementSpace::with(
+    ///     &maillage, &[(Interpolation::Lagrange1, QuadratureRule::Reduced)])?;
+    /// assert_eq!(fes.union(&centres)?.mesh()?.len(), 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn mesh(&self) -> Result<Mesh> {
         let mut mesh = Mesh::empty();
         for sub in self.iter() {
-            let submesh = sub.read().submesh();
-            if !mesh.items().iter().any(|h| h.same_object(&submesh)) {
-                mesh.add_sub(submesh)?;
-            }
+            mesh.add_sub(sub.read().submesh())?;
         }
         Ok(mesh)
     }

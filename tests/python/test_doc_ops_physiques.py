@@ -212,8 +212,8 @@ f_int = pyrucast.node_field.internal_forces(model, sig, solution, materials)
 f_ext_modele = pyrucast.node_field.external_forces(model, materials)
 residu = f_ext - f_int  # Σ f_ext − Σ f_int
 # ANCHOR_END: forces_internes
-assert residu.node_count() > 0
-assert f_ext_modele.node_count() == 0
+assert residu.node_count > 0
+assert f_ext_modele.node_count == 0
 
 # ── Building the material field ─────────────────────────────────────────────
 

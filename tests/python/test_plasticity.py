@@ -59,7 +59,7 @@ def test_plasticity_caps_at_yield_plane_stress():
     assert "sigma_xx" in sub.components()
     assert "eps_p_xx" in sub.components()
     assert "p" in sub.components()
-    for g in range(sub.gauss_count()):
+    for g in range(sub.gauss_count):
         vm = _vm_plane_stress(
             sub.value(0, g, "sigma_xx"),
             sub.value(0, g, "sigma_yy"),
@@ -82,7 +82,7 @@ def test_plasticity_elastic_below_yield():
     strain = pyrucast.element_field.deformation(u, fes)
     state = pyrucast.element_field.integrate_behavior(model, strain, materials)
     sub = state[0]
-    for g in range(sub.gauss_count()):
+    for g in range(sub.gauss_count):
         assert abs(sub.value(0, g, "p")) < 1e-14
 
 

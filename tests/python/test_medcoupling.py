@@ -159,7 +159,7 @@ def test_gauss_rules_are_declared_in_meds_reference_element(element_type, tmp_pa
     )
     sub = fes[0]
     field = pyrucast.ElementField(fes, ["s"])
-    for g in range(sub.gauss_count()):
+    for g in range(sub.gauss_count):
         field[0].set_value(0, g, "s", float(g + 1))
     path = tmp_path / "g.med"
     pyrucast.export.to_medcoupling(meshes, {"s": field}).write(str(path), 2)
@@ -168,7 +168,7 @@ def test_gauss_rules_are_declared_in_meds_reference_element(element_type, tmp_pa
     mesh = data.getMeshes()[0]
     one = data.getFields()[0][0, -1]
     located = one.getFieldOnMeshAtLevel(mc.ON_GAUSS_PT, 0, mesh)
-    ours = np.array([sub.gauss_xi(g) for g in range(sub.gauss_count())])
+    ours = np.array([sub.gauss_xi(g) for g in range(sub.gauss_count)])
     if element_type in MEDCOUPLING_CANNOT_LOCATE:
         with pytest.raises(mc.InterpKernelException):
             located.getLocalizationOfDiscr()
@@ -180,8 +180,8 @@ def test_gauss_rules_are_declared_in_meds_reference_element(element_type, tmp_pa
         pyrucast.Coords(ours.shape[1]), str(path)
     )
     back = fields["s"][0]
-    assert [back.value(0, g, "s") for g in range(back.gauss_count())] == [
-        float(g + 1) for g in range(sub.gauss_count())
+    assert [back.value(0, g, "s") for g in range(back.gauss_count)] == [
+        float(g + 1) for g in range(sub.gauss_count)
     ]
 
 
@@ -213,7 +213,7 @@ def by_position(mesh, value):
     """`{node position: value(node)}` over the nodes of `mesh`."""
     out = {}
     for s in range(len(mesh)):
-        for c in range(mesh[s].cell_count()):
+        for c in range(mesh[s].cell_count):
             for n in mesh.cell(s, c).nodes():
                 out[tuple(n.position())] = value(n)
     return out
@@ -244,7 +244,7 @@ def test_node_fields_and_evolutions_round_trip(tmp_path):
     body = meshes["solid"]
     temperature = pyrucast.NodeField(body, ["T", "p"])
     for z in range(len(temperature)):
-        for i in range(temperature[z].node_count()):
+        for i in range(temperature[z].node_count):
             temperature[z].set(i, 0, 1.5 * i)
             temperature[z].set(i, 1, -float(i))
     cold = pyrucast.NodeField(body, ["T", "p"])
@@ -269,8 +269,8 @@ def test_element_fields_round_trip(tmp_path, gauss):
     stress = pyrucast.ElementField(fes, ["sxx", "syy"])
     for z in range(len(stress)):
         sub = stress[z]
-        for c in range(sub.cell_count()):
-            for g in range(sub.gauss_count()):
+        for c in range(sub.cell_count):
+            for g in range(sub.gauss_count):
                 sub.set_value(c, g, "sxx", 10.0 * z + g)
                 sub.set_value(c, g, "syy", -1.0 * g)
     path = tmp_path / "s.med"
@@ -284,7 +284,7 @@ def test_element_fields_round_trip(tmp_path, gauss):
         out = set()
         for z in range(len(field)):
             zone = field[z]
-            values = tuple(zone.value(0, g, "sxx") for g in range(zone.gauss_count()))
+            values = tuple(zone.value(0, g, "sxx") for g in range(zone.gauss_count))
             out.add(values if gauss else (round(sum(values) / len(values), 12),))
         return out
 
@@ -347,12 +347,12 @@ def test_a_file_written_by_medcoupling(tmp_path):
     # A zone per submesh the profile covers entirely: both triangles of
     # "tris", the triangle of "mid" — not the quadrangle of "mid".
     field = fields["E"]
-    counts = sorted(field[z].cell_count() for z in range(len(field)))
+    counts = sorted(field[z].cell_count for z in range(len(field)))
     assert counts == [1, 2]
     values = sorted(
         field[z].value(c, 0, "E")
         for z in range(len(field))
-        for c in range(field[z].cell_count())
+        for c in range(field[z].cell_count)
     )
     assert values == [5.0, 6.0, 6.0]
 

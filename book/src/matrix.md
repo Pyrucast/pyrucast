@@ -280,7 +280,7 @@ Une contrainte de Dirichlet introduit, par sa nature, un bloc **rectangulaire** 
 
 ## Ce que pèse une matrice
 
-`memory_bytes()`, sur un bloc comme sur la matrice, estime les octets de tas
+`memory_bytes`, sur un bloc comme sur la matrice, estime les octets de tas
 occupés. Pour un bloc, ce sont ses entrées stockées : un indice de ligne, un
 indice de colonne et une valeur, soit 24 octets chacune — un bloc *calculé* n'en
 stocke aucune et répond `0`. Pour la matrice, c'est la CSR assemblée (un indice

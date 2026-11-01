@@ -35,25 +35,25 @@ def main() -> None:
     center = coords.add_node([1.5, 0.0, 0.5])
     contour = pc.mesh.circle(center, [0.0, 1.0, 0.0], 0.5, 24)
     face = pc.mesh.triangulate_surface(contour, "TRI3", 0.25)
-    print("face  :", face.element_types(), face.cell_count(), "cells")
+    print("face  :", face.element_types(), face.cell_count, "cells")
 
     # One 15° slice of a solid of revolution about the z axis.
     rotated = pc.mesh.rotate(face, math.radians(15.0), [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
     wedge = pc.mesh.sweep_solid(face, rotated, 2)
-    print("wedge :", wedge.element_types(), wedge.cell_count(), "cells")
+    print("wedge :", wedge.element_types(), wedge.cell_count, "cells")
 
     # The whole solid of revolution, in one call: a full turn in 24 slices.
     # The ring closes on itself — the last node layer is the first one back.
     torus = pc.mesh.revolve(face, 2 * math.pi, 24, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
-    print("torus :", torus.element_types(), torus.cell_count(), "cells")
+    print("torus :", torus.element_types(), torus.cell_count, "cells")
 
     # A straight prism block: sweep the face onto a translated copy.
     shifted = pc.mesh.translate(face, [0.0, 3.0, 0.0])
     block = pc.mesh.sweep_solid(face, shifted, 3)
-    print("block :", block.element_types(), block.cell_count(), "cells")
+    print("block :", block.element_types(), block.cell_count, "cells")
 
     # The source face is untouched by either copy.
-    print("source cells still:", face.cell_count())
+    print("source cells still:", face.cell_count)
 
 
 if __name__ == "__main__":

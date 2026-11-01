@@ -26,7 +26,7 @@ une **fonction libre** d'un module `ops/` est figée dans le fichier
 `CONVENTIONS.md` à la racine du dépôt. En résumé :
 
 - **méthode** — accesseur, mutation préservant l'invariant, ou vue dérivée
-  d'**un seul** conteneur (`mesh.cell_count()`, `field.set(...)`,
+  d'**un seul** conteneur (`mesh.cell_count`, `field.set(...)`,
   `field.components()`) ;
 - **fonction libre `ops::<module>`** — tout opérateur qui croise des
   conteneurs ou appartient à une famille d'opérateurs
@@ -150,6 +150,13 @@ L'extension compilée `_pyrucast` est, elle, **plate** : les homonymes y
 portent un `#[pyo3(name = …)]` distinct (`consolidate_mesh`, …) et la couche
 Python pure les ré-exporte sous leur vrai nom dans le bon sous-module. C'est
 un détail du namespace privé, pas une entorse au miroir.
+
+Un accesseur sans argument qui rend un **scalaire** — une taille, une
+dimension, un nom, un drapeau — se lit comme une **propriété**, sans
+parenthèses : `mesh.cell_count`, `fes[0].gauss_count`, `fes[0].element_type`,
+`zone.is_sealed`. C'est l'idiome Python d'une valeur lue sur un objet, celui de
+`a.size` ou `a.ndim` chez numpy. Ce qui prend un argument, ou rend une liste ou
+un autre objet, reste une méthode : `components()`, `coords()`, `mesh()`.
 
 ## Erreurs
 

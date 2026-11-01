@@ -127,13 +127,13 @@ def test_out_of_range_names_the_policy_it_applies(policy, beyond):
     steps = [(0.0, 10.0), (1.0, 20.0)]
     se = pyrucast.SubEvolution(steps, out_of_range=policy)
     e = pyrucast.Evolution(steps, out_of_range=policy)
-    assert se.out_of_range() == policy
-    assert e.out_of_range() == policy
+    assert se.out_of_range == policy
+    assert e.out_of_range == policy
     assert se.interpolate(2.0) == beyond
 
 
 def test_out_of_range_defaults_to_error():
     se = pyrucast.SubEvolution([(0.0, 10.0), (1.0, 20.0)])
-    assert se.out_of_range() == "error"
+    assert se.out_of_range == "error"
     with pytest.raises(RuntimeError, match="outside the tabulated range"):
         se.interpolate(2.0)

@@ -51,7 +51,7 @@ def test_mazars_undamaged_below_threshold():
     sub = state[0]
     assert "damage" in sub.components()
     assert "kappa" in sub.components()
-    for g in range(sub.gauss_count()):
+    for g in range(sub.gauss_count):
         assert abs(sub.value(0, g, "damage")) < 1e-14
 
 
@@ -64,7 +64,7 @@ def test_mazars_damages_in_tension():
     strain = pyrucast.element_field.deformation(u, fes)
     state = pyrucast.element_field.integrate_behavior(model, strain, materials)
     sub = state[0]
-    for g in range(sub.gauss_count()):
+    for g in range(sub.gauss_count):
         d = sub.value(0, g, "damage")
         assert 0.0 < d < 1.0, f"damage {d}"
         assert sub.value(0, g, "kappa") >= 5e-4 - 1e-12

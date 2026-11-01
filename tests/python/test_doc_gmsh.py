@@ -38,7 +38,7 @@ regions, _ = pyrucast.mesh.from_gmsh(coords)
 piece = regions["piece"]
 print(piece.element_types())  # ['TET4']
 print(regions["encastrement"].element_types())  # ['TRI3']
-print(coords.node_count())  # the model's nodes, shared by both
+print(coords.node_count)  # the model's nodes, shared by both
 
 gmsh.finalize()  # pyrucast owns its data: the mesh outlives it
 # ANCHOR_END: from_gmsh
@@ -46,7 +46,7 @@ gmsh.finalize()  # pyrucast owns its data: the mesh outlives it
 assert piece.element_types() == ["TET4"]
 assert regions["encastrement"].element_types() == ["TRI3"]
 assert set(regions) == {"encastrement", "piece", "<ungrouped>"}
-assert coords.node_count() > 0
+assert coords.node_count > 0
 
 # ── And back: pyrucast's results as gmsh views ──────────────────────────────
 
@@ -57,7 +57,7 @@ _CWD = os.getcwd()
 os.chdir(_TMP.name)
 temperature = pyrucast.NodeField(piece, ["T"])
 for _z in range(len(temperature)):
-    for _i in range(temperature[_z].node_count()):
+    for _i in range(temperature[_z].node_count):
         temperature[_z].set(_i, 0, float(_i))
 
 # ANCHOR: to_gmsh

@@ -138,7 +138,7 @@ def test_a_circle_gets_a_core_and_a_frontal_band():
     # box, the core is the staircase inside the disc, and the front paves the
     # ring left between the two. It must still close on the exact area.
     mesh = pc.mesh.grid_surface(_on_grid(coords, circle, 0.1), "QUA4", size=0.1)
-    assert mesh.cell_count() > 100
+    assert mesh.cell_count > 100
     assert "QUA4" in _cells(mesh)
 
 

@@ -40,8 +40,8 @@ def test_gradient_of_linear_temperature():
     assert len(grad) == 1
     sub = grad[0]
     assert sub.components() == ["grad_T_x"]
-    for cell in range(sub.cell_count()):
-        for g in range(sub.gauss_count()):
+    for cell in range(sub.cell_count):
+        for g in range(sub.gauss_count):
             assert abs(sub.value(cell, g, "grad_T_x") - 1.0) < 1e-10  # ∇(x) = 1
 
 
@@ -53,8 +53,8 @@ def test_integrate_behavior_returns_weak_form_flux():
     assert len(state) == 1
     sub = state[0]
     assert sub.components() == ["flux_x"]
-    for cell in range(sub.cell_count()):
-        for g in range(sub.gauss_count()):
+    for cell in range(sub.cell_count):
+        for g in range(sub.gauss_count):
             assert abs(sub.value(cell, g, "flux_x") - k) < 1e-10  # k·∇T = k·1
 
 
@@ -69,8 +69,8 @@ def test_has_behavior_true_for_hc_false_for_dirichlet():
     cible = pyrucast.model.heat_conduction(fes)
 
     model = cible | pyrucast.model.dirichlet(imposed, cible, "T")
-    assert model[0].has_behavior() is True
-    assert model[1].has_behavior() is False
+    assert model[0].has_behavior is True
+    assert model[1].has_behavior is False
 
 
 def test_integrate_behavior_missing_material_errors():
@@ -107,7 +107,7 @@ def test_deformation_linearized_strain_2d():
     strain = pyrucast.element_field.deformation(u, fes)
     sub = strain[0]
     assert sub.components() == ["eps_xx", "eps_xy", "eps_yy"]
-    for g in range(sub.gauss_count()):
+    for g in range(sub.gauss_count):
         assert abs(sub.value(0, g, "eps_xx") - 2.0) < 1e-10
         assert abs(sub.value(0, g, "eps_yy") - 3.0) < 1e-10
         assert abs(sub.value(0, g, "eps_xy") - 0.3) < 1e-10

@@ -50,7 +50,7 @@ def test_pave_surface_fills_a_square_with_quadrangles():
     cells = _cells(mesh)
     assert "QUA4" in cells
     assert cells.get("TRI3", 0) == 0
-    assert mesh.cell_count() > 30
+    assert mesh.cell_count > 30
 
 
 def test_pave_surface_handles_a_hole():
@@ -58,7 +58,7 @@ def test_pave_surface_handles_a_hole():
     outer = _closed_loop(coords, _rect(3.0, 1.0, 30, 10))
     hole = _closed_loop(coords, _circle(2.25, 0.5, 0.35, 32, clockwise=True))
     mesh = pc.mesh.pave_surface(outer | hole, "QUA4", size=0.1)
-    assert mesh.cell_count() > 200
+    assert mesh.cell_count > 200
     # The hole is not meshed: the area is well short of the full rectangle.
     assert _cells(mesh).get("QUA4", 0) > 0
 
@@ -92,7 +92,7 @@ def test_pave_surface_never_adds_a_node_on_the_boundary():
     # the contour's own segments, no more and no fewer.
     seen = {}
     for sub in mesh:
-        for c in range(sub.cell_count()):
+        for c in range(sub.cell_count):
             ids = [n.id for n in sub[c].nodes()]
             for i in range(len(ids)):
                 a, b = ids[i], ids[(i + 1) % len(ids)]
@@ -100,7 +100,7 @@ def test_pave_surface_never_adds_a_node_on_the_boundary():
                 seen[key] = seen.get(key, 0) + 1
     # Each contour segment must be an edge of exactly one cell: present, and
     # not split in two by a node the mesher slipped in.
-    ids = [n.id for c in range(contour[0].cell_count()) for n in contour[0][c].nodes()]
+    ids = [n.id for c in range(contour[0].cell_count) for n in contour[0][c].nodes()]
     for k in range(0, len(ids), 2):
         a, b = ids[k], ids[k + 1]
         key = (a, b) if a < b else (b, a)
@@ -119,7 +119,7 @@ def test_pave_surface_default_size_follows_the_contour():
     coords = pc.Coords(2)
     contour = _closed_loop(coords, _rect(1.0, 1.0, 10, 10))
     mesh = pc.mesh.pave_surface(contour, "QUA4")
-    assert 40 <= mesh.cell_count() <= 400
+    assert 40 <= mesh.cell_count <= 400
 
 
 def test_pave_surface_accepts_quadratic_quadrangles():
@@ -134,7 +134,7 @@ def test_pave_surface_paves_a_planar_contour_in_3d():
     coords = pc.Coords(3)
     contour = _closed_loop(coords, [(x, 0.0, y) for x, y in _rect(1.0, 1.0, 6, 6)])
     mesh = pc.mesh.pave_surface(contour, "QUA4", size=0.2)
-    assert mesh.cell_count() > 10
+    assert mesh.cell_count > 10
 
 
 def test_pave_surface_extrudes_to_hexahedra():
@@ -145,7 +145,7 @@ def test_pave_surface_extrudes_to_hexahedra():
     assert _cells(plate).get("TRI3", 0) == 0
     volume = pc.mesh.extrude(plate, [0.0, 0.2, 0.0], 2)
     assert volume.element_types() == ["HEX8"]
-    assert volume.cell_count() == 2 * plate.cell_count()
+    assert volume.cell_count == 2 * plate.cell_count
 
 
 def test_pave_surface_rejects_a_non_quadrangle_element_type():
@@ -191,8 +191,8 @@ def test_relax_along_keeps_a_square_square():
     contour = _closed_loop(coords, _rect(20.0, 20.0, 20, 20))
     free = pc.mesh.pave_surface(contour, "QUA4", 1.0)
     along = pc.mesh.pave_surface(contour, "QUA4", 1.0, relax="along")
-    assert free.cell_count() > 500
-    assert along.cell_count() == 400
+    assert free.cell_count > 500
+    assert along.cell_count == 400
     assert along.element_types() == ["QUA4"]
 
 
@@ -200,16 +200,16 @@ def test_relax_none_is_accepted_and_an_unknown_name_is_not():
     coords = pc.Coords(2)
     contour = _closed_loop(coords, _rect(6.0, 4.0, 6, 4))
     for mode in ("free", "along", "none"):
-        assert pc.mesh.pave_surface(contour, "QUA4", 1.0, relax=mode).cell_count() > 0
+        assert pc.mesh.pave_surface(contour, "QUA4", 1.0, relax=mode).cell_count > 0
     # The default is the historical behaviour, whether it is spelled out or not.
     assert (
-        pc.mesh.pave_surface(contour, "QUA4", 1.0).cell_count()
-        == pc.mesh.pave_surface(contour, "QUA4", 1.0, relax="free").cell_count()
+        pc.mesh.pave_surface(contour, "QUA4", 1.0).cell_count
+        == pc.mesh.pave_surface(contour, "QUA4", 1.0, relax="free").cell_count
     )
     with pytest.raises(ValueError, match="unknown front relaxation"):
         pc.mesh.pave_surface(contour, "QUA4", 1.0, relax="tangential")
     # And the same argument on the two grid meshers.
     for op in (pc.mesh.grid_surface, pc.mesh.grid_surface2):
-        assert op(contour, "QUA4", 1.0, relax="along").cell_count() > 0
+        assert op(contour, "QUA4", 1.0, relax="along").cell_count > 0
         with pytest.raises(ValueError, match="unknown front relaxation"):
             op(contour, "QUA4", 1.0, relax="tangential")

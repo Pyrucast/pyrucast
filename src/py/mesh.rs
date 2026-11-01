@@ -96,6 +96,7 @@ impl PySubMesh {
     }
 
     /// Number of cells in this submesh.
+    #[getter]
     fn cell_count(&self) -> usize {
         self.handle.read().cell_count()
     }
@@ -335,6 +336,7 @@ impl PyMesh {
     }
 
     /// Total number of cells across all submeshes.
+    #[getter]
     fn cell_count(&self) -> usize {
         self.inner.cell_count()
     }

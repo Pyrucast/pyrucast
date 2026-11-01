@@ -12,7 +12,7 @@ def test_submesh_poi1_is_node_list():
     sm = pyrucast.Mesh(c, "POI1")[0]
     sm.add_cell([a])
     sm.add_cell([b])
-    assert sm.cell_count() == 2
+    assert sm.cell_count == 2
     assert sm.element_type == "POI1"
 
 
@@ -23,7 +23,7 @@ def test_poi1_from_nodes_builds_points_mesh():
     # Node-based: the Coords is taken from the nodes themselves.
     m = pyrucast.mesh.poi1_from_nodes([a, b])
     assert m.element_types() == ["POI1"]
-    assert m.cell_count() == 2
+    assert m.cell_count == 2
 
 
 def test_poi1_from_nodes_empty_raises():
@@ -54,7 +54,7 @@ def test_submesh_sealed_by_fe_space_refuses_add_cell():
         pass
     else:
         raise AssertionError("expected RuntimeError adding a cell to a sealed submesh")
-    assert sm.cell_count() == 1
+    assert sm.cell_count == 1
 
 
 def test_duplicate_gives_editable_copy_after_seal():
@@ -68,12 +68,12 @@ def test_duplicate_gives_editable_copy_after_seal():
     pyrucast.FiniteElementSpace(mesh)  # seals mesh[0]
 
     copy = mesh.duplicate()
-    assert copy.cell_count() == 1
+    assert copy.cell_count == 1
     assert copy[0].is_sealed is False
     # The copy can keep growing while the original stays frozen.
     copy[0].add_cell([b, d, e])
-    assert copy.cell_count() == 2
-    assert mesh.cell_count() == 1
+    assert copy.cell_count == 2
+    assert mesh.cell_count == 1
 
 
 def test_aggregate_union_sub_and_sub_union_sub():
@@ -155,10 +155,10 @@ def test_node_union_node_and_mesh_union_node():
 
     m = a | b  # node | node → unitary POI1 Mesh
     assert m.element_types() == ["POI1"]
-    assert m.cell_count() == 2
+    assert m.cell_count == 2
 
     m2 = m | d  # mesh | node → unitary POI1 Mesh (via Node.__ror__)
-    assert m2.cell_count() == 3
+    assert m2.cell_count == 3
 
 
 def test_mesh_union_node_rejects_non_poi1():
@@ -244,7 +244,7 @@ def test_mesh_aggregates_submeshes():
 
     mesh = pts | tri
     assert len(mesh) == 2
-    assert mesh.cell_count() == 3  # 2 POI1 + 1 TRI3
+    assert mesh.cell_count == 3  # 2 POI1 + 1 TRI3
 
 
 def test_submesh_cell_indexing_and_iteration():
@@ -362,7 +362,7 @@ def test_triangulate_surface_square_tri3():
 
     tri = pyrucast.mesh.triangulate_surface(contour, "TRI3", size=0.25)
     assert tri.element_types() == ["TRI3"]
-    assert tri.cell_count() > 2  # interior nodes created
+    assert tri.cell_count > 2  # interior nodes created
     assert abs(_triangle_area_sum(tri) - 1.0) < 1e-9
 
 
@@ -507,7 +507,7 @@ def test_triangulate_surface_3d_tilted_square():
 
     tri = pyrucast.mesh.triangulate_surface(contour, "TRI3", size=0.5)
     assert tri.element_types() == ["TRI3"]
-    assert tri.cell_count() >= 2
+    assert tri.cell_count >= 2
 
 
 def test_triangulate_surface_3d_rejects_degenerate_contour():
@@ -558,7 +558,7 @@ def test_to_poi1_converts_each_submesh_to_node_list():
     poi = pyrucast.mesh.to_poi1(tri)
     assert len(poi) == 1
     assert poi.element_types() == ["POI1"]
-    assert poi.cell_count() == 4  # 6 connectivity entries, deduplicated
+    assert poi.cell_count == 4  # 6 connectivity entries, deduplicated
     ids = [poi.node(0, i, 0).id for i in range(4)]
     assert ids == [a.id, b.id, cc.id, d.id]
 
@@ -626,7 +626,7 @@ def test_slice_negative_bounds_and_step():
     # reversed slice preserves the zones, order flipped
     rev = mesh[::-1]
     fwd = mesh[:]
-    assert rev[0].cell_count() == fwd[-1].cell_count()
+    assert rev[0].cell_count == fwd[-1].cell_count
 
 
 def test_slice_empty():
@@ -679,7 +679,7 @@ def _hex_cube():
 def test_skin_hex_cube_gives_six_quad_faces():
     sk = pyrucast.mesh.skin(_hex_cube())
     assert sk.element_types() == ["QUA4"] * 6
-    assert sk.cell_count() == 6
+    assert sk.cell_count == 6
 
 
 def test_skin_extruded_solid_merges_flat_faces():
@@ -704,7 +704,7 @@ def test_skin_extruded_solid_merges_flat_faces():
 def test_skin_large_angle_merges_all_faces():
     sk = pyrucast.mesh.skin(_hex_cube(), angle_deg=180.0)
     assert sk.element_types() == ["QUA4"]
-    assert sk.cell_count() == 6
+    assert sk.cell_count == 6
 
 
 def test_skin_rejects_surface_mesh():
@@ -734,20 +734,20 @@ def _unit_quad():
 def test_convert_qua4_to_tri3_splits_each_quad():
     tri = pyrucast.mesh.convert(_unit_quad(), "TRI3")
     assert tri.element_types() == ["TRI3"]
-    assert tri.cell_count() == 2
+    assert tri.cell_count == 2
 
 
 def test_convert_hex8_to_tet4_gives_six_tets():
     tets = pyrucast.mesh.convert(_hex_cube(), "TET4")
     assert tets.element_types() == ["TET4"]
-    assert tets.cell_count() == 6
+    assert tets.cell_count == 6
 
 
 def test_convert_identity_is_noop_copy():
     tri = pyrucast.mesh.convert(_unit_quad(), "TRI3")
     same = pyrucast.mesh.convert(tri, "TRI3")
     assert same.element_types() == ["TRI3"]
-    assert same.cell_count() == 2
+    assert same.cell_count == 2
 
 
 def test_convert_rejects_unsupported_pair():
@@ -803,7 +803,7 @@ def test_merge_nodes_copies_by_default_leaving_the_sources_apart():
     left, right, b, b2 = _two_touching_segments()
 
     joined = pyrucast.mesh.merge_nodes(left | right, 1e-6)
-    assert joined.cell_count() == 2
+    assert joined.cell_count == 2
     # The welded mesh is a new one; the sources still hold their own nodes.
     assert right.node(0, 0, 0).id == b2.id
     assert left.node(0, 0, 1).id == b.id
@@ -819,7 +819,7 @@ def test_merge_nodes_in_place_welds_the_sources_through_their_union():
     # And the weld reached the two source meshes, which share the submeshes.
     assert right.node(0, 0, 0).id == b.id
     assert left.node(0, 0, 1).id == b.id
-    assert [left.cell_count(), right.cell_count()] == [1, 1]
+    assert [left.cell_count, right.cell_count] == [1, 1]
     assert b2.id != b.id
 
 
@@ -846,10 +846,10 @@ def test_merge_nodes_in_place_refuses_to_drop_a_collapsing_cell():
     else:
         raise AssertionError("expected an error on a collapsing cell")
     # Nothing was written: both cells still there, still on d.
-    assert mesh.cell_count() == 2
+    assert mesh.cell_count == 2
     assert mesh.node(0, 1, 1).id == d.id
     # The copying variant drops it, as documented.
-    assert pyrucast.mesh.merge_nodes(mesh, 1e-6).cell_count() == 1
+    assert pyrucast.mesh.merge_nodes(mesh, 1e-6).cell_count == 1
 
 
 def test_merge_nodes_in_place_refuses_a_sealed_submesh():
@@ -930,8 +930,8 @@ def test_copy_is_unsealed_even_from_a_sealed_mesh():
         assert not copie[0].is_sealed
         if not new_nodes:  # les nœuds de la copie neuve sont d'autres nœuds
             copie[0].add_cell([mesh.node(0, 0, 0), mesh.node(0, 0, 1), d])
-            assert copie.cell_count() == 3
-    assert mesh.cell_count() == 2  # l'original n'a pas bougé
+            assert copie.cell_count == 3
+    assert mesh.cell_count == 2  # l'original n'a pas bougé
 
 
 def test_set_face_color_paints_every_zone_and_chains():
@@ -969,5 +969,5 @@ def test_from_live_nodes_holds_exactly_the_live_nodes():
     assert not c.is_alive(dead)
 
     mesh = pyrucast.mesh.from_live_nodes(c)
-    ids = sorted(n.id for i in range(mesh.cell_count()) for n in mesh.cell(0, i))
+    ids = sorted(n.id for i in range(mesh.cell_count) for n in mesh.cell(0, i))
     assert ids == sorted([a.id, b.id])

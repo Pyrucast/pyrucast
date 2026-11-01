@@ -7,7 +7,15 @@ means by it — no value is ever read or written one node at a time.
 from .. import node_field
 from .._pyrucast import NodeField
 
-__all__ = ["STRAIN_PREFIXES", "carried", "infinity_norm", "part", "shifted", "uniform"]
+__all__ = [
+    "STRAIN_PREFIXES",
+    "carried",
+    "domain_mesh",
+    "infinity_norm",
+    "part",
+    "shifted",
+    "uniform",
+]
 
 # What the loop reads as a strain: the measure each law reads — linear,
 # Green–Lagrange or Hencky.
@@ -52,6 +60,15 @@ def infinity_norm(field, names):
         return 0.0
     magnitude = field.abs()
     return max(magnitude.max(n) for n in present)
+
+
+def domain_mesh(fespace):
+    """The mesh ``fespace`` spans, each zone once. ``fespace.mesh()`` gives one
+    zone per subspace, and a model's space has one subspace per sub-model: two
+    physics on one zone — a convection and a radiation on the same boundary —
+    would carry it twice. The union keeps each zone once."""
+    mesh = fespace.mesh()
+    return mesh | mesh
 
 
 def uniform(mesh, names, value):

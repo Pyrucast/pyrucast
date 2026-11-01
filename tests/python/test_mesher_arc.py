@@ -12,7 +12,7 @@ def test_arc_default_seg2():
     b = c.add_node([0.0, 1.0])
     mesh = pyrucast.mesh.arc(a, center, b, 3)
     assert mesh.element_types() == ["SEG2"]
-    assert mesh.cell_count() == 3
+    assert mesh.cell_count == 3
     assert mesh.node(0, 0, 0).id == a.id
     assert mesh.node(0, 2, 1).id == b.id
 
@@ -24,7 +24,7 @@ def test_arc_seg3():
     b = c.add_node([0.0, 1.0])
     mesh = pyrucast.mesh.arc(a, center, b, 2, element_type="SEG3")
     assert mesh.element_types() == ["SEG3"]
-    assert mesh.cell_count() == 2
+    assert mesh.cell_count == 2
 
 
 def test_arc_nodes_lie_on_circle():
@@ -33,7 +33,7 @@ def test_arc_nodes_lie_on_circle():
     a = c.add_node([3.0, 1.0])
     b = c.add_node([1.0, 3.0])
     mesh = pyrucast.mesh.arc(a, center, b, 4)
-    for ei in range(mesh.cell_count()):
+    for ei in range(mesh.cell_count):
         for corner in range(2):
             x, y = mesh.node(0, ei, corner).position()
             dist = math.hypot(x - 1.0, y - 1.0)

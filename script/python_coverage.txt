@@ -10,12 +10,14 @@ dense
 div_to_component
 entries
 entry_count
+factor
 fespace
 field_names
 geometric_matrix
 get_by_node
 has_behavior
 is_alive
+is_symmetric
 mass_matrix
 material_components
 mul_dense
