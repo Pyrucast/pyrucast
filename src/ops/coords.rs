@@ -211,16 +211,9 @@ pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()
     let dim = coords.read().dim() as usize;
     let comps = resolve_axis_components(field, components, dim, &["ux", "uy", "uz"])?;
     let (nodes, increments) = per_node_values(field, &comps)?;
-    let mut c = coords.write();
-    let mut coord = vec![0.0; dim];
-    for (&nid, inc) in nodes.iter().zip(increments.chunks_exact(dim)) {
-        coord.copy_from_slice(c.position(nid)?);
-        for (x, dv) in coord.iter_mut().zip(inc) {
-            *x += dv;
-        }
-        c.set_position(nid, &coord)?;
-    }
-    Ok(())
+    coords
+        .write()
+        .displace(nodes.iter().copied().zip(increments.chunks_exact(dim)))
 }
 
 /// Lay configuration `target` at configuration `reference` displaced by

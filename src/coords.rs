@@ -843,6 +843,46 @@ impl Coords {
         Ok(())
     }
 
+    /// Displace the active configuration by `increments`, **in place**: each
+    /// listed node moves by its increment, the others stay put. The
+    /// incremental twin of [`displace_from`](Self::displace_from).
+    ///
+    /// Errors: a collected node, an increment of the wrong length, a negative
+    /// radius on a body of revolution. The nodes listed before the culprit have
+    /// moved; the culprit has not.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// let id = c.add_node(&[1.0, 2.0]).unwrap();
+    /// c.displace([(id, &[0.5, 0.0][..])]).unwrap();
+    /// c.displace([(id, &[0.5, 0.0][..])]).unwrap();
+    /// // In place: the increments add up.
+    /// assert_eq!(c.position(id).unwrap(), &[2.0, 2.0]);
+    /// ```
+    pub fn displace<'a>(
+        &mut self,
+        increments: impl IntoIterator<Item = (NodeId, &'a [f64])>,
+    ) -> Result<()> {
+        let (d, active) = (self.dim as usize, self.active);
+        for (id, inc) in increments {
+            self.ensure_alive(id)?;
+            if inc.len() != d {
+                return Err(PyrucastError::Message(format!(
+                    "displace: expected {d} increment(s), got {}",
+                    inc.len()
+                )));
+            }
+            let s = id.0 as usize * d;
+            // The radius alone, checked before the node moves.
+            self.check_radius("displace", &[self.configs[active][s] + inc[0]])?;
+            for (x, du) in self.configs[active][s..s + d].iter_mut().zip(inc) {
+                *x += du;
+            }
+        }
+        Ok(())
+    }
+
     /// Index of the active configuration.
     ///
     /// ```
@@ -1070,6 +1110,23 @@ mod tests {
         c.set_position(id, &[0.5, 2.0]).unwrap();
         // A Cartesian Coords keeps accepting negative x.
         assert!(Coords::new(2).unwrap().add_node(&[-1.0, 0.0]).is_ok());
+    }
+
+    #[test]
+    fn displace_refuses_a_negative_radius_before_moving_the_node() {
+        let mut c = Coords::axisymmetric().unwrap();
+        let a = c.add_node(&[1.0, 0.0]).unwrap();
+        let b = c.add_node(&[0.5, 0.0]).unwrap();
+        // `a` moves, then `b` would cross the axis: refused, `b` stays put.
+        let err = c
+            .displace([(a, &[1.0, 1.0][..]), (b, &[-1.0, 0.0][..])])
+            .unwrap_err();
+        assert!(format!("{err}").contains("negative radius"));
+        assert_eq!(c.position(a).unwrap(), &[2.0, 1.0]);
+        assert_eq!(c.position(b).unwrap(), &[0.5, 0.0]);
+        // One increment per axis.
+        assert!(c.displace([(a, &[1.0][..])]).is_err());
+        assert_eq!(c.position(a).unwrap(), &[2.0, 1.0]);
     }
 
     #[test]
