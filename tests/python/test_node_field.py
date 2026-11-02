@@ -1021,3 +1021,17 @@ def test_a_field_is_not_built_on_a_zone_listed_twice():
     with pytest.raises(RuntimeError, match="zones 0 and 1"):
         pyrucast.NodeField(twice, ["T"])
     assert len(pyrucast.NodeField(twice | twice, ["T"])) == 1
+
+
+def test_a_field_is_not_built_on_a_poi1_zone_listing_a_node_twice():
+    # [a, a, b]: b sits at row 2 but ranks 1 among the distinct nodes, so a
+    # field on it would read and write b in the second row of a.
+    _c, (a, b), _ = _poi1_with(2)
+    points = pyrucast.mesh.poi1_from_nodes([a, a, b])
+    with pytest.raises(RuntimeError, match="3 cell"):
+        pyrucast.NodeField(points, ["T"])
+    with pytest.raises(RuntimeError, match="3 cell"):
+        pyrucast.node_field.positions(points)
+    assert not points[0].is_sealed
+    distinct = pyrucast.mesh.to_poi1(points)
+    assert pyrucast.node_field.positions(distinct).value(b, "X") == 1.0

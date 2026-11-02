@@ -107,9 +107,9 @@ pub fn restrict_like(
     })
 }
 
-/// Merge two node fields as tightly as possible: structural union of their
-/// zones, consolidated — zones sharing a component set are fused, the
-/// others stay separate (nothing is densified).
+/// The union `a | b`: the zones of both fields, those on the same support
+/// fused into one carrying the union of their components, those on distinct
+/// supports side by side (nothing is densified).
 ///
 /// Errors if the two fields hold different values at the same
 /// `(node, component)` pair, or are attached to different `Coords`s.
@@ -121,8 +121,9 @@ pub fn merge(a: PyRef<PyNodeField>, b: PyRef<PyNodeField>) -> PyResult<PyNodeFie
     })
 }
 
-/// Fuse the zones of a node `field` sharing the same component set into one,
-/// deduping the nodes on their interface after a coherence check.
+/// Fuse the zones of a node `field` sharing the same support into one,
+/// carrying the union of their components; zones on distinct supports stay
+/// side by side.
 ///
 /// Errors if two zones disagree on a value at a shared `(node, component)`
 /// pair. `field` itself is left untouched.
