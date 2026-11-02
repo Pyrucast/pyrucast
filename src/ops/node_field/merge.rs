@@ -103,7 +103,7 @@ mod tests {
         // handle, not by component set); the shared interface node nb is
         // checked and agrees.
         assert_eq!(c.len(), 2, "distinct supports stay separate");
-        assert_eq!(c.node_count().unwrap(), 3);
+        assert_eq!(c.node_count(), 3);
         assert_eq!(c.value(na.id(), "T").unwrap(), 5.0);
         assert_eq!(c.value(nb.id(), "T").unwrap(), 3.0);
         assert_eq!(c.value(nc.id(), "T").unwrap(), 9.0);

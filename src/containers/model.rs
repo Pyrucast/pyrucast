@@ -1398,7 +1398,7 @@ impl SubModel {
     ///     &impose, &cible, "T", RelationSense::Equality)?;
     /// // By **relation index**: the way when one node keys several of them.
     /// let rhs = d.constraint_rhs_by_index(&[(0, 100.0)])?;
-    /// assert_eq!(rhs.node_count()?, 1);
+    /// assert_eq!(rhs.node_count(), 1);
     /// assert!(d.constraint_rhs_by_index(&[(7, 0.0)]).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```

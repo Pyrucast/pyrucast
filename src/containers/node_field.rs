@@ -69,7 +69,7 @@ use crate::containers::field::{RowPoints, SubField};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::handle::Handle;
+use crate::handle::{Handle, ReadGuard};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::{Index, IndexMut};
@@ -790,7 +790,7 @@ crate::impl_subfield_field_ops!(SubNodeField);
 /// let support = mesh::poi1_from_nodes(&n)?;
 /// let f = NodeField::from_submesh(&support.get(0)?, vec!["T".into()])?;
 /// assert_eq!(f.len(), 1);
-/// assert_eq!(f.node_count()?, 3);
+/// assert_eq!(f.node_count(), 3);
 /// # use pyrucast::containers::field::Field;
 /// assert_eq!(f.components(), vec!["T".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1148,17 +1148,14 @@ impl NodeField {
     /// assert_eq!(u.node_ids(), vec![a.id(), b.id()]);
     /// ```
     pub fn node_ids(&self) -> Vec<NodeId> {
-        let mut out: Vec<NodeId> = Vec::new();
-        for h in self {
-            let s = h.read();
-            let support = s.support();
-            let support = support.read();
-            for &nid in s.nodes_with(&support) {
-                if !out.contains(&nid) {
-                    out.push(nid);
-                }
-            }
-        }
+        let guards: Vec<ReadGuard<SubNodeField>> = self.iter().map(|h| h.read()).collect();
+        let zones: Vec<&SubNodeField> = guards.iter().map(|g| &**g).collect();
+        let mut out = Vec::new();
+        first_rows(&zones, |z, rows| {
+            // At most the zone's rows are new: one growth per zone.
+            out.reserve(zones[z].node_count());
+            rows.for_each(|_, p| out.push(p));
+        });
         out
     }
 
@@ -1176,10 +1173,14 @@ impl NodeField {
     /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
     /// let u = NodeField::new(&support, vec!["T".into()]).unwrap();
-    /// assert_eq!(u.node_count().unwrap(), 2); // nœuds **distincts**, zones confondues
+    /// assert_eq!(u.node_count(), 2); // nœuds **distincts**, zones confondues
     /// ```
-    pub fn node_count(&self) -> Result<usize> {
-        Ok(self.node_ids().len())
+    pub fn node_count(&self) -> usize {
+        let guards: Vec<ReadGuard<SubNodeField>> = self.iter().map(|h| h.read()).collect();
+        let zones: Vec<&SubNodeField> = guards.iter().map(|g| &**g).collect();
+        let mut count = 0;
+        first_rows(&zones, |_, rows| rows.for_each(|_, _| count += 1));
+        count
     }
 
     /// The field with its zones **added**: one zone over every node some zone
@@ -1490,6 +1491,59 @@ impl NodeField {
             }
         }
         Ok(Self::from_sub(sub))
+    }
+}
+
+/// Every node of `zones` once, at the first zone holding it: `visit(z, rows)`
+/// for each zone in order, `rows` being the rows of `zones[z]` whose node no
+/// earlier zone holds, read in place in the support. One bit per node across
+/// the zones; a lone zone needs none.
+pub(crate) fn first_rows(zones: &[&SubNodeField], mut visit: impl FnMut(usize, Rows<'_>)) {
+    if let [zone] = zones {
+        let support = zone.support.read();
+        visit(0, Rows::All(zone.nodes_with(&support)));
+        return;
+    }
+    let key: Vec<usize> = (0..zones.len()).collect();
+    let bound =
+        crate::containers::field::point_bound(zones, &key).expect("a nodal zone stands at nodes");
+    let mut seen = vec![0u64; bound.div_ceil(64)];
+    // One support guard at a time: two zones may share a support.
+    for (z, zone) in zones.iter().enumerate() {
+        let support = zone.support.read();
+        visit(z, Rows::New(zone.nodes_with(&support), &mut seen));
+    }
+}
+
+/// The rows of one zone that [`first_rows`] hands over: `(row, node)`.
+pub(crate) enum Rows<'a> {
+    /// Every row: the lone zone.
+    All(&'a [NodeId]),
+    /// The rows whose node is not posted in the point set yet; each is posted
+    /// as it goes — a zone lists each node once.
+    New(&'a [NodeId], &'a mut [u64]),
+}
+
+impl Rows<'_> {
+    /// `f(row, node)` for each row handed over, in row order. The variant is
+    /// matched once, not per row.
+    pub(crate) fn for_each(self, mut f: impl FnMut(usize, NodeId)) {
+        match self {
+            Rows::All(ids) => {
+                for (row, &p) in ids.iter().enumerate() {
+                    f(row, p);
+                }
+            }
+            Rows::New(ids, seen) => {
+                for (row, &p) in ids.iter().enumerate() {
+                    let (word, bit) = (p.0 as usize / 64, 1u64 << (p.0 % 64));
+                    if seen[word] & bit == 0 {
+                        seen[word] |= bit;
+                        f(row, p);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1924,13 +1978,69 @@ mod tests {
         (coords, vec![n0, n1, n2, n3], mesh)
     }
 
+    /// One POI1 zone per list of `nodes` indices.
+    fn poi1_zones(nodes: &[Node], zones: &[&[usize]]) -> Mesh {
+        let mut mesh = Mesh::empty();
+        for zone in zones {
+            let held: Vec<Node> = zone.iter().map(|&i| nodes[i].clone()).collect();
+            mesh.add_sub(Handle::new(SubMesh::poi1_from_nodes(&held).unwrap()))
+                .unwrap();
+        }
+        mesh
+    }
+
+    fn nodes_on_a_line(coords: &Handle<Coords>, n: usize) -> Vec<Node> {
+        (0..n)
+            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn node_ids_lists_each_node_once_in_first_seen_order() {
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let n = nodes_on_a_line(&coords, 4);
+        // Zones neither in node order nor disjoint.
+        let mesh = poi1_zones(&n, &[&[2, 0], &[0, 1], &[1, 3]]);
+        let f = NodeField::new(&mesh, vec!["T".into()]).unwrap();
+        let expected: Vec<NodeId> = [2, 0, 1, 3].iter().map(|&i| n[i].id()).collect();
+        assert_eq!(f.node_ids(), expected);
+        assert_eq!(f.node_count(), 4);
+    }
+
+    #[test]
+    fn node_ids_of_a_small_field_on_a_large_coords() {
+        // Four rows against a thousand nodes: the point set is sized by the
+        // largest node held — here the last one of the `Coords`.
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let n = nodes_on_a_line(&coords, 1000);
+        let mesh = poi1_zones(&n, &[&[998, 999], &[999, 3]]);
+        let f = NodeField::new(&mesh, vec!["T".into()]).unwrap();
+        assert_eq!(f.node_ids(), vec![n[998].id(), n[999].id(), n[3].id()]);
+        assert_eq!(f.node_count(), 3);
+    }
+
+    #[test]
+    fn node_ids_counts_once_a_node_two_zones_of_one_support_hold() {
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let n = nodes_on_a_line(&coords, 2);
+        let support = Handle::new(SubMesh::poi1_from_nodes(&n).unwrap());
+        let mut f =
+            NodeField::from_sub(SubNodeField::from_poi1(&support, vec!["ux".into()]).unwrap());
+        f.add_sub(Handle::new(
+            SubNodeField::from_poi1(&support, vec!["uy".into()]).unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(f.node_ids(), vec![n[0].id(), n[1].id()]);
+        assert_eq!(f.node_count(), 2);
+    }
+
     #[test]
     fn nf_new_one_sub_per_submesh() {
         let (_cfg, nodes, mesh) = make_two_zone_mesh();
         let f = NodeField::new(&mesh, vec!["T".into()]).unwrap();
         assert_eq!(f.len(), 2);
         // 4 distinct nodes; interface nodes n1, n2 stored in both subs.
-        assert_eq!(f.node_count().unwrap(), 4);
+        assert_eq!(f.node_count(), 4);
         assert_eq!(f.get(0).unwrap().read().node_count(), 3);
         assert_eq!(f.get(1).unwrap().read().node_count(), 3);
         // Zero-initialized everywhere.

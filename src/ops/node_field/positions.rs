@@ -148,7 +148,7 @@ mod tests {
         let f = positions(&mesh, None).unwrap();
         assert_eq!(f.len(), 1);
         assert_eq!(Field::components(&f), vec!["X", "Y", "Z"]);
-        assert_eq!(f.node_count().unwrap(), 2);
+        assert_eq!(f.node_count(), 2);
         assert_eq!(f.value(a.id(), "X").unwrap(), 1.0);
         assert_eq!(f.value(a.id(), "Y").unwrap(), 2.0);
         assert_eq!(f.value(a.id(), "Z").unwrap(), 3.0);
@@ -170,7 +170,7 @@ mod tests {
 
         let f = positions(&tri, None).unwrap();
         assert_eq!(f.len(), 1);
-        assert_eq!(f.node_count().unwrap(), 4, "shared nodes must appear once");
+        assert_eq!(f.node_count(), 4, "shared nodes must appear once");
         assert_eq!(f.value(c.id(), "X").unwrap(), 0.5);
         assert_eq!(f.value(c.id(), "Y").unwrap(), 1.0);
         assert_eq!(f.value(d.id(), "X").unwrap(), 1.5);
@@ -192,7 +192,7 @@ mod tests {
 
         let f = positions(&mesh, None).unwrap();
         assert_eq!(f.len(), 2, "one sub-field per submesh");
-        assert_eq!(f.node_count().unwrap(), 4);
+        assert_eq!(f.node_count(), 4);
         // Interface nodes are duplicated across zones with equal values.
         f.check().unwrap();
         assert_eq!(f.value(n1.id(), "X").unwrap(), 1.0);

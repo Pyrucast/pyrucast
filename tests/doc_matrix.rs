@@ -105,7 +105,7 @@ fn additionner_deux_matrices_puis_resoudre() -> Result<()> {
     let sys = (&m / dt + &k)?;
     let u = solver::solve(&sys, &rhs)?;
 
-    assert!(u.node_count()? > 0);
+    assert!(u.node_count() > 0);
     Ok(())
 }
 // ANCHOR_END: somme

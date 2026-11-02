@@ -11,12 +11,13 @@
 //! with another configuration active, and makes the one before it active
 //! again.
 
+use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
-use crate::containers::field::Field;
-use crate::containers::node_field::NodeField;
+use crate::containers::field::{Field, SubField};
+use crate::containers::node_field::{first_rows, NodeField, SubNodeField};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::handle::Handle;
+use crate::handle::{Handle, ReadGuard};
 
 /// Resolve the per-axis component names: one name per spatial axis, in axis
 /// order. `None` falls back to `default[..dim]`. Errors if the count does
@@ -52,20 +53,54 @@ fn resolve_axis_components(
     Ok(comps)
 }
 
-/// Per distinct node of `field`, the value of each of `comps` — read
-/// through the aggregate (first zone wins), so interface nodes appear
-/// exactly once. Errors if a node lacks one of the components.
-fn per_node_values(field: &NodeField, comps: &[String]) -> Result<Vec<(NodeId, Vec<f64>)>> {
-    let nodes = field.node_ids();
-    let mut out = Vec::with_capacity(nodes.len());
-    for nid in nodes {
-        let mut values = Vec::with_capacity(comps.len());
-        for name in comps {
-            values.push(field.value(nid, name)?);
-        }
-        out.push((nid, values));
+/// Every distinct node of `field`, first-seen order, and its values of
+/// `comps`, `comps.len()` per node — read through the aggregate (first zone
+/// wins), so interface nodes appear exactly once. Errors if a node lacks one
+/// of the components.
+fn per_node_values(field: &NodeField, comps: &[String]) -> Result<(Vec<NodeId>, Vec<f64>)> {
+    let (mut nodes, mut values) = (Vec::new(), Vec::new());
+    // (node, component) the first zone holding the node lacks: some later zone
+    // may hold it.
+    let mut missing: Vec<(usize, usize)> = Vec::new();
+    {
+        let guards: Vec<ReadGuard<SubNodeField>> = field.iter().map(|h| h.read()).collect();
+        let zones: Vec<&SubNodeField> = guards.iter().map(|g| &**g).collect();
+        first_rows(&zones, |z, rows| {
+            let (held, width) = (zones[z].values(), zones[z].component_count());
+            let cols: Vec<Option<usize>> =
+                comps.iter().map(|c| zones[z].component_index(c)).collect();
+            // At most the zone's rows are new: one growth per zone.
+            nodes.reserve(zones[z].node_count());
+            values.reserve(zones[z].node_count() * comps.len());
+            if let Some(cols) = cols.iter().copied().collect::<Option<Vec<usize>>>() {
+                rows.for_each(|row, p| {
+                    let r = &held[row * width..(row + 1) * width];
+                    nodes.push(p);
+                    values.extend(cols.iter().map(|&c| r[c]));
+                });
+                return;
+            }
+            rows.for_each(|row, p| {
+                for (k, col) in cols.iter().enumerate() {
+                    match col {
+                        Some(c) => values.push(held[row * width + c]),
+                        None => {
+                            missing.push((nodes.len(), k));
+                            values.push(0.0);
+                        }
+                    }
+                }
+                nodes.push(p);
+            });
+        });
     }
-    Ok(out)
+    if !missing.is_empty() {
+        let view = field.view()?;
+        for (i, k) in missing {
+            values[i * comps.len() + k] = view.value(nodes[i], &comps[k])?;
+        }
+    }
+    Ok((nodes, values))
 }
 
 /// **Set** node coordinates from `field` (absolute): for every distinct
@@ -118,10 +153,10 @@ pub fn set(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
     let coords = field.coords()?;
     let dim = coords.read().dim() as usize;
     let comps = resolve_axis_components(field, components, dim, &["X", "Y", "Z"])?;
-    let targets = per_node_values(field, &comps)?;
+    let (nodes, targets) = per_node_values(field, &comps)?;
     let mut c = coords.write();
-    for (nid, coord) in &targets {
-        c.set_position(*nid, coord)?;
+    for (&nid, coord) in nodes.iter().zip(targets.chunks_exact(dim)) {
+        c.set_position(nid, coord)?;
     }
     Ok(())
 }
@@ -175,14 +210,15 @@ pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()
     let coords = field.coords()?;
     let dim = coords.read().dim() as usize;
     let comps = resolve_axis_components(field, components, dim, &["ux", "uy", "uz"])?;
-    let increments = per_node_values(field, &comps)?;
+    let (nodes, increments) = per_node_values(field, &comps)?;
     let mut c = coords.write();
-    for (nid, inc) in &increments {
-        let mut coord = c.position(*nid)?.to_vec();
-        for (a, dv) in inc.iter().enumerate() {
-            coord[a] += dv;
+    let mut coord = vec![0.0; dim];
+    for (&nid, inc) in nodes.iter().zip(increments.chunks_exact(dim)) {
+        coord.copy_from_slice(c.position(nid)?);
+        for (x, dv) in coord.iter_mut().zip(inc) {
+            *x += dv;
         }
-        c.set_position(*nid, &coord)?;
+        c.set_position(nid, &coord)?;
     }
     Ok(())
 }
@@ -234,11 +270,11 @@ pub fn displace_from(
     let coords = field.coords()?;
     let dim = coords.read().dim() as usize;
     let comps = resolve_axis_components(field, components, dim, &["ux", "uy", "uz"])?;
-    let increments = per_node_values(field, &comps)?;
+    let (nodes, increments) = per_node_values(field, &comps)?;
     coords.write().displace_from(
         reference,
         target,
-        increments.iter().map(|(nid, inc)| (*nid, inc.as_slice())),
+        nodes.iter().copied().zip(increments.chunks_exact(dim)),
     )
 }
 
@@ -370,6 +406,53 @@ mod tests {
 
         displace(&f, None).unwrap();
         assert_eq!(coords.read().position(s.id()).unwrap(), &[1.5]);
+    }
+
+    #[test]
+    fn displace_reads_each_component_where_a_zone_holds_it() {
+        // One support, `ux` in one zone and `uy` in the other: each node moves
+        // by both.
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
+        let support = Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
+        let mut ux = SubNodeField::from_poi1(&support, vec!["ux".into()]).unwrap();
+        ux.set_value(a.id(), "ux", 1.0).unwrap();
+        ux.set_value(b.id(), "ux", 2.0).unwrap();
+        let mut uy = SubNodeField::from_poi1(&support, vec!["uy".into()]).unwrap();
+        uy.set_value(a.id(), "uy", 3.0).unwrap();
+        uy.set_value(b.id(), "uy", 4.0).unwrap();
+        let mut f = NodeField::from_sub(ux);
+        f.add_sub(Handle::new(uy)).unwrap();
+
+        displace(&f, None).unwrap();
+        let c = coords.read();
+        assert_eq!(c.position(a.id()).unwrap(), &[1.0, 3.0]);
+        assert_eq!(c.position(b.id()).unwrap(), &[3.0, 5.0]);
+    }
+
+    #[test]
+    fn displace_refuses_a_node_lacking_a_component_and_moves_nothing() {
+        // `a` holds `ux` and `uy`, `b` only `ux`.
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
+        let both = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+        let alone = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&b)).unwrap());
+        let mut f = NodeField::from_sub(
+            SubNodeField::from_poi1(&both, vec!["ux".into(), "uy".into()]).unwrap(),
+        );
+        f.add_sub(Handle::new(
+            SubNodeField::from_poi1(&alone, vec!["ux".into()]).unwrap(),
+        ))
+        .unwrap();
+        f.add_to_component("ux", 1.0).unwrap();
+
+        let err = displace(&f, None).unwrap_err().to_string();
+        assert!(err.contains("component uy"), "{err}");
+        let c = coords.read();
+        assert_eq!(c.position(a.id()).unwrap(), &[0.0, 0.0]);
+        assert_eq!(c.position(b.id()).unwrap(), &[1.0, 1.0]);
     }
 
     #[test]

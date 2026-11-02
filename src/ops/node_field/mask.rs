@@ -105,7 +105,7 @@ where
 /// // components — where `select_nodes` extracts a mesh.
 /// let bande = Band::new(Some(40.0), None, None, None)?;
 /// let m = node_field::mask(&temp, &bande, None)?;
-/// assert_eq!(m.node_count()?, temp.node_count()?);
+/// assert_eq!(m.node_count(), temp.node_count());
 /// assert_eq!(m.get(0)?.read().value(n[0].id(), "T")?, 0.0); // 10 < 40
 /// assert_eq!(m.get(0)?.read().value(n[2].id(), "T")?, 1.0); // 90 ≥ 40
 /// // Hence its purpose: multipliable term by term, it zeroes the out-of-band

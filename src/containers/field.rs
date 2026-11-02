@@ -2000,7 +2000,7 @@ fn sum_once<S: SubField, F: Fn(usize) -> f64 + Sync>(
 /// sizes — one bit per node — costs no more to clear than one read of the
 /// points, 4 bytes per row; found by a pass over the points otherwise, for a
 /// small field on a large mesh.
-fn point_bound<S: SubField>(zones: &[&S], key: &[usize]) -> Option<usize> {
+pub(crate) fn point_bound<S: SubField>(zones: &[&S], key: &[usize]) -> Option<usize> {
     let (mut capacity, mut rows) = (0, 0);
     for &z in key {
         let points = zones[z].row_points()?;

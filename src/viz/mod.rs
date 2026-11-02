@@ -433,17 +433,32 @@ pub(crate) fn node_field_points(
     field: &crate::containers::node_field::NodeField,
     component: &str,
 ) -> Result<Vec<(crate::atoms::Point3, f64)>> {
+    use crate::aggregate::Aggregate;
+    use crate::containers::field::SubField;
+    use crate::containers::node_field::{first_rows, SubNodeField};
     use crate::viz::mesh_draw::pad3;
-    let view = field.view()?;
+    let mut held: Vec<(crate::atoms::NodeId, f64)> = Vec::new();
+    {
+        let guards: Vec<crate::handle::ReadGuard<SubNodeField>> =
+            field.iter().map(|h| h.read()).collect();
+        // Only the zones holding the component: a node none of them holds is
+        // skipped, one several hold is drawn once, with its first zone's value.
+        let zones: Vec<(&SubNodeField, usize)> = guards
+            .iter()
+            .filter_map(|g| Some((&**g, g.component_index(component)?)))
+            .collect();
+        let only: Vec<&SubNodeField> = zones.iter().map(|&(z, _)| z).collect();
+        first_rows(&only, |z, rows| {
+            let (zone, ci) = zones[z];
+            let (values, width) = (zone.values(), zone.component_count());
+            rows.for_each(|row, p| held.push((p, values[row * width + ci])));
+        });
+    }
     let coords = field.coords()?;
     let c = coords.read();
-    let mut points = Vec::new();
-    for nid in field.node_ids() {
-        if let Some(val) = view.value_opt(nid, component) {
-            points.push((pad3(c.position(nid)?), val));
-        }
-    }
-    Ok(points)
+    held.into_iter()
+        .map(|(nid, val)| Ok((pad3(c.position(nid)?), val)))
+        .collect()
 }
 
 /// Whether a [`NodeField`] lives on axisymmetric coordinates — the point cloud
@@ -465,8 +480,14 @@ pub(crate) fn node_field_bbox(
     let coords = field.coords()?;
     let c = coords.read();
     let mut bb = crate::viz::camera::Bbox3::empty();
-    for nid in field.node_ids() {
-        bb.extend(pad3(c.position(nid)?));
+    // A node several zones hold widens the box no further: no need to skip it.
+    for h in field {
+        let zone = h.read();
+        let support = zone.support();
+        let support = support.read();
+        for &nid in zone.nodes_with(&support) {
+            bb.extend(pad3(c.position(nid)?));
+        }
     }
     Ok(bb)
 }
@@ -808,6 +829,38 @@ fn pin_implicit_stroke_widths(markup: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn node_field_points_draws_each_node_holding_the_component_once() {
+        use crate::aggregate::Aggregate;
+        use crate::atoms::Node;
+        use crate::containers::mesh::{Mesh, SubMesh};
+        use crate::containers::node_field::NodeField;
+        use crate::coords::Coords;
+        use crate::handle::Handle;
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let n: Vec<Node> = (0..4)
+            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
+            .collect();
+        // `T` on [0, 1] and [1, 2], sharing node 1; node 3 holds only `Q`.
+        let mut mesh = Mesh::empty();
+        for zone in [&n[0..2], &n[1..3], &n[3..4]] {
+            mesh.add_sub(Handle::new(SubMesh::poi1_from_nodes(zone).unwrap()))
+                .unwrap();
+        }
+        let t = vec!["T".to_string()];
+        let f = NodeField::with(&mesh, &[t.clone(), t, vec!["Q".into()]]).unwrap();
+        for (z, values) in [(0, [1.0, 2.0]), (1, [2.0, 3.0])] {
+            let mut zone = f.get(z).unwrap().write();
+            for (row, v) in values.into_iter().enumerate() {
+                zone.set(row, 0, v).unwrap();
+            }
+        }
+
+        let points = node_field_points(&f, "T").unwrap();
+        let drawn: Vec<(f64, f64)> = points.iter().map(|(p, v)| (p.x, *v)).collect();
+        assert_eq!(drawn, vec![(0.0, 1.0), (1.0, 2.0), (2.0, 3.0)]);
+    }
 
     #[test]
     fn presets_match_documented_angles() {
