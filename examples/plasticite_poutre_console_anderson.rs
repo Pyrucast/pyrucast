@@ -404,12 +404,12 @@ fn anderson_step(
     let mut trace = 0.0;
     for i in 0..m {
         for j in i..m {
-            let v = dg_free[i].dot_field(&dg_free[j])?;
+            let v = dg_free[i].dot_field(&dg_free[j]);
             a[i][j] = v;
             a[j][i] = v;
         }
         trace += a[i][i];
-        b[i] = dg_free[i].dot_field(&g_free)?;
+        b[i] = dg_free[i].dot_field(&g_free);
     }
     if trace <= 0.0 {
         return Ok(None); // degenerate directions

@@ -110,13 +110,13 @@ pub fn xty(x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyResult<f64> {
         let b = y
             .extract::<PyRef<PyNodeField>>()
             .map_err(|_| PyTypeError::new_err("xty: both operands must be NodeFields"))?;
-        return Ok(a.inner.dot_field(&b.inner)?);
+        return Ok(a.inner.dot_field(&b.inner));
     }
     if let Ok(a) = x.extract::<PyRef<PyElementField>>() {
         let b = y
             .extract::<PyRef<PyElementField>>()
             .map_err(|_| PyTypeError::new_err("xty: both operands must be ElementFields"))?;
-        return Ok(a.inner.dot_field(&b.inner)?);
+        return Ok(a.inner.dot_field(&b.inner));
     }
     if let Ok(a) = x.extract::<PyRef<PySubNodeField>>() {
         let b = y

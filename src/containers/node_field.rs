@@ -65,7 +65,7 @@
 use crate::aggregate::Aggregate;
 use crate::atoms::ElementType;
 use crate::atoms::NodeId;
-use crate::containers::field::SubField;
+use crate::containers::field::{RowPoints, SubField};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
@@ -635,8 +635,8 @@ impl crate::containers::field::SubField for SubNodeField {
     fn same_support_with(&self, components: Vec<String>) -> Result<Self> {
         Self::from_support(&self.support, components)
     }
-    fn row_points(&self) -> Option<Vec<NodeId>> {
-        Some(self.node_ids())
+    fn row_points(&self) -> Option<RowPoints> {
+        Some(RowPoints::of_poi1(self.support.read()))
     }
 }
 
@@ -1310,7 +1310,8 @@ impl NodeField {
     /// u.check().unwrap();
     /// ```
     pub fn check(&self) -> Result<()> {
-        crate::containers::field::check_points_agree(self, None)
+        let components = crate::containers::field::Field::components(self);
+        crate::containers::field::check_points_agree(self, &components)
     }
 
     /// Read the values at `dofs` (`(node, component)` pairs) into a dense

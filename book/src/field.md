@@ -254,9 +254,11 @@ les opérateurs décrits plus haut, présents sur les quatre classes.
   `component_index`, `min`, `max`, `sum`, `xtx`, `dot`, `pscal`, `map_all`,
   `add_to_component`…, `merge_components`, `select_components`,
   `rename_component`. `SubNodeField` et `SubElementField` l'implémentent.
-  `SubNodeField` fournit en plus `row_points()`, le nœud de chaque ligne :
-  c'est ce qui permet de compter un nœud une fois et de vérifier la deuxième
-  règle. Une zone aux points de Gauss garde la réponse par défaut, `None`.
+  `SubNodeField` fournit en plus `row_points()`, le nœud de chaque ligne, lu
+  sur place dans le support : c'est ce qui permet de compter un nœud une fois
+  (la première zone qui le porte le compte, les suivantes le sautent) et de
+  vérifier la deuxième règle. Une zone aux points de Gauss garde la réponse
+  par défaut, `None`.
 - **`Field`**, l'agrégat. Il est implémenté d'office pour tout
   [`Aggregate`](aggregate.md) dont la zone est un `SubField` : `NodeField` et
   `ElementField` le reçoivent sans une ligne de code : `components`, `min`,
