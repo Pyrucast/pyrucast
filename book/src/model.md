@@ -1,274 +1,291 @@
 # Modèle physique (Model/SubModel)
 
-Un **`Model`** est l'objet orchestrateur qui décrit un problème physique et **produit les matrices** (raideur, masse) à la demande de l'utilisateur. Il vient se poser sur la couche éléments finis ([`FiniteElementSpace`](fe-space.md)), elle-même posée sur le maillage géométrique.
+Un modèle décrit **le problème à résoudre** : quelles physiques, sur quelles
+zones du maillage, et quelles contraintes les tiennent. Il ne porte aucune
+valeur de matériau : la conductivité, le module d'Young ou la densité d'un
+chargement arrivent dans un [champ matériau](element-field.md) au moment de
+l'assemblage, et un même modèle sert avec d'autres valeurs. C'est un
+[agrégat](aggregate.md) :
 
-```text
-Géométrie         Mesh / SubMesh                       (purement géométrique)
-Formulation EF    FiniteElementSpace / SubFiniteElementSpace      (interpolation, quadrature)
-Physique          Model / SubModel / SubModelKind      (loi, matériaux, assemblage)
-```
+- un **sous-modèle** (`SubModel`) est une physique sur une zone, c'est-à-dire
+  sur un sous-espace d'un [espace éléments finis](fe-space.md), ou bien une
+  contrainte ;
+- un **modèle** (`Model`) est une liste de sous-modèles, de physiques
+  éventuellement différentes : une conduction et une élasticité sur le même
+  maillage, avec leurs appuis.
 
-## Architecture
+Le modèle est la troisième couche, posée sur les deux autres :
 
-```text
-Model
-├── sub_models: Vec<SubModel>
-├── primal_vars(): Vec<String>      # union — colonnes des matrices
-├── dual_vars():   Vec<String>      # union — lignes des matrices
-├── filter(Physics) -> Model        # sous-modèles d'une nature donnée
-└── fespace() -> FiniteElementSpace # 1 sous-espace par sous-modèle de domaine
-                                     # (contraintes exclues, sans dédup)
-
-ops::matrix (opérateurs, pas des méthodes de Model)
-├── stiffness(model, materials) -> Matrix   # K  (assemblé sur demande)
-└── mass(model)                 -> Matrix   # M  (assemblé sur demande)
-
-SubModel  (énum de stockage + dispatch — AUCUNE logique)
-├── HeatConduction(HeatConduction)    # chaque variante enveloppe une struct…
-├── Dirichlet(Dirichlet)             # …qui porte ses données + impl SubModelKind
-├── Mpc(Mpc)                         # contrainte multi-points (relations linéaires)
-├── fespace() -> Option<SubFiniteElementSpace>  # sous-espace intégré (None si contrainte)
-└── as_kind(&self) -> &dyn SubModelKind   # l'unique match du module modèle
-
-SubModelKind  (trait de base — le dénominateur commun, co-localisé par physique)
-├── primal_vars / dual_vars
-├── physics       # ensemble de natures : &[Physics] (Mechanical|Thermal|Constraint|Other)
-├── as_domain / as_constraint  # seams de capacité (None par défaut) — cf. ci-dessous
-├── matrix_element          # pont vers les noyaux élémentaires, qui vivent sur Domain
-├── stiffness_layout        # Some ⇒ bloc CALCULÉ (scatter parallèle) ; None ⇒ littéral
-├── contributions           # défaut : dérivé du layout ; contraintes rendent leurs C/Cᵀ littéraux
-├── build_stiffness_blocks  # défaut : stiffness_layout + Domain::element_matrix
-├── build_mass_blocks       # (défaut : vide)
-└── label / display / render
-
-Capacités (sous-traits, miroir des natures ; une struct n'a que la sienne) :
-├── Domain      # matériau + comportement (heat, elasticity, poutres, …)
-└── Constraint  # multiplicateurs de Lagrange (Dirichlet, MPC, embedded, contact)
-```
-
-L'énum `SubModel` ne sert qu'au **stockage** et à la **sérialisation**
-(`bincode`) ; il délègue chaque appel à l'`impl SubModelKind` de la variante via
-`as_kind()`. Tout le code générique (l'agrégat `Model`, l'assembleur,
-`Dump`) passe par ce seul point — ajouter une physique ne touche donc aucun
-de ces sites. Voir le chapitre [Ajouter une physique](ajouter-une-physique.md).
-
-Le `Model` est **purement orchestrateur** : il énumère les DOFs, dimensionne la `Matrix`, boucle sur les sub-models et accumule. Aucune logique physique ne vit chez lui.
-
-## Identification des DOFs : primal ≠ dual
-
-Chaque physique déclare :
-
-- ses **variables primales** (les inconnues — composantes du vecteur solution, colonnes de la matrice) ;
-- ses **variables duales** (les conjuguées énergétiques — composantes du vecteur chargement, lignes de la matrice).
-
-Elles sont presque toujours **différentes** :
-
-| Physique           | Primales (cols)    | Duales (rows)      |
+| Couche | Objets | Ce qu'elle décrit |
 |---|---|---|
-| `HeatConduction`   | `T` (température)  | `q` (flux de chaleur) |
-| `BoundaryTransfer` (film) | `T` (partagée avec `HeatConduction`) | `q` (partagée) |
-| `Truss` / `LinearElasticity` | `u_x`, `u_y`, …   | `f_x`, `f_y`, …    |
-| `Dirichlet { imposed_variable: "T" }` | `lambda`           | `imposed`           |
+| Géométrie | [`Mesh` / `SubMesh`](mesh.md) | les nœuds et les mailles |
+| Interpolation | [`FiniteElementSpace` / `SubFiniteElementSpace`](fe-space.md) | les fonctions de forme et les points de Gauss |
+| Physique | `Model` / `SubModel` | les équations, leurs inconnues, leurs contraintes |
 
-Les DOFs de la `Matrix` sont identifiés par le couple `(NodeID, nom_de_champ)` (voir [`Matrix`](matrix.md)) : deux SubModels qui utilisent le même nom (`"T"`) sur des nœuds différents ne se collisionnent pas, et la jonction se fait automatiquement quand ils partagent un même `(NodeID, nom)`.
+## Déclarer un modèle
 
-## Chargements complètement séparés du Model
+Chaque physique se déclare par une fonction de `pyrucast.model`, qui reçoit
+l'espace éléments finis et rend un modèle couvrant **tout** l'espace : un
+sous-modèle par sous-espace. Une contrainte reçoit, au lieu d'un espace, les
+maillages qu'elle relie, et rend un seul sous-modèle, quel que soit leur nombre
+de zones.
 
-Le `Model` ne porte **aucune** logique de second membre. L'utilisateur :
+On compose les modèles avec `|`, qui rend un nouveau modèle : les sous-modèles
+des deux côtés, dans l'ordre, sans répéter un sous-modèle déjà présent.
+`Model()` est un modèle vide ; `add_sub` et `add_subs` ajoutent des
+sous-modèles en place. Tous les sous-modèles d'un modèle vivent dans un même
+`Coords` : en composer deux de `Coords` différents est refusé.
 
-1. lit `model.dual_vars()` pour connaître les noms de composantes du vecteur force ;
-2. construit un `NodeField` avec ces composantes (forces de Neumann, sources de chaleur, valeurs imposées de Dirichlet aux nœuds-multiplicateurs, …) ;
-3. compose plusieurs sources avec `|` (union des zones, dédupliquée et fusionnée par support) — le nommé `merge` en est l'alias ;
-4. passe `Matrix + NodeField` au solveur.
-
-Cette séparation a deux mérites :
-- les chargements sont des données utilisateur, faciles à composer ;
-- le `Model` reste une description compacte et indépendante du chargement (le même modèle peut être résolu avec plusieurs chargements en cascade).
-
-Pour la part **contrainte** du second membre (les valeurs imposées aux
-nœuds-multiplicateurs), le helper `model.constraint_rhs([(nœud, g), …])`
-construit ce `NodeField` tout seul : on désigne chaque relation par un nœud
-contraint (Dirichlet) ou un nœud-terme (MPC) et sa valeur `g`, et le helper
-retrouve le nœud-multiplicateur et y renseigne la composante `imposed`. Voir
-[Contraintes](contraintes.md).
-
-## Les physiques disponibles
-
-Chaque physique est une struct sous `src/models/` implémentant le trait
-`SubModelKind`, enveloppée par une variante de l'énum `SubModel`. Leur **détail**
-(équations, matériau, comportement, exemples) est dans la partie
-[Détails des physiques](physiques.md) ; on n'en rappelle ici que les
-opérateurs qui les déclarent et leurs variables, vus du `Model` :
-
-| Opérateur (`ops::model::…`, Python `pyrucast.model.…`) | Primales | Duales | Matériau | Chapitre |
-|---|---|---|---|---|
-| `heat_conduction(fespace, sym)` | `T` | `q` | `k` ; orientée : `k_1…` / `k_11…` + repère | [Thermique](thermique.md), [conduction orientée](thermique.md#conduction-orthotrope-et-anisotrope) |
-| `boundary_transfer(fespace, cible, variables)` | celles données | lues dans la cible | `h_<primale>`, `a_ext_<primale>` | [Échanges](echanges.md) |
-| `radiation(fespace, cible)` | `T` | `q` | `emis, T_inf` (+ `sigma` facultatif) | [Rayonnement](thermique.md#rayonnement-à-linfini-stefan-boltzmann) |
-| `fick(fespace, espèce, sym)` | `c_<espèce>` | `j_<espèce>` | `D_<espèce>` ; orientée : `D_1_<espèce>…` + repère ; `poro` facultatif | [Diffusion](diffusion.md) |
-| `interface_transfer(a, b, cible, variables, tol)` | celles données | lues dans la cible | `h_<primale>` | [Échanges](echanges.md) |
-| `truss(fespace, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, A` | [Barre](mecanique/truss.md) |
-| `elasticity(fespace, cinématique, sym, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu` ; orientée : `E_1…G_23` / `C_11…C_66` + repère | [Élasticité](mecanique/elasticite.md), [orthotropie](mecanique/orthotropie.md) ; en grandes transformations, [mesure de déformation](mecanique/grandes-transformations.md) |
-| `plasticity_perfect(fespace, cinématique, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu, sigma_y` | [Plasticité](mecanique/plasticite.md) |
-| `plasticity(fespace, cinématique, loi, mesure)` | idem | idem | selon la loi | [Lois d'écoulement](mecanique/lois-plastiques.md), [Fluage](mecanique/fluage.md) |
-| `bernoulli(fespace)` | selon la configuration | idem | `E, I` (+ `A`, `I_y…`) | [Euler-Bernoulli](mecanique/bernoulli.md) |
-| `timoshenko(fespace)` | selon la configuration lue sur le maillage : `w, theta` (1-D), `u_x, u_y, r_z` (plan), `u_x…r_z` (6, espace) | `f_w, m_theta` ; `f_x, f_y, m_z` ; `f_x…m_z` | 1-D : `E, I, G, A_s` ; plan : `E, A, I, G, A_s` ; espace : `E, A, I_y, I_z, J, G, A_sy, A_sz` | [Timoshenko](mecanique/timoshenko.md) |
-| `shell(fespace, formulation)`<br>`thick`, `kirchhoff` | `u_x…r_z` (6) | `f_x…m_z` (6) | `E, nu, h` | [Coques](mecanique/coques.md) |
-| `dirichlet(maillage, cible, variable, sens)` | `lambda` | `imposed` | — | [Dirichlet](contraintes/dirichlet.md) |
-| `mpc(termes, cible, sens)` | `lambda` | `imposed` | — | [Multi-points](contraintes/mpc.md) |
-| `embedded(immergé, hôte, cible, variables, tol)` | `lambda` | `imposed` | — | [Baignage](contraintes/embedded.md) |
-| `contact(esclave, maître, cible, variables)` | `lambda` | `imposed` | — | [Contact](contraintes/contact.md) |
-
-Toutes balaient **tous** les sous-espaces du `fespace` (une zone par sous-espace),
-sauf `dirichlet`, `mpc`, `embedded` et `contact` qui sont des
-[contraintes](contraintes.md) portées par des maillages fournis par
-l'utilisateur. Le matériau est toujours fourni **à l'assemblage**, pas au
-modèle (cf. ci-dessous).
-
-Pour **ajouter** une physique, voir [Ajouter une physique](ajouter-une-physique.md).
-
-## Ce que chaque physique calcule
-
-Le tableau ci-dessus dit *quelles variables* porte chaque physique. Ce qu'elle
-**sait produire** — les genres de matrice qu'elle déclare, la voie par laquelle
-elle obtient sa tangente, son intégration de comportement et sa particularité de
-calcul — est rassemblé physique par physique dans
-[Détails des physiques](physiques.md#ce-que-chacune-sait-produire).
-
-
-## Nature physique et filtrage
-
-Chaque physique déclare un **ensemble de natures** — sa classification grossière,
-orthogonale à l'axe de capacité `Domain`/`Constraint`. Elle répond à « quel champ
-de physique » là où les capacités répondent à « domaine ou contrainte » :
-
-| Nature (`Physics`) | Physiques |
-|---|---|
-| `Mechanical` | `truss`, `elasticity`, `plasticity`, `mazars`, `bernoulli`, `timoshenko`, `shell` |
-| `Thermal`    | `heat_conduction`, `radiation` ; `boundary_transfer` et `interface_transfer` quand leur cible est thermique |
-| `Constraint` | `dirichlet`, `mpc`, `embedded`, `contact` — portée **avec** la nature de la physique qu'ils contraignent (`[Constraint, Mechanical]` pour un Dirichlet sur `u_x`) |
-| `Other`      | nature « autre / rien » explicite (aucune physique de base ne la déclare) |
-| `Diffusion`  | `fick` ; `boundary_transfer` et `interface_transfer` quand leur cible est une diffusion |
-| `Radiation`  | `radiation` — portée **en plus** de `Thermal`, donc `filter("thermal")` le rend aussi |
-
-Côté Python, les mêmes natures sont des chaînes : `"mechanical"`, `"thermal"`,
-`"constraint"`, `"other"`, `"diffusion"`, `"radiation"`.
-
-`Diffusion` est une nature à part entière bien que la loi de Fick partage
-l'opérateur de la conduction : les variables diffèrent (`c`/`j` contre `T`/`q`),
-et un problème couplé doit pouvoir sélectionner l'une sans l'autre. Partager un
-opérateur n'est pas partager une physique.
-
-La nature d'une physique de base est **entièrement déterminée par la variante** :
-c'est une constante par physique, exposée par `SubModelKind::physics()` — un
-**slice** `&'static [Physics]` (comme `label()`). Les termes qui écrivent dans
-les lignes d'une autre physique la lisent sur leur cible à la construction :
-`boundary_transfer`, `interface_transfer` et `flux` prennent sa nature, et une
-**contrainte** porte `Constraint` **plus** la nature de la physique dont elle
-fige les inconnues. Une relation qui lie les inconnues de deux physiques n'en
-porte aucune des deux : aucun sous-problème mono-physique ne saurait la
-résoudre. Le type est un **ensemble** pour trois raisons :
-
-- une physique **couplée** (par ex. un futur élément thermo-mécanique) porte
-  *plusieurs* natures — `[Mechanical, Thermal]` ;
-- une contrainte appartient à la fois aux contraintes et à la physique qu'elle
-  fige — `[Constraint, Mechanical]` ;
-- un bloc de matrice monté à la main, hors assemblage, n'en porte **aucune** —
-  l'ensemble vide, le cas « rien ». `Physics::Other` est la nature « autre »
-  *explicite*, pour un bloc qu'on veut classer plutôt que laisser sans étiquette.
-
-L'ensemble voyage avec chaque bloc assemblé jusqu'à la [`SubMatrix`](matrix.md)
-(posé par l'assembleur sur les deux chemins, calculé et littéral, donc le couple
-C/Cᵀ d'un Dirichlet est étiqueté aussi).
-
-Deux sélecteurs en découlent, chacun présent sur `Model` et sur `Matrix`, tous
-deux à partage par compteur de références (pas de copie profonde) :
-
-- `filter(nature)` garde les entités dont l'ensemble **contient** la nature (une
-  physique couplée apparaît donc sous chacune) ;
-- `exclude(nature)`, son complément, garde celles dont l'ensemble **ne la
-  contient pas**.
-
-Ils se composent, une condition chacun. Comme une contrainte porte la nature de
-ce qu'elle fige, `model.filter(Physics::Mechanical)` rend la mécanique **avec**
-ses appuis — un sous-problème solvable tel quel — et
-`model.filter(Physics::Mechanical).exclude(Physics::Constraint)` la mécanique
-**seule**, par exemple pour lire ses seules inconnues de déplacement. Côté
-matrice, `k.filter(...)` rend une `Matrix` non assemblée — relancer
-`Matrix::assemble` avant de résoudre.
-
-Les natures disent ce qu'un sous-modèle fige, pas ce qu'il est : un contact et
-un Dirichlet sur les déplacements portent tous deux `[Constraint, Mechanical]`.
-`label()` nomme la physique (`"Dirichlet"`, `"Contact"`, …) ; c'est par lui que
-le [pas à pas](pas-a-pas.md) reconnaît le contact.
-
-`k.physics()` renvoie l'ensemble des natures **présentes** dans la matrice
-(dédupliqué) : une matrice agrégeant plusieurs physiques y expose plusieurs tags
-(par ex. `[Thermal, Constraint]` pour une conduction et son Dirichlet). Un bloc à l'ensemble vide n'est jamais
-sélectionné par une nature concrète — l'étiqueter `Physics::Other` le rend
-atteignable par `filter(Physics::Other)`.
-
-```rust,ignore
-{{#include ../../tests/doc_conventions.rs:filtrer_par_nature}}
-```
-
-## Règle invariante : un Model = une Matrice
-
-`matrix::stiffness(model, materials)` et `matrix::mass(model, materials)` produisent chacune **une seule** `Matrix` couvrant l'ensemble des DOFs du Model (primaux ⊕ multiplicateurs). Les conditions limites n'ont pas de statut spécial — ce sont des sub-models comme les autres qui contribuent leurs entrées dans la même matrice globale.
-
-Cette uniformité simplifie tout : le solveur reçoit une seule `Matrix` + un seul `NodeField` ; pas besoin de jongler avec un système saddle-point composé.
-
-## API Rust
-
-```rust,ignore
-{{#include ../../tests/doc_conventions.rs:modele}}
-```
-
-## API Python
+Certains termes agissent sur les inconnues d'une autre physique : les
+contraintes (`dirichlet`, `mpc`, `embedded`, `contact`), les échanges
+(`boundary_transfer`, `interface_transfer`), le rayonnement (`radiation`) et le
+chargement réparti (`flux`). Ils reçoivent cette physique, leur **cible** :
+elle donne la ligne où écrire leur effet (`q` pour une contrainte sur `T`,
+`f_x` pour une contrainte sur `u_x`), et garantit qu'une physique du problème
+assemble bien cette ligne.
 
 ```python
 {{#include ../../tests/python/test_doc_conteneurs.py:model_api}}
 ```
 
-## Assemblage et résolution
+`modele[i]` rend une **vue** sur un sous-modèle. Une vue se lit (variables,
+natures, sous-espace, matériau attendu) mais ne se modifie pas : on change un
+modèle en le recomposant.
 
-L'assemblage (`stiffness` / `mass`) et la résolution (`solve`) sont des
-**opérateurs** : ils consomment le `Model` (et le matériau, le chargement) et
-sont décrits dans la partie [Détail des opérateurs](operateurs.md) —
-[Assemblage](operateurs/assemblage.md) et [Solveur](operateurs/solveur.md). Le
-solveur est une LU creuse directe (faer), dont la factorisation est mise en
-cache sur la `Matrix` — *factoriser une fois, résoudre souvent*.
+| `Model` | |
+|---|---|
+| `len(modele)`, `modele[i]`, `modele[i:j]`, `for sub in modele`, `unit()`, `\|`, `add_sub`, `add_subs` | l'interface des [agrégats](aggregate.md) |
+| `primal_vars()`, `dual_vars()` | les inconnues et les duales de tous les sous-modèles, dans l'ordre de première apparition |
+| `dual_of(variable)` | la duale associée à une inconnue, ou `None` |
+| `fespace()` | l'espace sur lequel le modèle intègre : le sous-espace de chaque physique, dans l'ordre ; deux physiques sur un même sous-espace le citent deux fois, une contrainte n'en a pas |
+| `filter(nature)`, `exclude(nature)` | les sous-modèles qui portent, ou ne portent pas, cette nature |
+| `multiplier_mesh()` | les nœuds-multiplicateurs de toutes les contraintes |
+| `constraint_rhs([(nœud, g), …])`, `constraint_rhs_by_index([(i, g), …])` | les valeurs imposées, sur un modèle qui porte une seule contrainte (voir [Assembler et résoudre](#assembler-et-résoudre)) |
+| `stiffness_matrix`, `mass_matrix`, `geometric_matrix`, `tangent_matrix`, `material_field`, `material_field_per_sub_model`, `strain`, `integrate_behavior`, `elastic_stress`, `elastic_strain`, `internal_forces`, `external_forces`, `update_contact` | les opérateurs qui prennent un modèle en premier argument, en méthode : `modele.stiffness_matrix(materiaux)` est `matrix.stiffness(modele, materiaux)` |
+| `dump()` | le détail de chaque sous-modèle |
 
-Des exemples **complets et à solution analytique** (assemblage + contraintes +
-lecture des inconnues et des réactions) sont déroulés dans
-[Dirichlet](contraintes/dirichlet.md) (Poisson 1-D),
+| `SubModel` (vue) | |
+|---|---|
+| `label()` | le nom de la physique : `"Elasticity"`, `"Dirichlet"`… |
+| `physics()` | ses natures |
+| `primal_vars()`, `dual_vars()` | ses inconnues et ses duales |
+| `fespace()` | son sous-espace, ou `None` pour une contrainte |
+| `material_components()` | les composantes matériau qu'il demande, ou `None` |
+| `has_behavior` | vrai s'il porte une loi de comportement, que `integrate_behavior` intègre |
+| `multiplier_mesh()` | ses nœuds-multiplicateurs, vide hors contrainte |
+| `material_field([(c, v), …])` | un champ matériau uniforme pour ce seul sous-modèle |
+
+## Les physiques disponibles
+
+Le tableau donne, pour chaque déclaration, les variables qu'elle apporte au
+modèle. Les équations, le matériau et les exemples sont dans la page de chaque
+physique ; ce que chacune sait assembler est résumé dans
+[Détails des physiques](physiques.md#ce-que-chacune-sait-produire).
+
+| Déclaration (`pyrucast.model.…`) | Inconnues | Duales | Page |
+|---|---|---|---|
+| `heat_conduction(fes, symétrie)` | `T` | `q` | [Thermique](thermique.md) |
+| `radiation(fes, cible)` | `T` | `q` | [Rayonnement](thermique.md#rayonnement-à-linfini-stefan-boltzmann) |
+| `fick(fes, espèce, symétrie)` | `c_<espèce>` | `j_<espèce>` | [Diffusion](diffusion.md) |
+| `boundary_transfer(fes, cible, variables)` | les `variables` | celles de la cible | [Échanges](echanges.md) |
+| `interface_transfer(côté_a, côté_b, cible, variables, tol)` | les `variables` | celles de la cible | [Échanges](echanges.md) |
+| `flux(fes, cible, duale)` | aucune | `duale` ; `"n"`, une pression, écrit dans `f_x`, `f_y`(, `f_z`) | [Chargement réparti](operateurs/assemblage.md) |
+| `elasticity(fes, cinématique, symétrie, mesure)` | `u_x, u_y`(, `u_z`) | `f_x, f_y`(, `f_z`) | [Élasticité](mecanique/elasticite.md), [orthotropie](mecanique/orthotropie.md) |
+| `plasticity_perfect`, `plasticity_isotropic`, `drucker_prager`, `ottosen`, `gurson`, `creep_norton`, `creep_blackburn`, `creep_lemaitre`, `viscoplasticity_chaboche`, `viscoplasticity_lemaitre_chaboche` `(fes, cinématique, mesure)` | `u_x, u_y`(, `u_z`) | `f_x, f_y`(, `f_z`) | [Plasticité](mecanique/plasticite.md), [lois d'écoulement](mecanique/lois-plastiques.md), [fluage](mecanique/fluage.md) |
+| `mazars`, `damage_tc`, `damage_sic_sic` `(fes, cinématique, mesure)` | `u_x, u_y`(, `u_z`) | `f_x, f_y`(, `f_z`) | [Mazars](mecanique/mazars.md), [lois d'endommagement](mecanique/endommagement.md) |
+| `truss(fes, mesure)` | `u_x, u_y`(, `u_z`) | `f_x, f_y`(, `f_z`) | [Barre](mecanique/truss.md) |
+| `bernoulli(fes)`, `timoshenko(fes)` | 1-D : `w, theta` ; plan : `u_x, u_y, r_z` ; espace : `u_x…u_z, r_x…r_z` | `f_w, m_theta` ; `f_x, f_y, m_z` ; `f_x…f_z, m_x…m_z` | [Euler-Bernoulli](mecanique/bernoulli.md), [Timoshenko](mecanique/timoshenko.md) |
+| `shell(fes, formulation)` | `u_x…u_z, r_x…r_z` | `f_x…f_z, m_x…m_z` | [Coques](mecanique/coques.md) |
+| `dirichlet(maillage, cible, variable, sens)` | `lambda` | `imposed` | [Dirichlet](contraintes/dirichlet.md) |
+| `mpc(termes, cible, sens)` | `lambda` | `imposed` | [Multi-points](contraintes/mpc.md) |
+| `embedded(immergé, hôte, cible, variables, tol)` | `lambda` | `imposed` | [Baignage](contraintes/embedded.md) |
+| `contact(esclave, maître, cible, variables)` | `lambda` | `imposed` | [Contact](contraintes/contact.md) |
+
+`symétrie` (`"isotropic"`), `mesure` (`"linear"`), `sens` (`"="`) et `tol` ont
+une valeur par défaut. Une poutre lit sa configuration (1-D, plan, espace) sur
+le maillage. Les composantes matériau dépendent de la physique et de ses
+options : `sub.material_components()` les donne.
+
+`interface_transfer` rend un sous-modèle par paire de sous-espaces des deux
+côtés, pris dans l'ordre. `update_contact(modele, déplacement)` ne déclare
+rien : il rend le modèle avec ses contacts appariés de nouveau sur la
+configuration déplacée (voir [Contact](contraintes/contact.md)).
+
+## Inconnues et multiplicateurs
+
+Chaque physique déclare :
+
+- ses **inconnues**, ou variables primales (`primal_vars()`) : les composantes
+  de la solution, et les colonnes de la matrice ;
+- ses **duales** (`dual_vars()`) : les composantes du second membre, et les
+  lignes de la matrice. `T` a pour duale `q`, `u_x` a pour duale `f_x`.
+
+Une inconnue de la matrice est un couple (nœud, nom). Deux physiques qui
+emploient le même nom au même nœud partagent l'inconnue : c'est ainsi qu'un
+échange de bord sur `T` s'ajoute à la conduction, et que deux zones
+d'élasticité se raccordent sur leurs nœuds communs. Deux noms différents ne se
+rencontrent jamais : une conduction et une élasticité sur le même maillage
+forment, dans la même matrice, deux problèmes que rien ne lie.
+
+Une **contrainte** impose ses relations par multiplicateurs de Lagrange (voir
+[Contraintes](contraintes.md)). À sa construction, elle crée dans le même
+`Coords` un nœud par relation, le **nœud-multiplicateur**, à la position d'un
+nœud de la relation : le nœud imposé d'un Dirichlet, le nœud esclave d'un
+contact. Ce nœud porte l'inconnue `lambda`, dont la valeur à la solution est
+la réaction, et la duale `imposed`, la ligne où s'écrit la valeur imposée.
+Toutes les contraintes emploient ces deux noms sans se mélanger, puisque
+chacune a ses propres nœuds. `multiplier_mesh()` rend ces nœuds, en zones
+POI1.
+
+## Assembler et résoudre
+
+`matrix.stiffness(modele, materiaux)` rend **une seule** matrice pour tout le
+modèle : physiques et contraintes, inconnues et multiplicateurs. Les
+conditions aux limites sont des sous-modèles comme les autres. Le second
+membre réunit trois sources :
+
+- **les données que porte le modèle**, rendues par
+  `node_field.external_forces(modele, materiaux)` : un chargement réparti
+  (`flux`, dont la densité `phi_<duale>` est lue dans le matériau), la partie
+  ambiante d'un échange de bord, le jeu d'un contact. Un modèle qui n'en a pas
+  rend un champ vide ;
+- **les valeurs imposées par une contrainte**, rendues par
+  `contrainte.constraint_rhs([(nœud, g), …])` : on désigne chaque relation par
+  un de ses nœuds, et la valeur `g` est écrite à son nœud-multiplicateur, dans
+  la composante `imposed`. Le modèle doit porter une seule contrainte ;
+  `constraint_rhs_by_index` désigne la relation par son rang (voir
+  [Contraintes](contraintes.md#second-membre--le-helper-constraint_rhs)) ;
+- **ce qu'on écrit soi-même** : un [champ aux nœuds](node-field.md) sur les
+  composantes de `dual_vars()`, comme une force ou un flux ponctuels.
+
+Deux champs posés sur le même maillage s'additionnent avec `+`, composante par
+composante. `|` réunit des champs qui ne se recouvrent pas, comme les valeurs
+imposées, portées par les nœuds-multiplicateurs.
+
+```python
+{{#include ../../tests/python/test_doc_conteneurs.py:model_chargement}}
+```
+
+Les opérateurs sont détaillés dans [Assemblage](operateurs/assemblage.md) et
+[Solveur](operateurs/solveur.md). Des exemples complets à solution analytique
+sont déroulés dans [Dirichlet](contraintes/dirichlet.md) (Poisson 1-D),
 [Conduction thermique](thermique.md) et [Mécanique](mecanique.md).
 
-## Limitations actuelles
+Une physique qui n'a pas un genre de matrice n'y contribue pas :
+`matrix.mass` sur une conduction avec échange de bord ne prend que la capacité
+de la conduction.
 
-- **Physiques disponibles** : `HeatConduction` et `BoundaryTransfer` (échange de
-  surface / film) ([thermique](thermique.md)) ; `Truss`, `Elasticity`,
-  `Plasticity`, `Damage`, `Bernoulli`, `Timoshenko`, `Shell`
-  ([mécanique](mecanique.md)) ; et les contraintes `Dirichlet`, `Mpc`,
-  `Embedded`, `Contact` ([contraintes](contraintes.md)). Toute nouvelle physique
-  est une struct implémentant `SubModelKind` (une variante de l'énum `SubModel`
-  + un bras de `as_kind`, rien d'autre — cf. [Ajouter une
-  physique](ajouter-une-physique.md)). Le coût d'ajout est O(1) fichier,
-  indépendant du nombre de physiques existantes.
-- **Toutes les physiques n'ont pas tous les genres de matrice** : chacune
-  déclare les `MatrixKind` qu'elle sait produire (raideur, masse, raideur
-  géométrique, tangente cohérente). Assembler un genre qu'une physique n'a pas
-  ne casse rien — elle ne contribue simplement pas.
-- **Pas de check de cohérence pré-assemblage** : la consistance (matériau
-  définit bien `"k"` pour HeatConduction, compatibilité des FE spaces entre
-  sub-models, etc.) est vérifiée au moment de `matrix.stiffness` /
-  `matrix.mass`, pas à l'ajout du sub-model. Si on découvre des cas où ça pose
-  problème, un check eager est facile à ajouter.
-- **Deux back-ends de solveur, tous deux directs** : LU creuse (défaut) et
-  Cholesky, au choix de l'appelant via `method=`, toutes deux en faer et avec
-  cache de factorisation. Cholesky exige une matrice qui se **déclare**
-  symétrique — un triangle ne se lisant que d'un côté, elle ne se tromperait pas
-  bruyamment sur une matrice qui ne l'est pas — et définie positive : un
-  point-selle à multiplicateurs, symétrique mais indéfini, est refusé au pivot
-  fautif, qu'on l'élimine d'abord ou qu'on le résolve en LU. Pas de méthode
-  itérative ; `SolveMethod` reste le point d'extension prévu pour cela.
+## Nature physique et filtrage
+
+Chaque sous-modèle déclare un **ensemble de natures** (`physics()`), qui dit à
+quelle physique il appartient :
+
+| Nature | Sous-modèles |
+|---|---|
+| `"mechanical"` | `elasticity`, les lois de plasticité et d'endommagement, `truss`, `bernoulli`, `timoshenko`, `shell` |
+| `"thermal"` | `heat_conduction` ; `radiation` |
+| `"radiation"` | `radiation`, en plus de `"thermal"` |
+| `"diffusion"` | `fick` |
+| `"constraint"` | `dirichlet`, `mpc`, `embedded`, `contact` |
+| `"other"` | aucune physique ; sert, en Rust, à classer un bloc de matrice monté à la main |
+
+Un `flux` et les échanges prennent la nature de leur cible : sur une
+conduction, ils sont `"thermal"`, sur une diffusion, `"diffusion"`. Une
+contrainte porte `"constraint"` **et** la nature de la physique dont elle fige
+les inconnues : un Dirichlet sur `u_x` est `["constraint", "mechanical"]`. Une
+relation qui lie les inconnues de deux physiques différentes ne porte que
+`"constraint"` : aucun problème d'une seule physique ne saurait la résoudre.
+
+`filter(nature)` garde les sous-modèles qui portent cette nature, et
+`exclude(nature)` ceux qui ne la portent pas. Les deux se composent, et les
+sous-modèles sont partagés, pas copiés. Comme une contrainte porte la nature
+de ce qu'elle fige, `filter("mechanical")` rend la mécanique **avec** ses
+appuis, un problème qui se résout tel quel, et
+`filter("mechanical").exclude("constraint")` la mécanique **seule** :
+
+```python
+{{#include ../../tests/python/test_doc_conteneurs.py:model_natures}}
+```
+
+Les natures disent ce qu'un sous-modèle fige, pas ce qu'il est : un contact et
+un Dirichlet sur les déplacements portent tous deux
+`["constraint", "mechanical"]`. `label()` nomme la physique (`"Dirichlet"`,
+`"Contact"`…) ; c'est par lui que le [pas à pas](pas-a-pas.md) reconnaît le
+contact.
+
+Chaque bloc d'une matrice assemblée garde les natures du sous-modèle qui l'a
+produit : une matrice se sélectionne de la même façon (voir
+[Matrice](matrix.md)).
+
+## Ce qui est vérifié, et quand
+
+À la **déclaration** :
+
+- l'espace convient à la physique : une poutre d'Euler-Bernoulli demande un
+  espace `"HERMITE3"`, une poutre de Timoshenko un espace `"MODEL_EMBEDDED"` ;
+- la variable qu'une contrainte fige est une inconnue de sa cible ;
+- la composition refuse un sous-modèle d'un autre `Coords`.
+
+À l'**assemblage** : le champ matériau porte, sur le sous-espace de chaque
+sous-modèle, les composantes qu'il demande. Le matériau n'est connu qu'à ce
+moment-là.
+
+## Ce qui est mis en cache
+
+Un modèle garde, pour chaque genre de matrice (raideur, masse, raideur
+géométrique, tangente), le **motif** de sa matrice : quelles lignes et quelles
+colonnes portent un terme, et à quelle place de la matrice creuse chaque terme
+élémentaire vient s'ajouter. Il est calculé au premier assemblage de ce genre,
+puis repris tel quel : les assemblages suivants ne calculent que les valeurs.
+
+Ce motif ne dépend que des inconnues que relient les sous-modèles, pas du
+matériau, de la position des nœuds ou de l'état mécanique. Un calcul non
+linéaire, qui réassemble sa tangente à chaque itération, le réutilise donc à
+chaque fois. Le calculer représente plus de la moitié du premier assemblage :
+sur un million de quadrangles en élasticité plane (4 cœurs), le premier
+assemblage prend 1,9 s, les suivants 0,7 s.
+
+Le motif est oublié quand on ajoute un sous-modèle (`add_sub`, `add_subs`). Un
+nouveau modèle, rendu par `|`, `filter`, `exclude`, une tranche
+`modele[i:j]` ou `update_contact`, part sans motif : dans une boucle, on garde
+le modèle dans une variable plutôt que de le recomposer à chaque tour.
+
+## Sauvegarde
+
+Un modèle se [sauvegarde](sauvegarde.md) avec tout ce qu'il désigne : ses
+espaces, leurs maillages, le `Coords`, les nœuds-multiplicateurs de ses
+contraintes. Sauvegardés dans un même fichier, un modèle et son maillage
+restent liés à la lecture : le modèle relu est posé sur le maillage relu. Le
+motif des matrices n'est pas écrit ; il se recalcule au premier assemblage.
+
+## Côté Rust
+
+`Model` est l'agrégat de `Handle<SubModel>`. Il garde aussi le motif de chaque
+genre de matrice, dans `matrix_patterns`, un tableau de
+`OnceLock<Arc<AssemblyPattern>>` à une case par `MatrixKind`. Son `check_push`
+refuse un sous-modèle d'un autre `Coords`, et son `post_push` vide les motifs.
+`ops::matrix::assemble_kind` demande ses blocs à chaque sous-modèle, puis
+prend le motif du modèle, construit au premier appel par
+`ops::scatter::build_pattern`, et y répartit les valeurs en parallèle.
+
+`SubModel` est une `enum` à une variante par physique, chacune enveloppant la
+struct de `src/models/` qui porte ses données. L'`enum` sert à ranger et à
+sauvegarder : `bincode` écrit le rang de la variante, donc une nouvelle
+variante se place à la fin. Le code commun (l'agrégat, l'assemblage,
+l'affichage) passe par `as_kind()`, qui rend la struct de la variante en
+`&dyn SubModelKind`.
+
+`SubModelKind` (`src/models/mod.rs`) est ce que toute physique déclare : ses
+variables, ses natures (`physics()`, un `&'static [Physics]`), son nom
+(`label()`), ses blocs pour chaque genre de matrice, ses termes de forces
+internes et externes, son affichage. Trois traits la complètent selon la
+physique, rendus par `as_domain`, `as_constraint` et `as_behavior` (`None` par
+défaut) : `Domain` pour le matériau et les matrices élémentaires, `Constraint`
+pour les nœuds-multiplicateurs et les relations, `Behavior` pour la loi de
+comportement. Le chapitre [Ajouter une physique](ajouter-une-physique.md)
+détaille ces traits. Un bloc de matrice monté à la main reçoit ses natures par
+`SubMatrix::set_physics`, que Python n'expose pas.
+
+```rust,ignore
+{{#include ../../tests/doc_conventions.rs:modele}}
+```

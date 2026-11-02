@@ -54,58 +54,30 @@ fn un_seul_mecanisme_de_serialisation() {
 // ANCHOR: modele
 #[test]
 fn un_modele_se_declare_et_s_assemble() -> Result<()> {
-    // 1-D: a [0, 1] mesh with a single SEG2.
+    // Une barre [0, 1] d'un seul SEG2.
     let coords = Handle::new(Coords::new(1)?);
     let a = Node::create_in(coords.clone(), &[0.0])?;
     let b = Node::create_in(coords.clone(), &[1.0])?;
-    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
-    mesh.add_cell(&[a.id(), b.id()])?;
-    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    let mut maillage = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+    maillage.add_cell(&[a.id(), b.id()])?;
+    let fes = FiniteElementSpace::lagrange1(&maillage)?;
 
-    // Model: conduction (the material is supplied at assembly, not here) +
-    // Dirichlet on the left. Constructors at the parent level (they sweep
-    // `fes`'s subspaces), composed with `union` — a `SubModel` is never built by
-    // hand (see CONVENTIONS.md).
-    let hc = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    // Mesh of the imposed nodes + support of the multipliers (barycenter
-    // co-locates fresh nodes). The model creates no node itself.
-    let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&a))?;
-    let dir = model::dirichlet(&imposed, &hc, "T", RelationSense::Equality)?;
-    let model = hc.union(&dir)?;
+    // La conduction, puis l'appui qui fige T en `a` ; `union` est le `|` de
+    // Python.
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
+    let impose = mesh::poi1_from_nodes(std::slice::from_ref(&a))?;
+    let appui = model::dirichlet(&impose, &conduction, "T", RelationSense::Equality)?;
+    let modele = conduction.union(&appui)?;
 
-    // Material k = 1, applied to the sub-models that need it (Dirichlet is
-    // skipped automatically), then assembly.
-    let materials = element_field::material_field(&model, &[("k", 1.0)])?;
-    let k = matrix::stiffness(&model, &materials)?;
-    assert_eq!(k.n_rows()?, 3); // 2 nœuds physiques + 1 multiplicateur
+    // Le matériau arrive à l'assemblage ; l'appui n'en demande pas.
+    let materiaux = element_field::material_field(&modele, &[("k", 1.0)])?;
+    let k = matrix::stiffness(&modele, &materiaux)?;
+    assert_eq!(k.n_rows()?, 3); // 2 nœuds + 1 nœud-multiplicateur
+
+    // L'appui fige une température : il est thermique aussi.
+    let thermique = modele.filter(Physics::Thermal);
+    let seule = thermique.exclude(Physics::Constraint);
+    assert_eq!((thermique.len(), seule.len()), (2, 1));
     Ok(())
 }
 // ANCHOR_END: modele
-
-// ANCHOR: filtrer_par_nature
-#[test]
-fn filtrer_un_modele_et_sa_matrice_par_nature() -> Result<()> {
-    let coords = Handle::new(Coords::new(1)?);
-    let a = Node::create_in(coords.clone(), &[0.0])?;
-    let b = Node::create_in(coords.clone(), &[1.0])?;
-    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
-    mesh.add_cell(&[a.id(), b.id()])?;
-    let fes = FiniteElementSpace::lagrange1(&mesh)?;
-    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
-    let appui = mesh::poi1_from_nodes(std::slice::from_ref(&a))?;
-    let bloque = model::dirichlet(&appui, &conduction, "T", RelationSense::Equality)?;
-    let model = conduction.union(&bloque)?;
-    let materials = element_field::material_field(&model, &[("k", 1.0)])?;
-    let k = matrix::stiffness(&model, &materials)?;
-
-    let thermique = model.filter(Physics::Thermal); // la conduction ET son Dirichlet
-    let seule = thermique.exclude(Physics::Constraint); // la conduction seule
-    let k_meca = k.filter(Physics::Mechanical); // blocs au moins mécaniques (non assemblés)
-    let natures = k.physics(); // [Thermal, Constraint]
-
-    assert_eq!((thermique.len(), seule.len()), (2, 1));
-    assert!(k_meca.is_empty()); // ce modèle est thermique
-    assert!(natures.contains(&Physics::Thermal) && natures.contains(&Physics::Constraint));
-    Ok(())
-}
-// ANCHOR_END: filtrer_par_nature

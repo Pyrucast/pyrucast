@@ -630,40 +630,93 @@ assert abs(aires.unit().value(1, 0, "un") - 0.5) < 1e-15
 # ANCHOR: model_api
 import pyrucast
 
-c = pyrucast.Coords(dim=1)
-a = c.add_node([0.0])
-b = c.add_node([1.0])
-mesh = pyrucast.Mesh(c, "SEG2")
-mesh.unit().add_cell([a, b])
-fes = pyrucast.FiniteElementSpace(mesh)
+# Un carré de 2 × 2 quadrangles.
+c = pyrucast.Coords(dim=2)
+a = c.add_node([0.0, 0.0])
+b = c.add_node([1.0, 0.0])
+carre = pyrucast.mesh.extrude(pyrucast.mesh.line(a, b, 2), [0.0, 1.0], 2)
+fes = pyrucast.FiniteElementSpace(carre)
 
-# Model: conduction (material supplied at assembly) + Dirichlet on the left.
-# Constructors at the parent level, composed with `|` — no SubModel by hand.
-# The constraint mints its multipliers beside the imposed nodes.
-imposed = pyrucast.mesh.poi1_from_nodes([a])
-cible = pyrucast.model.heat_conduction(fes)
+# Chaque déclaration rend un modèle : un sous-modèle par sous-espace de `fes`.
+thermique = pyrucast.model.heat_conduction(fes)
+solide = pyrucast.model.elasticity(fes, "plane_stress")
+# Une contrainte reçoit le modèle dont elle fige une inconnue : sa cible.
+appui = pyrucast.model.dirichlet(pyrucast.mesh.poi1_from_nodes([a]), solide, "u_x")
 
-model = cible | pyrucast.model.dirichlet(imposed, cible, "T")
+modele = thermique | solide | appui
+print([sub.label() for sub in modele])  # ['HeatConduction', 'Elasticity', 'Dirichlet']
+print(modele.primal_vars())  # ['T', 'u_x', 'u_y', 'lambda']
+print(modele.dual_vars())  # ['q', 'f_x', 'f_y', 'imposed']
+print(modele.dual_of("u_y"))  # f_y
 
-# Material k = 1 (the Dirichlet sub-models are skipped automatically).
-materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
+# `modele[i]` est une vue sur un sous-modèle.
+sub = modele[1]
+print(sub.physics(), sub.material_components())  # ['mechanical'] ['E', 'nu']
+print(modele[2].fespace(), modele[2].has_behavior)  # None False
+print(len(modele.fespace()))  # 2 : l'appui n'intègre rien
 
-K = pyrucast.matrix.stiffness(model, materials)
-print("primal_vars =", model.primal_vars())  # ['T', 'lambda']
-print("dual_vars =", model.dual_vars())  # ['q', 'imposed']
-print(K)  # Matrix: 3 row(s) × 3 col(s), …
-
-# The Dirichlet pins the temperature: it is a constraint, and thermal too.
-thermique = model.filter("thermal")  # conduction + Dirichlet
-conduction = thermique.exclude("constraint")  # conduction alone
-print(len(thermique), len(conduction))  # 2 1
-
-# The natures say what a sub-model pins, its label what it is.
-print([sub.label() for sub in model])  # ['HeatConduction', 'Dirichlet']
+# L'appui a créé son nœud-multiplicateur, à la position du nœud imposé.
+m = modele.multiplier_mesh().node(0, 0, 0)
+print(m.position(), m == a)  # [0.0, 0.0] False
 # ANCHOR_END: model_api
-assert K.n_rows == 3
-assert (len(thermique), len(conduction)) == (2, 1)
-assert [sub.label() for sub in model] == ["HeatConduction", "Dirichlet"]
+assert [sub.label() for sub in modele] == ["HeatConduction", "Elasticity", "Dirichlet"]
+assert modele.primal_vars() == ["T", "u_x", "u_y", "lambda"]
+assert modele.dual_vars() == ["q", "f_x", "f_y", "imposed"]
+assert modele.dual_of("u_y") == "f_y"
+assert modele[1].physics() == ["mechanical"]
+assert modele[1].material_components() == ["E", "nu"]
+assert modele[2].fespace() is None and not modele[2].has_behavior
+assert len(modele.fespace()) == 2
+assert m.position() == [0.0, 0.0] and m != a
+assert len(solide.multiplier_mesh()) == 0
+
+# ── model natures ──────────────────────────────────────────
+
+# ANCHOR: model_natures
+# L'appui fige un déplacement : il est une contrainte, et mécanique aussi.
+print(appui.unit().physics())  # ['constraint', 'mechanical']
+mecanique = modele.filter("mechanical")  # l'élasticité et son appui
+print([sub.label() for sub in mecanique])  # ['Elasticity', 'Dirichlet']
+seule = mecanique.exclude("constraint")  # l'élasticité seule
+print(seule.primal_vars())  # ['u_x', 'u_y']
+# ANCHOR_END: model_natures
+assert appui.unit().physics() == ["constraint", "mechanical"]
+assert [sub.label() for sub in mecanique] == ["Elasticity", "Dirichlet"]
+assert seule.primal_vars() == ["u_x", "u_y"]
+
+# ── model chargement ───────────────────────────────────────
+
+# ANCHOR: model_chargement
+# Une barre [0, 1] de 4 SEG2 : conduction, source répartie, T imposée à gauche.
+c = pyrucast.Coords(dim=1)
+o = c.add_node([0.0])
+l = c.add_node([1.0])
+barre = pyrucast.mesh.line(o, l, 4)
+fes = pyrucast.FiniteElementSpace(barre)
+conduction = pyrucast.model.heat_conduction(fes)
+source = pyrucast.model.flux(fes, conduction, "q")  # densité lue dans phi_q
+gauche = pyrucast.model.dirichlet(pyrucast.mesh.poi1_from_nodes([o]), conduction, "T")
+modele = conduction | source | gauche
+
+materiaux = pyrucast.element_field.material_field(modele, [("k", 1.0), ("phi_q", 1.0)])
+K = pyrucast.matrix.stiffness(modele, materiaux)
+
+# Les données que porte le modèle : ici la source, ∫ phi_q·N dx.
+donnees = pyrucast.node_field.external_forces(modele, materiaux)
+# Un flux de 1 entrant en x = 1, écrit à la main sur les nœuds de la barre.
+ponctuel = pyrucast.NodeField(barre, ["q"])
+ponctuel.unit().set_value(l, "q", 1.0)
+# La valeur imposée par la contrainte : T = 2 en x = 0.
+imposees = gauche.constraint_rhs([(o, 2.0)])
+
+T = pyrucast.solver.solve(K, (donnees + ponctuel) | imposees)
+print(T.value(l, "T"))  # 3.5 = 2 + 1 + 1/2
+multiplicateur = gauche.multiplier_mesh().node(0, 0, 0)
+print(T.value(multiplicateur, "lambda"))  # 2.0 : la réaction de l'appui
+# ANCHOR_END: model_chargement
+assert K.n_rows == 6
+assert abs(T.value(l, "T") - 3.5) < 1e-12
+assert abs(T.value(multiplicateur, "lambda") - 2.0) < 1e-12
 
 # ── Matrice ─────────────────────────────────────────────────────────────────
 
