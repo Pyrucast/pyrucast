@@ -261,9 +261,11 @@ impl SubMesh {
     }
 
     /// `NodeId → index` map over the **distinct** nodes of the connectivity,
-    /// in first-appearance order (the order [`SubNodeField`](crate::containers::node_field::SubNodeField) snapshots its
-    /// support in). Built once and cached; callers keep their read guard on
-    /// this submesh while using the returned reference — no copy.
+    /// in first-appearance order — on a POI1 support, the row of a
+    /// [`SubNodeField`](crate::containers::node_field::SubNodeField), which
+    /// refuses a support whose map is shorter than its cells. Built once and
+    /// cached; callers keep their read guard on this submesh while using the
+    /// returned reference — no copy.
     ///
     /// The map is derived from `connectivity`, and every mutator drops it, so
     /// it can never go stale. (It is queried through a sealed support in

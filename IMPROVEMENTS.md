@@ -49,6 +49,18 @@ in the volume zone. Only an explicit `check()` reports it.
   `|`, solver outputs reuse the blocks' supports and reads are zero-copy — a
   redesign.
 
+## A matrix block on a POI1 support repeating a node
+
+A block numbers its rows by position in its POI1 support, and finds a node's
+row through `SubMesh::node_index`, which ranks the **distinct** nodes: on a
+support listing a node twice, the two disagree past the repeat.
+`SubNodeField::from_poi1` refuses such a support (inverse map shorter than the
+cells); the matrix constructors only document the requirement, and the test
+`node_index_is_the_flat_position_only_on_a_deduplicated_support`
+(`src/containers/matrix.rs`) pins it. `solve` on such a block now fails when
+it builds its output field. Lead: the same refusal where a block takes its
+support.
+
 ## `NodeField::with` and `with_components_per_submesh`
 
 Rust `NodeField::with(mesh, components_per_submesh)`
@@ -100,8 +112,6 @@ and the Rust docs of `src/coords.rs` and `src/atoms/node.rs`.
 Same rules as the reviewed pages: checked against the code, Python first then
 "Côté Rust", current state only.
 
-- `node-field.md`: no `SubNodeField` API table; the "écriture" bullet says
-  there is no aggregate-level write, while the field has `add_to_component`.
 - `model.md`.
 - `matrix.md`: describes a `DofId { node_id, field_idx }` type that does not
   exist; `factor` and `is_symmetric` are not cited.

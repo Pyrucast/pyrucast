@@ -7,8 +7,9 @@
 //! - [`NodeField`] — aggregate of `SubNodeField`, one per zone. A node
 //!   shared by several zones (an interface node) may be stored by several
 //!   subs; aggregate reads take the **first** sub defining
-//!   `(node, component)`, and coherence across duplicates is checked on
-//!   demand by [`NodeField::check`].
+//!   `(node, component)`. The union and the operations between fields keep
+//!   the copies equal; a write into one zone does not, and
+//!   [`NodeField::check`] verifies them on demand.
 //!
 //! A [`SubNodeField`] stores one or more named components per node of a
 //! support defined by a POI1 [`SubMesh`] (a list of nodes). The field
@@ -76,7 +77,7 @@ use std::ops::{Index, IndexMut};
 
 // ─── SubNodeField ──────────────────────────────────────────────────────────────
 
-/// Multi-component values on a snapshot of a POI1 SubMesh's node list.
+/// Multi-component values on the nodes of a POI1 SubMesh, one row per node.
 ///
 /// Values are stored row-major: component `c` of node `i` is at index
 /// `i * component_count + c` in the internal flat buffer.
@@ -122,12 +123,13 @@ pub struct SubNodeField {
 }
 
 impl SubNodeField {
-    /// Build a SubNodeField on the nodes of a POI1 [`SubMesh`]. The support
-    /// is captured as a snapshot; subsequent changes to the SubMesh do
-    /// not affect this field.
+    /// Build a SubNodeField on the nodes of a POI1 [`SubMesh`]: row `i` is the
+    /// submesh's `i`-th node. The field shares the submesh's handle and seals
+    /// it, so that order can no longer move.
     ///
     /// Errors:
     /// - the SubMesh is not POI1,
+    /// - the SubMesh lists a node twice — a field holds one row per node,
     /// - `components` is empty,
     /// - `components` contains duplicate names.
     ///
@@ -159,6 +161,18 @@ impl SubNodeField {
             }
             // POI1: one node per cell, so the cell count *is* the node count
             // and the connectivity *is* the node list. Nothing to copy.
+            // A node listed twice would own two rows while the `NodeId → row`
+            // lookup, which ranks the distinct nodes, names one of them: the
+            // inverse map must cover every cell.
+            let distinct = sm.node_index().len();
+            if distinct != sm.cell_count() {
+                return Err(PyrucastError::Message(format!(
+                    "SubNodeField: the POI1 support lists {} cell(s) but {distinct} \
+                     distinct node(s) — a field holds one row per node; take the \
+                     distinct nodes with `to_poi1`",
+                    sm.cell_count()
+                )));
+            }
             sm.cell_count()
         };
 
@@ -595,10 +609,6 @@ impl SubNodeField {
     // Scalar per-component operations (`add_to_component`, …) come from
     // the [`crate::containers::field::SubField`] trait.
 
-    // ── Reduction on a mesh ─────────────────────────────────────────────────
-
-    /// Restrict this field to the nodes of `mesh`.
-    ///
     fn check_indices(&self, ni: usize, ci: usize) -> Result<()> {
         if ni >= self.node_count() {
             return Err(PyrucastError::Message(format!(
@@ -766,9 +776,12 @@ crate::impl_subfield_field_ops!(SubNodeField);
 ///
 /// A node shared by several zones (an interface node) may be stored by
 /// several subs. Aggregate reads ([`NodeField::value`]) take the **first**
-/// sub defining `(node, component)`; whether the duplicates agree is
-/// verified on demand by [`NodeField::check`]. Writes go through the subs
-/// (`with_mut` on `field.get(i)`), exactly like `ElementField`.
+/// sub defining `(node, component)`. Writes go through a sub
+/// (`field.get(i)?.write()`), or through the per-component operations of
+/// [`Field`](crate::containers::field::Field), which write every sub
+/// carrying the component. The union and the operations between fields keep
+/// the duplicates equal; a write into one sub does not, and
+/// [`NodeField::check`] verifies them on demand.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -2032,6 +2045,32 @@ mod tests {
         .unwrap();
         assert_eq!(f.node_ids(), vec![n[0].id(), n[1].id()]);
         assert_eq!(f.node_count(), 2);
+    }
+
+    #[test]
+    fn a_poi1_support_listing_a_node_twice_is_refused_and_left_unsealed() {
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let n = nodes_on_a_line(&coords, 2);
+        // [a, a, b]: `b` sits at row 2 but ranks 1 among the distinct nodes.
+        let held = [n[0].clone(), n[0].clone(), n[1].clone()];
+        let support = Handle::new(SubMesh::poi1_from_nodes(&held).unwrap());
+        let err = SubNodeField::from_poi1(&support, vec!["T".into()]).unwrap_err();
+        assert!(
+            err.to_string().contains("3 cell(s) but 2 distinct node(s)"),
+            "{err}"
+        );
+        assert!(!support.read().is_sealed());
+        // The aggregate constructor reaches the zone through the same door.
+        let mut mesh = Mesh::empty();
+        mesh.add_sub(support.clone()).unwrap();
+        assert!(NodeField::new(&mesh, vec!["T".into()]).is_err());
+
+        // Its distinct nodes make a support: one row per node, `b` at row 1.
+        let distinct = support.read().to_poi1().unwrap();
+        let mut f = SubNodeField::from_poi1(&distinct, vec!["T".into()]).unwrap();
+        f.set_value(n[1].id(), "T", 7.0).unwrap();
+        assert_eq!(f.node_count(), 2);
+        assert_eq!(f.get(1, 0).unwrap(), 7.0);
     }
 
     #[test]

@@ -2503,7 +2503,9 @@ class NodeField:
         r"""
         `NodeField(support, components)` — zero-initialized field. With a
         `Mesh` support: one `SubNodeField` per submesh, each on the
-        distinct nodes of its zone. With a `SubMesh`: a single zone.
+        distinct nodes of its zone. With a `SubMesh`: a single zone. A POI1
+        zone is its own support, and is refused if it lists a node twice
+        (`pyrucast.mesh.to_poi1` gives its distinct nodes).
         """
     @classmethod
     def with_components_per_submesh(cls, mesh: Mesh, components_per_submesh: typing.Sequence[typing.Sequence[builtins.str]]) -> NodeField:
@@ -2519,8 +2521,8 @@ class NodeField:
         r"""
         Values for the named `component` at several nodes, returned in the
         **same order** as given — the batch form of `value`. `nodes` is
-        either a list of `Node`, a POI1 `SubMesh`, or a POI1 `Mesh` (its
-        nodes taken in connectivity order). The first zone defining each
+        either a list of `Node`, or a `SubMesh` or a `Mesh` whose
+        connectivity is read in order (for a POI1, its points). The first zone defining each
         `(node, component)` pair wins; raises on the first node the field
         does not define.
         """
@@ -2859,8 +2861,9 @@ class NodeField:
         """
     def consolidate(self) -> NodeField:
         r"""
-        Fuse the zones of a node `field` sharing the same component set into one,
-        deduping the nodes on their interface after a coherence check.
+        Fuse the zones of a node `field` sharing the same support into one,
+        carrying the union of their components; zones on distinct supports stay
+        side by side.
         
         Errors if two zones disagree on a value at a shared `(node, component)`
         pair. `field` itself is left untouched.
@@ -4303,8 +4306,9 @@ def consolidate_mesh(mesh: Mesh) -> Mesh:
 
 def consolidate_node(field: NodeField) -> NodeField:
     r"""
-    Fuse the zones of a node `field` sharing the same component set into one,
-    deduping the nodes on their interface after a coherence check.
+    Fuse the zones of a node `field` sharing the same support into one,
+    carrying the union of their components; zones on distinct supports stay
+    side by side.
     
     Errors if two zones disagree on a value at a shared `(node, component)`
     pair. `field` itself is left untouched.
@@ -5122,9 +5126,9 @@ def mazars(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure
 
 def merge(a: NodeField, b: NodeField) -> NodeField:
     r"""
-    Merge two node fields as tightly as possible: structural union of their
-    zones, consolidated — zones sharing a component set are fused, the
-    others stay separate (nothing is densified).
+    The union `a | b`: the zones of both fields, those on the same support
+    fused into one carrying the union of their components, those on distinct
+    supports side by side (nothing is densified).
     
     Errors if the two fields hold different values at the same
     `(node, component)` pair, or are attached to different `Coords`s.

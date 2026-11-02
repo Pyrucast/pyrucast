@@ -78,6 +78,8 @@ un par maille. La ligne `i` de la zone est le `i`-ème nœud de ce support ; le
 champ ne range que ses valeurs et lit ses nœuds dans le support.
 
 - **Sur une zone POI1**, le champ prend cette zone pour support, telle quelle.
+  Il la refuse si elle liste deux fois un même nœud, puisqu'il range une ligne
+  par nœud ; `pyrucast.mesh.to_poi1` en donne les nœuds distincts.
 - **Sur une zone d'un autre type** (TRI3, HEX8…), il prend son **nuage de
   nœuds** : la zone POI1 de ses nœuds distincts, dans leur ordre de première
   apparition, celle que rend `pyrucast.mesh.to_poi1`. La zone de maillage le

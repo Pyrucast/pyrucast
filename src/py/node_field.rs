@@ -265,7 +265,9 @@ pub struct PyNodeField {
 impl PyNodeField {
     /// `NodeField(support, components)` — zero-initialized field. With a
     /// `Mesh` support: one `SubNodeField` per submesh, each on the
-    /// distinct nodes of its zone. With a `SubMesh`: a single zone.
+    /// distinct nodes of its zone. With a `SubMesh`: a single zone. A POI1
+    /// zone is its own support, and is refused if it lists a node twice
+    /// (`pyrucast.mesh.to_poi1` gives its distinct nodes).
     #[new]
     fn py_new(support: &Bound<'_, PyAny>, components: Vec<String>) -> PyResult<Self> {
         let inner = if let Ok(mesh) = support.extract::<PyRef<PyMesh>>() {
@@ -304,8 +306,8 @@ impl PyNodeField {
 
     /// Values for the named `component` at several nodes, returned in the
     /// **same order** as given — the batch form of `value`. `nodes` is
-    /// either a list of `Node`, a POI1 `SubMesh`, or a POI1 `Mesh` (its
-    /// nodes taken in connectivity order). The first zone defining each
+    /// either a list of `Node`, or a `SubMesh` or a `Mesh` whose
+    /// connectivity is read in order (for a POI1, its points). The first zone defining each
     /// `(node, component)` pair wins; raises on the first node the field
     /// does not define.
     fn values(&self, nodes: &Bound<'_, PyAny>, component: &str) -> PyResult<Vec<f64>> {
