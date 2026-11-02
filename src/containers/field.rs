@@ -1926,44 +1926,10 @@ fn sum_once<S: SubField, F: Fn(usize) -> f64 + Sync>(
     counts: impl Fn(usize, usize) -> bool,
     term: impl Fn(usize, &[usize]) -> F,
 ) -> f64 {
-    let mut names: Vec<&str> = Vec::new();
-    for z in zones {
-        for c in z.components() {
-            if !names.contains(&c.as_str()) {
-                names.push(c);
-            }
-        }
-    }
-    // Per group of components counted by the same zones: those zones, in
-    // order, and the columns each one counts.
-    let mut groups: Vec<(Vec<usize>, Vec<Vec<usize>>)> = Vec::new();
-    for name in names {
-        let cols: Vec<(usize, usize)> = zones
-            .iter()
-            .enumerate()
-            .filter_map(|(z, zone)| {
-                let ci = zone.component_index(name)?;
-                counts(z, ci).then_some((z, ci))
-            })
-            .collect();
-        if cols.is_empty() {
-            continue;
-        }
-        let key: Vec<usize> = cols.iter().map(|&(z, _)| z).collect();
-        let g = match groups.iter().position(|(k, _)| *k == key) {
-            Some(g) => g,
-            None => {
-                groups.push((key, vec![Vec::new(); cols.len()]));
-                groups.len() - 1
-            }
-        };
-        for (k, &(_, ci)) in cols.iter().enumerate() {
-            groups[g].1[k].push(ci);
-        }
-    }
     let rows = |z: usize| zones[z].values().len() / zones[z].component_count().max(1);
     let mut acc = 0.0;
-    for (key, cols) in &groups {
+    for group in column_groups(zones, counts) {
+        let (key, cols) = (&group.zones, &group.columns);
         let last = key.len() - 1;
         // A point repeats only across two zones or more, of rows standing at
         // points — nodal zones.
@@ -1993,6 +1959,59 @@ fn sum_once<S: SubField, F: Fn(usize) -> f64 + Sync>(
         }
     }
     acc
+}
+
+/// Components carried by the same zones: those zones, in order, and per zone
+/// the columns of the group's components, in one order across the zones —
+/// `columns[k][j]` and `columns[l][j]` hold the same component.
+struct ColumnGroup {
+    zones: Vec<usize>,
+    columns: Vec<Vec<usize>>,
+}
+
+/// The columns `takes(z, c)` keeps — column `c` of zone `z` — grouped by the
+/// zones carrying their component, in the order the components are first met.
+fn column_groups<S: SubField>(
+    zones: &[&S],
+    takes: impl Fn(usize, usize) -> bool,
+) -> Vec<ColumnGroup> {
+    let mut names: Vec<&str> = Vec::new();
+    for z in zones {
+        for c in z.components() {
+            if !names.contains(&c.as_str()) {
+                names.push(c);
+            }
+        }
+    }
+    let mut groups: Vec<ColumnGroup> = Vec::new();
+    for name in names {
+        let cols: Vec<(usize, usize)> = zones
+            .iter()
+            .enumerate()
+            .filter_map(|(z, zone)| {
+                let ci = zone.component_index(name)?;
+                takes(z, ci).then_some((z, ci))
+            })
+            .collect();
+        if cols.is_empty() {
+            continue;
+        }
+        let key: Vec<usize> = cols.iter().map(|&(z, _)| z).collect();
+        let g = match groups.iter().position(|g| g.zones == key) {
+            Some(g) => g,
+            None => {
+                groups.push(ColumnGroup {
+                    zones: key,
+                    columns: vec![Vec::new(); cols.len()],
+                });
+                groups.len() - 1
+            }
+        };
+        for (k, &(_, ci)) in cols.iter().enumerate() {
+            groups[g].columns[k].push(ci);
+        }
+    }
+    groups
 }
 
 /// One past the largest point of the zones `key`, or `None` when their rows
@@ -2340,6 +2359,11 @@ where
 /// carry holds one value per component, compared exactly. A field whose zones
 /// share no point passes at once. Errors on the first point where two zones
 /// disagree.
+///
+/// One pass per group of components the same zones carry
+/// ([`column_groups`]) — usually a single one: per point, the first (zone,
+/// row) holding it; at a point met again, every component of the group is
+/// compared with that row. Values are read there only.
 pub(crate) fn check_points_agree<A>(field: &A, components: &[String]) -> Result<()>
 where
     A: Aggregate,
@@ -2349,53 +2373,52 @@ where
         return Ok(());
     }
     let guards: Vec<ReadGuard<A::Sub>> = field.iter().map(|h| h.read()).collect();
-    // Points are read in place, one zone at a time: two zones may share a
-    // support, whose lock is never taken twice.
-    let mut len = None;
-    for g in &guards {
-        if let Some(points) = g.row_points() {
-            len = len.max(points.ids().iter().map(|id| id.0 as usize + 1).max());
-        }
-    }
-    let Some(len) = len else {
-        return Ok(());
-    };
-    // Per point, the first (zone, row) that held it, for the component at hand.
+    let zones: Vec<&A::Sub> = guards.iter().map(|g| &**g).collect();
+    let checked = |z: usize, c: usize| components.contains(&zones[z].components()[c]);
     const UNSEEN: u32 = u32::MAX;
-    let mut first = vec![(UNSEEN, 0u32); len];
-    for name in components {
-        // Per zone, the column of `name` read in place — found once, not at
-        // every shared point.
-        let columns: Vec<Option<Column>> = guards
-            .iter()
-            .map(|g| {
-                let ci = g.component_index(name)?;
-                Some((g.values(), g.component_count(), ci))
-            })
-            .collect();
-        first.fill((UNSEEN, 0));
-        for (z, g) in guards.iter().enumerate() {
-            let (Some((values, nc, ci)), Some(points)) = (columns[z], g.row_points()) else {
-                continue;
-            };
+    for group in column_groups(&zones, checked) {
+        let (key, cols) = (&group.zones, &group.columns);
+        // A point repeats only across two zones or more, of rows standing at
+        // points — nodal zones.
+        if key.len() < 2 {
+            continue;
+        }
+        let Some(bound) = point_bound(&zones, key) else {
+            continue;
+        };
+        // Per point, the first (zone of the group, row) holding it. Points are
+        // read in place, one zone at a time: two zones may share a support,
+        // whose lock is never taken twice.
+        let mut first = vec![(UNSEEN, 0u32); bound];
+        let points = zones[key[0]].row_points().expect("point_bound read them");
+        for (row, p) in points.ids().iter().enumerate() {
+            first[p.0 as usize] = (0, row as u32);
+        }
+        drop(points);
+        for (k, &z) in key.iter().enumerate().skip(1) {
+            let points = zones[z].row_points().expect("point_bound read them");
+            let (values, width) = (zones[z].values(), zones[z].component_count());
             for (row, p) in points.ids().iter().enumerate() {
-                let v = values[row * nc + ci];
                 let slot = &mut first[p.0 as usize];
                 if slot.0 == UNSEEN {
-                    *slot = (z as u32, row as u32);
+                    *slot = (k as u32, row as u32);
                     continue;
                 }
-                let (held, hn, hc) = columns[slot.0 as usize].expect("held the component");
-                let w = held[slot.1 as usize * hn + hc];
-                if w != v {
-                    return Err(PyrucastError::Message(format!(
-                        "incoherent {}: node {}, component {}: {} \u{2260} {}",
-                        A::type_name(),
-                        p,
-                        name,
-                        w,
-                        v
-                    )));
+                let (hk, hrow) = (slot.0 as usize, slot.1 as usize);
+                let held = zones[key[hk]];
+                let (hv, hw) = (held.values(), held.component_count());
+                for (&hc, &c) in cols[hk].iter().zip(&cols[k]) {
+                    let (w, v) = (hv[hrow * hw + hc], values[row * width + c]);
+                    if w != v {
+                        return Err(PyrucastError::Message(format!(
+                            "incoherent {}: node {}, component {}: {} \u{2260} {}",
+                            A::type_name(),
+                            p,
+                            held.components()[hc],
+                            w,
+                            v
+                        )));
+                    }
                 }
             }
         }

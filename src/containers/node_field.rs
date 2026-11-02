@@ -2113,6 +2113,36 @@ mod tests {
     }
 
     #[test]
+    fn check_compares_a_component_between_the_zones_carrying_it() {
+        // One node in three zones: A carries `ux`, B `uy`, C both. The first
+        // zone holding the node lacks `uy`: B and C are still compared on it.
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let n = nodes_on_a_line(&coords, 1);
+        let zone = |names: &[&str], values: &[f64]| {
+            let support = Handle::new(SubMesh::poi1_from_nodes(&n).unwrap());
+            let names = names.iter().map(|s| s.to_string()).collect();
+            let mut z = SubNodeField::from_poi1(&support, names).unwrap();
+            for (c, &v) in values.iter().enumerate() {
+                z.set(0, c, v).unwrap();
+            }
+            Handle::new(z)
+        };
+        let mut f = NodeField::empty();
+        f.add_sub(zone(&["ux"], &[1.0])).unwrap();
+        f.add_sub(zone(&["uy"], &[2.0])).unwrap();
+        f.add_sub(zone(&["ux", "uy"], &[1.0, 3.0])).unwrap();
+        let err = f.check().unwrap_err().to_string();
+        assert!(err.contains("component uy: 2 \u{2260} 3"), "{err}");
+        // C agreeing with B: coherent.
+        f.get(2).unwrap().write().set(0, 1, 2.0).unwrap();
+        f.check().unwrap();
+        // C disagreeing with A on `ux`.
+        f.get(2).unwrap().write().set(0, 0, 5.0).unwrap();
+        let err = f.check().unwrap_err().to_string();
+        assert!(err.contains("component ux: 1 \u{2260} 5"), "{err}");
+    }
+
+    #[test]
     fn nf_check_ok_on_disjoint_components() {
         let (_cfg, _nodes, mesh) = make_two_zone_mesh();
         // Same interface nodes, but disjoint components: no duplicate pair.
