@@ -3499,9 +3499,10 @@ class SubMatrix:
     def physics(self) -> builtins.list[builtins.str]:
         r"""
         The physics nature(s) of the sub-model that produced this block, as a list
-        of tags (`"mechanical"`, `"thermal"`, `"constraint"`, `"other"`). **Empty**
-        for a block built outside assembly (the "rien" case), or several tags for a
-        coupled physics. Set by the assembler; used by `Matrix.filter`.
+        of tags (`"mechanical"`, `"thermal"`, `"diffusion"`, `"radiation"`,
+        `"constraint"`, `"other"`). **Empty** for a block built outside assembly
+        (the "rien" case), or several tags for a coupled physics. Set by the
+        assembler; used by `Matrix.filter`.
         """
     def field_names(self) -> builtins.list[builtins.str]:
         r"""
@@ -3716,9 +3717,12 @@ class SubModel:
         """
     def physics(self) -> builtins.list[builtins.str]:
         r"""
-        The physics nature(s) of this sub-model as a list of tags (`"mechanical"`,
-        `"thermal"`, `"constraint"`, `"other"`). Determined entirely by the physics
-        kind — one tag for a plain physics, several for a coupled one.
+        The physics nature(s) of this sub-model as a list of tags among
+        `"mechanical"`, `"thermal"`, `"diffusion"`, `"radiation"` and
+        `"constraint"`. A flux or an exchange takes the nature of the model it
+        targets; a constraint carries `"constraint"` plus that nature, or alone
+        when its relation spans two physics; radiation carries `"thermal"` and
+        `"radiation"`.
         """
     def label(self) -> builtins.str:
         r"""

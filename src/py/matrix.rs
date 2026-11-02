@@ -157,9 +157,10 @@ impl PySubMatrix {
     }
 
     /// The physics nature(s) of the sub-model that produced this block, as a list
-    /// of tags (`"mechanical"`, `"thermal"`, `"constraint"`, `"other"`). **Empty**
-    /// for a block built outside assembly (the "rien" case), or several tags for a
-    /// coupled physics. Set by the assembler; used by `Matrix.filter`.
+    /// of tags (`"mechanical"`, `"thermal"`, `"diffusion"`, `"radiation"`,
+    /// `"constraint"`, `"other"`). **Empty** for a block built outside assembly
+    /// (the "rien" case), or several tags for a coupled physics. Set by the
+    /// assembler; used by `Matrix.filter`.
     fn physics(&self) -> Vec<String> {
         self.handle
             .read()

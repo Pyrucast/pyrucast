@@ -522,7 +522,8 @@ pub struct CouplingLayout {
 pub enum Physics {
     /// Solid mechanics — elasticity, plasticity, damage, bars, beams, frames.
     Mechanical,
-    /// Heat conduction (and future thermal physics).
+    /// Heat transfer — conduction, and radiation alongside
+    /// [`Radiation`](Self::Radiation).
     Thermal,
     /// A Lagrange constraint — Dirichlet, MPC, embedded, contact.
     Constraint,

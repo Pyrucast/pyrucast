@@ -35,9 +35,11 @@ une identité de paire commune que seul `constraint_block_pair` mint — celui q
 écrit le même coefficient des deux côtés. L'agrégat conclut à la symétrie quand il
 tient les **deux** moitiés, et la retire si un découpage en sépare une.
 
-Les **nœuds-multiplicateurs** sont des nœuds comme les autres, fournis par
-l'utilisateur via un maillage : la contrainte ne crée jamais de nœud et ne
-mute jamais le `Coords`.
+Les **nœuds-multiplicateurs** sont des nœuds comme les autres, créés par la
+contrainte : un par relation, dans le même `Coords`, à la position d'un nœud de
+la relation (le nœud imposé pour Dirichlet, celui du premier terme pour une MPC,
+le nœud immergé pour le baignage, le nœud esclave pour le contact).
+`multiplier_mesh()` les donne.
 
 ## Imposition par élimination (condensation)
 
@@ -170,6 +172,6 @@ un index dépasse le nombre de relations.
   **projection** à la construction (petits glissements, sans frottement).
   Résolu par `solve`, qui y trouve des inégalités.
 
-D'autres contraintes suivront le même patron : une struct
+Une nouvelle contrainte suit le même patron : une struct
 implémentant `SubModelKind`, des blocs `C`/`Cᵀ` littéraux. Voir [Ajouter une
 physique](ajouter-une-physique.md).
