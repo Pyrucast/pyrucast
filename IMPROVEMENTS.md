@@ -106,29 +106,13 @@ and the Rust docs of `src/coords.rs` and `src/atoms/node.rs`.
 - The `external_forces` doc (`src/py/ops/node_field.rs`) cites
   `internal_forces(model, state)`; the signature is
   `internal_forces(model, state, solution, materials)`.
-- `src/containers/model.rs` module doc: the tree names a `sub_models` member
-  (it is `subs`) and `mass(model)` (it takes `materials`); "Loads … are
-  entirely the user's responsibility" predates `flux` and `external_forces`;
-  the multiplier nodes are said "supplied by the user … the sub-model creates
-  no node" while every constraint mints its own; "the dense LU solver ignores
-  the flag" — the solver is sparse (faer).
-- `Model::keep` says `Model` "declares no `check_push`" (it refuses another
-  `Coords`); the `Model::filter` doc says it goes through `Aggregate::subset`
-  (it does not).
-- `SubModel::Timoshenko` doc tells the removed `Frame`/`Frame3d` variants;
-  `Physics::Thermal` says "(and future thermal physics)"; the `dirichlet.rs`
-  module doc says "POI1 (for now)".
-- `PySubModel::physics` docstring lists four tags, not six (`diffusion`,
-  `radiation` missing); the `ops::model` module doc does not list `flux`.
 
 ## Book pages not reviewed yet
 
 Same rules as the reviewed pages: checked against the code, Python first then
 "Côté Rust", current state only.
 
-- `contraintes.md`: says the multiplier nodes are "fournis par l'utilisateur"
-  and that a constraint "ne crée jamais de nœud" — each constraint mints one
-  per relation in the `Coords`; "D'autres contraintes suivront" is a plan.
+- `contraintes.md`.
 - `operateurs/assemblage.md`: heading "Règle invariante : un Model = une
   Matrice".
 - `matrix.md`: describes a `DofId { node_id, field_idx }` type that does not

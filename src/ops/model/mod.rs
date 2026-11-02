@@ -10,6 +10,7 @@
 //!
 //! - *field physics* — [`heat_conduction()`], [`fick()`], [`radiation()`],
 //!   [`boundary_transfer()`], [`interface_transfer()`];
+//! - *loads* — [`flux()`], a load distributed over the model it feeds;
 //! - *solid mechanics* — [`elasticity()`], [`plasticity()`], [`damage()`]
 //!   and their named shorthands;
 //! - *structural elements* — [`truss()`], [`bernoulli()`], [`timoshenko()`],

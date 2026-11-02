@@ -45,9 +45,12 @@ impl PySubModel {
             .map(|handle| PySubFiniteElementSpace { handle })
     }
 
-    /// The physics nature(s) of this sub-model as a list of tags (`"mechanical"`,
-    /// `"thermal"`, `"constraint"`, `"other"`). Determined entirely by the physics
-    /// kind — one tag for a plain physics, several for a coupled one.
+    /// The physics nature(s) of this sub-model as a list of tags among
+    /// `"mechanical"`, `"thermal"`, `"diffusion"`, `"radiation"` and
+    /// `"constraint"`. A flux or an exchange takes the nature of the model it
+    /// targets; a constraint carries `"constraint"` plus that nature, or alone
+    /// when its relation spans two physics; radiation carries `"thermal"` and
+    /// `"radiation"`.
     fn physics(&self) -> Vec<String> {
         self.handle
             .read()

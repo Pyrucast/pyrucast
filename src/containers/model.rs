@@ -15,17 +15,18 @@
 //!
 //! ```text
 //! Model
-//! ├── sub_models: Vec<Handle<SubModel>>
+//! ├── subs: Vec<Handle<SubModel>>
+//! ├── matrix_patterns                 # sparsity per MatrixKind, built once
 //! ├── primal_vars(): Vec<String>      # union over sub-models — columns
 //! └── dual_vars():   Vec<String>      # union over sub-models — rows
 //!
 //! ops::model (operators, not Model methods) — declares the physics
-//! ├── heat_conduction(fes) -> Model          # one sub-model per subspace
-//! └── dirichlet(...)       -> Model          # composed with `union` / `|`
+//! ├── heat_conduction(fes, symmetry) -> Model   # one sub-model per subspace
+//! └── dirichlet(...)                 -> Model   # composed with `union` / `|`
 //!
 //! ops::matrix (operators, not Model methods)
 //! ├── stiffness(model, materials) -> Matrix   # rows: dual × cols: primal
-//! └── mass(model)                 -> Matrix   # same DOF layout, may be empty
+//! └── mass(model, materials)      -> Matrix   # same DOF layout, may be empty
 //!
 //! SubModel  (enum: storage + serialization; dispatch via as_kind())
 //! ├── HeatConduction(HeatConduction)
@@ -36,17 +37,22 @@
 //! └── primal_vars / dual_vars / material_* / build_*_blocks / render / ...
 //! ```
 //!
-//! The model layer is purely matrix-producing. Loads (right-hand side
-//! vectors) are entirely the user's responsibility: read
-//! `model.dual_vars()`, build a [`crate::containers::node_field::SubNodeField`] with
-//! the matching component names, and feed `Matrix + SubNodeField` to the
-//! solver.
+//! The right-hand side comes from three sources, added together before the
+//! solve:
+//!
+//! - [`external_forces`](crate::ops::node_field::external_forces()) — the
+//!   loads the model declares: a [`flux`](crate::ops::model::flux()), the
+//!   ambient part of a boundary exchange, the gap of a contact;
+//! - [`SubModel::constraint_rhs`] — the values a constraint imposes;
+//! - any [`crate::containers::node_field::NodeField`] the user builds on
+//!   `model.dual_vars()`.
 //!
 //! # Lagrange multipliers and DOF identification
 //!
-//! `SubModel::Dirichlet` introduces new DOFs of two kinds, both living on the
-//! **multiplier nodes** supplied by the user (`multiplier_mesh`; the sub-model
-//! creates no node):
+//! Every constraint sub-model (Dirichlet, MPC, embedded, contact) introduces
+//! new DOFs of two kinds, both living on its **multiplier nodes** — one per
+//! relation, minted by the constraint in the same `Coords`, beside a node of
+//! the relation, and reached through `multiplier_mesh`:
 //!
 //! - the **primal** of the constraint sub-model is `lambda`
 //!   ([`MULTIPLIER`](crate::models::MULTIPLIER)) at the multiplier nodes — the
@@ -65,8 +71,7 @@
 //! the primary DOFs. The blocks `C` (constraint) and `Cᵀ` (its transpose — the
 //! reaction in the target's `target_dual` row) are stored explicitly and each
 //! marked **non-symmetric**: only their union `C ∪ Cᵀ` is symmetric, a global
-//! property of the saddle-point system (the dense LU solver ignores the flag
-//! anyway).
+//! property of the saddle-point system.
 //!
 //! # Example: 1-D heat conduction with a Dirichlet condition
 //!
@@ -237,10 +242,6 @@ pub enum SubModel {
     Damage(damage::Damage),
     /// Timoshenko beam — shear-deformable, in a 1-D, plane or space
     /// configuration read from the mesh. See [`timoshenko::Timoshenko`].
-    ///
-    /// > The `Frame` and `Frame3d` variants that once sat here were the same
-    /// > physics in 2-D and 3-D; they are gone, and the two indices after this
-    /// > one shifted with them. That is a `bincode` break, taken knowingly.
     Timoshenko(timoshenko::Timoshenko),
     // New variants go **at the end**: `bincode` serialises the variant index, so
     // inserting one in the middle would silently misread every saved model.
@@ -2318,9 +2319,8 @@ impl Model {
     /// the given [`Physics`] (`model.filter(Physics::Mechanical)` → every
     /// sub-model that is at least mechanical, including a coupled one).
     ///
-    /// Sub-model order is preserved and the handles are **shared** (refcount
-    /// bump, no deep copy) via [`Aggregate::subset`];
-    /// the result may be empty. The matrix-side counterpart is
+    /// Sub-model order is preserved and the handles are **shared** (no deep
+    /// copy); the result may be empty. The matrix-side counterpart is
     /// [`Matrix::filter`](crate::containers::matrix::Matrix::filter).
     ///
     /// ```
@@ -2424,8 +2424,9 @@ impl Model {
     fn keep(&self, keep: impl Fn(&[Physics]) -> bool) -> Model {
         // Built sub-model by sub-model rather than through `subset`: that one is
         // fallible on an out-of-range index, which selecting by predicate cannot
-        // produce — and `Model`, like `Matrix`, declares no `check_push`, so
-        // appending never fails either. Nothing matching yields an empty model.
+        // produce. The kept sub-models come from one model, hence one `Coords`:
+        // `check_push` has nothing to refuse, and a plain `push` never fails.
+        // Nothing matching yields an empty model.
         let mut out = Model::empty();
         for h in self {
             if keep(h.read().physics()) {
@@ -2721,10 +2722,9 @@ mod tests {
         assert!(lambda_col_present);
     }
 
-    /// The multiplier nodes (supplied by the user via `multiplier_mesh`) stay
-    /// alive as long as **either** the user's mesh **or** the sub-model holds
-    /// their submesh; once both are gone the node is released and collectable.
-    /// The sub-model creates no node and never mutates the Coords.
+    /// A constraint mints its multiplier nodes beside the constrained nodes;
+    /// its multiplier submesh is their only holder, so dropping the sub-model
+    /// releases them.
     #[test]
     fn multiplier_nodes_live_with_their_mesh() {
         let coords = Handle::new(Coords::new(1).unwrap());

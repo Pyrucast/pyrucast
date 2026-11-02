@@ -3,7 +3,7 @@
 //! A Dirichlet sub-model imposes `u = u_d` on a set of constrained nodes. It
 //! is a *constraint*, not a volumetric physics: it carries no material and no
 //! constitutive law. It is built from **one mesh supplied by the user**,
-//! `imposed_mesh` — POI1 (for now): the constrained nodes (shared with the
+//! `imposed_mesh` — POI1: the constrained nodes (shared with the
 //! target physics), one node per cell, one relation per cell.
 //!
 //! Each relation gets a multiplier node of its own, minted at construction by
@@ -105,7 +105,7 @@ impl Dirichlet {
     /// its own minted beside it.
     ///
     /// `variable` is a primal of `target`, whose dual row (e.g. `"q"`) is read
-    /// from it. `imposed_mesh` must be POI1 (for now).
+    /// from it. `imposed_mesh` must be POI1.
     ///
     /// `sense` turns the constraint unilateral: `GreaterEqual` imposes
     /// `u ≥ u_d` (`LessEqual`: `u ≤ u_d`), enforced only while in contact — such
