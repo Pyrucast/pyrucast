@@ -77,30 +77,25 @@ fn un_maillage_se_compose_de_zones() -> Result<()> {
 #[test]
 fn un_champ_aux_noeuds_s_ecrit_par_zone_et_se_lit_par_agregat() -> Result<()> {
     let coords = Handle::new(Coords::new(2)?);
-    let a = Node::create_in(coords.clone(), &[0.0, 0.0])?;
-    let b = Node::create_in(coords.clone(), &[1.0, 0.0])?;
+    let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+        .iter()
+        .map(|p| Node::create_in(coords.clone(), p))
+        .collect::<Result<_>>()?;
+    let mut tri = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
+    tri.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
 
-    // Support : SubMesh POI1 contenant a et b.
-    let sm = {
-        let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
-        sm.add_cell(&[a.id()])?;
-        sm.add_cell(&[b.id()])?;
-        Handle::new(sm)
-    };
+    // Une zone par zone de maillage, posée sur son nuage de nœuds : le
+    // `Handle` même que `to_poi1` garde en cache, sans objet intermédiaire.
+    let u = NodeField::new(&tri, vec!["ux".into(), "uy".into()])?;
+    let zone = u.get(0)?;
+    let nuage = tri.get(0)?.read().to_poi1()?;
+    assert!(zone.read().support().same_object(&nuage));
 
-    // Champ de déplacement 2D mono-zone : composantes UX, UY.
-    let u = NodeField::from_submesh(&sm, vec!["UX".into(), "UY".into()])?;
-
-    // Écriture : via la zone. Lecture : via l'agrégat (ou la zone).
-    u.get(0)?.write().set_value(a.id(), "UX", 1.5)?;
-    assert_eq!(u.value(a.id(), "UX")?, 1.5);
-    assert_eq!(u.value(b.id(), "UX")?, 0.0); // valeur par défaut
-
-    // From a multi-zone mesh: one SubNodeField per submesh.
-    let mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::POI1));
-    let field = NodeField::new(&mesh, vec!["T".into()])?;
-    assert_eq!(field.len(), mesh.len());
-    field.check()?; // zones cohérentes aux interfaces
+    // Écriture par la zone, lecture par le champ.
+    zone.write().set_value(n[1].id(), "ux", 1.5)?;
+    assert_eq!(u.value(n[1].id(), "ux")?, 1.5);
+    assert_eq!(u.value(n[0].id(), "ux")?, 0.0); // valeur initiale
+    u.check()?;
     Ok(())
 }
 // ANCHOR_END: champ_nodal

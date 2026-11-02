@@ -1,153 +1,261 @@
 # Champ aux nœuds (NodeField/SubNodeField)
 
-Un champ aux nœuds porte une ou plusieurs valeurs **par nœud**. Il suit la
-même grammaire d'agrégat que tous les conteneurs de pyrucast (cf.
-[Conventions](conventions.md)) :
+Un champ aux nœuds porte des valeurs **par nœud** : une température, un
+déplacement, des forces nodales, les positions des nœuds. Là où un [champ aux
+points de Gauss](element-field.md) donne une valeur à chaque point
+d'intégration de chaque maille, celui-ci en donne une à chaque nœud, que les
+mailles voisines partagent. C'est un [agrégat](aggregate.md) de **zones** :
 
-- **`SubNodeField`** — les valeurs d'**une zone** : un bloc multi-composantes
-  sur les nœuds d'un sous-maillage POI1 (cf. [Maillage](mesh.md)) ;
-- **`NodeField`** — l'**agrégat** : une liste de `SubNodeField`, un par zone,
-  avec éventuellement des **composantes différentes d'une zone à l'autre**.
+- une **zone** (`SubNodeField`) range les valeurs des nœuds d'un **nuage de
+  nœuds**, une zone de maillage POI1 ;
+- un **champ** (`NodeField`) est une liste de zones, qui n'ont pas forcément
+  les mêmes composantes : un champ multiphysique porte `T` sur tout le domaine
+  et `ux`, `uy` sur la partie solide seulement.
 
-C'est le miroir exact de `ElementField` / `SubElementField` côté valeurs aux
-nœuds. L'intérêt de l'agrégat : un champ multiphysique (par exemple `T` sur
-tout le domaine, `UX`/`UY` sur la zone solide seulement) se représente sans
-inventer de `0.0` pour les couples `(nœud, composante)` qu'aucune zone ne
-définit — rien n'est densifié.
+Les règles communes aux deux familles de champs (composantes, règles de
+cohérence, statistiques, arithmétique) sont décrites dans [Champ](field.md) ;
+cette page en donne ce qui est propre aux nœuds.
 
-## Support : un sous-maillage POI1 par zone
+## Créer et lire un champ
 
-Un `SubMesh` POI1 est, par construction, **exactement une liste de nœuds**
-(un nœud par cellule). Chaque `SubNodeField` s'appuie sur un support POI1 :
+`pyrucast.NodeField(maillage, ["T"])` crée une zone par zone du maillage, avec
+ces composantes, toutes les valeurs à zéro ; sur une seule zone de maillage
+(`SubMesh`), le champ a une zone.
+`NodeField.with_components_per_submesh(maillage, [["T", "ux"], ["T"]])` donne
+une liste de composantes **par** zone. Une liste vide, un nom en double, un
+nombre de listes qui ne correspond pas aux zones ou un maillage qui liste deux
+fois la même zone sont refusés.
 
-- construit depuis un SubMesh POI1, le champ **partage le handle** du
-  support tel quel (aucun refcount par nœud supplémentaire : le SubMesh est
-  l'unique propriétaire des increfs, garder son handle suffit à garder les
-  nœuds en vie) ;
-- construit depuis un SubMesh d'un autre type d'élément, le champ se pose sur
-  le **compagnon POI1 canonique** de la zone — ses **nœuds distincts** dans
-  l'ordre de première apparition —, matérialisé une fois et **mémoïsé** par le
-  sous-maillage. Deux champs bâtis sur la même zone tombent donc sur le **même
-  support**, et s'apparient (cf. [`same_support`](field.md)).
+Le champ se lit nœud par nœud : `champ.value(nœud, "T")` lit la première zone
+qui porte ce nœud et cette composante, et lève une erreur si aucune ne les
+porte. `champ.values(nœuds, "T")` lit plusieurs nœuds d'un coup et rend leurs
+valeurs dans le même ordre ; `nœuds` est une liste de `Node`, ou une zone ou un
+maillage dont la connectivité est lue dans l'ordre (pour une zone POI1, ses
+points). Un nœud d'un autre `Coords` est refusé.
 
-Le champ **ne stocke aucun identifiant de nœud** : un POI1 *est* la liste de
-nœuds, et c'est le support qui la détient, une fois pour tous les champs qui s'y
-posent. Recopier la liste dans chaque champ reviendrait à la stocker autant de
-fois qu'il y a de champs (et de pas de temps) sur ce support ; le champ ne porte
-que ses valeurs, et lit les nœuds dans le support quand il en a besoin.
-
-## Scellement : le compagnon, pas le maillage
-
-C'est le **support** qui est scellé — le compagnon POI1 —, jamais le maillage
-donné en argument. Le champ indexe ses lignes par position dans ce support, donc
-ce support ne doit plus bouger ; mais la zone d'origine, elle, n'a aucune raison
-de geler : le champ n'y touche plus.
-
-Modifier cette zone (`add_cell`, `remap_nodes`) lui fait **lâcher son
-compagnon** : le nuage de nœuds a changé, le cache n'y répond plus. Conséquence,
-un champ construit après la modification se pose sur un **nouveau** support et
-ne s'apparie plus avec les précédents. Ce n'est pas une invalidation : les
-champs d'avant gardent leur support en vie et restent parfaitement lisibles,
-simplement définis sur le maillage d'avant. Pour les ramener sur le nouveau, un
-[`restrict`](operateurs/champs.md#restriction-fusion-consolidation) suffit.
-
-```text
-   NodeField (agrégat)
-   ├── SubNodeField zone 0 ── support POI1 ── values[i × ncomp + c]
-   ├── SubNodeField zone 1 ── support POI1 ── values[...]
-   └── …
-```
-
-## Composantes nommées
-
-Chaque zone porte ses **noms de composantes** (`"UX"`, `"UY"`, `"T"`, …),
-rangés en **row-major** : la composante `c` du nœud `i` est à l'indice
-`i × ncomp + c`. Au moins une composante par zone, noms uniques, valeurs
-initialisées à `0.0`. Au niveau agrégat, `components()` renvoie l'**union**
-des composantes des zones (ordre de première apparition).
-
-Les caractéristiques communes à tous les champs (composantes, `min`, `max`,
-`sum`, arithmétique scalaire et par composante) sont portées par les traits Rust
-[`SubField` (niveau zone) et `Field` (niveau agrégat)](field.md) — partagés
-avec [`ElementField`](element-field.md).
-
-## Nœuds d'interface : duplication, lecture, cohérence
-
-Un nœud partagé par plusieurs zones (nœud d'interface) est stocké **une
-fois par zone**. Trois règles régissent cette duplication :
-
-- **lecture agrégat** (`field.value(nœud, comp)`) : la **première zone**
-  définissant le couple gagne — aucune vérification au fil de l'eau. La
-  forme par lot `field.values(nœuds, comp)` lit une **liste** de valeurs
-  dans le **même ordre** : `nœuds` est une liste de nœuds, un `SubMesh`
-  POI1, ou un `Mesh` POI1 (ses points pris dans l'ordre de la
-  connectivité) ; même règle « première zone » et même erreur qu'un nœud
-  non défini ;
-- **écriture** : il n'y a **pas** d'écriture au niveau agrégat ; toute
-  mutation passe par les zones (`field[i]`), exactement comme
-  `ElementField` ;
-- **cohérence** : toutes les zones stockant un même couple `(nœud,
-  composante)` portent la **même** valeur (deuxième règle de
-  [Champ](field.md#les-règles-de-cohérence)). L'union et les opérations entre
-  champs la vérifient quand c'est nécessaire ; une écriture dans une zone ne
-  touche pas les autres, et `field.check()` vérifie la règle à la demande
-  (comparaison exacte) ; `node_field.consolidate(field)` fait cette
-  vérification puis **fusionne par support** — les zones définies sur le
-  **même** `SubMesh` (identité de handle) deviennent une seule zone portant
-  l'union de leurs composantes (valeurs des composantes communes vérifiées),
-  les supports distincts restent séparés.
-
-## Composition : union `|`
-
-Comme pour tous les agrégats, `a | b` **unit les zones** (handles partagés,
-pas de copie ; déduplication par handle) — ce n'est pas une addition de
-valeurs. L'union **finalise** en fusionnant les zones de même support (voir
-`node_field.consolidate` ci-dessus) et lève si deux zones divergent sur une valeur
-partagée. L'arithmétique scalaire (`f + 2.0`, `f * 0.5`, …) vit au niveau
-zone (`SubNodeField`) sur `+`/`*`/… Le nommé `merge(a, b)` ≡ `a | b`.
-
-## API Rust
-
-```rust,ignore
-{{#include ../../tests/doc_conteneurs.rs:champ_nodal}}
-```
-
-## API Python
+On écrit **dans une zone** : `champ[i]` ou `champ.unit()` la rendent, et ce
+sont des vues (écrire dans la zone, c'est écrire dans le champ). Dans une
+zone, un nœud se désigne par lui-même (`zone[nœud, "T"]`, `set_value`) ou par
+sa **ligne**, son rang dans le support de la zone (`get(ligne, rang)`, `set`,
+`node_values`). Les opérations par composante, comme `add_to_component`,
+s'appliquent au champ entier, en place, dans toutes les zones qui portent la
+composante.
 
 ```python
 {{#include ../../tests/python/test_doc_conteneurs.py:node_field_api}}
 ```
 
-## Refcount et durée de vie
-
-Le champ ne fait **aucune** comptabilité par nœud : il garde un clone du
-`Handle<SubMesh>` de son support, et c'est le SubMesh qui possède les
-increfs par nœud dans la `Coords` (cf.
-[Coords](coords.md)). Tant qu'une zone du champ est vivante,
-son support l'est aussi, donc ses nœuds aussi — même si tous les `Node`
-utilisateurs ont disparu.
-
-La libération est automatique : quand le dernier `Handle` sur une zone
-disparaît, la zone est détruite, son clone du handle de support avec elle, et
-les nœuds redeviennent collectables si plus rien ne les retient (cf.
-[Modèle mémoire](memory-model.md)).
-
-## Opérateurs consommant un champ
-
-Les opérateurs détaillés sont décrits dans
-[Opérateurs sur les champs](operateurs/champs.md) (dérivations),
-[Assemblage](operateurs/assemblage.md) (`flux`, second membre) et
-[Solveur](operateurs/solveur.md). Tous consomment l'agrégat et résolvent les
-nœuds **à travers les zones** (règle premier-trouvé) :
-
-| Opération | Particularité multi-zones |
+| `NodeField` | |
 |---|---|
-| `positions(mesh)` | un `SubNodeField` par submesh, interfaces cohérentes par construction |
-| `coords.set(f)` / `displace(f)` | chaque nœud distinct traité **une seule fois** (un nœud d'interface n'est pas déplacé deux fois) |
-| `gradient(f, fes)` / `deformation(u, fes)` | lookups par nœud × Gauss via un snapshot des zones |
-| `divergence(F)` | adjoint de `gradient` : champ vectoriel par éléments → `NodeField` (`div`), accumulé par nœud (`d_i = ∫ ∇N_i·F`) |
-| `solve(matrix, rhs)` | second membre lu par DOF (absent ⇒ `0.0`) ; solution : une zone par support **colonne** des blocs de la matrice, sur le handle même du bloc — `same_support` avec tout champ posé sur ces supports, stable d'une résolution à l'autre |
-| `restrict(f, mesh)` | une zone par submesh cible, sur le **nuage POI1 canonique caché** du sous-maillage (`to_poi1`) ⇒ deux restrictions sur le même `mesh` partagent le support et sont soustractibles (et s'alignent avec `K·x`/`solve`) ; `0.0` pour les nœuds non couverts |
-| `restrict_like(f, target)` | reprojette sur le support **et** les composantes de `target` (mêmes slots) ⇒ combinable par `+ - * /` avec `target` ; nœuds/composantes hors de `target` abandonnés, `0.0` si non couverts |
-| `merge(a, b)` | union structurelle consolidée (conflit de valeur ⇒ erreur) |
-| `node_field.consolidate(f)` | fusion par jeu de composantes après vérification de cohérence |
+| `len(champ)`, `champ[i]`, `for zone in champ`, `unit()`, `\|`, `add_sub` | l'interface des [agrégats](aggregate.md) |
+| `support()` | le support de chaque zone, dans l'ordre, partagé |
+| `components()` | l'union des composantes des zones |
+| `value(nœud, "c")`, `values(nœuds, "c")` | une valeur, ou une liste dans l'ordre des nœuds |
+| `node_count` | le nombre de nœuds distincts, toutes zones confondues |
+| `min(c)`, `max(c)`, `sum(c)` | sur toutes les zones qui portent `c` ; `sum` compte une fois un nœud partagé |
+| `champ["c"]`, `filter_components([…])`, `rename_component(a, b)` | un champ réduit à ces composantes, ou une composante renommée |
+| `add_to_component(c, s)`, `mul_to_component(c, s)`… | une opération sur une composante, en place |
+| `check()` | vérifie que les zones s'accordent sur les nœuds qu'elles partagent |
+| `consolidate()` | fond les zones posées sur un même support (voir [Combiner](#combiner-des-champs)) |
+| `plot(…)` | le tracé, voir [Visualisation](#visualisation) |
+
+| `SubNodeField` (zone) | |
+|---|---|
+| `support()` | son nuage de nœuds, partagé |
+| `node_count`, `component_count` | ses deux dimensions |
+| `value(nœud, "c")`, `zone[nœud, "c"]` | une valeur, par nœud et nom de composante |
+| `set_value(nœud, "c", v)`, `zone[nœud, "c"] = v` | écrire une valeur |
+| `get(ligne, rang)`, `set(ligne, rang, v)` | par ligne et rang de composante |
+| `get_by_node(nœud, rang)`, `set_by_node(nœud, rang, v)` | par nœud et rang de composante |
+| `node_values(ligne)` | toutes les composantes d'une ligne, dans l'ordre |
+| `set_uniform("c", v)` | la composante `c` à `v` en tout nœud |
+| `components()`, `component_index("c")` | les composantes, le rang de l'une |
+
+## Le support : un nuage de nœuds
+
+Chaque zone est posée sur une zone de maillage **POI1** : une liste de nœuds,
+un par maille. La ligne `i` de la zone est le `i`-ème nœud de ce support ; le
+champ ne range que ses valeurs et lit ses nœuds dans le support.
+
+- **Sur une zone POI1**, le champ prend cette zone pour support, telle quelle.
+- **Sur une zone d'un autre type** (TRI3, HEX8…), il prend son **nuage de
+  nœuds** : la zone POI1 de ses nœuds distincts, dans leur ordre de première
+  apparition, celle que rend `pyrucast.mesh.to_poi1`. La zone de maillage le
+  calcule une fois et le garde en [cache](#ce-qui-est-mis-en-cache) : deux
+  champs construits sur le même maillage reçoivent le même support.
+
+Le support est [scellé](mesh.md#scellement), puisque le champ range ses lignes
+dans l'ordre de ses nœuds. La zone TRI3 d'où vient le nuage, elle, reste
+modifiable. Si on lui ajoute une maille, elle oublie son nuage : les champs
+déjà posés restent valides sur l'ancien, et un champ construit ensuite se pose
+sur un nouveau nuage. Les deux ne se combinent plus nœud à nœud ;
+`pyrucast.node_field.restrict(champ, maillage)` porte l'ancien sur le nouveau
+(voir [Maillage](mesh.md#ce-quune-zone-garde-en-cache)).
+
+`champ.support()` rend le support de chaque zone, dans l'ordre, et
+`zone.support()` celui d'une zone. C'est le même objet, pas une copie : un
+champ construit dessus se combine nœud à nœud avec le premier. Le champ garde
+son support en vie, mais pas la zone de maillage dont il a été tiré : il n'a
+plus besoin d'elle.
+
+```python
+{{#include ../../tests/python/test_doc_conteneurs.py:node_field_support}}
+```
+
+## Nœuds partagés entre zones
+
+Deux zones de maillage qui se touchent partagent leurs nœuds de frontière, et
+un champ posé sur elles range ces nœuds **dans chaque zone**, comme `a` et `d`
+dans le premier exemple. La [deuxième règle de
+cohérence](field.md#les-règles-de-cohérence) veut qu'un tel nœud ait la même
+valeur dans toutes les zones qui le portent, pour chaque composante qu'elles
+ont en commun. Le champ s'appuie sur elle :
+
+- `value` et `values` lisent la première zone qui porte le nœud ;
+- `sum`, `node_count`, `pyrucast.measure.xtx` et `xty` comptent un nœud
+  partagé une fois ;
+- `add_to_component` et les autres opérations par composante modifient toutes
+  les zones à la fois, et gardent donc la règle.
+
+L'union et les opérations entre deux champs la vérifient quand c'est
+nécessaire. Écrire dans une zone, en revanche, ne touche pas les autres :
+`T[0][d, "T"] = 30.0` laisse l'ancienne valeur de `d` dans la zone du haut.
+`champ.check()` compare alors les valeurs exactement et lève une erreur au
+premier désaccord.
+
+## Combiner des champs
+
+Les opérations par un scalaire et entre deux champs suivent les règles de
+[Champ](field.md#calculer-avec-des-champs) : les valeurs s'associent par support
+et par composante, et deux zones s'associent quand leurs supports sont le même
+objet.
+
+L'**union** `a | b` réunit les zones sans toucher aux valeurs :
+
+- les zones posées sur un **même** support sont fondues en une, qui porte
+  l'union de leurs composantes ; une composante portée des deux côtés doit y
+  avoir les mêmes valeurs ;
+- les zones posées sur des supports **distincts** restent côte à côte, et
+  doivent s'accorder sur les nœuds qu'elles partagent.
+
+Un désaccord lève une erreur. `pyrucast.node_field.merge(a, b)` est cette même
+union. `add_sub` ajoute une zone telle quelle, sans rien fondre, et refuse une
+zone qui porterait une composante déjà portée sur son support ;
+`consolidate()` fond ensuite les zones qui partagent un support, après la même
+vérification.
+
+```python
+{{#include ../../tests/python/test_doc_conteneurs.py:node_field_combiner}}
+```
+
+## D'où viennent ces champs, et où ils vont
+
+Les opérateurs qui **produisent** un champ aux nœuds sont rangés dans
+`pyrucast.node_field` (détail dans [Opérateurs sur les
+champs](operateurs/champs.md) et [Assemblage](operateurs/assemblage.md)) :
+
+| Famille | Opérateurs |
+|---|---|
+| géométrie | `positions(maillage)`, les coordonnées des nœuds, une composante par axe |
+| d'un champ aux points de Gauss | `divergence`, `sum_to_nodes` |
+| assemblage | `internal_forces`, `external_forces` |
+| d'un champ aux nœuds | `restrict`, `restrict_like`, `project`, `merge`, `consolidate`, `mask` |
+
+La résolution en produit un aussi : `pyrucast.solver.solve(K, f)` pose sa
+solution sur les supports des blocs de la matrice, ceux que
+`restrict(…, maillage)` donne sur le même maillage (voir
+[Solveur](operateurs/solveur.md)).
+
+Ces champs sont ensuite **consommés** :
+
+- portés aux points de Gauss : `interp_to_gauss`, `gradient`, `deformation`,
+  `beam_deformation`, `shell_deformation`, `strain` (dans
+  `pyrucast.element_field`) ;
+- comme second membre de `solve`, où un degré de liberté qu'aucune zone ne
+  porte vaut zéro ;
+- pour déplacer les nœuds : `pyrucast.coords.set`, `displace`,
+  `displace_from`, qui traitent une fois un nœud partagé ;
+- par `pyrucast.model.update_contact`, les réductions de `pyrucast.measure`
+  (`integral`, `xtx`, `xty`), l'export (`pyrucast.export.to_arrays(…,
+  node_fields=[…])`, `export_vtk`) et le tracé.
+
+## Ce qui est mis en cache
+
+Un champ aux nœuds ne garde **aucun cache** : une zone ne contient que ses
+valeurs, les noms de ses composantes et son support. Il s'appuie sur deux
+caches des zones de maillage (détaillés dans
+[Maillage](mesh.md#ce-quune-zone-garde-en-cache)) :
+
+- **le nuage de nœuds**, gardé par la zone de maillage d'origine, calculé à la
+  première demande puis rendu tel quel. C'est lui qui donne le même support à
+  `NodeField(maillage, …)`, à `restrict(…, maillage)`, à la solution de `solve`
+  et aux sorties de `divergence` et de `sum_to_nodes` sur ce maillage : ils se
+  combinent nœud à nœud. Il épargne aussi le dédoublonnage des nœuds de la zone
+  à chaque nouveau champ ;
+- **l'index des nœuds**, gardé par le support : la table « nœud → ligne »,
+  construite à la première lecture par nœud (`value`, `set_value`, `values`,
+  les opérateurs qui lisent le champ nœud par nœud). Elle sert ensuite à tous
+  les champs posés sur ce support : trouver la ligne d'un nœud ne parcourt plus
+  la liste.
+
+Le support étant scellé, son index ne change plus. Le nuage, lui, est oublié
+dès que la zone de maillage d'origine change.
+
+## Visualisation
+
+`champ.plot(component="T")` trace un **nuage de points colorés** : le support
+POI1 n'a pas de mailles, aucune surface ne s'en déduit. Pour colorer les
+mailles, on passe le champ au maillage : `maillage.plot(field=champ,
+component="T")`. Voir [Visualisation](visualization.md).
+
+## Sauvegarde
+
+[`pyrucast.save`](sauvegarde.md) écrit le champ avec son support et son
+`Coords`. Des champs sauvegardés dans un même fichier partagent leur support à
+la relecture et se combinent nœud à nœud. Le nuage mis en cache n'est pas
+écrit : un champ construit sur le maillage relu se pose sur un nouveau nuage,
+et `restrict(champ, maillage)` y ramène un champ relu. Les nœuds relus
+appartiennent au `Coords` relu : `value` refuse un `Node` du script qui a écrit
+le fichier, et on lit avec le nœud relu, `o["maillage"].coords().acquire(id)`.
+
+## Côté Rust
+
+`SubNodeField` porte le `Handle<SubMesh>` de son support, ses noms de
+composantes et un `Vec<f64>` à plat, rangé **ligne → composante** :
+
+```text
+values[ligne * component_count + c]
+```
+
+Les composantes d'un nœud sont donc contiguës : `node_values(ligne)` en rend
+la tranche sans copie.
+
+Le `Handle<SubMesh>` du support est le **compagnon POI1 lui-même**, sans objet
+intermédiaire. `SubMesh::to_poi1` garde ce compagnon dans un `OnceLock` et en
+rend un clone du `Handle` ; le champ garde ce clone. Un `Handle` étant un
+`Arc<RwLock<SubMesh>>`, le champ et la zone d'origine tiennent deux clones du
+même `Arc`, et le champ ne référence pas la zone d'origine.
+
+`NodeField` est l'agrégat de `Handle<SubNodeField>`. Son `check_push` refuse
+une zone d'un autre `Coords`, son `check_add` une composante déjà portée sur le
+support de la zone (première règle), et son `finalize`, appelé à la fin de
+chaque union, est `ops::node_field::consolidate`.
+
+```rust,ignore
+{{#include ../../tests/doc_conteneurs.rs:champ_nodal}}
+```
+
+- **Contrat commun.** Les noms de composantes, `min`/`max`/`sum`, les
+  opérations par composante et l'arithmétique viennent des traits `SubField`
+  et `Field` (`src/containers/field.rs`), partagés avec le champ aux points de
+  Gauss.
+- **Ligne d'un nœud.** `SubNodeField::index_of` passe par
+  `SubMesh::node_index()`, un `OnceLock<HashMap<NodeId, usize>>` du support ;
+  `index_of_with` prend un verrou de lecture déjà tenu, pour une boucle qui
+  cherche beaucoup de nœuds.
+- **Lecture par les opérateurs.** `NodeFieldView` tient un verrou de lecture
+  sur chaque zone et sur son support pendant tout un opérateur (`gradient`,
+  `restrict`, `project`, le tracé…), et lit les valeurs en place.
+- **Un nœud une fois.** `first_rows` parcourt les zones dans l'ordre et donne
+  chaque nœud une fois, à la première zone qui le porte : c'est ce
+  qu'utilisent `node_ids`, `node_count` et le déplacement des nœuds.

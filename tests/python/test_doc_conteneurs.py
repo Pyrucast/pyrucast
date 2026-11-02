@@ -306,54 +306,101 @@ assert poi.cell_count == 3
 # ── Field at the nodes ──────────────────────────────────────────────────────
 
 
-def _maillage_a_deux_zones():
-    """Two POI1 clouds united: the support of a field with per-zone components.
-
-    Set up here so the test function does not name `pyrucast` before its anchor —
-    an `import pyrucast` inside an anchor makes it a local variable.
-    """
-    c = pyrucast.Coords(2)
-    x, y = c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0])
-    return pyrucast.mesh.poi1_from_nodes([x]) | pyrucast.mesh.poi1_from_nodes([y])
-
-
 # ── node field api ─────────────────────────────────────────
 
-two_zone_mesh = _maillage_a_deux_zones()
 # ANCHOR: node_field_api
 import pyrucast
 
-c = pyrucast.Coords(dim=2)
-a = c.add_node([0.0, 0.0])
-b = c.add_node([1.0, 0.0])
+# Un carré coupé en deux triangles, deux zones de maillage qui partagent la
+# diagonale a–d.
+c = pyrucast.Coords(2)
+a, b, d, e = (c.add_node(p) for p in ([0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]))
+bas = pyrucast.Mesh(c, "TRI3")
+bas.unit().add_cell([a, b, d])
+haut = pyrucast.Mesh(c, "TRI3")
+haut.unit().add_cell([a, d, e])
+carre = bas | haut
 
-mesh = pyrucast.Mesh(c, "POI1")
-mesh.unit().add_cell([a])
-mesh.unit().add_cell([b])
+# Une zone par zone de maillage, toutes les valeurs à zéro.
+T = pyrucast.NodeField(carre, ["T"])
+print(len(T), T.node_count)  # 2 4 — a et d sont rangés dans les deux zones
 
-# One SubNodeField per submesh of the support (Mesh or SubMesh).
-u = pyrucast.NodeField(mesh, ["UX", "UY"])
-print(u)  # NodeField: 1 subfield(s)
-print(u.unit())  # SubNodeField: 2 node(s), 2 component(s) [UX, UY]
+# En place, dans toutes les zones qui portent T ; puis dans une zone seulement.
+T.add_to_component("T", 20.0)
+T[1].set_value(e, "T", 25.0)  # e n'appartient qu'à la zone du haut
 
-# Écriture via la zone, lecture via l'agrégat.
-u[0][a, "UX"] = 1.5
-print(u.value(a, "UX"))  # 1.5
+# Lire par le champ : la première zone qui porte le nœud répond.
+print(T.value(e, "T"))  # 25.0
+print(T.values([a, b, d, e], "T"))  # [20.0, 20.0, 20.0, 25.0]
+print(T.sum("T"))  # 85.0 — a et d ne comptent qu'une fois
 
-# Batch read: a list of nodes (or a POI1 Mesh/SubMesh) → an ordered list.
-print(u.values([a, b], "UX"))  # [1.5, 0.0]
-print(u.values(mesh, "UX"))  # [1.5, 0.0]  — points of the POI1 mesh
-print(u.min("UX"), u.max("UX"))  # 0.0 1.5
-print(u.sum("UX"))  # 1.5  — Σ over the nodes (resultant of a force field)
+# Une zone est une vue : écrire dans zone, c'est écrire dans T.
+zone = T[0]
+print(zone)  # SubNodeField: 3 node(s), 1 component(s) [T]
+print(zone[d, "T"], zone.get(2, 0))  # 20.0 20.0 — d est la ligne 2 de la zone
 
-# Components per zone (multiphysics):
-f = pyrucast.NodeField.with_components_per_submesh(two_zone_mesh, [["T"], ["UX", "UY"]])
-print(f.components())  # ['T', 'UX', 'UY']
-f.check()  # interface coherence (raises otherwise)
-g = pyrucast.node_field.consolidate(f)  # merge as tightly as possible
+# Écrire un nœud partagé dans une seule zone rompt la deuxième règle.
+zone[d, "T"] = 30.0
+try:
+    T.check()
+except RuntimeError as err:
+    print(err)  # incoherent NodeField: node 2, component T: 30 ≠ 20
+T[1][d, "T"] = 30.0
+T.check()  # les deux zones s'accordent de nouveau
+
+# Une liste de composantes par zone.
+mixte = pyrucast.NodeField.with_components_per_submesh(carre, [["T", "ux"], ["T"]])
+print(mixte.components())  # ['T', 'ux']
 # ANCHOR_END: node_field_api
-assert u.value(a, "UX") == 1.5
-assert f.components() == ["T", "UX", "UY"]
+assert T.values([a, b, d, e], "T") == [20.0, 20.0, 30.0, 25.0]
+assert T.sum("T") == 95.0
+assert [z.components() for z in mixte] == [["T", "ux"], ["T"]]
+
+# ── node field support ─────────────────────────────────────
+
+# ANCHOR: node_field_support
+# Posé sur une zone TRI3, le champ prend son nuage de nœuds : une zone POI1,
+# scellée. La zone TRI3 elle-même reste modifiable.
+s = T.support()
+print(s[0].element_type, s[0].cell_count)  # POI1 3
+print(s[0].is_sealed, carre[0].is_sealed)  # True False
+
+# Ce nuage est celui que rend to_poi1, le même objet : l'union ne garde
+# que deux zones, pas quatre.
+print(len(s | pyrucast.mesh.to_poi1(carre)))  # 2
+
+# Une zone POI1 est elle-même le support.
+points = pyrucast.mesh.poi1_from_nodes([b, d])
+F = pyrucast.NodeField(points, ["F"])
+print(len(F.support() | points), points[0].is_sealed)  # 1 True
+# ANCHOR_END: node_field_support
+assert len(pyrucast.NodeField(carre, ["T"]) + T) == 2
+
+# ── node field combiner ────────────────────────────────────
+
+# ANCHOR: node_field_combiner
+# Sur un même support, l'union fond les zones en une.
+q = pyrucast.NodeField(carre, ["q"])
+tout = T | q
+print([z.components() for z in tout])  # [['T', 'q'], ['T', 'q']]
+
+# Deux supports distincts restent côte à côte, mais doivent s'accorder sur
+# les nœuds qu'ils partagent.
+coin = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes([d]), ["T"])
+try:
+    T | coin
+except RuntimeError as err:
+    print(err)  # incoherent NodeField: node 2, component T: 30 ≠ 0
+coin.unit()[d, "T"] = 30.0
+print(len(T | coin))  # 3
+
+# add_sub ajoute une zone telle quelle ; consolidate fond celles qui
+# partagent un support.
+w = pyrucast.NodeField(carre, ["T"])
+w.add_sub(q[0])
+print(len(w), len(w.consolidate()))  # 3 2
+# ANCHOR_END: node_field_combiner
+assert len(pyrucast.node_field.merge(w, q)) == 2
 
 # ── Finite element space ────────────────────────────────────────────────────
 
