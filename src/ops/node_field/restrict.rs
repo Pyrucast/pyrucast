@@ -80,7 +80,7 @@ fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) {
 /// // The field brought back to a mesh's nodes — a border, a selection.
 /// let bout = mesh::poi1_from_nodes(&n[..1])?;
 /// let r = node_field::restrict(&temp, &bout)?;
-/// assert_eq!(r.node_count()?, 1);
+/// assert_eq!(r.node_count(), 1);
 /// assert_eq!(r.get(0)?.read().value(n[0].id(), "T")?, 10.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -228,7 +228,7 @@ mod tests {
 
         let r = restrict(&f, &m).unwrap();
         assert_eq!(r.len(), 1);
-        assert_eq!(r.node_count().unwrap(), 2);
+        assert_eq!(r.node_count(), 2);
         assert_eq!(Field::components(&r), vec!["T", "P"]);
         assert_eq!(r.value(nodes[0].id(), "T").unwrap(), 1.0);
         assert_eq!(r.value(nodes[2].id(), "T").unwrap(), 3.0);
@@ -248,7 +248,7 @@ mod tests {
         m.add_cell(&[nb.id()]).unwrap();
 
         let r = restrict(&f, &m).unwrap();
-        assert_eq!(r.node_count().unwrap(), 2);
+        assert_eq!(r.node_count(), 2);
         assert_eq!(r.value(nodes[0].id(), "T").unwrap(), 7.0);
         assert_eq!(r.value(nb.id(), "T").unwrap(), 0.0);
     }
@@ -299,7 +299,7 @@ mod tests {
 
         let out = restrict_like(&source, &target).unwrap();
         assert_eq!(Field::components(&out), vec!["u_x", "u_y"]);
-        assert_eq!(out.node_count().unwrap(), 2); // n2 dropped
+        assert_eq!(out.node_count(), 2); // n2 dropped
         assert_eq!(out.value(n0.id(), "u_x").unwrap(), 1.0);
         assert_eq!(out.value(n1.id(), "u_y").unwrap(), 2.0);
         assert_eq!(out.value(n1.id(), "u_x").unwrap(), 0.0); // absent → 0

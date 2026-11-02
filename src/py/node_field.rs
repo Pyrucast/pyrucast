@@ -291,8 +291,8 @@ impl PyNodeField {
 
     /// Number of distinct nodes across the zones.
     #[getter]
-    fn node_count(&self) -> PyResult<usize> {
-        Ok(self.inner.node_count()?)
+    fn node_count(&self) -> usize {
+        self.inner.node_count()
     }
 
     /// Value at `node` for the named `component` — the first zone
