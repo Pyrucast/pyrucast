@@ -290,8 +290,7 @@ table de noms de la matrice (`dof_vars()`). `row_dofs()` rend la forme lisible,
 - `symmetry`, `physics`, `factor`, et `row_sense`, le sens (égalité ou
   inégalité) des lignes `imposed`, que lit le solveur ;
 - `sealed`, posé quand une matrice qui contient le bloc reçoit ses valeurs
-  (`Matrix::set_values`, par où passent l'assemblage et la somme), et lu par
-  `add_entry`. Il se pose comme celui d'une zone de maillage : la fonction
+  (assemblage ou somme), et lu par `add_entry`. Il se pose comme celui d'une zone de maillage : la fonction
   `seal` lit d'abord, et ne prend le verrou d'écriture que si le bloc n'est
   pas encore scellé. Il n'est pas sauvegardé : une matrice relue n'a pas de
   valeurs, et son assemblage scelle de nouveau ses blocs.
