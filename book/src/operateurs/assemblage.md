@@ -134,7 +134,7 @@ reste sur `stiffness`.
 assemblée, sur l'union de leurs DOFs : le résultat est assemblé et se résout
 tel quel. Rien n'est recalculé. Avec le **facteur scalaire** des blocs
 (`bloc * s`, `bloc / s` — voir
-[Matrice creuse](../matrix.md#facteur-scalaire-et-somme-de-matrices)), c'est
+[Matrice creuse](../matrix.md#calculer-avec-des-matrices)), c'est
 l'opérateur de la dynamique, `M/dt + K` :
 
 ```python

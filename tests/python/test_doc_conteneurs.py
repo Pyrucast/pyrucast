@@ -717,39 +717,3 @@ print(T.value(multiplicateur, "lambda"))  # 2.0 : la réaction de l'appui
 assert K.n_rows == 6
 assert abs(T.value(l, "T") - 3.5) < 1e-12
 assert abs(T.value(multiplicateur, "lambda") - 2.0) < 1e-12
-
-# ── Matrice ─────────────────────────────────────────────────────────────────
-
-
-def _support_de_deux_noeuds():
-    c = pyrucast.Coords(1)
-    a, b = c.add_node([0.0]), c.add_node([1.0])
-    return pyrucast.mesh.poi1_from_nodes([a, b]), a, b
-
-
-# ── matrix api ─────────────────────────────────────────────
-
-support, a, b = _support_de_deux_noeuds()
-# ANCHOR: matrix_api
-import pyrucast
-
-# The entries live in a **block**, never in the aggregate: a block knows its
-# POI1 supports (rows and columns) and its variables.
-k = pyrucast.Matrix.block(support, support, ["q"], ["T"], symmetry="full")
-bloc = k[0]
-bloc.add_entry(a, "q", a, "T", 2.0)
-bloc.add_entry(a, "q", b, "T", -1.0)
-bloc.add_entry(b, "q", a, "T", -1.0)
-bloc.add_entry(b, "q", b, "T", 2.0)
-k.finalize()  # required before any solver use
-
-assert k.n_rows == 2
-assert k.n_cols == 2
-assert k.symmetric is True
-
-# What it weighs, estimated: the four entries of the block, plus the assembled
-# CSR. The factorization, larger than both, cannot be counted (faer keeps the
-# size of its factors private).
-assert bloc.memory_bytes == 4 * 24
-assert k.memory_bytes > bloc.memory_bytes
-# ANCHOR_END: matrix_api

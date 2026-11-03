@@ -434,7 +434,7 @@ valeur).
 `Matrix.__mul__` **dispatche selon l'opérande droite**, comme l'arithmétique de
 champ ci-dessus : un `NodeField` déclenche le produit matrice-vecteur
 (`mul_field`), un `float` la mise à l'échelle **paresseuse** du facteur (voir
-[Matrice creuse](../matrix.md#facteur-scalaire-et-somme-de-matrices)).
+[Matrice creuse](../matrix.md#calculer-avec-des-matrices)).
 `/` n'existe que pour le facteur (`Matrix` n'a pas de division matrice-vecteur),
 et refuse un diviseur nul (`ZeroDivisionError`) ou non fini (`ValueError`).
 Comme pour les champs, tous ces opérateurs renvoient une **nouvelle** `Matrix` —

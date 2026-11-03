@@ -61,6 +61,70 @@ cells); the matrix constructors only document the requirement, and the test
 it builds its output field. Lead: the same refusal where a block takes its
 support.
 
+## `lump` returns a matrix without blocks
+
+`ops::matrix::lump` (`src/ops/matrix.rs`) builds the diagonal values and hands
+them to `Matrix::empty()` through `set_assembled`: the result has no block.
+Everything that reads the blocks then sees nothing. Measured from Python on a
+conduction bar: `M.lump().solve(rhs)` returns a `NodeField` with zero zones,
+`M.lump() * x` too, `M.lump().filter("thermal")` is empty, and a save/load
+returns a 0×0 matrix. `M.lump() / dt + K` works only because `K` brings blocks
+covering the same rows. Lead: give the result a literal diagonal block on the
+row support, so that it describes itself like any other matrix.
+
+## Writing into a block of an assembled matrix
+
+`add_entry` on a block (`k[0].add_entry(...)`) changes the block but not the
+matrix that holds it, which keeps its assembled values and its cached
+factorization: after it, `k.get(...)` and `k[0].get(...)` disagree, and
+`k.solve` returns the old solution. Measured: 2.0 against 4.0 after adding 2.0
+to a finalized block. Decide: refuse the write on a block that an assembled
+matrix holds, or let the matrix see it.
+
+## Reading a computed block
+
+On a computed block, `SubMatrix.get` raises ("a computed block holds no
+value"), but `dense()` and `mul_dense()` return zeros and `entries()` an empty
+list. One rule for all four.
+
+## "call finalize()" on a matrix that needs `assemble()`
+
+`dense`, `mul_dense`, `matrix * x` and `solve` on an unassembled matrix raise
+"Matrix has not been finalized; call finalize() before solving"
+(`assembled_or_err`, `src/containers/matrix.rs`), also when the matrix carries
+a computed block, which `finalize()` refuses. The message should name
+`assemble()`.
+
+## Matrix docstrings and comments that describe older things
+
+Python (the `.pyi` stub, from `src/py/matrix.rs`):
+
+- `Matrix`: "call `finalize()` before solving" — an assembler returns an
+  assembled matrix; a matrix of computed blocks needs `assemble()`.
+- `Matrix()`: "Populate via `add_sub_matrix`", which does not exist.
+- `n_rows`, `n_cols`: "(finalized)" — they read the blocks.
+- `finalize`: "Must be called before any solver-facing method".
+- `__truediv__`: "Not finalized; see `__mul__`" — the result stays assembled.
+- `__or__`: "then call `finalize()` before solving".
+
+Rust:
+
+- `src/containers/matrix.rs` module doc: `Matrix` is "Read-only: every
+  accessor unions the blocks on the fly" — it holds an assembled CSR.
+- `SubMatrix::recipe` member: "(the historical behaviour, unchanged)".
+- `AssembledCsr`: "storing one here meant copying… twenty gigabytes of
+  `memcpy`".
+- `DofKey`: "thirty million of each on a solid mesh".
+- `set_assembled`: "the cycle Option B avoids"; `src/ops/matrix.rs` "Option B".
+- `collect_dof_keys`: "identical to the historical behaviour".
+- Matrix scalar operators comment: "`Matrix` being the one aggregate that
+  declares no `check_push`" — it declares one (same `Coords`).
+- `src/ops/scatter.rs`: "The historical path turned every block…", "A
+  `HashMap<(NodeId, String), usize>` was thirty million string hashes".
+- `src/ops/solver/lu.rs`: "in the order it used to happen", "All four used to
+  be live at once", "the passes that used to fill and drain them", "like the
+  old dense solver did".
+
 ## `NodeField::with` and `with_components_per_submesh`
 
 Rust `NodeField::with(mesh, components_per_submesh)`
@@ -100,8 +164,6 @@ Same rules as the reviewed pages: checked against the code, Python first then
   Matrice".
 - `operateurs/comportement.md`: heading `internal_forces(model, state)`; the
   signature is `internal_forces(model, state, solution, materials)`.
-- `matrix.md`: describes a `DofId { node_id, field_idx }` type that does not
-  exist; `factor` and `is_symmetric` are not cited.
 - `evolution.md`.
 - `elements/index.md`: the rest of the page.
 - `sauvegarde.md`: a reloaded field is read through
