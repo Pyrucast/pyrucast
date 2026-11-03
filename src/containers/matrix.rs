@@ -5441,8 +5441,14 @@ impl SubMatrix {
     /// This block alone in a fresh one-block [`Matrix`], copied into a new
     /// handle — the operand the mixed block/matrix sums are built from.
     fn as_matrix(&self) -> Matrix {
+        self.clone().into_matrix()
+    }
+
+    /// This block alone in a fresh one-block [`Matrix`], under a new handle.
+    /// Cannot fail: an empty matrix accepts any block.
+    pub(crate) fn into_matrix(self) -> Matrix {
         let mut out = Matrix::empty();
-        out.push(Handle::new(self.clone()));
+        out.push(Handle::new(self));
         out.post_push();
         out
     }
