@@ -480,7 +480,7 @@ impl Behavior for HeatConduction {
 ///     |geoms, m, _s, ke| heat_conduction::element_stiffness(
 ///         &geoms[0], m, &lay, MaterialSymmetry::Isotropic, ke),
 /// )?;
-/// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+/// let total: f64 = bloc.iter_entries()?.into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!(total.abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -587,7 +587,7 @@ pub fn element_stiffness(
 ///     &mat, None,
 ///     |geoms, m, _s, ke| heat_conduction::element_capacity(&geoms[0], m, &lay, ke),
 /// )?;
-/// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+/// let total: f64 = bloc.iter_entries()?.into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!((total - 3.0 * 4.0 * 0.5).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```

@@ -74,6 +74,7 @@
 //! assert_eq!(k.n_cols(), 2);
 //! assert!(k.is_symmetric());
 //! assert_eq!(k.get(a.id(), "q", a.id(), "T").unwrap(), 2.0);
+//! # Ok::<(), pyrucast::PyrucastError>(())
 //! ```
 
 use crate::aggregate::Aggregate;
@@ -1055,6 +1056,7 @@ impl SubMatrix {
     /// assert_eq!(c.row_sense(), RelationSense::Equality);
     /// c.set_row_sense(RelationSense::LessEqual);
     /// assert_eq!(c.row_sense(), RelationSense::LessEqual);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn set_row_sense(&mut self, sense: RelationSense) {
         self.row_sense = sense;
