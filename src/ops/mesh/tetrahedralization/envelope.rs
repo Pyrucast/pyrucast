@@ -46,7 +46,7 @@ const COINCIDENT_NODE_TOL: f64 = 1e-12;
 /// A validated closed surface, ready to be tetrahedralized.
 ///
 /// Node identity is kept twice over: `points[i]` is the position of the node
-/// whose store-level identity is `node_ids[i]`. The mesher works on the
+/// whose `NodeId` in the `Coords` is `node_ids[i]`. The mesher works on the
 /// compact local indices and only goes back to `NodeId`s when materializing
 /// the result, which is what lets the envelope's nodes be reused verbatim.
 #[derive(Debug, Clone)]
@@ -387,7 +387,7 @@ impl Envelope {
         &self.points
     }
 
-    /// Store-level identity of each local index.
+    /// `NodeId` in the `Coords` of each local index.
     pub fn node_ids(&self) -> &[NodeId] {
         &self.node_ids
     }

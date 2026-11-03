@@ -33,7 +33,7 @@ impl Facet {
 /// A watertight, consistently oriented surface of `TRI3` and `QUA4` facets.
 #[derive(Debug)]
 pub struct Shell {
-    /// Store identity of each node, in the order the shell indexes them.
+    /// `NodeId` of each node, in the order the shell indexes them.
     pub nodes: Vec<NodeId>,
     pub points: Vec<Point3>,
     pub facets: Vec<Facet>,

@@ -415,8 +415,8 @@ impl Coords {
 
     /// Append `refcounts.len()` nodes that are **already referenced**: node
     /// `k` starts with `refcounts[k]` units instead of one, and `fill` writes
-    /// the positions straight into the zeroed `n × dim` slice of the store —
-    /// no intermediate buffer, no `incref_all` pass afterwards.
+    /// the positions straight into the zeroed `n × dim` slice of the first
+    /// configuration — no intermediate buffer, no `incref_all` pass afterwards.
     ///
     /// The bulk importers count every occurrence while they translate the
     /// connectivity, so the count is known before the nodes exist; the

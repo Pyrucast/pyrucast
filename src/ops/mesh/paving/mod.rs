@@ -210,7 +210,7 @@ pub struct Fabric {
     /// swept once paving is over.
     dead: Vec<bool>,
     pub tris: Vec<[u32; 3]>,
-    /// Store identity of the contour nodes, in the order they occupy the first
+    /// `NodeId` of the contour nodes, in the order they occupy the first
     /// entries of `pts`. Shorter than `pts`: everything past it is new.
     pub contour_ids: Vec<NodeId>,
     /// The pairs of contour nodes the **contour** itself joins — what

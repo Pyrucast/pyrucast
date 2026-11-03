@@ -1,4 +1,4 @@
-"""Operators on the coordinate store — mirror of ``ops::coords`` (Rust).
+"""Operators on a ``Coords`` — mirror of ``ops::coords`` (Rust).
 
 The only three operators that change the geometry: ``set`` lays down absolute
 positions, ``displace`` adds an increment, ``displace_from`` lays one

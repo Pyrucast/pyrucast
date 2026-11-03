@@ -109,6 +109,7 @@ Same rules as the reviewed pages: checked against the code, Python first then
   `o[...].coords().acquire(id)`; drop `gc()` and "la copie qu'un champ garde
   de la connectivité", which no longer exists.
 - `compilation.md`: the features list lacks `spill`.
+- `memory-model.md`: the paragraph « Il y a eu un store global… » is history.
 
 ## Introduction diagram
 

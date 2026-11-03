@@ -579,7 +579,7 @@ fn materialize(
     // put on the envelope to make it fit, and past those the interior nodes
     // refinement placed; both need a node of their own, and only where a
     // cell actually uses them. The `Node` handles are held until the cells
-    // hold them, so the store cannot collect a point between its creation
+    // hold them, so the `Coords` cannot collect a point between its creation
     // and its first use.
     let given = env.given_node_count();
     let mut ids: Vec<NodeId> = env.node_ids().to_vec();
