@@ -194,7 +194,7 @@ impl Cell {
     /// # let mut sm = SubMesh::new(coords, ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let sm = Handle::new(sm);
-    /// // Every `Node` returned carries one more ticket on the store.
+    /// // Every `Node` returned adds one to its node's count in the `Coords`.
     /// let noeuds = Cell::new(sm, 0).unwrap().nodes().unwrap();
     /// assert_eq!(noeuds.len(), 3);
     /// assert_eq!(noeuds[0].position().unwrap(), vec![0.0, 0.0]);

@@ -6,12 +6,12 @@ use crate::error::Result;
 /// given order.
 ///
 /// The [`Coords`](crate::coords::Coords) is taken from the nodes themselves
-/// — every [`Node`] carries its own — so no store argument is needed. The
+/// — every [`Node`] carries its own — so no `Coords` argument is needed. The
 /// result has a single submesh. Errors if `nodes` is empty (no `Coords` to
 /// attach to).
 ///
 /// The companion of [`from_live_nodes`](super::from_live_nodes()), which takes
-/// the whole store instead of a chosen list, and of
+/// every live node of a `Coords` instead of a chosen list, and of
 /// [`to_poi1`](super::to_poi1()), which takes an existing mesh.
 ///
 /// ```

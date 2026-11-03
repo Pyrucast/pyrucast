@@ -21,7 +21,7 @@
 //! passes over whole blocks: one pass translates the tags to rows and counts
 //! every node's occurrences — which gives both "is this node used" and its
 //! final refcount — then the used nodes are created in one go, with their
-//! positions written straight into the store, and each block's connectivity
+//! positions written straight into the `Coords`, and each block's connectivity
 //! is rewritten **in place** into ids in pyrucast's order. No allocation and
 //! no hashing per cell; the permutation is fetched once per block.
 //!

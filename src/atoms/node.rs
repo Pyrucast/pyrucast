@@ -43,7 +43,7 @@ use std::fmt;
 ///
 /// ```
 /// # use pyrucast::atoms::NodeId;
-/// // A bare identifier: it travels everywhere, without carrying the store.
+/// // A bare identifier: it travels everywhere, without carrying its `Coords`.
 /// let id = NodeId(3);
 /// assert_eq!(id.0, 3);
 /// ```
@@ -186,7 +186,7 @@ impl Node {
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # use pyrucast::handle::Handle as H;
     /// let n = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
-    /// // The node carries its store: no `Coords` argument anywhere else.
+    /// // The node carries its `Coords`: no `Coords` argument anywhere else.
     /// assert!(H::same_object(&n.coords(), &coords));
     /// ```
     pub fn coords(&self) -> Handle<Coords> {

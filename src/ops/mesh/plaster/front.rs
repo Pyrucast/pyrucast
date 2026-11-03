@@ -26,7 +26,7 @@ use std::collections::HashMap;
 
 /// Every node and cell the mesher has produced, on flat arrays.
 pub struct Fabric {
-    /// Store identity of each node. A node the mesher grew has **no identity
+    /// `NodeId` of each node. A node the mesher grew has **no identity
     /// yet** while the front advances: it gets one from
     /// [`Fabric::materialize_nodes`], once its final position is known.
     pub ids: Vec<NodeId>,

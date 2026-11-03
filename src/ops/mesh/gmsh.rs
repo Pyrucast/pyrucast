@@ -122,7 +122,7 @@ struct ParsedElement {
 }
 
 /// The pure result of parsing — coordinates by gmsh node tag and the list of
-/// elements. No store access happens here.
+/// elements. No `Coords` access happens here.
 struct Parsed {
     coords: HashMap<u64, [f64; 3]>,
     elements: Vec<ParsedElement>,

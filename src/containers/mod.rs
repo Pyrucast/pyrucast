@@ -4,7 +4,7 @@
 //! half a mesh is a mesh, half a field is a field. That is what makes it
 //! an *operand* — and, by the API convention, the only thing an operator
 //! may take as its subject. The indivisible types it is built from live
-//! in [`crate::atoms`]; the coordinate store they all hang from lives in
+//! in [`crate::atoms`]; the `Coords` they all hang from lives in
 //! [`crate::coords`].
 //!
 //! Each module here defines the data structure and the inherent algorithms
