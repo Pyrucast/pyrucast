@@ -49,81 +49,38 @@ in the volume zone. Only an explicit `check()` reports it.
   `|`, solver outputs reuse the blocks' supports and reads are zero-copy — a
   redesign.
 
-## A matrix block on a POI1 support repeating a node
+## `Aggregate::finalize` still answers on a matrix
 
-A block numbers its rows by position in its POI1 support, and finds a node's
-row through `SubMesh::node_index`, which ranks the **distinct** nodes: on a
-support listing a node twice, the two disagree past the repeat.
-`SubNodeField::from_poi1` refuses such a support (inverse map shorter than the
-cells); the matrix constructors only document the requirement, and the test
-`node_index_is_the_flat_position_only_on_a_deduplicated_support`
-(`src/containers/matrix.rs`) pins it. `solve` on such a block now fails when
-it builds its output field. Lead: the same refusal where a block takes its
-support.
+`Matrix::finalize` is gone (`assemble` is the one entry point), but the
+`Aggregate` trait has a hook of the same name (`src/aggregate.rs`), run after a
+union: fields fuse or check their zones there, a matrix does nothing. With the
+trait in scope, `k.finalize()` still compiles on a matrix, does nothing, and
+the next `solve` reports a matrix without values. Lead: rename the hook after
+what it does (e.g. `after_union`), in `aggregate.rs`, `node_field.rs` and
+`element_field.rs`.
 
-## `lump` returns a matrix without blocks
+## A matrix declaring an inequality it does not hold refactorizes every solve
 
-`ops::matrix::lump` (`src/ops/matrix.rs`) builds the diagonal values and hands
-them to `Matrix::empty()` through `set_assembled`: the result has no block.
-Everything that reads the blocks then sees nothing. Measured from Python on a
-conduction bar: `M.lump().solve(rhs)` returns a `NodeField` with zero zones,
-`M.lump() * x` too, `M.lump().filter("thermal")` is empty, and a save/load
-returns a 0×0 matrix. `M.lump() / dt + K` works only because `K` brings blocks
-covering the same rows. Lead: give the result a literal diagonal block on the
-row support, so that it describes itself like any other matrix.
+`solve` sends a matrix with `has_inequality()` to the active-set path
+(`src/ops/solver/unilateral.rs`), which caches its state and, finding no
+inequality row, hands over to the LU path, which caches a factorization in the
+same slot. The next solve finds no active-set state, rebuilds it, and the LU
+path finds no factorization: each solve refactorizes. It takes a block that
+declares a sense on rows it does not hold. Lead: decide the path from the
+inequality rows themselves, before caching anything.
 
-## Writing into a block of an assembled matrix
+## Schur base of an elimination: a Cholesky of `K̂` would do
 
-`add_entry` on a block (`k[0].add_entry(...)`) changes the block but not the
-matrix that holds it, which keeps its assembled values and its cached
-factorization: after it, `k.get(...)` and `k[0].get(...)` disagree, and
-`k.solve` returns the old solution. Measured: 2.0 against 4.0 after adding 2.0
-to a finalized block. Decide: refuse the write on a block that an assembled
-matrix holds, or let the matrix see it.
-
-## Reading a computed block
-
-On a computed block, `SubMatrix.get` raises ("a computed block holds no
-value"), but `dense()` and `mul_dense()` return zeros and `entries()` an empty
-list. One rule for all four.
-
-## "call finalize()" on a matrix that needs `assemble()`
-
-`dense`, `mul_dense`, `matrix * x` and `solve` on an unassembled matrix raise
-"Matrix has not been finalized; call finalize() before solving"
-(`assembled_or_err`, `src/containers/matrix.rs`), also when the matrix carries
-a computed block, which `finalize()` refuses. The message should name
-`assemble()`.
-
-## Matrix docstrings and comments that describe older things
-
-Python (the `.pyi` stub, from `src/py/matrix.rs`):
-
-- `Matrix`: "call `finalize()` before solving" — an assembler returns an
-  assembled matrix; a matrix of computed blocks needs `assemble()`.
-- `Matrix()`: "Populate via `add_sub_matrix`", which does not exist.
-- `n_rows`, `n_cols`: "(finalized)" — they read the blocks.
-- `finalize`: "Must be called before any solver-facing method".
-- `__truediv__`: "Not finalized; see `__mul__`" — the result stays assembled.
-- `__or__`: "then call `finalize()` before solving".
-
-Rust:
-
-- `src/containers/matrix.rs` module doc: `Matrix` is "Read-only: every
-  accessor unions the blocks on the fly" — it holds an assembled CSR.
-- `SubMatrix::recipe` member: "(the historical behaviour, unchanged)".
-- `AssembledCsr`: "storing one here meant copying… twenty gigabytes of
-  `memcpy`".
-- `DofKey`: "thirty million of each on a solid mesh".
-- `set_assembled`: "the cycle Option B avoids"; `src/ops/matrix.rs` "Option B".
-- `collect_dof_keys`: "identical to the historical behaviour".
-- Matrix scalar operators comment: "`Matrix` being the one aggregate that
-  declares no `check_push`" — it declares one (same `Coords`).
-- `src/ops/scatter.rs`: "The historical path turned every block…", "A
-  `HashMap<(NodeId, String), usize>` was thirty million string hashes".
-- `src/ops/solver/lu.rs`: "in the order it used to happen", "All four used to
-  be live at once", "the passes that used to fill and drain them", "like the
-  old dense solver did".
+With `relations="eliminate"` and kept inequalities, the `"schur"` method
+factorizes by LU the base `[[K̂, Bᵀ], [0, I]]` (every inequality released,
+`SchurCache` in `src/ops/solver/unilateral.rs`). That base is block
+triangular: solving with it gives `λ` directly, then one solve with `K̂`; the
+Schur columns are `−K̂⁻¹·Bᵀeᵢ`. `K̂` is positive definite once the equalities
+are eliminated, so a Cholesky of `K̂` would replace the LU of the whole base; a
+singular `K̂` (a structure held by contact alone) is refused by Cholesky and
+falls back as a singular base does today. With `"lagrange"` the base keeps the
+equality multipliers, a saddle-point: the LU stays. To measure on a release
+build before deciding.
 
 ## `NodeField::with` and `with_components_per_submesh`
 

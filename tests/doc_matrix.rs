@@ -75,7 +75,8 @@ fn ecrire_un_bloc() -> Result<()> {
         vec!["T".into()], // variables primales : les colonnes
         DofOrdering::NodesThenVars,
         Symmetry::Full, // symétrique à lui seul
-    );
+    )
+    .unwrap();
     // K = [[2, -1], [-1, 2]]
     bloc.add_entry(a.id(), "q", a.id(), "T", 2.0)?;
     bloc.add_entry(a.id(), "q", b.id(), "T", -1.0)?;
@@ -84,7 +85,7 @@ fn ecrire_un_bloc() -> Result<()> {
 
     let mut k = Matrix::empty();
     k.add_sub(Handle::new(bloc))?;
-    k.finalize()?; // assemble les blocs écrits
+    k.assemble()?; // assemble les blocs écrits
 
     assert_eq!((k.n_rows()?, k.n_cols()?), (2, 2));
     assert!(k.symmetric());
@@ -118,10 +119,8 @@ fn lire_une_matrice_assemblee() -> Result<()> {
     let a: NodeId = k.row_mesh()?.node(0, 0, 0)?.id();
     let x = NodeField::from_submesh(&k.col_mesh()?.get(0)?, vec!["T".into()])?;
 
-    // Une valeur, et la matrice pleine, ligne par ligne.
+    // Une valeur.
     let v: f64 = k.get(a, "q", a, "T")?;
-    let d: Vec<f64> = k.dense()?;
-    assert_eq!(d.len(), k.n_rows()? * k.n_cols()?);
 
     // Les trois tableaux de la matrice creuse, prêtés sans copie…
     let (debuts, colonnes, valeurs): (&[usize], &[usize], &[f64]) = k.csr_arrays()?;

@@ -47,7 +47,17 @@ K.dump()
 assert K.row_dofs() == [(0, "q"), (2, "q"), (1, "q"), (3, "imposed")]
 assert K.col_dofs() == [(0, "T"), (2, "T"), (1, "T"), (3, "lambda")]
 assert K.get(o, "q", o, "T") == 2.0
-assert K.dense() == [2, -2, 0, 1, -2, 4, -2, 0, 0, -2, 2, 0, 1, 0, 0, 0]
+assert K.entries() == [
+    (0, "q", 0, "T", 2.0),
+    (0, "q", 2, "T", -2.0),
+    (0, "q", 3, "lambda", 1.0),
+    (2, "q", 0, "T", -2.0),
+    (2, "q", 2, "T", 4.0),
+    (2, "q", 1, "T", -2.0),
+    (1, "q", 2, "T", -2.0),
+    (1, "q", 1, "T", 2.0),
+    (3, "imposed", 0, "T", 1.0),
+]
 
 # ── Les blocs ───────────────────────────────────────────────────────────────
 
@@ -73,7 +83,7 @@ b = B.unit()
 b.add_entry(o, "q", o, "T", 1.0)
 b.add_entry(l, "q", l, "T", 1.0)
 b.add_entry(o, "q", o, "T", 0.5)  # s'ajoute à la précédente
-B.finalize()
+B.assemble()
 print(B.get(o, "q", o, "T"))  # 1.5
 print(b.memory_bytes)  # 72 : trois valeurs écrites, 24 octets chacune
 # ANCHOR_END: bloc_ecrit

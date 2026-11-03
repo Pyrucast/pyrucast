@@ -145,7 +145,7 @@ fn elasticity_grid(n: usize) -> Grid {
 }
 
 /// A strictly diagonally-dominant (hence non-singular) 5-point-Laplacian-like
-/// system on an `n × n` grid, finalized, plus a unit right-hand side. Used to
+/// system on an `n × n` grid, assembled, plus a unit right-hand side. Used to
 /// benchmark the solver without needing boundary conditions.
 fn spd_system(n: usize) -> (Matrix, NodeField) {
     let coords = Handle::new(Coords::new(2).unwrap());
@@ -175,7 +175,8 @@ fn spd_system(n: usize) -> (Matrix, NodeField) {
         vec!["T".into()],
         DofOrdering::NodesThenVars,
         Symmetry::Full,
-    );
+    )
+    .unwrap();
     for j in 0..=n {
         for i in 0..=n {
             let c = at(i, j);
@@ -203,7 +204,7 @@ fn spd_system(n: usize) -> (Matrix, NodeField) {
     }
     let mut m = Matrix::empty();
     m.add_sub(Handle::new(block)).unwrap();
-    m.finalize().unwrap();
+    m.assemble().unwrap();
 
     let mut rhs = SubNodeField::from_poi1(&sm, vec!["q".into()]).unwrap();
     for &id in &ids {

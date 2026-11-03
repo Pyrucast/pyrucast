@@ -166,8 +166,9 @@ pub struct SolveOptions {
     pub active_set: ActiveSetMethod,
     /// Reuse / populate what is cached on the matrix: the factorization, the
     /// condensation or the active-set state (with its last converged status as
-    /// a warm start). When `false`, everything is computed afresh and the
-    /// cache is not touched.
+    /// a warm start). A factorization, alone or inside a condensation, is
+    /// reused for the `method` it was made with only. When `false`,
+    /// everything is computed afresh and the cache is not touched.
     pub cache: bool,
     /// Maximum number of status iterations of the active-set loop.
     pub max_iter: usize,
@@ -386,9 +387,9 @@ pub fn solve_cancellable_with_options(
 ) -> Result<NodeField> {
     cancel.check()?;
     match options.relations {
-        // Which path is decided by the blocks themselves, before any cache is
-        // looked at: each path keeps its own artefact in the matrix's single
-        // cache slot, and a matrix only ever goes down one of them.
+        // The path is decided by `relations` and by the blocks, before any
+        // cache is looked at. Each path keeps its own artefact in the matrix's
+        // single cache slot: another path on the same matrix replaces it.
         RelationMethod::Lagrange if matrix.has_inequality() => {
             unilateral::solve(matrix, rhs, options, cancel)
         }

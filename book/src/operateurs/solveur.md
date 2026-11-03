@@ -72,21 +72,87 @@ relations étaient des égalités.
 | `cache` | `True` | réutiliser ce qui est rangé sur la matrice |
 | `verbosity` | `"silent"` | ce que la résolution raconte (`"brief"`, `"detailed"`) |
 
+## Les voies de la résolution
+
+`solve` choisit son calcul, sa **voie**, d'après deux choses : l'option
+`relations`, et la présence d'inégalités dans la matrice (un bloc `C` dont le
+sens est `>=` ou `<=`). Dans la boucle de l'ensemble actif, l'option
+`active_set` choisit ensuite comment chaque statut est factorisé. Pour chaque
+voie, le schéma dit ce qui est calculé, et ce que la matrice garde ensuite dans
+sa case de cache (section suivante).
+
+```text
+solve(matrice, second_membre, relations=…, method=…, active_set=…)
+├── relations="lagrange" (défaut)
+│   ├── la matrice ne porte aucune inégalité
+│   │     calcul : factorisation de la matrice, LU ou Cholesky selon method
+│   │     case   : la factorisation
+│   └── la matrice porte des inégalités
+│         calcul : boucle de l'ensemble actif sur la matrice, toujours en LU
+│         ├── active_set="schur" (défaut)
+│         │     calcul : une LU de la base (la matrice, toutes les inégalités
+│         │              relâchées), faite une fois ; à chaque statut, une
+│         │              petite matrice dense, une ligne par relation active
+│         │     case   : l'état de l'ensemble actif : les inégalités, la LU de
+│         │              la base, les colonnes déjà calculées, le dernier
+│         │              statut convergé
+│         │     base singulière : calcul de active_set="refactorize"
+│         └── active_set="refactorize"
+│               calcul : une LU de toute la matrice à chaque statut
+│               case   : l'état de l'ensemble actif : les inégalités, le
+│                        dernier statut convergé et sa LU
+└── relations="eliminate"
+    ├── la matrice ne porte aucune relation
+    │     calcul : factorisation de la matrice, LU ou Cholesky selon method
+    │     case   : la factorisation
+    ├── la matrice ne porte que des égalités
+    │     calcul : élimination des égalités, puis factorisation du système
+    │              réduit K̂ = TᵀKT, LU ou Cholesky selon method
+    │     case   : la condensation : T, Tᵀ, K sans ses contraintes, K̂ factorisé
+    └── la matrice porte des inégalités
+          calcul : élimination des égalités, puis boucle de l'ensemble actif
+                   sur le système réduit [[K̂, Bᵀ], [B, 0]], toujours en LU
+          ├── active_set="schur" (défaut)
+          │     calcul : une LU de la base (le système réduit, toutes les
+          │              inégalités relâchées), faite une fois ; à chaque
+          │              statut, une petite matrice dense, une ligne par
+          │              relation active
+          │     case   : la condensation : T, Tᵀ, K sans ses contraintes, le
+          │              système réduit, et l'état de l'ensemble actif : les
+          │              inégalités, la LU de la base, les colonnes déjà
+          │              calculées, le dernier statut convergé
+          │     base singulière : calcul de active_set="refactorize"
+          └── active_set="refactorize"
+                calcul : une LU de tout le système réduit à chaque statut
+                case   : la condensation : T, Tᵀ, K sans ses contraintes, le
+                         système réduit, et l'état de l'ensemble actif : les
+                         inégalités, le dernier statut convergé et sa LU
+```
+
+`method` ne s'applique qu'aux factorisations directes : la boucle de
+l'ensemble actif factorise en LU quoi qu'on demande, parce que le système d'un
+statut n'est jamais symétrique (une relation inactive y devient la ligne
+`λ = 0`, sa colonne restant en place).
+
 ## Factorisation réutilisable (cache transparent)
 
-`solve` **factorise une fois, résout N fois** : la factorisation est mise en
-cache **dans la `Matrix`** (état dérivé, non sérialisé, à mutabilité intérieure).
-La première résolution factorise et met en cache ; les suivantes sur la même
-matrice ne font que la descente/remontée — bien moins cher (cas de charge
-multiples, itérations de Newton, transitoire à matrice constante). Le cache est
-**invalidé automatiquement** dès que la matrice change (`add_sub`). On ne stocke
-**jamais l'inverse explicite** (dense, coûteux, instable) — seulement la
-factorisation.
+`solve` **factorise une fois, résout N fois**. Ce qui coûte est rangé **dans la
+`Matrix`**, dans **une seule case** : selon la voie, une factorisation, une
+condensation ou l'état de l'ensemble actif (schéma ci-dessus). La condensation
+et l'état de l'ensemble actif contiennent eux-mêmes leurs factorisations. Les
+résolutions suivantes sur la même matrice reprennent ce contenu et ne font que
+la descente/remontée, bien moins chère (cas de charge multiples, itérations de
+Newton, transitoire à matrice constante) ; la boucle de l'ensemble actif repart
+en plus du dernier statut convergé.
 
-Le cache n'a qu'une place, et chaque voie y range son propre artefact : la
-factorisation, la condensation ou l'état de l'ensemble actif. La voie est
-décidée par la matrice elle-même, avant tout regard sur le cache : une matrice
-n'en emprunte qu'une, et ce qu'elle a rangé y reste.
+- Le contenu n'est repris que s'il répond à la demande : la même voie, et pour
+  une factorisation, seule ou dans une condensation, la même `method`. Sinon il
+  est recalculé et remplace l'ancien : alterner deux voies sur une même matrice
+  recalcule à chaque changement.
+- Il est oublié dès que la matrice change (`add_sub`), et n'est pas
+  sauvegardé. `cache=False` ne le lit ni ne le remplit.
+- On ne stocke **jamais l'inverse explicite** (dense, coûteux, instable) —
+  seulement la factorisation.
 
 ## L'élimination : `relations="eliminate"`
 

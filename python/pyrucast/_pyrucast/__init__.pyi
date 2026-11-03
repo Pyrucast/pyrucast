@@ -1076,18 +1076,21 @@ class Matrix:
     A global finite-element matrix, assembled from rectangular blocks
     (`SubMatrix`).
     
-    Build blocks with `Matrix.block(...)`, compose them with `|`, then call
-    `finalize()` before solving. Index it (`matrix[i]`) to reach a block.
+    An assembler (`pyrucast.matrix.stiffness`, …) returns it assembled. Blocks
+    written with `Matrix.block(...)` and composed with `|` get their values from
+    `assemble()`. Index it (`matrix[i]`) to reach a block.
     """
     @property
     def n_rows(self) -> builtins.int:
         r"""
-        Total number of rows of the (finalized) global matrix.
+        Number of rows: the distinct (node, dual) pairs of the blocks, read
+        off the blocks, assembled or not.
         """
     @property
     def n_cols(self) -> builtins.int:
         r"""
-        Total number of columns of the (finalized) global matrix.
+        Number of columns: the distinct (node, primal) pairs of the blocks,
+        read off the blocks, assembled or not.
         """
     @property
     def entry_count(self) -> builtins.int:
@@ -1113,8 +1116,8 @@ class Matrix:
         """
     def __new__(cls) -> Matrix:
         r"""
-        `Matrix()` — empty aggregate. Populate via `add_sub_matrix`, or
-        build blocks with `Matrix.block(...)` and compose them with `|`.
+        `Matrix()` — empty matrix. Add blocks with `add_sub`, or build them with
+        `Matrix.block(...)` and compose them with `|`.
         """
     @classmethod
     def block(cls, row_support: typing.Any, col_support: typing.Any, dual_vars: typing.Sequence[builtins.str], primal_vars: typing.Sequence[builtins.str], ordering: builtins.str = 'nodes_then_vars', symmetry: builtins.str = 'none') -> Matrix:
@@ -1124,40 +1127,33 @@ class Matrix:
         `col_support` may each be a `SubMesh` view or a **unitary** `Mesh`.
         `ordering` is `"nodes_then_vars"` (default) or `"vars_then_nodes"`.
         Fill entries via the block view (`block[0].add_entry(...)`) and
-        compose several blocks with `|`, then `finalize()`.
+        compose several blocks with `|`, then `assemble()`.
         """
     def assemble(self) -> None:
         r"""
         Assemble this matrix **from its blocks alone** — no `Model` — on the
-        configuration active now, mutating it in place. A matrix is assembled
-        once: on one that already is, this does nothing.
+        configuration active now, in place: a computed block is computed, a
+        written block brings its values. A matrix is assembled once: on one
+        that already is, this does nothing.
         
-        The composition path, for blocks put together without their values
-        (`|` union, `add_sub`, `filter`, `exclude`), including *computed* ones
-        (which `finalize()` refuses — the element kernel lives outside
-        `containers`). Not needed after `matrix * scalar` nor after a sum: both
-        carry the assembled values along — `pyrucast.solver.solve(m / dt + k,
-        rhs)`.
-        """
-    def finalize(self) -> None:
-        r"""
-        Build the global DOF table and CSR. Must be called before any
-        solver-facing method (`dense`, `mul_dense`, …).
+        Needed for blocks put together without their values (`Matrix.block`,
+        `|`, `add_sub`, `filter`, `exclude`). Not needed after `matrix * scalar`
+        nor after a sum: both carry the assembled values along —
+        `pyrucast.solver.solve(m / dt + k, rhs)`.
         """
     def filter(self, physics: builtins.str) -> Matrix:
         r"""
         `Matrix.filter(physics)` — a new `Matrix` holding only the blocks **whose
         nature set contains** the given physics (`"mechanical"`, `"thermal"`,
         `"constraint"`, `"other"`, `"diffusion"`, `"radiation"`). The result is
-        **not** finalized — call `assemble` (or `finalize` for literal-only
-        blocks) before solving.
+        without values: call `assemble()` before solving.
         """
     def exclude(self, physics: builtins.str) -> Matrix:
         r"""
         `Matrix.exclude(physics)` — the complement of `filter`: a new `Matrix`
         holding only the blocks **whose nature set does not contain** the given
         physics. Composes with `filter`: `k.filter("thermal").exclude("constraint")`
-        keeps the conduction blocks without the Dirichlet pair. Not finalized,
+        keeps the conduction blocks without the Dirichlet pair. Without values,
         like `filter`.
         """
     def physics(self) -> builtins.list[builtins.str]:
@@ -1185,18 +1181,10 @@ class Matrix:
         Raises on an unassembled matrix carrying a computed block, whose values
         do not exist yet.
         """
-    def dense(self) -> builtins.list[builtins.float]:
-        r"""
-        Dense row-major buffer of the finalized matrix (`n_rows × n_cols`).
-        """
-    def mul_dense(self, x: typing.Sequence[builtins.float]) -> builtins.list[builtins.float]:
-        r"""
-        `y = A · x` against a dense vector `x`.
-        """
     def __truediv__(self, rhs: builtins.float) -> Matrix:
         r"""
         `matrix / scalar` — a fresh `Matrix` whose blocks carry the divided
-        `factor` (lazy). Not finalized; see `__mul__`. Raises `ZeroDivisionError`
+        `factor` (lazy), assembled if the matrix was. Raises `ZeroDivisionError`
         for a divisor of zero, and `ValueError` for one that is not finite:
         either would make every value of the result non-finite.
         """
@@ -1211,8 +1199,11 @@ class Matrix:
         """
     def entries(self) -> builtins.list[tuple[builtins.int, builtins.str, builtins.int, builtins.str, builtins.float]]:
         r"""
-        List of `(row_node, row_field, col_node, col_field, value)`
-        tuples — every entry across every block, in block-insertion order.
+        List of `(row_node, row_field, col_node, col_field, value)` tuples: the
+        values `get` reads. An assembled matrix lists its assembled values, row
+        by row; an unassembled one lists the entries written in its blocks, in
+        insertion order. Raises on an unassembled matrix carrying a computed
+        block, as `get` does.
         """
     @typing.overload
     def __mul__(self, rhs: NodeField) -> NodeField:
@@ -1255,7 +1246,8 @@ class Matrix:
         r"""
         `matrix | other` → a fresh `Matrix` holding the blocks of both, in
         first-seen order and deduplicated by object identity. Assemble the global
-        operator this way, then call `finalize()` before solving.
+        operator this way; the result has no values, call `assemble()` before
+        solving.
         """
     def __ror__(self, other: SubMatrix) -> Matrix:
         r"""
@@ -1340,7 +1332,9 @@ class Matrix:
         
         `cache` (default `True`) reuses what is stored transparently on the matrix —
         the factorization, the condensation, the active-set state and its last
-        status — cleared automatically when the matrix changes. `verbosity` says
+        status — cleared automatically when the matrix changes. A matrix keeps one
+        of them at a time, and a factorization serves the `method` it was made
+        with only: another `relations` or `method` computes afresh and replaces it. `verbosity` says
         how much the solve reports on stdout: `"silent"` (default), `"brief"` or
         `"detailed"`.
         
@@ -3516,18 +3510,11 @@ class SubMatrix:
         r"""
         `(node_id, field_name)` tuples for each column, in order.
         """
-    def dense(self) -> builtins.list[builtins.float]:
-        r"""
-        Dense row-major buffer, length `n_rows × n_cols`.
-        """
-    def mul_dense(self, x: typing.Sequence[builtins.float]) -> builtins.list[builtins.float]:
-        r"""
-        `y = A · x` (dense).
-        """
     def entries(self) -> builtins.list[tuple[builtins.int, builtins.str, builtins.int, builtins.str, builtins.float]]:
         r"""
         List of `(row_node, row_field, col_node, col_field, value)`
-        tuples, in insertion order.
+        tuples, in insertion order. Raises on a computed block, which holds no
+        value, as `get` does.
         """
     def __len__(self) -> builtins.int: ...
     def __add__(self, rhs: Matrix  |  SubMatrix) -> Matrix:
@@ -5801,7 +5788,9 @@ def solve(matrix: Matrix, rhs: NodeField, method: builtins.str = 'lu', relations
     
     `cache` (default `True`) reuses what is stored transparently on the matrix —
     the factorization, the condensation, the active-set state and its last
-    status — cleared automatically when the matrix changes. `verbosity` says
+    status — cleared automatically when the matrix changes. A matrix keeps one
+    of them at a time, and a factorization serves the `method` it was made
+    with only: another `relations` or `method` computes afresh and replaces it. `verbosity` says
     how much the solve reports on stdout: `"silent"` (default), `"brief"` or
     `"detailed"`.
     

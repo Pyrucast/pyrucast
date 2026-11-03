@@ -519,7 +519,7 @@ fn at_rest_every_measure_is_the_same_and_current_is_the_reference() -> Result<()
     }
     let k_current = on_current(&p, &rest, || matrix::stiffness(&gl, &mat))?;
     let k_reference = matrix::stiffness(&gl, &mat)?;
-    assert_eq!(k_current.dense()?, k_reference.dense()?);
+    assert_eq!(k_current.to_dmatrix()?, k_reference.to_dmatrix()?);
     Ok(())
 }
 

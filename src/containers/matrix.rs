@@ -11,12 +11,12 @@
 //!   the numbering cannot drift (see `book/src/developper/parallelisme.md`
 //!   § Zéro-copie).  The actual non-zeros are stored in a
 //!   [`nalgebra_sparse::CooMatrix`]; [`SubMatrix::add_entry`] appends
-//!   triplets that accumulate on `get` / densification.
+//!   triplets that accumulate when read or assembled.
 //! - [`Matrix`] — aggregate of [`SubMatrix`] blocks (one
-//!   `Vec<Handle<SubMatrix>>`), produced by
-//!   [`crate::containers::model::Model`] assembly (one or several blocks
-//!   per sub-model).  Read-only: every accessor unions the blocks on the
-//!   fly.
+//!   `Vec<Handle<SubMatrix>>`), produced by the assemblers of
+//!   [`crate::ops::matrix`] (one or several blocks per sub-model), plus its
+//!   **assembled values**: one CSR, the matrix the solver reads. The sizes,
+//!   DOF lists and supports read the blocks; the values read the CSR.
 //!
 //! Each [`SubMatrix`] declares what share of the matrix's symmetry it carries
 //! ([`Symmetry`]), and the aggregate [`Matrix`] adds those declarations up
@@ -64,7 +64,7 @@
 //!     support.clone(), support.clone(),
 //!     vec!["q".into()], vec!["T".into()],
 //!     DofOrdering::NodesThenVars, Symmetry::Full,
-//! );
+//! )?;
 //! k.add_entry(a.id(), "q", a.id(), "T",  2.0).unwrap();
 //! k.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 //! k.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -74,6 +74,7 @@
 //! assert_eq!(k.n_cols(), 2);
 //! assert!(k.is_symmetric());
 //! assert_eq!(k.get(a.id(), "q", a.id(), "T").unwrap(), 2.0);
+//! # Ok::<(), pyrucast::PyrucastError>(())
 //! ```
 
 use crate::aggregate::Aggregate;
@@ -89,7 +90,7 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::{Handle, ReadGuard};
 use crate::models::{MatrixKind, Physics, RelationSense, IMPOSED};
 use crate::parallel::*;
-use nalgebra::{DMatrix, DVector};
+use nalgebra::DMatrix;
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -117,7 +118,7 @@ use std::fmt;
 /// # let bloc = || {
 /// #     let mut z = SubMatrix::new(
 /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #         DofOrdering::NodesThenVars, Symmetry::Full);
+/// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
 /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -127,7 +128,7 @@ use std::fmt;
 /// # use pyrucast::containers::matrix::MatrixEntry;
 /// // An entry whose DOFs are **materialized**: no more indices, but
 /// // `(node, variable)` already resolved.
-/// let entrees: Vec<MatrixEntry> = bloc().iter_entries();
+/// let entrees: Vec<MatrixEntry> = bloc().iter_entries()?;
 /// assert_eq!(entrees.len(), 4);
 /// assert_eq!((entrees[0].1.as_str(), entrees[0].3.as_str()), ("q", "T"));
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -158,7 +159,7 @@ pub type MatrixEntry = (NodeId, String, NodeId, String, f64);
 /// # let bloc = || {
 /// #     let mut z = SubMatrix::new(
 /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #         DofOrdering::NodesThenVars, Symmetry::Full);
+/// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
 /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -205,7 +206,7 @@ impl DofOrdering {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -252,7 +253,7 @@ impl DofOrdering {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -370,7 +371,7 @@ pub enum KernelInputs {
 /// };
 /// let z = SubMatrix::computed(
 ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-///     DofOrdering::NodesThenVars, Symmetry::Full, recette);
+///     DofOrdering::NodesThenVars, Symmetry::Full, recette)?;
 /// assert!(z.is_computed());
 /// // Its structure is complete — hence the structural queries that
 /// // work — but it counts **no** stored entry.
@@ -540,7 +541,7 @@ impl crate::named::Named for Symmetry {
 /// # };
 /// # let mut bloc = SubMatrix::new(
 /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #     DofOrdering::NodesThenVars, Symmetry::Full);
+/// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
 /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
 /// // A **block**: its row and column supports, its variables
@@ -570,8 +571,7 @@ pub struct SubMatrix {
     symmetry: Symmetry,
     /// `Some` ⇒ this is a **computed** block: `coo` is an empty placeholder and
     /// the contribution is produced on the fly by the global assembler from this
-    /// recipe. `None` ⇒ **literal** block, `coo` holds the values (the historical
-    /// behaviour, unchanged).
+    /// recipe. `None` ⇒ **literal** block, `coo` holds the values.
     recipe: Option<ComputedRecipe>,
     /// The set of [`Physics`] natures of the sub-model that produced this block,
     /// set by the assembler ([`crate::ops::matrix`]) for **both** the computed
@@ -595,19 +595,36 @@ pub struct SubMatrix {
     /// reads it to know which rows are inequalities, the coefficients being
     /// the row itself. Meaningless on any other row.
     row_sense: RelationSense,
+    /// Set once a matrix holding this block is assembled: the assembled values
+    /// and the solver's cache were computed from this block's entries, so
+    /// [`add_entry`](Self::add_entry) refuses to change them. Not archived: a
+    /// reloaded matrix has no values, and its assembly seals the block again.
+    #[serde(skip)]
+    sealed: bool,
+}
+
+/// Seal a block, as [`crate::containers::mesh::seal`] seals a zone: the write
+/// lock is taken only if the block is not sealed yet, so sealing again a block
+/// already sealed coexists with a reader holding it.
+fn seal(handle: &Handle<SubMatrix>) {
+    if handle.read().sealed {
+        return;
+    }
+    handle.write().sealed = true;
 }
 
 impl SubMatrix {
     /// Build a new block.
     ///
-    /// `row_support` / `col_support` must be POI1 sub-meshes whose cells
-    /// define the row/col node sequence, and whose nodes are **distinct** —
-    /// what `to_poi1` produces, and what every physics hands over. A repeated
-    /// node is not rejected but addresses the wrong row: the block looks
-    /// `node_local` up through [`SubMesh::node_index`], a deduplicated rank
-    /// that parts from the flat position as soon as a node appears twice.
-    /// `dual_vars` / `primal_vars` are the row/column variable names; they must
-    /// be non-empty.
+    /// `row_support` / `col_support` are POI1 sub-meshes whose cells define
+    /// the row/col node sequence, each node **once** — what `to_poi1`
+    /// produces, and what every physics hands over. `dual_vars` /
+    /// `primal_vars` are the row/column variable names; they must be
+    /// non-empty.
+    ///
+    /// **Errors**: a support that is not a POI1, or that lists a node twice —
+    /// the block finds a node's row through [`SubMesh::node_index`], which
+    /// ranks the distinct nodes, as a node field does.
     ///
     /// Both supports are sealed here: the block reads their connectivity in
     /// place ever after, it keeps no copy.
@@ -625,7 +642,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -641,14 +658,10 @@ impl SubMatrix {
         primal_vars: Vec<String>,
         ordering: DofOrdering,
         symmetry: Symmetry,
-    ) -> Self {
-        // The block's row/col numbering *is* these supports' connectivity, read
-        // in place on every access rather than copied; freeze them so it holds.
-        crate::containers::mesh::seal(&row_support);
-        crate::containers::mesh::seal(&col_support);
-        let nrows = row_support.read().connectivity().len() * dual_vars.len();
-        let ncols = col_support.read().connectivity().len() * primal_vars.len();
-        Self {
+    ) -> Result<Self> {
+        let (nrows, ncols) =
+            Self::seal_supports(&row_support, &col_support, &dual_vars, &primal_vars)?;
+        Ok(Self {
             row_support,
             col_support,
             dual_vars,
@@ -660,7 +673,30 @@ impl SubMatrix {
             physics: Vec::new(),
             factor: 1.0,
             row_sense: RelationSense::Equality,
-        }
+            sealed: false,
+        })
+    }
+
+    /// Check and seal the two supports, and return the block's dimensions.
+    /// The block's row/col numbering *is* these supports' connectivity, read
+    /// in place on every access rather than copied; sealing freezes it.
+    fn seal_supports(
+        row_support: &Handle<SubMesh>,
+        col_support: &Handle<SubMesh>,
+        dual_vars: &[String],
+        primal_vars: &[String],
+    ) -> Result<(usize, usize)> {
+        row_support
+            .read()
+            .check_node_support("SubMatrix row support")?;
+        col_support
+            .read()
+            .check_node_support("SubMatrix column support")?;
+        crate::containers::mesh::seal(row_support);
+        crate::containers::mesh::seal(col_support);
+        let nrows = row_support.read().cell_count() * dual_vars.len();
+        let ncols = col_support.read().cell_count() * primal_vars.len();
+        Ok((nrows, ncols))
     }
 
     /// Build a **computed** block: a sized-but-empty placeholder that carries a
@@ -668,6 +704,8 @@ impl SubMatrix {
     /// ordering, dimensions) is fully defined; the values are produced by the
     /// global assembler, which drives `submodel`'s element kernel over
     /// `recipe.fespace` and scatters straight into the global matrix.
+    ///
+    /// **Errors**: a support as refused by [`new`](Self::new).
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -705,7 +743,7 @@ impl SubMatrix {
     ///         kind: MatrixKind::Stiffness,
     ///         inputs: KernelInputs::MaterialOnly,
     ///         col_fespaces: Vec::new(),
-    ///     });
+    ///     })?;
     /// assert!(z.recipe().is_some());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -718,14 +756,10 @@ impl SubMatrix {
         ordering: DofOrdering,
         symmetry: Symmetry,
         recipe: ComputedRecipe,
-    ) -> Self {
-        // The block's row/col numbering *is* these supports' connectivity, read
-        // in place on every access rather than copied; freeze them so it holds.
-        crate::containers::mesh::seal(&row_support);
-        crate::containers::mesh::seal(&col_support);
-        let nrows = row_support.read().connectivity().len() * dual_vars.len();
-        let ncols = col_support.read().connectivity().len() * primal_vars.len();
-        Self {
+    ) -> Result<Self> {
+        let (nrows, ncols) =
+            Self::seal_supports(&row_support, &col_support, &dual_vars, &primal_vars)?;
+        Ok(Self {
             row_support,
             col_support,
             dual_vars,
@@ -737,7 +771,8 @@ impl SubMatrix {
             physics: Vec::new(),
             factor: 1.0,
             row_sense: RelationSense::Equality,
-        }
+            sealed: false,
+        })
     }
 
     /// Build a block from an already-assembled COO whose indices are this
@@ -745,6 +780,9 @@ impl SubMatrix {
     /// nodes positioned as in `row_support` / `col_support`). Lets an assembler
     /// produce all entries in parallel and hand them over in one shot, bypassing
     /// the per-entry [`add_entry`](Self::add_entry).
+    ///
+    /// **Errors**: a support as refused by [`new`](Self::new), or a COO whose
+    /// size does not match the supports and variables.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -765,7 +803,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -798,12 +836,8 @@ impl SubMatrix {
         symmetry: Symmetry,
         coo: CooMatrix<f64>,
     ) -> Result<Self> {
-        // The block's row/col numbering *is* these supports' connectivity, read
-        // in place on every access rather than copied; freeze them so it holds.
-        crate::containers::mesh::seal(&row_support);
-        crate::containers::mesh::seal(&col_support);
-        let nrows = row_support.read().connectivity().len() * dual_vars.len();
-        let ncols = col_support.read().connectivity().len() * primal_vars.len();
+        let (nrows, ncols) =
+            Self::seal_supports(&row_support, &col_support, &dual_vars, &primal_vars)?;
         if coo.nrows() != nrows || coo.ncols() != ncols {
             return Err(PyrucastError::Message(format!(
                 "from_coo: COO is {}×{} but the support/vars imply {}×{}",
@@ -825,6 +859,7 @@ impl SubMatrix {
             physics: Vec::new(),
             factor: 1.0,
             row_sense: RelationSense::Equality,
+            sealed: false,
         })
     }
 
@@ -844,7 +879,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -872,7 +907,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -901,7 +936,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -940,7 +975,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1017,10 +1052,11 @@ impl SubMatrix {
     /// # };
     /// let mut c = SubMatrix::new(
     ///     support.clone(), support.clone(), vec![IMPOSED.into()], vec!["T".into()],
-    ///     DofOrdering::NodesThenVars, Symmetry::None);
+    ///     DofOrdering::NodesThenVars, Symmetry::None)?;
     /// assert_eq!(c.row_sense(), RelationSense::Equality);
     /// c.set_row_sense(RelationSense::LessEqual);
     /// assert_eq!(c.row_sense(), RelationSense::LessEqual);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn set_row_sense(&mut self, sense: RelationSense) {
         self.row_sense = sense;
@@ -1043,7 +1079,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1071,7 +1107,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1100,7 +1136,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone()]).unwrap().get(0).unwrap();
     /// # let bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// assert_eq!(bloc.symmetry(), Symmetry::Full);
     /// ```
     pub fn symmetry(&self) -> Symmetry {
@@ -1122,7 +1158,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1149,7 +1185,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1176,7 +1212,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1209,7 +1245,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// let vide = bloc.memory_bytes();
     /// bloc.add_entry(a.id(), "q", b.id(), "T", -1.0)?;
     /// // One more entry: an index, an index and a value.
@@ -1235,7 +1271,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1261,7 +1297,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1287,7 +1323,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1320,7 +1356,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1357,7 +1393,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1390,7 +1426,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1424,7 +1460,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1467,7 +1503,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1593,7 +1629,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1602,7 +1638,7 @@ impl SubMatrix {
     /// # };
     /// let mut z = SubMatrix::new(
     ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    ///     DofOrdering::NodesThenVars, Symmetry::Full);
+    ///     DofOrdering::NodesThenVars, Symmetry::Full)?;
     /// // Two calls at the same place **accumulate** — that is what lets the
     /// // assembly pour cell by cell without reading anything back.
     /// z.add_entry(a.id(), "q", a.id(), "T", 1.0)?;
@@ -1622,8 +1658,8 @@ impl SubMatrix {
     ) -> Result<()> {
         // The supports' own `NodeId → position` tables, borrowed in place. Rows
         // and columns usually share one handle, so ask that lock only once.
-        // The computed-block refusal lives in `add_entry_with`, tested once here
-        // rather than twice.
+        // The refusals (computed or sealed block) live in `add_entry_with`,
+        // tested once here rather than twice.
         let (row_g, col_g) = self.support_guards();
         let row = &row_g;
         let col = col_g.as_deref().unwrap_or(&row_g);
@@ -1647,12 +1683,17 @@ impl SubMatrix {
         col_var: &str,
         value: f64,
     ) -> Result<()> {
-        if self.is_computed() {
-            return Err(PyrucastError::Message(
+        if self.recipe.is_some() || self.sealed {
+            return Err(PyrucastError::Message(if self.sealed {
+                "add_entry: this block belongs to an assembled matrix, whose \
+                 values were computed from its entries; write a block before \
+                 assembling it, or build a new one"
+                    .into()
+            } else {
                 "add_entry: this is a computed block (its values come from its \
                  recipe at assembly time); literal entries cannot be added"
-                    .into(),
-            ));
+                    .into()
+            }));
         }
         let n_rn = row_support.connectivity().len();
         let n_dv = self.dual_vars.len();
@@ -1714,7 +1755,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1752,7 +1793,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1786,7 +1827,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1817,7 +1858,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1835,13 +1876,7 @@ impl SubMatrix {
         col_node: NodeId,
         col_var: &str,
     ) -> Result<f64> {
-        if self.recipe.is_some() {
-            return Err(PyrucastError::Message(
-                "SubMatrix::get: a computed block holds no value; read the \
-                 assembled Matrix it belongs to"
-                    .into(),
-            ));
-        }
+        self.check_has_values("get")?;
         let (row_g, col_g) = self.support_guards();
         Ok(self.get_with(
             &row_g,
@@ -1851,6 +1886,19 @@ impl SubMatrix {
             col_node,
             col_var,
         ))
+    }
+
+    /// Refuse a value read on a computed block, whose values exist only in the
+    /// assembled [`Matrix`] it belongs to. Every reader of the stored values
+    /// goes through here, so they all answer alike.
+    fn check_has_values(&self, what: &str) -> Result<()> {
+        if self.recipe.is_some() {
+            return Err(PyrucastError::Message(format!(
+                "SubMatrix::{what}: a computed block holds no value; read the \
+                 assembled Matrix it belongs to"
+            )));
+        }
+        Ok(())
     }
 
     /// Read guards on both supports, taking a **single** one when rows and
@@ -1921,6 +1969,8 @@ impl SubMatrix {
     /// All COO triplets, in insertion order, with DOFs materialised as
     /// `(NodeId, var_name)` pairs.
     ///
+    /// **Errors**: a computed block holds no value, as for [`get`](Self::get).
+    ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
@@ -1934,18 +1984,20 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
     /// // Insertion order preserved; variable names already resolved.
-    /// assert_eq!(bloc.iter_entries().len(), 4);
-    /// assert_eq!(bloc.iter_entries()[0].4, 2.0);
+    /// assert_eq!(bloc.iter_entries()?.len(), 4);
+    /// assert_eq!(bloc.iter_entries()?[0].4, 2.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn iter_entries(&self) -> Vec<MatrixEntry> {
+    pub fn iter_entries(&self) -> Result<Vec<MatrixEntry>> {
+        self.check_has_values("iter_entries")?;
         let (row_g, col_g) = self.support_guards();
-        self.iter_entries_with(&row_g, col_g.as_deref().unwrap_or(&row_g))
+        Ok(self.iter_entries_with(&row_g, col_g.as_deref().unwrap_or(&row_g)))
     }
 
     /// [`iter_entries`](Self::iter_entries) reading support guards the caller
@@ -1981,42 +2033,11 @@ impl SubMatrix {
             .collect()
     }
 
-    /// Materialise as a row-major dense buffer of length `n_rows × n_cols`.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(1).unwrap());
-    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
-    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-    /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
-    /// # let mut bloc = SubMatrix::new(
-    /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
-    /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
-    /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
-    /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
-    /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// assert_eq!(bloc.dense(), vec![2.0, -1.0, -1.0, 2.0]); // ligne-major
-    /// ```
-    pub fn dense(&self) -> Vec<f64> {
-        let m = self.to_dmatrix();
-        let mut out = Vec::with_capacity(m.nrows() * m.ncols());
-        for i in 0..m.nrows() {
-            for j in 0..m.ncols() {
-                out.push(m[(i, j)]);
-            }
-        }
-        out
-    }
-
     /// Materialise as a [`nalgebra::DMatrix<f64>`]. Entries at the same
     /// `(row, col)` are summed.
     ///
+    /// **Errors**: a computed block holds no value, as for [`get`](Self::get).
+    ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
@@ -2030,14 +2051,23 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// assert_eq!(bloc.to_dmatrix()[(0, 1)], -1.0);
+    /// assert_eq!(bloc.to_dmatrix()?[(0, 1)], -1.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn to_dmatrix(&self) -> DMatrix<f64> {
+    pub fn to_dmatrix(&self) -> Result<DMatrix<f64>> {
+        self.check_has_values("to_dmatrix")?;
+        Ok(self.values_dmatrix())
+    }
+
+    /// The stored values as a dense matrix, factor applied — what
+    /// [`to_dmatrix`](Self::to_dmatrix) returns, and an empty grid for a
+    /// computed block.
+    fn values_dmatrix(&self) -> DMatrix<f64> {
         let nr = self.coo.nrows();
         let nc = self.coo.ncols();
         let mut out = DMatrix::<f64>::zeros(nr, nc);
@@ -2056,6 +2086,8 @@ impl SubMatrix {
     /// The internal COO matrix, with [`SubMatrix::factor`] baked in (cloned as-is
     /// when the factor is `1.0`, rebuilt with scaled values otherwise).
     ///
+    /// **Errors**: a computed block holds no value, as for [`get`](Self::get).
+    ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
@@ -2069,26 +2101,30 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// assert_eq!(bloc.to_coo().nnz(), 4);
+    /// assert_eq!(bloc.to_coo()?.nnz(), 4);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn to_coo(&self) -> CooMatrix<f64> {
+    pub fn to_coo(&self) -> Result<CooMatrix<f64>> {
+        self.check_has_values("to_coo")?;
         if self.factor == 1.0 {
-            return self.coo.clone();
+            return Ok(self.coo.clone());
         }
         let mut out = CooMatrix::new(self.coo.nrows(), self.coo.ncols());
         for (r, c, &v) in self.coo.triplet_iter() {
             out.push(r, c, v * self.factor);
         }
-        out
+        Ok(out)
     }
 
     /// Convert this block to a [`nalgebra_sparse::CsrMatrix`] (factor applied).
     ///
+    /// **Errors**: a computed block holds no value, as for [`get`](Self::get).
+    ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
@@ -2102,44 +2138,21 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// assert_eq!(bloc.to_csr().nnz(), 4);
+    /// assert_eq!(bloc.to_csr()?.nnz(), 4);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn to_csr(&self) -> CsrMatrix<f64> {
-        CsrMatrix::from(&self.to_coo())
+    pub fn to_csr(&self) -> Result<CsrMatrix<f64>> {
+        Ok(CsrMatrix::from(&self.to_coo()?))
     }
 
     /// Convert this block to a [`nalgebra_sparse::CscMatrix`] (factor applied).
     ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(1).unwrap());
-    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
-    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-    /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
-    /// # let mut bloc = SubMatrix::new(
-    /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
-    /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
-    /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
-    /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
-    /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// assert_eq!(bloc.to_csc().nrows(), 2);
-    /// ```
-    pub fn to_csc(&self) -> CscMatrix<f64> {
-        CscMatrix::from(&self.to_coo())
-    }
-
-    /// `y = A · x` (dense). Returns an error if `x.len() != n_cols`.
+    /// **Errors**: a computed block holds no value, as for [`get`](Self::get).
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -2154,26 +2167,16 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// // [[2, -1], [-1, 2]] · [1, 1] = [1, 1].
-    /// assert_eq!(bloc.mul_dense(&[1.0, 1.0]).unwrap(), vec![1.0, 1.0]);
+    /// assert_eq!(bloc.to_csc()?.nrows(), 2);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn mul_dense(&self, x: &[f64]) -> Result<Vec<f64>> {
-        if x.len() != self.n_cols() {
-            return Err(PyrucastError::Message(format!(
-                "mul_dense: x has length {} but sub-matrix has {} columns",
-                x.len(),
-                self.n_cols()
-            )));
-        }
-        let csr = self.to_csr();
-        let x_vec = DVector::<f64>::from_column_slice(x);
-        let y_vec: DVector<f64> = &csr * &x_vec;
-        Ok(y_vec.iter().copied().collect())
+    pub fn to_csc(&self) -> Result<CscMatrix<f64>> {
+        Ok(CscMatrix::from(&self.to_coo()?))
     }
 }
 
@@ -2365,7 +2368,8 @@ impl crate::dump::Dump for SubMatrix {
         }
         let row_labels: Vec<String> = self.row_dofs().iter().map(dof_label).collect();
         let col_labels: Vec<String> = self.col_dofs().iter().map(dof_label).collect();
-        let data = self.dense();
+        // Row-major: the column-major storage of the transpose.
+        let data = self.values_dmatrix().transpose().as_slice().to_vec();
         // What `Display` does not say — the DOF ordering decides how to read the
         // grid that follows, and the factor decides its values. Without this
         // line, the "content" level would teach less than the structure does.
@@ -2431,12 +2435,11 @@ mod coo_serde {
 
 /// The assembled CSR, its **index arrays shared** with whatever produced them.
 ///
-/// A `CsrMatrix` owns its three arrays, so storing one here meant copying the
-/// sparsity out of the assembler's (already shared, already memoised) pattern at
-/// every assembly — twenty gigabytes of `memcpy` on a solid mesh, to reproduce
-/// something that had not changed. Only the values are new from one assembly to
-/// the next; the offsets and the column indices are the pattern's, held by
-/// `Arc`. A `CsrMatrix` is built on demand, where one is actually wanted.
+/// A `CsrMatrix` owns its three arrays: storing one here would copy the
+/// sparsity out of the assembler's pattern, shared and kept by the model, at
+/// every assembly. Only the values are new from one assembly to the next; the
+/// offsets and the column indices are the pattern's, held by `Arc`. A
+/// `CsrMatrix` is built on demand, where one is actually wanted.
 pub(crate) struct AssembledCsr {
     pub(crate) row_offsets: std::sync::Arc<Vec<usize>>,
     pub(crate) col_indices: std::sync::Arc<Vec<usize>>,
@@ -2481,11 +2484,11 @@ impl AssembledCsr {
     }
 }
 
-/// Snapshot produced by [`Matrix::finalize`]: DOF numbering + assembled CSR.
+/// The values of an assembled matrix: DOF numbering + CSR.
 ///
 /// The numbering is held as packed [`DofKey`]s over a shared name table, not as
-/// a `Vec<(NodeId, String)>`: on a solid mesh the materialised form is thirty
-/// million `String`s, rebuilt at every assembly, for a handful of distinct
+/// a `Vec<(NodeId, String)>`: the materialised form is one `String` per
+/// degree of freedom, rebuilt at every assembly, for a handful of distinct
 /// names.
 struct AssembledData {
     vars: std::sync::Arc<Vec<String>>,
@@ -2507,7 +2510,7 @@ impl AssembledData {
     /// the result shares the pattern too. Otherwise the DOFs are numbered as the
     /// blocks of both assembled together would be: `self`'s, then those only
     /// `other` has, in `other`'s order — sorted by the solver permutation `perm`
-    /// when the coordinates carry one, as [`Matrix::finalize`] does, and as
+    /// when the coordinates carry one, as an assembly does, and as
     /// conjugate pairs when the sum is `conjugate` (symmetric). A DOF and its
     /// conjugate are both new or both known, so each side keeps its
     /// rank-for-rank conjugacy.
@@ -2630,10 +2633,11 @@ fn merged_order(
 
 /// Aggregate of [`SubMatrix`] blocks.
 ///
-/// Call [`Matrix::finalize`] before passing to a solver. Solver-facing methods
-/// (`to_csr`, `to_dmatrix`, `mul_dense`, `dense`, `to_coo`, `to_csc`) return
-/// an error if the matrix has not been finalized. `add_sub` invalidates the
-/// assembled state.
+/// An assembler returns it assembled; a matrix put together from blocks
+/// (`add_sub`, `|`, `filter`) gets its values from [`Matrix::assemble`]. The
+/// readers of the assembled values (`to_csr`, `to_dmatrix`, `to_coo`,
+/// `to_csc`, `mul_field`) and the solver return an error on a matrix without
+/// values. `add_sub` clears the values.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -2653,13 +2657,13 @@ fn merged_order(
 /// # };
 /// # let mut bloc = SubMatrix::new(
 /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #     DofOrdering::NodesThenVars, Symmetry::Full);
+/// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
 /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
 /// // The aggregate: blocks, a global numbering, an assembled state.
 /// let mut k = Matrix::empty();
 /// k.add_sub(Handle::new(bloc))?;
-/// k.finalize()?;
+/// k.assemble()?;
 /// assert_eq!((k.n_rows()?, k.n_cols()?), (2, 2));
 /// assert_eq!(k.to_csr()?.nnz(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -2737,7 +2741,7 @@ crate::impl_aggregate!(Matrix, SubMatrix, sub_matrix, "sub-matrix(es)", {
 /// # let bloc = || {
 /// #     let mut z = SubMatrix::new(
 /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #         DofOrdering::NodesThenVars, Symmetry::Full);
+/// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
 /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -2747,7 +2751,7 @@ crate::impl_aggregate!(Matrix, SubMatrix, sub_matrix, "sub-matrix(es)", {
 /// # use pyrucast::containers::matrix::NamedDof;
 /// let mut k = Matrix::empty();
 /// k.add_sub(Handle::new(bloc()))?;
-/// k.finalize()?;
+/// k.assemble()?;
 /// // A row or column DOF of the aggregate, in materialized form.
 /// let dofs: Vec<NamedDof> = k.row_dofs()?;
 /// assert_eq!(dofs[0], (a.id(), "q".to_string()));
@@ -2758,12 +2762,11 @@ pub type NamedDof = (NodeId, String);
 /// A DOF in **packed** form: the node id in the high 32 bits, the index of its
 /// variable in the matrix's name table in the low 32.
 ///
-/// The materialised [`NamedDof`] carries a `String` per DOF. That is one heap
+/// The materialised [`NamedDof`] carries a `String` per DOF: one heap
 /// allocation, one hash of a string and one clone for every degree of freedom
-/// of the problem — thirty million of each on a solid mesh, paid again at every
-/// assembly, to re-express what a handful of variable names already say. The
-/// key says the same thing in eight bytes, and the names live once in the
-/// table the key indexes ([`Matrix::dof_vars`]).
+/// of the problem, at every assembly, to re-express what a handful of variable
+/// names already say. The key says the same thing in eight bytes, and the
+/// names live once in the table the key indexes ([`Matrix::dof_vars`]).
 ///
 /// ```
 /// # use pyrucast::atoms::NodeId;
@@ -2980,7 +2983,7 @@ fn conjugate_lengths(rows: usize, cols: usize, what: &str) -> Result<()> {
 /// # let bloc = || {
 /// #     let mut z = SubMatrix::new(
 /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #         DofOrdering::NodesThenVars, Symmetry::Full);
+/// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
 /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -2990,7 +2993,7 @@ fn conjugate_lengths(rows: usize, cols: usize, what: &str) -> Result<()> {
 /// # use pyrucast::ops::scatter;
 /// let mut k = Matrix::empty();
 /// k.add_sub(Handle::new(bloc()))?;
-/// k.finalize()?;
+/// k.assemble()?;
 /// // A pure function of the model's **structure**, not of its materials:
 /// // built once, reused from one assembly to the next.
 /// let motif = scatter::build_pattern(&k)?;
@@ -3052,7 +3055,7 @@ pub struct AssemblyPattern {
 /// # let bloc = || {
 /// #     let mut z = SubMatrix::new(
 /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #         DofOrdering::NodesThenVars, Symmetry::Full);
+/// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
 /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -3063,7 +3066,7 @@ pub struct AssemblyPattern {
 /// # use pyrucast::ops::scatter;
 /// let mut k = Matrix::empty();
 /// k.add_sub(Handle::new(bloc()))?;
-/// k.finalize()?;
+/// k.assemble()?;
 /// // A **literal** block lays its slots out in its COO order;
 /// // a computed block groups them per cell, in the order the kernel
 /// // produit.
@@ -3178,7 +3181,7 @@ impl AssemblyPattern {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -3188,7 +3191,7 @@ impl AssemblyPattern {
     /// # use pyrucast::ops::scatter;
     /// let mut k = Matrix::empty();
     /// k.add_sub(Handle::new(bloc()))?;
-    /// k.finalize()?;
+    /// k.assemble()?;
     /// let motif = scatter::build_pattern(&k)?;
     /// // The number of **stored** entries — the CSR's, not the blocks'.
     /// assert_eq!(motif.nnz(), motif.col_indices.len());
@@ -3367,69 +3370,25 @@ fn csr_from_triplets_parallel(
 }
 
 impl Matrix {
-    /// Build the global DOF union + CSR. Must be called before any
-    /// solver-facing method (`to_csr`, `to_dmatrix`, `mul_dense`, `dense`,
-    /// `to_coo`, `to_csc`). Idempotent: a second call is a no-op if no
-    /// `add_sub` has occurred since the last `finalize`.
+    /// Assemble a matrix of **written** blocks only, without leaving this
+    /// container: the DOF orders, then the values summed into a CSR. A sum
+    /// with an unassembled operand needs it ([`literal_values`](Self::literal_values)),
+    /// and so do the tests that check the assemblers against it. The public
+    /// entry point is [`assemble`](Self::assemble), which also computes the
+    /// computed blocks. Does nothing on an assembled matrix.
     ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
-    /// # use pyrucast::containers::mesh::SubMesh;
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # let coords = Handle::new(Coords::new(1).unwrap());
-    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
-    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-    /// # let support = {
-    /// #     let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
-    /// #     sm.add_cell(&[a.id()]).unwrap();
-    /// #     sm.add_cell(&[b.id()]).unwrap();
-    /// #     Handle::new(sm)
-    /// # };
-    /// # let bloc = || {
-    /// #     let mut z = SubMatrix::new(
-    /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
-    /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
-    /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
-    /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
-    /// #     z.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// #     z
-    /// # };
-    /// let mut k = Matrix::empty();
-    /// k.add_sub(Handle::new(bloc()))?;
-    /// // The size reads off the blocks, without assembly…
-    /// assert_eq!((k.n_rows()?, k.n_cols()?), (2, 2));
-    /// // …but the sparse views exist only once the matrix is finalized.
-    /// assert!(k.to_csr().is_err());
-    /// k.finalize()?;
-    /// assert_eq!(k.to_csr()?.nnz(), 4);
-    /// // Idempotent: a second call reassembles nothing.
-    /// k.finalize()?;
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn finalize(&mut self) -> Result<()> {
+    /// **Errors**: a computed block, whose values only the model's kernel
+    /// computes — and `containers` does not depend on `models`.
+    pub(crate) fn assemble_written(&mut self) -> Result<()> {
         if self.assembled.is_some() {
             return Ok(());
         }
-        // A *computed* block carries no values: producing them means driving a
-        // model kernel that lives in `crate::models` (outside `containers`).
-        // Assembling it here would force a matrix↔kernel cycle, so we don't —
-        // the global assembler in `ops::matrix::stiffness` handles computed
-        // blocks and injects the finished CSR via `set_assembled`.
-        for h in &*self {
-            if h.read().is_computed() {
-                return Err(PyrucastError::Message(
-                    "Matrix::finalize: this matrix carries a computed block; \
-                     assemble it with m.assemble() (or \
-                     ops::matrix::stiffness), which scatters the kernel into \
-                     the global CSR — finalize() cannot (it must not reach into \
-                     the model/kernel)"
-                        .into(),
-                ));
-            }
+        if self.iter().any(|h| h.read().is_computed()) {
+            return Err(PyrucastError::Message(
+                "Matrix::assemble_written: this matrix carries a computed block, \
+                 whose values only Matrix::assemble computes"
+                    .into(),
+            ));
         }
         let vars = std::sync::Arc::new(self.field_names());
         let (row_keys, col_keys) = self.dof_orders(&vars)?;
@@ -3442,7 +3401,7 @@ impl Matrix {
             values,
             ncols: col_keys.len(),
         };
-        self.assembled = Some(AssembledData {
+        self.set_values(AssembledData {
             vars,
             row_keys: std::sync::Arc::new(row_keys),
             col_keys: std::sync::Arc::new(col_keys),
@@ -3451,13 +3410,11 @@ impl Matrix {
         Ok(())
     }
 
-    /// Inject a globally-assembled CSR built by an external assembler
-    /// ([`crate::ops::matrix`]), bypassing [`finalize`](Self::finalize).
-    /// `row_dofs` / `col_dofs` must be this matrix' global DOF union (as
-    /// returned by [`row_dofs`](Self::row_dofs) / [`col_dofs`](Self::col_dofs))
-    /// and index `csr`. This is the path for matrices carrying *computed*
-    /// blocks, which `finalize` cannot assemble on its own (it would have to
-    /// reach into the model/kernel — the cycle Option B avoids).
+    /// Hand over the values an assembler of [`crate::ops::matrix`] computed.
+    /// `row_keys` / `col_keys` are this matrix's DOF orders (those of
+    /// [`row_dofs`](Self::row_dofs) / [`col_dofs`](Self::col_dofs)) and index
+    /// `csr`. The values of a computed block are computed there, by the
+    /// model's kernel, which `containers` does not depend on.
     pub(crate) fn set_assembled(
         &mut self,
         vars: std::sync::Arc<Vec<String>>,
@@ -3465,7 +3422,7 @@ impl Matrix {
         col_keys: std::sync::Arc<Vec<DofKey>>,
         csr: AssembledCsr,
     ) {
-        self.assembled = Some(AssembledData {
+        self.set_values(AssembledData {
             vars,
             row_keys,
             col_keys,
@@ -3473,17 +3430,27 @@ impl Matrix {
         });
     }
 
-    /// Whether the values are there: assembled by an assembler, finalized, or
-    /// added by a sum.
+    /// Give the matrix its values, and seal every block they were computed
+    /// from: a block's later [`add_entry`](SubMatrix::add_entry) would change
+    /// what the values say without changing them. Every path to an assembled
+    /// matrix goes through here, except scaling, whose blocks are copies of
+    /// blocks already sealed.
+    fn set_values(&mut self, values: AssembledData) {
+        for h in &*self {
+            seal(h);
+        }
+        self.assembled = Some(values);
+    }
+
+    /// Whether the values are there: assembled by an assembler or by
+    /// [`assemble`](Self::assemble), or added by a sum.
     pub(crate) fn is_assembled(&self) -> bool {
         self.assembled.is_some()
     }
 
     fn assembled_or_err(&self) -> Result<&AssembledData> {
         self.assembled.as_ref().ok_or_else(|| {
-            PyrucastError::Message(
-                "Matrix has not been finalized; call finalize() before solving".into(),
-            )
+            PyrucastError::Message("Matrix has no assembled values; call assemble() first".into())
         })
     }
 
@@ -3509,7 +3476,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -3519,7 +3486,7 @@ impl Matrix {
     /// # use std::sync::Arc;
     /// let mut k = Matrix::empty();
     /// k.add_sub(Handle::new(bloc()))?;
-    /// k.finalize()?;
+    /// k.assemble()?;
     /// assert!(k.cached_factorization::<usize>().is_none()); // rien encore
     /// k.store_factorization(Arc::new(42usize));
     /// // The downcast is checked: another type yields nothing.
@@ -3556,7 +3523,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -3566,7 +3533,7 @@ impl Matrix {
     /// # use std::sync::Arc;
     /// let mut k = Matrix::empty();
     /// k.add_sub(Handle::new(bloc()))?;
-    /// k.finalize()?;
+    /// k.assemble()?;
     /// // The solver drops its factorization here to reuse it as is at the next
     /// // step; any change to the matrix wipes it.
     /// k.store_factorization(Arc::new(42usize));
@@ -3580,7 +3547,7 @@ impl Matrix {
         *self.factorization.lock() = Some(factorization);
     }
 
-    // ── Block-traversal helpers (no finalize required) ──────────────────
+    // ── Block-traversal helpers (no assembly required) ──────────────────
 
     /// Deduplicated concatenation of the blocks' row (or col) DOFs, as packed
     /// [`DofKey`]s — the global DOF numbering.
@@ -3593,8 +3560,7 @@ impl Matrix {
     /// Order: **solver order** when the backing `Coords` carries a
     /// [`permutation`](crate::coords::Coords::permutation) (stable
     /// sort by the node's permutation index, so the per-node variable order is
-    /// preserved); otherwise **first-seen** (identical to the historical
-    /// behaviour, hence bit-for-bit stable when no permutation is set).
+    /// preserved); otherwise **first-seen**: the blocks alone decide it.
     fn collect_dof_keys(&self, row: bool, vars: &[String]) -> Result<Vec<DofKey>> {
         let slot_of: HashMap<String, u32> = vars
             .iter()
@@ -4002,7 +3968,7 @@ impl Matrix {
     }
 
     /// Union of all row DOFs across blocks, in first-seen order.
-    /// If finalized, returns the cached order (consistent with the CSR).
+    /// If assembled, returns the assembled order (consistent with the CSR).
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -4036,7 +4002,7 @@ impl Matrix {
     }
 
     /// Union of all column DOFs across blocks, in first-seen order.
-    /// If finalized, returns the cached order (consistent with the CSR).
+    /// If assembled, returns the assembled order (consistent with the CSR).
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -4461,14 +4427,7 @@ impl Matrix {
                 _ => 0.0,
             });
         }
-        if self.iter().any(|h| h.read().is_computed()) {
-            return Err(PyrucastError::Message(
-                "Matrix::get: this matrix carries a computed block that was never \
-                 assembled, so its values do not exist yet; assemble it first \
-                 (m.assemble())"
-                    .into(),
-            ));
-        }
+        self.check_no_unassembled_computed("get")?;
         let mut total = 0.0;
         for h in self {
             total += h.read().get(row_node, row_field, col_node, col_field)?;
@@ -4476,7 +4435,14 @@ impl Matrix {
         Ok(total)
     }
 
-    /// All COO entries across every block, in block-insertion order.
+    /// Every entry, as `(row node, dual var, column node, primal var, value)`:
+    /// the values [`get`](Self::get) reads. An assembled matrix lists its
+    /// assembled values, row by row in its row order; an unassembled one lists
+    /// the entries written in its blocks, block by block in insertion order, a
+    /// coordinate written twice appearing twice.
+    ///
+    /// **Errors**: an unassembled matrix carrying a computed block, as for
+    /// [`get`](Self::get).
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -4499,23 +4465,50 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // One 5-tuple per entry: row node, dual var, column node,
-    /// // primal var, value — names are already resolved there. Like
-    /// // `entry_count` walks the entries **stored**: a
-    /// // computed one has none, its values living in the global CSR.
-    /// assert!(k.iter_entries().is_empty());
+    /// // One 5-tuple per value of the assembled matrix, names resolved:
+    /// // K = [[1, -1], [-1, 1]], row by row.
+    /// let entries = k.iter_entries()?;
+    /// assert_eq!(entries.len(), 4);
+    /// assert_eq!(entries[1], (a.id(), "q".to_string(), b.id(), "T".to_string(), -1.0));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn iter_entries(&self) -> Vec<MatrixEntry> {
+    pub fn iter_entries(&self) -> Result<Vec<MatrixEntry>> {
+        if let Some(a) = &self.assembled {
+            let named = |key: DofKey| (dof_node(key), a.vars[dof_var(key) as usize].clone());
+            return Ok(a
+                .csr
+                .triplets()
+                .map(|(r, c, v)| {
+                    let (row_node, row_var) = named(a.row_keys[r]);
+                    let (col_node, col_var) = named(a.col_keys[c]);
+                    (row_node, row_var, col_node, col_var, v)
+                })
+                .collect());
+        }
+        self.check_no_unassembled_computed("iter_entries")?;
         let mut out = Vec::new();
         for h in self {
-            out.extend(h.read().iter_entries());
+            out.extend(h.read().iter_entries()?);
         }
-        out
+        Ok(out)
     }
 
-    // ── Solver-facing (require finalize) ────────────────────────────────
+    /// Refuse a value read on an unassembled matrix that carries a computed
+    /// block: its values do not exist until the matrix is assembled.
+    fn check_no_unassembled_computed(&self, what: &str) -> Result<()> {
+        if self.assembled.is_none() && self.iter().any(|h| h.read().is_computed()) {
+            return Err(PyrucastError::Message(format!(
+                "Matrix::{what}: this matrix carries a computed block that was never \
+                 assembled, so its values do not exist yet; assemble it first \
+                 (m.assemble())"
+            )));
+        }
+        Ok(())
+    }
 
-    /// Assembled CSR, **materialised**. Requires [`finalize`](Self::finalize).
+    // ── Solver-facing (require the assembled values) ────────────────────────────────
+
+    /// Assembled CSR, **materialised**. Requires an assembled matrix.
     ///
     /// The assembled state holds the sparsity by `Arc`, shared with the
     /// assembler's memoised pattern, and only the values as its own. Building a
@@ -4552,7 +4545,7 @@ impl Matrix {
     }
 
     /// The assembled CSR **borrowed**: `(row_offsets, col_indices, values)`.
-    /// Requires [`finalize`](Self::finalize).
+    /// Requires an assembled matrix.
     ///
     /// The reading form of [`to_csr`](Self::to_csr), copying nothing.
     ///
@@ -4589,7 +4582,7 @@ impl Matrix {
         Ok((&a.csr.row_offsets, &a.csr.col_indices, &a.csr.values))
     }
 
-    /// Assembled dense matrix. Requires [`finalize`](Self::finalize).
+    /// Assembled dense matrix. Requires an assembled matrix.
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -4627,46 +4620,7 @@ impl Matrix {
         Ok(out)
     }
 
-    /// Row-major dense buffer. Requires [`finalize`](Self::finalize).
-    ///
-    /// ```
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::Matrix;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::Model;
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::ops::{element_field, matrix};
-    /// # use pyrucast::ops::model;
-    /// # let coords = Handle::new(Coords::new(1).unwrap());
-    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
-    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
-    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
-    /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // Vue dense ligne-major, longueur n_rows × n_cols.
-    /// let d = k.dense().unwrap();
-    /// assert_eq!(d.len(), k.n_rows().unwrap() * k.n_cols().unwrap());
-    /// assert_eq!(d, vec![1.0, -1.0, -1.0, 1.0]);
-    /// ```
-    pub fn dense(&self) -> Result<Vec<f64>> {
-        let m = self.to_dmatrix()?;
-        let mut out = Vec::with_capacity(m.nrows() * m.ncols());
-        for i in 0..m.nrows() {
-            for j in 0..m.ncols() {
-                out.push(m[(i, j)]);
-            }
-        }
-        Ok(out)
-    }
-
-    /// Assembled COO (rebuilt from the CSR). Requires [`finalize`](Self::finalize).
+    /// Assembled COO (rebuilt from the CSR). Requires an assembled matrix.
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -4700,7 +4654,7 @@ impl Matrix {
         Ok(coo)
     }
 
-    /// Assembled CSC. Requires [`finalize`](Self::finalize).
+    /// Assembled CSC. Requires an assembled matrix.
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -4729,42 +4683,10 @@ impl Matrix {
         Ok(CscMatrix::from(&self.assembled_or_err()?.csr.to_csr()?))
     }
 
-    /// `y = A · x` (dense). Requires [`finalize`](Self::finalize).
-    ///
-    /// ```
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::Matrix;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::Model;
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::ops::{element_field, matrix};
-    /// # use pyrucast::ops::model;
-    /// # let coords = Handle::new(Coords::new(1).unwrap());
-    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
-    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
-    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
-    /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // K · [1, 1] = 0: the rigid mode of a conduction.
-    /// assert_eq!(k.mul_dense(&[1.0, 1.0]).unwrap(), vec![0.0, 0.0]);
-    /// ```
-    pub fn mul_dense(&self, x: &[f64]) -> Result<Vec<f64>> {
+    /// `y = A · x` on the assembled values, `x` and `y` in the assembled column
+    /// and row orders — the arithmetic behind [`mul_field`](Self::mul_field).
+    fn mul_values(&self, x: &[f64]) -> Result<Vec<f64>> {
         let a = self.assembled_or_err()?;
-        let nc = a.col_keys.len();
-        if x.len() != nc {
-            return Err(PyrucastError::Message(format!(
-                "mul_dense: x has length {} but matrix has {} columns",
-                x.len(),
-                nc
-            )));
-        }
         // Row-wise SpMV straight on the CSR arrays: each row's dot product is
         // written once, so the result is independent of the thread count.
         let (offsets, cols, vals) = (&a.csr.row_offsets, &a.csr.col_indices, &a.csr.values);
@@ -4788,8 +4710,8 @@ impl Matrix {
     /// matrix's row-side fields: `restrict(&f_ext, &k.row_mesh()?)` lands the
     /// external forces on the very supports [`mul_field`](Self::mul_field)
     /// (internal forces `K·u`) lives on, so `&f_ext_r - &f_int` aligns zone by
-    /// zone instead of passing through. Available before
-    /// [`finalize`](Self::finalize) (the supports are structural).
+    /// zone instead of passing through. Available before assembly (the
+    /// supports are structural).
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -5023,7 +4945,7 @@ impl Matrix {
     /// shared by several supports are stored once per zone, with equal values
     /// by construction (they come from the same vector).
     ///
-    /// Requires [`finalize`](Self::finalize).
+    /// Requires an assembled matrix.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -5044,7 +4966,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -5054,7 +4976,7 @@ impl Matrix {
     /// # use pyrucast::containers::field::SubField;
     /// let mut k = Matrix::empty();
     /// k.add_sub(Handle::new(bloc()))?;
-    /// k.finalize()?;
+    /// k.assemble()?;
     /// // A flat vector, in column DOF order, becomes a field again —
     /// // laid on the **existing** POI1 supports, materializing no other.
     /// let f = k.field_from_col_values(&[10.0, 20.0])?;
@@ -5089,7 +5011,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -5099,7 +5021,7 @@ impl Matrix {
     /// # use pyrucast::containers::field::SubField;
     /// let mut k = Matrix::empty();
     /// k.add_sub(Handle::new(bloc()))?;
-    /// k.finalize()?;
+    /// k.assemble()?;
     /// // Le jumeau côté lignes : la disposition dans laquelle arrive `A · x`,
     /// // and whose components are the **dual** variables.
     /// let f = k.field_from_row_values(&[1.0, 2.0])?;
@@ -5204,9 +5126,8 @@ impl Matrix {
     /// [`crate::ops::solver::solve`], which reads a *dual* right-hand side at the
     /// rows and produces a *primal* solution at the columns. Both use
     /// [`NodeField::gather`] / [`NodeField::from_dof_values`] to bridge the
-    /// abstract field and the flat DOF vector. Requires
-    /// [`finalize`](Self::finalize); the `*` operator (`&matrix * &field`) is
-    /// sugar for this method.
+    /// abstract field and the flat DOF vector. Requires an assembled matrix;
+    /// the `*` operator (`&matrix * &field`) is sugar for this method.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -5227,7 +5148,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -5238,7 +5159,7 @@ impl Matrix {
     /// # use pyrucast::containers::node_field::NodeField;
     /// let mut k = Matrix::empty();
     /// k.add_sub(Handle::new(bloc()))?;
-    /// k.finalize()?;
+    /// k.assemble()?;
     /// // `x` is read at the **column** DOFs (primal), the result lives on the
     /// // **Row** DOFs (dual): K · u = f. The `*` operator is its sugar.
     /// let x = NodeField::from_submesh(&k.col_mesh()?.get(0)?, vec!["T".into()])?;
@@ -5250,7 +5171,7 @@ impl Matrix {
     /// ```
     pub fn mul_field(&self, x_field: &NodeField) -> Result<NodeField> {
         let x = x_field.gather(&self.col_dofs()?)?;
-        let y = self.mul_dense(&x)?;
+        let y = self.mul_values(&x)?;
         self.field_from_row_values(&y)
     }
 
@@ -5352,8 +5273,8 @@ impl Matrix {
     /// contribution as many times as it is handed over — `k + k` is `2k`.
     ///
     /// **Errors**: an operand that carries a computed block and was never
-    /// assembled — its values do not exist yet. A literal-only operand is
-    /// finalized on the way.
+    /// assembled — its values do not exist yet. An operand of written blocks
+    /// only is assembled on the way.
     fn added(&self, other: &Matrix) -> Result<Matrix> {
         let (own_a, own_b);
         let a = match &self.assembled {
@@ -5380,7 +5301,7 @@ impl Matrix {
         let perm = coords.as_ref().and_then(|c| c.permutation());
         let values = a.sum(b, perm, out.symmetric());
         drop(coords);
-        out.assembled = Some(values);
+        out.set_values(values);
         Ok(out)
     }
 
@@ -5400,15 +5321,18 @@ impl Matrix {
             literal.push(h.clone());
         }
         literal.post_push();
-        literal.finalize()?;
-        Ok(literal.assembled.take().expect("finalize assembles"))
+        literal.assemble_written()?;
+        Ok(literal
+            .assembled
+            .take()
+            .expect("assemble_written assembles"))
     }
 }
 
 impl std::ops::Mul<&NodeField> for &Matrix {
     type Output = Result<NodeField>;
     /// `&matrix * &field` — sugar for [`Matrix::mul_field`]. Fallible (the
-    /// matrix must be finalized), so the result is a `Result`: `(&k * &x)?`.
+    /// matrix must be assembled), so the result is a `Result`: `(&k * &x)?`.
     fn mul(self, rhs: &NodeField) -> Self::Output {
         self.mul_field(rhs)
     }
@@ -5426,9 +5350,9 @@ impl std::ops::Mul<&NodeField> for Matrix {
 // `&matrix * s`, `/ s` and `-matrix` — a fresh `Matrix` whose blocks are scaled
 // clones of `self`'s, carrying the assembled CSR along, scaled (see `scaled`).
 // The owning forms rescale in place whatever block no one else holds
-// (`scale_in_place`). **Infallible**: cloning a block and appending it cannot
-// fail, `Matrix` being the one aggregate that declares no `check_push` — except
-// a division, which refuses a divisor no matrix can survive (`check_divisor`).
+// (`scale_in_place`). **Infallible**: the clones come from one matrix, hence
+// from one `Coords`, so `check_push` has nothing to refuse — except a
+// division, which refuses a divisor no matrix can survive (`check_divisor`).
 
 impl std::ops::Mul<f64> for &Matrix {
     type Output = Matrix;
@@ -5515,8 +5439,14 @@ impl SubMatrix {
     /// This block alone in a fresh one-block [`Matrix`], copied into a new
     /// handle — the operand the mixed block/matrix sums are built from.
     fn as_matrix(&self) -> Matrix {
+        self.clone().into_matrix()
+    }
+
+    /// This block alone in a fresh one-block [`Matrix`], under a new handle.
+    /// Cannot fail: an empty matrix accepts any block.
+    pub(crate) fn into_matrix(self) -> Matrix {
         let mut out = Matrix::empty();
-        out.push(Handle::new(self.clone()));
+        out.push(Handle::new(self));
         out.post_push();
         out
     }
@@ -5621,7 +5551,7 @@ forward_ref_binop!(Sub, sub, SubMatrix, SubMatrix);
 impl crate::dump::Dump for Matrix {
     fn render(&self, opts: &crate::dump::DumpOptions) -> String {
         // Build the global labelled grid on the fly — `collect_*_dofs` and
-        // `build_global_triplets` take `&self`, so no `finalize()` (which needs
+        // `build_global_triplets` take `&self`, so no assembly (which needs
         // `&mut`) is required: a matrix dumps the same content whether assembled
         // or not.
         let grid = (|| -> Result<String> {
@@ -5732,8 +5662,8 @@ mod tests {
     /// the connectivity a **flat position**.
     ///
     /// Every support in practice comes from `to_poi1`, which deduplicates, so
-    /// the two coincide. This test pins both halves so the requirement cannot
-    /// be forgotten: it is documented on the constructors, never validated.
+    /// the two coincide. This test pins both halves; the constructors refuse
+    /// the second (see the test below).
     #[test]
     fn node_index_is_the_flat_position_only_on_a_deduplicated_support() {
         // Distinct nodes: rank and position coincide, for every node.
@@ -5761,6 +5691,47 @@ mod tests {
         assert_eq!(guard2.node_index()[&nodes2[2].id()], 2);
     }
 
+    /// The constructors refuse a support that lists a node twice, or that is
+    /// not a POI1, as a node field does: the block would number its rows by
+    /// cell position and find them by distinct rank.
+    #[test]
+    fn a_block_refuses_a_support_that_repeats_a_node() {
+        let vars = || (vec!["q".to_string()], vec!["T".to_string()]);
+        let (_c, _nodes, repeated) = make_poi1_repeated(3);
+        let (_c2, _nodes2, distinct) = make_poi1(2);
+        for (rows, cols) in [(&repeated, &distinct), (&distinct, &repeated)] {
+            let (d, p) = vars();
+            let err = SubMatrix::new(
+                rows.clone(),
+                cols.clone(),
+                d,
+                p,
+                DofOrdering::NodesThenVars,
+                Symmetry::None,
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(err.contains("distinct node"), "{err}");
+        }
+
+        let (c, nodes, _) = make_poi1(2);
+        let mut seg = SubMesh::new(c, ElementType::SEG2);
+        seg.add_cell(&[nodes[0].id(), nodes[1].id()]).unwrap();
+        let seg = Handle::new(seg);
+        let (d, p) = vars();
+        let err = SubMatrix::new(
+            seg.clone(),
+            seg,
+            d,
+            p,
+            DofOrdering::NodesThenVars,
+            Symmetry::None,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("requires a POI1"), "{err}");
+    }
+
     // ── SubMatrix tests ─────────────────────────────────────────────────────
 
     #[test]
@@ -5773,7 +5744,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         assert_eq!(m.n_rows(), 2);
         assert_eq!(m.n_cols(), 2);
         assert_eq!(m.entry_count(), 0);
@@ -5843,7 +5815,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Half(id_c),
-        );
+        )
+        .unwrap();
         let ct = SubMatrix::new(
             sup_a,
             sup_m,
@@ -5851,7 +5824,8 @@ mod tests {
             vec!["imposed".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Half(id_ct),
-        );
+        )
+        .unwrap();
         assert!(!c.is_symmetric(), "a half is not symmetric on its own");
 
         let mut both = Matrix::empty();
@@ -5861,6 +5835,44 @@ mod tests {
 
         let halved = both.subset([0]).unwrap();
         assert!(!halved.symmetric(), "one half alone carries no symmetry");
+    }
+
+    /// Once a matrix holding it is assembled, a block takes no more entries:
+    /// the values and the solver's cache were computed from them. Before, it
+    /// does — and a sum assembles, so it seals too.
+    #[test]
+    fn an_assembled_matrix_seals_its_blocks() {
+        let (_cfg, nodes, sup) = make_poi1(1);
+        let a = nodes[0].id();
+        let block = || {
+            let mut b = SubMatrix::new(
+                sup.clone(),
+                sup.clone(),
+                vec!["q".into()],
+                vec!["T".into()],
+                DofOrdering::NodesThenVars,
+                Symmetry::Full,
+            )
+            .unwrap();
+            b.add_entry(a, "q", a, "T", 2.0).unwrap();
+            Handle::new(b)
+        };
+
+        let written = block();
+        let mut k = Matrix::empty();
+        k.add_sub(written.clone()).unwrap();
+        written.write().add_entry(a, "q", a, "T", 1.0).unwrap();
+        k.assemble().unwrap();
+        assert_eq!(k.get(a, "q", a, "T").unwrap(), 3.0);
+        let err = written.write().add_entry(a, "q", a, "T", 1.0).unwrap_err();
+        assert!(err.to_string().contains("assembled matrix"), "{err}");
+        assert_eq!(k.get(a, "q", a, "T").unwrap(), 3.0);
+
+        let summed = block();
+        let mut m = Matrix::empty();
+        m.add_sub(summed.clone()).unwrap();
+        let _sum = (&m + &m).unwrap();
+        assert!(summed.write().add_entry(a, "q", a, "T", 1.0).is_err());
     }
 
     #[test]
@@ -5874,7 +5886,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
         m.add_entry(b, "q", a, "T", -1.0).unwrap();
@@ -5896,7 +5909,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         // unknown field → 0.0
         assert_eq!(m.get(nodes[0].id(), "x", nodes[0].id(), "y").unwrap(), 0.0);
     }
@@ -5912,7 +5926,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", a, "T", 1.5).unwrap();
         m.add_entry(a, "q", a, "T", -0.5).unwrap();
@@ -5920,7 +5935,7 @@ mod tests {
     }
 
     #[test]
-    fn dense_matches_get() {
+    fn to_dmatrix_matches_get() {
         let (_cfg, nodes, sup) = make_poi1(2);
         let (a, b) = (nodes[0].id(), nodes[1].id());
         let mut m = SubMatrix::new(
@@ -5930,12 +5945,16 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
         m.add_entry(b, "q", a, "T", -1.0).unwrap();
         m.add_entry(b, "q", b, "T", 2.0).unwrap();
-        assert_eq!(m.dense(), vec![2.0, -1.0, -1.0, 2.0]);
+        assert_eq!(
+            m.to_dmatrix().unwrap(),
+            DMatrix::from_row_slice(2, 2, &[2.0, -1.0, -1.0, 2.0])
+        );
     }
 
     #[test]
@@ -5950,7 +5969,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
         m.add_entry(b, "q", a, "T", -1.0).unwrap();
@@ -5974,43 +5994,6 @@ mod tests {
     }
 
     #[test]
-    fn mul_dense_against_known_matrix() {
-        let (_cfg, nodes, sup) = make_poi1(2);
-        let (a, b) = (nodes[0].id(), nodes[1].id());
-        let mut m = SubMatrix::new(
-            sup.clone(),
-            sup,
-            vec!["q".into()],
-            vec!["T".into()],
-            DofOrdering::NodesThenVars,
-            Symmetry::Full,
-        );
-        m.add_entry(a, "q", a, "T", 2.0).unwrap();
-        m.add_entry(a, "q", b, "T", -1.0).unwrap();
-        m.add_entry(b, "q", a, "T", -1.0).unwrap();
-        m.add_entry(b, "q", b, "T", 2.0).unwrap();
-        assert_eq!(m.mul_dense(&[1.0, 1.0]).unwrap(), vec![1.0, 1.0]);
-        assert_eq!(m.mul_dense(&[1.0, 2.0]).unwrap(), vec![0.0, 3.0]);
-    }
-
-    #[test]
-    fn mul_dense_rejects_wrong_size() {
-        let (_cfg, nodes, sup) = make_poi1(1);
-        let a = nodes[0].id();
-        let mut m = SubMatrix::new(
-            sup.clone(),
-            sup,
-            vec!["q".into()],
-            vec!["T".into()],
-            DofOrdering::NodesThenVars,
-            Symmetry::None,
-        );
-        m.add_entry(a, "q", a, "T", 1.0).unwrap();
-        // 1 col, but x has 2 elements
-        assert!(m.mul_dense(&[1.0, 2.0]).is_err());
-    }
-
-    #[test]
     fn rectangular_sub_matrix_distinct_row_and_col_supports() {
         let (_cfg_r, row_nodes, row_sup) = make_poi1(2);
         let (_cfg_c, col_nodes, col_sup) = make_poi1(2);
@@ -6021,7 +6004,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         c.add_entry(row_nodes[0].id(), "T", col_nodes[0].id(), "T", 1.0)
             .unwrap();
         c.add_entry(row_nodes[1].id(), "T", col_nodes[1].id(), "T", 1.0)
@@ -6043,11 +6027,12 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         m.add_entry(a, "q", a, "T", 1.0).unwrap();
         m.add_entry(b, "q", b, "T", 2.0).unwrap();
         m.add_entry(a, "q", a, "T", 3.0).unwrap();
-        let entries = m.iter_entries();
+        let entries = m.iter_entries().unwrap();
         assert_eq!(entries.len(), 3);
         assert_eq!(entries[0].4, 1.0);
         assert_eq!(entries[1].4, 2.0);
@@ -6065,7 +6050,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Full,
-        );
+        )
+        .unwrap();
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         assert_eq!(m.factor(), 1.0);
 
@@ -6073,8 +6059,7 @@ mod tests {
         let scaled = &m * 3.0;
         assert_eq!(scaled.factor(), 3.0);
         assert_eq!(scaled.get(a, "q", a, "T").unwrap(), 6.0);
-        assert_eq!(scaled.dense(), vec![6.0]);
-        assert_eq!(scaled.iter_entries()[0].4, 6.0);
+        assert_eq!(scaled.iter_entries().unwrap()[0].4, 6.0);
         assert_eq!(
             m.get(a, "q", a, "T").unwrap(),
             2.0,
@@ -6085,11 +6070,10 @@ mod tests {
         let halved = scaled / 2.0;
         assert_eq!(halved.factor(), 1.5);
         assert_eq!(halved.get(a, "q", a, "T").unwrap(), 3.0);
-        assert_eq!(halved.to_coo().values(), &[3.0]);
-        assert_eq!(halved.to_csr().values(), &[3.0]);
-        assert_eq!(halved.to_csc().values(), &[3.0]);
-        assert_eq!(halved.to_dmatrix()[(0, 0)], 3.0);
-        assert_eq!(halved.mul_dense(&[1.0]).unwrap(), vec![3.0]);
+        assert_eq!(halved.to_coo().unwrap().values(), &[3.0]);
+        assert_eq!(halved.to_csr().unwrap().values(), &[3.0]);
+        assert_eq!(halved.to_csc().unwrap().values(), &[3.0]);
+        assert_eq!(halved.to_dmatrix().unwrap()[(0, 0)], 3.0);
         // The raw local form is untouched by the factor.
         assert_eq!(halved.local_coo_arrays().2, &[2.0]);
     }
@@ -6107,6 +6091,7 @@ mod tests {
                 DofOrdering::NodesThenVars,
                 Symmetry::None,
             )
+            .unwrap()
         };
 
         // A fresh block is untagged — the "rien" case.
@@ -6152,7 +6137,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Full,
-        );
+        )
+        .unwrap();
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         let d = format!("{:?}", m);
         assert!(d.contains("SubMatrix"));
@@ -6178,7 +6164,8 @@ mod tests {
             vec!["u".into(), "v".into()],
             DofOrdering::VarsThenNodes,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         // With VarsThenNodes: row 0 = (p, node_a), row 1 = (p, node_b),
         //                     row 2 = (q, node_a), row 3 = (q, node_b)
         m.add_entry(a, "p", c, "u", 1.0).unwrap();
@@ -6210,7 +6197,8 @@ mod tests {
             vec!["u".into(), "v".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         // With NodesThenVars: row 0 = (node_a, p), row 1 = (node_a, q),
         //                     row 2 = (node_b, p), row 3 = (node_b, q)
         m.add_entry(a, "p", c, "u", 7.0).unwrap();
@@ -6260,7 +6248,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         a.add_entry(na, "q", ca0, "T", 2.0).unwrap();
         a.add_entry(na, "q", ca1, "T", -1.0).unwrap();
 
@@ -6278,7 +6267,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Full,
-        );
+        )
+        .unwrap();
         b.add_entry(m0, "q", m0, "T", 0.5).unwrap();
         b.add_entry(m1, "q", m0, "T", -1.0).unwrap();
         b.add_entry(m1, "q", m1, "T", 2.0).unwrap();
@@ -6303,7 +6293,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Full,
-        );
+        )
+        .unwrap();
         let b = SubMatrix::new(
             sup.clone(),
             sup,
@@ -6311,7 +6302,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         let mut k = Matrix::empty();
         k.add_sub(Handle::new(a)).unwrap();
         k.add_sub(Handle::new(b)).unwrap();
@@ -6329,7 +6321,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Full,
-        );
+        )
+        .unwrap();
         blk.add_entry(a, "q", a, "T", 2.0).unwrap();
         blk.add_entry(b, "q", b, "T", 3.0).unwrap();
         let mut orig = Matrix::empty();
@@ -6368,7 +6361,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Full,
-        );
+        )
+        .unwrap();
         for &n in nodes {
             blk.add_entry(n, "q", n, "T", value).unwrap();
         }
@@ -6386,11 +6380,11 @@ mod tests {
         let (_cfg, nodes, sup) = make_poi1(2);
         let (a, b) = (nodes[0].id(), nodes[1].id());
         let mut k = diag(&sup, &[a, b], 2.0);
-        k.finalize().unwrap();
+        k.assemble().unwrap();
 
         let scaled = &k * 3.0;
 
-        // Assembled on arrival: no `finalize()` / `assemble()` in between.
+        // Assembled on arrival: no `assemble()` in between.
         assert_eq!(scaled.to_csr().unwrap().values(), &[6.0, 6.0]);
         assert_eq!(scaled.get(a, "q", a, "T").unwrap(), 6.0);
         // The sparsity is untouched, so the index arrays are *shared*, not copied.
@@ -6458,7 +6452,7 @@ mod tests {
         assert_eq!(sum.get(a, "q", a, "T").unwrap(), 4.0, "k + k is 2k");
 
         let mut union = k.union(&k).unwrap();
-        union.finalize().unwrap();
+        union.assemble().unwrap();
         assert_eq!(union.len(), 1);
         assert_eq!(union.get(a, "q", a, "T").unwrap(), 2.0, "k | k is k");
 
@@ -6579,7 +6573,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Full,
-        );
+        )
+        .unwrap();
         k_blk.add_entry(a, "q", a, "T", 2.0).unwrap();
         k_blk.add_entry(a, "q", b, "T", -1.0).unwrap();
         k_blk.add_entry(b, "q", a, "T", -1.0).unwrap();
@@ -6599,7 +6594,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Full,
-        );
+        )
+        .unwrap();
         m_blk.add_entry(a, "q", a, "T", 4.0).unwrap();
         m_blk.add_entry(b, "q", b, "T", 4.0).unwrap();
         let mut m = Matrix::empty();
@@ -6643,7 +6639,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         a.add_entry(na, "q", na, "T", 2.0).unwrap();
 
         let mut b = SubMatrix::new(
@@ -6653,13 +6650,14 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         b.add_entry(nb, "q", nb, "T", 3.0).unwrap();
 
         let mut k = Matrix::empty();
         k.add_sub(Handle::new(a)).unwrap();
         k.add_sub(Handle::new(b)).unwrap();
-        k.finalize().unwrap();
+        k.assemble().unwrap();
 
         let d = k.to_dmatrix().unwrap();
         assert_eq!(d.nrows(), 2);
@@ -6692,7 +6690,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         a.add_entry(na, "q", na, "T", 2.0).unwrap();
         let mut b = SubMatrix::new(
             sup_b.clone(),
@@ -6701,7 +6700,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         b.add_entry(nb, "q", nb, "T", 3.0).unwrap();
 
         let mut k = Matrix::empty();
@@ -6714,7 +6714,7 @@ mod tests {
         perm.swap(na.0 as usize, nb.0 as usize);
         coords.write().set_permutation(perm).unwrap();
 
-        k.finalize().unwrap();
+        k.assemble().unwrap();
 
         let rows = k.row_dofs().unwrap();
         assert_eq!(rows[0], (nb, "q".to_string()));
@@ -6725,7 +6725,7 @@ mod tests {
     }
 
     #[test]
-    fn not_finalized_yields_error() {
+    fn unassembled_yields_error() {
         let (_cfg, nodes, sup) = make_poi1(1);
         let a = nodes[0].id();
         let mut m = SubMatrix::new(
@@ -6735,20 +6735,20 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         m.add_entry(a, "q", a, "T", 1.0).unwrap();
         let mut k = Matrix::empty();
         k.add_sub(Handle::new(m)).unwrap();
-        // must not succeed before finalize
+        // must not succeed before assembly
         assert!(k.to_csr().is_err());
         assert!(k.to_dmatrix().is_err());
-        assert!(k.mul_dense(&[1.0]).is_err());
-        k.finalize().unwrap();
+        k.assemble().unwrap();
         assert!(k.to_csr().is_ok());
     }
 
     #[test]
-    fn aggregate_mul_dense_matches_dense() {
+    fn aggregate_of_row_blocks_assembles_both() {
         let (_cfg_a, nodes_a, sup_a) = make_poi1(2);
         let (na0, na1) = (nodes_a[0].id(), nodes_a[1].id());
         // row block a: only node na0 as row
@@ -6764,7 +6764,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         a.add_entry(na0, "q", na0, "T", 2.0).unwrap();
         a.add_entry(na0, "q", na1, "T", -1.0).unwrap();
 
@@ -6779,21 +6780,24 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         b.add_entry(na1, "q", na0, "T", -1.0).unwrap();
         b.add_entry(na1, "q", na1, "T", 2.0).unwrap();
 
         let mut k = Matrix::empty();
         k.add_sub(Handle::new(a)).unwrap();
         k.add_sub(Handle::new(b)).unwrap();
-        k.finalize().unwrap();
+        k.assemble().unwrap();
 
-        assert_eq!(k.mul_dense(&[1.0, 1.0]).unwrap(), vec![1.0, 1.0]);
-        assert_eq!(k.mul_dense(&[1.0, 2.0]).unwrap(), vec![0.0, 3.0]);
+        assert_eq!(
+            k.to_dmatrix().unwrap(),
+            DMatrix::from_row_slice(2, 2, &[2.0, -1.0, -1.0, 2.0])
+        );
     }
 
     #[test]
-    fn aggregate_mul_field_matches_mul_dense_and_operator() {
+    fn aggregate_mul_field_and_its_operator() {
         use crate::containers::node_field::{NodeField, SubNodeField};
 
         // K = [[2,-1],[-1,2]] with dual rows "q" and primal columns "T".
@@ -6806,14 +6810,15 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Full,
-        );
+        )
+        .unwrap();
         sm.add_entry(a, "q", a, "T", 2.0).unwrap();
         sm.add_entry(a, "q", b, "T", -1.0).unwrap();
         sm.add_entry(b, "q", a, "T", -1.0).unwrap();
         sm.add_entry(b, "q", b, "T", 2.0).unwrap();
         let mut k = Matrix::empty();
         k.add_sub(Handle::new(sm)).unwrap();
-        k.finalize().unwrap();
+        k.assemble().unwrap();
 
         // x = T:[1, 2] over both column nodes ⇒ y = K·x = [0, 3] at the "q" rows.
         let mut x_sub = SubNodeField::from_poi1(&sup, vec!["T".into()]).unwrap();
@@ -6857,7 +6862,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         a.add_entry(na, "q", na, "T", 1.0).unwrap();
 
         let mut b = SubMatrix::new(
@@ -6867,14 +6873,15 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         b.add_entry(nb, "q", nb, "T", 2.0).unwrap();
 
         let mut k = Matrix::empty();
         k.add_sub(Handle::new(a)).unwrap();
         k.add_sub(Handle::new(b)).unwrap();
 
-        let entries = k.iter_entries();
+        let entries = k.iter_entries().unwrap();
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].4, 1.0);
         assert_eq!(entries[1].4, 2.0);
@@ -6891,7 +6898,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Full,
-        );
+        )
+        .unwrap();
         a.add_entry(a_id, "q", a_id, "T", 2.0).unwrap();
         let mut k = Matrix::empty();
         k.add_sub(Handle::new(a)).unwrap();
@@ -6937,7 +6945,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Full,
-        );
+        )
+        .unwrap();
         k.add_entry(phys_nodes[0].id(), "q", phys_nodes[0].id(), "T", 1.0)
             .unwrap();
         let mut c = SubMatrix::new(
@@ -6947,7 +6956,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         c.add_entry(mult_node.id(), "imposed", phys_nodes[0].id(), "T", 1.0)
             .unwrap();
         let mut ct = SubMatrix::new(
@@ -6957,7 +6967,8 @@ mod tests {
             vec!["lambda".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         ct.add_entry(phys_nodes[0].id(), "q", mult_node.id(), "lambda", 1.0)
             .unwrap();
 
@@ -6966,9 +6977,9 @@ mod tests {
         m.add_sub(Handle::new(c)).unwrap();
         m.add_sub(Handle::new(ct)).unwrap();
 
-        // Not finalized yet ⇒ error.
+        // Not assembled yet ⇒ error.
         assert!(m.field_from_col_values(&[0.0]).is_err());
-        m.finalize().unwrap();
+        m.assemble().unwrap();
 
         // x holds its own flat index at every column DOF.
         let col_dofs = m.col_dofs().unwrap();
@@ -7004,7 +7015,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         a.add_entry(nodes[0].id(), "q", nodes[0].id(), "T", 1.0)
             .unwrap();
         let mut b = SubMatrix::new(
@@ -7014,14 +7026,15 @@ mod tests {
             vec!["P".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         b.add_entry(nodes[1].id(), "r", nodes[1].id(), "P", 1.0)
             .unwrap();
 
         let mut m = Matrix::empty();
         m.add_sub(Handle::new(a)).unwrap();
         m.add_sub(Handle::new(b)).unwrap();
-        m.finalize().unwrap();
+        m.assemble().unwrap();
 
         let col_dofs = m.col_dofs().unwrap();
         let x: Vec<f64> = (0..col_dofs.len()).map(|i| 10.0 + i as f64).collect();
@@ -7070,7 +7083,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Full,
-        );
+        )
+        .unwrap();
         k.add_entry(n0.id(), "q", n0.id(), "T", 2.0).unwrap();
         k.add_entry(n1.id(), "q", n1.id(), "T", 2.0).unwrap();
         let mut c = SubMatrix::new(
@@ -7080,13 +7094,14 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         c.add_entry(nm.id(), "imposed", n0.id(), "T", 1.0).unwrap();
         let mut m = Matrix::empty();
         m.add_sub(Handle::new(k)).unwrap();
         m.add_sub(Handle::new(c)).unwrap();
 
-        // Meshes: available pre-finalize, deduplicated, sharing the handles.
+        // Meshes: available before assembly, deduplicated, sharing the handles.
         let rm = m.row_mesh().unwrap();
         assert_eq!(rm.len(), 2);
         assert!(rm.get(0).unwrap().same_object(&phys));
@@ -7095,7 +7110,7 @@ mod tests {
         assert_eq!(cm.len(), 1, "K and C share the phys column support");
         assert!(cm.get(0).unwrap().same_object(&phys));
 
-        m.finalize().unwrap();
+        m.assemble().unwrap();
 
         // f_int = A · x with x: T = [1, 1] on phys.
         let x = NodeField::from_sub(
@@ -7173,12 +7188,13 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         blk.add_entry(r0.id(), "q", c0.id(), "T", 1.0).unwrap();
 
         let mut m = Matrix::empty();
         m.add_sub(Handle::new(blk)).unwrap();
-        m.finalize().unwrap();
+        m.assemble().unwrap();
 
         let f = m.field_from_row_values(&[3.0, 7.0]).unwrap();
         assert_eq!(f.len(), 1);

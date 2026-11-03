@@ -50,7 +50,11 @@ n'en a pas besoin, mais la masse / capacité les exige (erreur claire sinon).
 sa ligne, les extra-diagonaux sont supprimés. Appliqué à une matrice de masse /
 capacité consistante, on obtient la masse **diagonale (lumpée)**, qui conserve la
 masse totale (`Σ_i M_lump[i,i] = Σ_ij M[i,j]`) — la forme découplée bon marché des
-schémas explicites. La matrice d'entrée doit être assemblée et carrée.
+schémas explicites. La matrice d'entrée doit être assemblée et carrée, sa
+ligne i et sa colonne i portant le même nœud. Le résultat garde les lignes et
+les colonnes de l'entrée, dans le même ordre, avec un bloc diagonal par support
+de lignes : il se résout, se multiplie par un champ et se sauvegarde comme
+l'entrée.
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_assemblage.py:lump}}

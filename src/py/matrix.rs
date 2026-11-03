@@ -195,25 +195,17 @@ impl PySubMatrix {
             .collect()
     }
 
-    /// Dense row-major buffer, length `n_rows × n_cols`.
-    fn dense(&self) -> Vec<f64> {
-        self.handle.read().dense()
-    }
-
-    /// `y = A · x` (dense).
-    fn mul_dense(&self, x: Vec<f64>) -> PyResult<Vec<f64>> {
-        Ok(self.handle.read().mul_dense(&x)?)
-    }
-
     /// List of `(row_node, row_field, col_node, col_field, value)`
-    /// tuples, in insertion order.
-    fn entries(&self) -> PyMatrixEntries {
-        self.handle
+    /// tuples, in insertion order. Raises on a computed block, which holds no
+    /// value, as `get` does.
+    fn entries(&self) -> PyResult<PyMatrixEntries> {
+        Ok(self
+            .handle
             .read()
-            .iter_entries()
+            .iter_entries()?
             .into_iter()
             .map(|(rn, rf, cn, cf, v)| (rn.0, rf, cn.0, cf, v))
-            .collect()
+            .collect())
     }
 
     fn __len__(&self) -> usize {
@@ -226,8 +218,9 @@ impl PySubMatrix {
 /// A global finite-element matrix, assembled from rectangular blocks
 /// (`SubMatrix`).
 ///
-/// Build blocks with `Matrix.block(...)`, compose them with `|`, then call
-/// `finalize()` before solving. Index it (`matrix[i]`) to reach a block.
+/// An assembler (`pyrucast.matrix.stiffness`, …) returns it assembled. Blocks
+/// written with `Matrix.block(...)` and composed with `|` get their values from
+/// `assemble()`. Index it (`matrix[i]`) to reach a block.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Matrix")]
 pub struct PyMatrix {
@@ -237,8 +230,8 @@ pub struct PyMatrix {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyMatrix {
-    /// `Matrix()` — empty aggregate. Populate via `add_sub_matrix`, or
-    /// build blocks with `Matrix.block(...)` and compose them with `|`.
+    /// `Matrix()` — empty matrix. Add blocks with `add_sub`, or build them with
+    /// `Matrix.block(...)` and compose them with `|`.
     #[new]
     fn py_new() -> Self {
         Self {
@@ -251,7 +244,7 @@ impl PyMatrix {
     /// `col_support` may each be a `SubMesh` view or a **unitary** `Mesh`.
     /// `ordering` is `"nodes_then_vars"` (default) or `"vars_then_nodes"`.
     /// Fill entries via the block view (`block[0].add_entry(...)`) and
-    /// compose several blocks with `|`, then `finalize()`.
+    /// compose several blocks with `|`, then `assemble()`.
     #[classmethod]
     #[pyo3(signature = (row_support, col_support, dual_vars, primal_vars, ordering="nodes_then_vars", symmetry=Symmetry::None))]
     fn block(
@@ -274,39 +267,30 @@ impl PyMatrix {
         };
         let row = submesh_handle(row_support)?;
         let col = submesh_handle(col_support)?;
-        let sub = SubMatrix::new(row, col, dual_vars, primal_vars, ord, symmetry);
+        let sub = SubMatrix::new(row, col, dual_vars, primal_vars, ord, symmetry)?;
         let mut m = Matrix::empty();
         m.add_sub(Handle::new(sub))?;
         Ok(Self { inner: m })
     }
 
     /// Assemble this matrix **from its blocks alone** — no `Model` — on the
-    /// configuration active now, mutating it in place. A matrix is assembled
-    /// once: on one that already is, this does nothing.
+    /// configuration active now, in place: a computed block is computed, a
+    /// written block brings its values. A matrix is assembled once: on one
+    /// that already is, this does nothing.
     ///
-    /// The composition path, for blocks put together without their values
-    /// (`|` union, `add_sub`, `filter`, `exclude`), including *computed* ones
-    /// (which `finalize()` refuses — the element kernel lives outside
-    /// `containers`). Not needed after `matrix * scalar` nor after a sum: both
-    /// carry the assembled values along — `pyrucast.solver.solve(m / dt + k,
-    /// rhs)`.
+    /// Needed for blocks put together without their values (`Matrix.block`,
+    /// `|`, `add_sub`, `filter`, `exclude`). Not needed after `matrix * scalar`
+    /// nor after a sum: both carry the assembled values along —
+    /// `pyrucast.solver.solve(m / dt + k, rhs)`.
     fn assemble(&mut self) -> PyResult<()> {
         self.inner.assemble()?;
-        Ok(())
-    }
-
-    /// Build the global DOF table and CSR. Must be called before any
-    /// solver-facing method (`dense`, `mul_dense`, …).
-    fn finalize(&mut self) -> PyResult<()> {
-        self.inner.finalize()?;
         Ok(())
     }
 
     /// `Matrix.filter(physics)` — a new `Matrix` holding only the blocks **whose
     /// nature set contains** the given physics (`"mechanical"`, `"thermal"`,
     /// `"constraint"`, `"other"`, `"diffusion"`, `"radiation"`). The result is
-    /// **not** finalized — call `assemble` (or `finalize` for literal-only
-    /// blocks) before solving.
+    /// without values: call `assemble()` before solving.
     fn filter(&self, physics: Physics) -> Self {
         Self {
             inner: self.inner.filter(physics),
@@ -316,7 +300,7 @@ impl PyMatrix {
     /// `Matrix.exclude(physics)` — the complement of `filter`: a new `Matrix`
     /// holding only the blocks **whose nature set does not contain** the given
     /// physics. Composes with `filter`: `k.filter("thermal").exclude("constraint")`
-    /// keeps the conduction blocks without the Dirichlet pair. Not finalized,
+    /// keeps the conduction blocks without the Dirichlet pair. Without values,
     /// like `filter`.
     fn exclude(&self, physics: Physics) -> Self {
         Self {
@@ -336,13 +320,15 @@ impl PyMatrix {
             .collect()
     }
 
-    /// Total number of rows of the (finalized) global matrix.
+    /// Number of rows: the distinct (node, dual) pairs of the blocks, read
+    /// off the blocks, assembled or not.
     #[getter]
     fn n_rows(&self) -> PyResult<usize> {
         Ok(self.inner.n_rows()?)
     }
 
-    /// Total number of columns of the (finalized) global matrix.
+    /// Number of columns: the distinct (node, primal) pairs of the blocks,
+    /// read off the blocks, assembled or not.
     #[getter]
     fn n_cols(&self) -> PyResult<usize> {
         Ok(self.inner.n_cols()?)
@@ -417,18 +403,8 @@ impl PyMatrix {
         Ok(self.inner.get(rn, row_field, cn, col_field)?)
     }
 
-    /// Dense row-major buffer of the finalized matrix (`n_rows × n_cols`).
-    fn dense(&self) -> PyResult<Vec<f64>> {
-        Ok(self.inner.dense()?)
-    }
-
-    /// `y = A · x` against a dense vector `x`.
-    fn mul_dense(&self, x: Vec<f64>) -> PyResult<Vec<f64>> {
-        Ok(self.inner.mul_dense(&x)?)
-    }
-
     /// `matrix / scalar` — a fresh `Matrix` whose blocks carry the divided
-    /// `factor` (lazy). Not finalized; see `__mul__`. Raises `ZeroDivisionError`
+    /// `factor` (lazy), assembled if the matrix was. Raises `ZeroDivisionError`
     /// for a divisor of zero, and `ValueError` for one that is not finite:
     /// either would make every value of the result non-finite.
     fn __truediv__(&self, rhs: f64) -> PyResult<PyMatrix> {
@@ -453,14 +429,18 @@ impl PyMatrix {
         }
     }
 
-    /// List of `(row_node, row_field, col_node, col_field, value)`
-    /// tuples — every entry across every block, in block-insertion order.
-    fn entries(&self) -> PyMatrixEntries {
-        self.inner
-            .iter_entries()
+    /// List of `(row_node, row_field, col_node, col_field, value)` tuples: the
+    /// values `get` reads. An assembled matrix lists its assembled values, row
+    /// by row; an unassembled one lists the entries written in its blocks, in
+    /// insertion order. Raises on an unassembled matrix carrying a computed
+    /// block, as `get` does.
+    fn entries(&self) -> PyResult<PyMatrixEntries> {
+        Ok(self
+            .inner
+            .iter_entries()?
             .into_iter()
             .map(|(rn, rf, cn, cf, v)| (rn.0, rf, cn.0, cf, v))
-            .collect()
+            .collect())
     }
 }
 
@@ -473,8 +453,7 @@ impl PyMatrix {
     /// read at the matrix's column DOFs, result a fresh `NodeField` over its row
     /// DOFs) or, for a `float`, a scalar scale: a fresh `Matrix` whose blocks
     /// carry the scaled `factor` (lazy — no value is rewritten). The scaled
-    /// result is **not** finalized; call `finalize()` (or `assemble` for computed
-    /// blocks) before solving or querying it.
+    /// result is assembled if the matrix was.
     fn __mul__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let py = rhs.py();
         if let Ok(field) = rhs.extract::<PyRef<'_, PyNodeField>>() {
@@ -525,7 +504,7 @@ impl PyMatrix {
     fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyMatrix> {
         let inner = match SumOperand::extract(rhs, "matrix + x")? {
             SumOperand::Aggregate(m) => (&self.inner + &m.inner)?,
-            SumOperand::Block(b) => (&self.inner + &*b.handle.read())?,
+            SumOperand::Block(b) => (&self.inner + &b.as_operand())?,
         };
         Ok(PyMatrix { inner })
     }
@@ -534,9 +513,19 @@ impl PyMatrix {
     fn __sub__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyMatrix> {
         let inner = match SumOperand::extract(rhs, "matrix - x")? {
             SumOperand::Aggregate(m) => (&self.inner - &m.inner)?,
-            SumOperand::Block(b) => (&self.inner - &*b.handle.read())?,
+            SumOperand::Block(b) => (&self.inner - &b.as_operand())?,
         };
         Ok(PyMatrix { inner })
+    }
+}
+
+impl PySubMatrix {
+    /// A copy of this block, alone in a one-block `Matrix`: the operand of a
+    /// sum, as the Rust `&k + &block` builds it. No guard outlives the copy —
+    /// the sum seals its blocks, and `b + b` hands the same one over twice.
+    fn as_operand(&self) -> Matrix {
+        let copy = (*self.handle.read()).clone();
+        copy.into_matrix()
     }
 }
 
@@ -547,14 +536,8 @@ impl PySubMatrix {
     /// other operand's, as `Matrix.__add__` does.
     fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyMatrix> {
         let inner = match SumOperand::extract(rhs, "sub_matrix + x")? {
-            SumOperand::Aggregate(m) => (&*self.handle.read() + &m.inner)?,
-            // One guard at a time: `b + b` hands over the same block twice, and
-            // a second read on a lock this thread already holds may deadlock
-            // against a queued writer.
-            SumOperand::Block(b) => {
-                let other = (*b.handle.read()).clone();
-                (&*self.handle.read() + &other)?
-            }
+            SumOperand::Aggregate(m) => (&self.as_operand() + &m.inner)?,
+            SumOperand::Block(b) => (&self.as_operand() + &b.as_operand())?,
         };
         Ok(PyMatrix { inner })
     }
@@ -562,11 +545,8 @@ impl PySubMatrix {
     /// `sub_matrix - other` — as `+`, with the right-hand side negated.
     fn __sub__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyMatrix> {
         let inner = match SumOperand::extract(rhs, "sub_matrix - x")? {
-            SumOperand::Aggregate(m) => (&*self.handle.read() - &m.inner)?,
-            SumOperand::Block(b) => {
-                let other = (*b.handle.read()).clone();
-                (&*self.handle.read() - &other)?
-            }
+            SumOperand::Aggregate(m) => (&self.as_operand() - &m.inner)?,
+            SumOperand::Block(b) => (&self.as_operand() - &b.as_operand())?,
         };
         Ok(PyMatrix { inner })
     }
@@ -645,7 +625,8 @@ class PyMatrix:
     def __or__(self, other: pyo3_stub_gen.RustType["PyMatrix"] | pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
         """`matrix | other` → a fresh `Matrix` holding the blocks of both, in
         first-seen order and deduplicated by object identity. Assemble the global
-        operator this way, then call `finalize()` before solving."""
+        operator this way; the result has no values, call `assemble()` before
+        solving."""
     def __ror__(self, other: pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
         """`sub_matrix | matrix` — the mirror of `matrix | sub_matrix`,
         differing only in that the lone block comes first."""

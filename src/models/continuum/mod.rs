@@ -558,7 +558,7 @@ impl Continuum {
     ///     |geoms, m, _s, ke| c.element_stiffness(
     ///         &geoms[0], m, &lay, MaterialSymmetry::Isotropic, ke),
     /// )?;
-    /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+    /// let total: f64 = bloc.iter_entries()?.into_iter().map(|(_, _, _, _, v)| v).sum();
     /// assert!(total.abs() < 1e-6);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -640,7 +640,7 @@ impl Continuum {
     ///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, None,
     ///     |geoms, m, _s, ke| c.element_mass(&geoms[0], m, &lay, ke),
     /// )?;
-    /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+    /// let total: f64 = bloc.iter_entries()?.into_iter().map(|(_, _, _, _, v)| v).sum();
     /// assert!((total - 2.0 * 0.5 * 2.0).abs() < 1e-9);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -737,7 +737,7 @@ impl Continuum {
     ///     |geoms, _m, s, ke| c.element_geometric(&geoms[0], s.unwrap(), &lay, ke),
     /// )?;
     /// // It too is singular: the rigid modes cost nothing in it.
-    /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+    /// let total: f64 = bloc.iter_entries()?.into_iter().map(|(_, _, _, _, v)| v).sum();
     /// assert!(total.abs() < 1e-9);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -837,7 +837,7 @@ impl Continuum {
     /// // been materialised to carry it there.
     /// let kt = matrix::tangent(&modele, &materiaux, &eps, None, None)?;
     /// let k = matrix::stiffness(&modele, &materiaux)?;
-    /// assert_eq!(kt.dense()?, k.dense()?);
+    /// assert_eq!(kt.to_dmatrix()?, k.to_dmatrix()?);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn element_tangent_of<B: crate::models::Behavior + ?Sized>(

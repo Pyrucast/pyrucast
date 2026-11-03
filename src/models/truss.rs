@@ -501,7 +501,7 @@ pub(crate) fn cell_cosine(geom: &CellGeom, space_dim: usize, out: &mut [f64; 3])
 ///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, None,
 ///     |geoms, m, s, ke| truss::element_stiffness(&geoms[0], m, &lay, ke),
 /// )?;
-/// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+/// let total: f64 = bloc.iter_entries()?.into_iter().map(|(_, _, _, _, v)| v).sum();
 /// // A free bar is singular: the overall translation costs nothing.
 /// assert!(total.abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -576,7 +576,7 @@ pub fn element_stiffness(
 ///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, None,
 ///     |geoms, m, s, ke| truss::element_mass(&geoms[0], m, &lay, ke),
 /// )?;
-/// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+/// let total: f64 = bloc.iter_entries()?.into_iter().map(|(_, _, _, _, v)| v).sum();
 /// // The consistent mass sums to ρ·A·L per direction: here twice 0.06.
 /// assert!((total - 2.0 * 3.0 * 0.01 * 2.0).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -654,7 +654,7 @@ pub fn element_mass(
 ///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, Some(&mat),
 ///     |geoms, m, s, ke| truss::element_geometric(&geoms[0], s.unwrap(), &lay, ke),
 /// )?;
-/// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+/// let total: f64 = bloc.iter_entries()?.into_iter().map(|(_, _, _, _, v)| v).sum();
 /// // The **geometric** stiffness comes from the axial force, not the material.
 /// // It is singular as well.
 /// assert!(total.abs() < 1e-9);

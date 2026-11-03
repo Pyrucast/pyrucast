@@ -59,7 +59,7 @@ def test_a_load_contributes_to_no_matrix():
     materials = pyrucast.element_field.material_field(model, [("phi_q", 1.0)])
 
     k = pyrucast.matrix.stiffness(model, materials)
-    assert k.dense() == []
+    assert k.n_rows == 0 and k.entries() == []
 
 
 def test_a_missing_density_is_named():

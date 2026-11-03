@@ -29,9 +29,10 @@ nœud, la duale en ligne et son inconnue en colonne (`q` et `T`, `imposed` et
 `lambda`). Une matrice peut aussi être rectangulaire : un bloc de contrainte a
 une ligne par relation et une colonne par nœud que les relations relient.
 
-`get` rend 0 pour une case que la matrice ne contient pas. `dense()` rend la
-matrice pleine, ligne par ligne, et `dump()` l'affiche en tableau : deux
-lectures à réserver aux petites matrices.
+`get` rend 0 pour une case que la matrice ne contient pas. `entries()` rend
+toutes les valeurs, ligne par ligne, chacune en tuple (nœud, duale, nœud,
+inconnue, valeur). `dump()` affiche la matrice en tableau, une lecture à
+réserver aux petites matrices.
 
 ## Les blocs
 
@@ -54,22 +55,28 @@ Un bloc est de l'une de deux sortes :
 - **écrit** : il garde ses valeurs, une par une. Ce sont les blocs des
   contraintes, et ceux qu'on écrit soi-même.
 
-Les valeurs se lisent donc sur la matrice, pas sur ses blocs. Sur un bloc
-calculé, `get` lève une erreur, `dense` et `mul_dense` lisent des zéros, et
-`entries` une liste vide. De même, `entry_count` et `entries()` de la matrice
-ne comptent que les valeurs écrites dans ses blocs.
+Les valeurs se lisent donc sur la matrice, pas sur ses blocs : sur un bloc
+calculé, `get` et `entries` lèvent une erreur. `entry_count`, sur un bloc comme
+sur la matrice, compte les valeurs écrites dans les blocs.
 
 Pour écrire un bloc soi-même, `Matrix.block` rend une matrice d'un seul bloc,
 vide, qu'on remplit par `add_entry`. Deux valeurs écrites dans la même case
-s'additionnent. `finalize()` assemble ensuite la matrice.
+s'additionnent. `assemble()` donne ensuite ses valeurs à la matrice.
+
+Un bloc est **scellé** dès qu'une matrice qui le contient reçoit ses valeurs :
+par `assemble()`, par un assembleur ou par une somme. `add_entry` est alors
+refusé, puisque les valeurs de la matrice ont été calculées à partir de ses
+entrées. On écrit donc un bloc avant d'assembler, comme on remplit une
+[zone de maillage](mesh.md#scellement) avant qu'un espace ou un champ ne la
+scelle.
 
 ```python
 {{#include ../../tests/python/test_doc_matrice.py:bloc_ecrit}}
 ```
 
 Les nœuds d'un support doivent être **distincts**, comme ceux que rend
-`to_poi1` : un nœud répété n'est pas refusé, mais ses valeurs vont à la
-mauvaise ligne. Quand un bloc porte plusieurs noms, `ordering` dit comment ses
+`to_poi1` : un support qui répète un nœud est refusé, comme pour un
+[champ aux nœuds](node-field.md). Quand un bloc porte plusieurs noms, `ordering` dit comment ses
 lignes se suivent : nœud par nœud (`"nodes_then_vars"`, par défaut) ou nom par
 nom (`"vars_then_nodes"`). `symmetry` vaut `"full"` ou `"none"` (par défaut),
 voir [Symétrie](#symétrie).
@@ -84,15 +91,15 @@ effacent ses valeurs.
 
 `assemble()` calcule les valeurs à partir des blocs seuls, sans modèle, sur la
 configuration active : un bloc calculé refait son calcul, un bloc écrit apporte
-ses valeurs. `finalize()` fait de même pour une matrice de blocs écrits
-seulement, et refuse un bloc calculé.
+ses valeurs.
 
 ```python
 {{#include ../../tests/python/test_doc_matrice.py:assembler}}
 ```
 
-Sur une matrice sans valeurs, `dense`, `mul_dense`, `K * x` et `solve` lèvent
-une erreur, et `get` aussi dès qu'un bloc est calculé.
+Sur une matrice sans valeurs, `K * x` et `solve` lèvent une erreur. `get` et
+`entries` lisent les valeurs écrites dans les blocs, et lèvent une erreur dès
+qu'un bloc est calculé.
 
 Une matrice est assemblée **une fois** : ses valeurs ne bougent plus, et un
 second `assemble()` ne fait rien. Les valeurs d'une autre configuration
@@ -122,7 +129,9 @@ s'obtiennent en refaisant la matrice.
   est lu aux colonnes (une valeur absente vaut 0), et le résultat est un champ
   posé sur les lignes.
 - `lump()` rend la matrice diagonale dont chaque terme est la somme de sa
-  ligne : la masse concentrée.
+  ligne : la masse concentrée. Elle garde les lignes et les colonnes de la
+  matrice d'origine, avec un bloc diagonal par support de lignes, qui porte
+  ses noms et ses natures : elle se résout et se multiplie comme elle.
 
 Deux matrices ne se multiplient pas entre elles.
 
@@ -179,9 +188,26 @@ en un produit de matrices triangulaires, l'étape coûteuse, et garde le résult
 dans la matrice. Les `solve` suivants sur la même matrice le reprennent et ne
 font que la descente-remontée, bien moins chère : plusieurs chargements, un
 transitoire à pas de temps constant, des itérations qui ne changent pas la
-matrice. Selon la voie du solveur, ce qui est gardé est la factorisation, la
-condensation de l'élimination ou l'état de l'ensemble actif (voir
-[Solveur](operateurs/solveur.md#factorisation-réutilisable-cache-transparent)).
+matrice.
+
+La matrice n'a qu'**une case** pour cela. Son contenu dépend de la voie du
+solveur (voir [Solveur](operateurs/solveur.md#les-voies-de-la-résolution)) :
+
+- **une factorisation** de la matrice, LU ou Cholesky, quand on résout avec
+  les multiplicateurs sans inégalité, ou par élimination une matrice sans
+  relation ;
+- **une condensation**, pour l'élimination (`relations="eliminate"`) : la
+  table `T` qui exprime chaque inconnue éliminée par les autres, la matrice
+  sans ses contraintes, et la factorisation du système réduit `K̂ = TᵀKT` ; ou,
+  si des inégalités restent, ce système réduit et l'état de l'ensemble actif
+  qui le résout ;
+- **l'état de l'ensemble actif**, quand la matrice porte des inégalités : les
+  inégalités, le dernier statut convergé (d'où repart la résolution suivante)
+  et ses factorisations LU — celle de la base de Schur et ses colonnes, ou
+  celle du dernier statut.
+
+Le contenu n'est repris que s'il répond à la demande : la même voie, et, pour
+une factorisation, la même `method`. Sinon il est recalculé et prend la place.
 
 Ce qui est gardé est oublié quand la matrice change (`add_sub`, `add_subs`).
 Une matrice neuve part sans : `2.0 * K`, `M / dt + K` ou un nouvel assemblage
@@ -249,7 +275,9 @@ table de noms de la matrice (`dof_vars()`). `row_dofs()` rend la forme lisible,
   construction du bloc. Le bloc ne recopie pas leur liste de nœuds : il la lit
   en place et trouve le rang d'un nœud par la table `node_index` du support
   (voir [Maillage](mesh.md#ce-quune-zone-garde-en-cache)). D'où la règle des
-  nœuds distincts : cette table donne le rang parmi les nœuds sans répétition ;
+  nœuds distincts : cette table donne le rang parmi les nœuds sans répétition,
+  et les constructeurs (`new`, `computed`, `from_coo`) refusent un support qui
+  répète un nœud ou qui n'est pas un POI1 ;
 - `dual_vars`, `primal_vars` et `ordering` (`DofOrdering`) : la ligne d'un
   couple (nœud, nom) est `rang_du_nœud * n_noms + rang_du_nom` en
   `NodesThenVars`, `rang_du_nom * n_nœuds + rang_du_nœud` en `VarsThenNodes` ;
@@ -260,20 +288,28 @@ table de noms de la matrice (`dof_vars()`). `row_dofs()` rend la forme lisible,
   calcul lit en plus du matériau (la contrainte pour la raideur géométrique, la
   déformation et l'état précédent pour la tangente) ;
 - `symmetry`, `physics`, `factor`, et `row_sense`, le sens (égalité ou
-  inégalité) des lignes `imposed`, que lit le solveur.
+  inégalité) des lignes `imposed`, que lit le solveur ;
+- `sealed`, posé quand une matrice qui contient le bloc reçoit ses valeurs
+  (assemblage ou somme), et lu par `add_entry`. Il se pose comme celui d'une zone de maillage : la fonction
+  `seal` lit d'abord, et ne prend le verrou d'écriture que si le bloc n'est
+  pas encore scellé. Il n'est pas sauvegardé : une matrice relue n'a pas de
+  valeurs, et son assemblage scelle de nouveau ses blocs.
+
+Sur un bloc calculé, toute lecture de valeurs (`get`, `iter_entries`,
+`to_dmatrix`, `to_coo`, `to_csr`, `to_csc`) rend une erreur.
 
 **Assemblage.** `ops::matrix::stiffness`, comme `mass`, `geometric` et
 `tangent`, demande ses blocs à chaque sous-modèle, prend le motif du modèle
 (construit au premier appel par `ops::scatter::build_pattern`), calcule les
 valeurs en parallèle par coloriage des mailles (voir
 [Parallélisme](developper/parallelisme.md)) et les remet à la matrice par
-`set_assembled`. `Matrix::finalize` n'assemble que des blocs écrits :
-calculer un bloc calculé demande le calcul élémentaire, qui vit dans `models`,
-et `containers` n'en dépend pas. `Matrix::assemble`, défini dans `ops::matrix`,
-construit le motif depuis les blocs à chaque appel.
+`set_assembled`. `Matrix::assemble` est défini dans `ops::matrix` et non avec
+la matrice : calculer un bloc calculé demande le calcul élémentaire, qui vit
+dans `models`, dont `containers` ne dépend pas. Il construit le motif depuis
+les blocs à chaque appel.
 
 **Facteur.** Il s'applique partout où une valeur du bloc est lue ou émise
-(`get`, `dense`, les conversions, `mul_dense`, l'assemblage), sauf dans
+(`get`, `iter_entries`, les conversions, l'assemblage), sauf dans
 `local_triplets` et `local_coo_arrays`, les valeurs brutes que chaque lecteur
 multiplie lui-même. `&k * s` copie chaque bloc ; `k * s`, qui prend `k`,
 multiplie en place les blocs que personne d'autre ne tient

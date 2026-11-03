@@ -153,26 +153,9 @@ impl SubNodeField {
 
         let n_nodes = {
             let sm = submesh.read();
-            if sm.element_type() != ElementType::POI1 {
-                return Err(PyrucastError::Message(format!(
-                    "SubNodeField requires a POI1 SubMesh, got {}",
-                    sm.element_type()
-                )));
-            }
             // POI1: one node per cell, so the cell count *is* the node count
             // and the connectivity *is* the node list. Nothing to copy.
-            // A node listed twice would own two rows while the `NodeId → row`
-            // lookup, which ranks the distinct nodes, names one of them: the
-            // inverse map must cover every cell.
-            let distinct = sm.node_index().len();
-            if distinct != sm.cell_count() {
-                return Err(PyrucastError::Message(format!(
-                    "SubNodeField: the POI1 support lists {} cell(s) but {distinct} \
-                     distinct node(s) — a field holds one row per node; take the \
-                     distinct nodes with `to_poi1`",
-                    sm.cell_count()
-                )));
-            }
+            sm.check_node_support("SubNodeField")?;
             sm.cell_count()
         };
 

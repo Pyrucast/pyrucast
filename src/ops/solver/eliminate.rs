@@ -69,7 +69,7 @@ use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use super::lu::{self, factorize_csr, Factored};
+use super::lu::{self, factorize_csr, Factored, SolveMethod};
 use super::relations::{relation_rows, RelationRow};
 use super::unilateral::{ActiveSet, Inequality};
 use super::SolveOptions;
@@ -135,6 +135,16 @@ struct ReducedInequalities {
 }
 
 impl Condensation {
+    /// Whether this condensation is what `method` asks for: its reduced system
+    /// factorized that way. Kept inequalities make it a saddle-point, which
+    /// the active-set loop factorizes by LU whatever is asked.
+    fn answers(&self, method: SolveMethod) -> bool {
+        match &self.reduced {
+            Reduced::Plain(factored) => factored.answers(method),
+            Reduced::Unilateral(_) => true,
+        }
+    }
+
     /// Which factorization the **reduced** system admitted — `"cholesky"` or
     /// `"lu"`. Unlike the saddle-point it came from, `K̂` carries no multiplier
     /// DOFs, so it stands a real chance of being positive definite; kept
@@ -159,7 +169,7 @@ pub(super) fn solve(
 
     // ── Step 1 — obtain the condensation (cached or fresh) ─────────────
     let cond: Arc<Condensation> = match matrix.cached_factorization::<Condensation>() {
-        Some(c) if options.cache => c,
+        Some(c) if options.cache && c.answers(options.method) => c,
         _ => {
             let relations = relation_rows(matrix)?;
             // No relation ⇒ elimination is a no-op; solve the matrix as-is.
@@ -706,7 +716,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         block.add_entry(b.id(), "q", b.id(), "T", 4.0).unwrap();
         k.add_sub(Handle::new(block)).unwrap();
         assert!(k.cached_factorization::<Condensation>().is_none());
@@ -730,11 +741,12 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         block.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
         let mut m = Matrix::empty();
         m.add_sub(Handle::new(block)).unwrap();
-        m.finalize().unwrap();
+        m.assemble().unwrap();
 
         let mut rhs = SubNodeField::from_poi1(&sm, vec!["q".into()]).unwrap();
         rhs.set_value(a.id(), "q", 6.0).unwrap();

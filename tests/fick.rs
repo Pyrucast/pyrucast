@@ -153,10 +153,10 @@ fn diffusion_and_conduction_coexist_and_filter_apart() -> Result<()> {
     // `D` scales the same Laplacian, so its (0,0) entry is `D/h` against `K/h`.
     let d_only = pyrucast::ops::matrix::stiffness(&only_diffusion, &materials)?;
     let k_only = pyrucast::ops::matrix::stiffness(&only_thermal, &materials)?;
-    let d00 = d_only.dense()?[0];
-    let k00 = k_only.dense()?[0];
+    let d00 = d_only.to_dmatrix()?[(0, 0)];
+    let k00 = k_only.to_dmatrix()?[(0, 0)];
     assert!((d00 / k00 - D / K).abs() < 1e-12, "{d00} / {k00}");
     // The coupled matrix carries both, so it is strictly larger than either.
-    assert!(full.dense()?.len() > d_only.dense()?.len());
+    assert!(full.to_dmatrix()?.len() > d_only.to_dmatrix()?.len());
     Ok(())
 }

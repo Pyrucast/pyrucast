@@ -105,42 +105,30 @@ def test_sub_matrix_repeated_entries_sum():
     assert m.entry_count == 3
 
 
-def test_sub_matrix_dense_layout_is_row_major():
+def test_block_refuses_a_support_that_repeats_a_node():
+    """A block numbers its rows one per node, as a node field does: a support
+    listing a node twice is refused at once."""
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
-    m = _make_block(c, [a, b], [a, b], ["q"], ["T"])
-    m.add_entry(a, "q", a, "T", 2.0)
-    m.add_entry(a, "q", b, "T", -1.0)
-    m.add_entry(b, "q", a, "T", -1.0)
-    m.add_entry(b, "q", b, "T", 2.0)
-    assert m.dense() == [2.0, -1.0, -1.0, 2.0]
+    repeated = pyrucast.mesh.poi1_from_nodes([a, a, b])
+    with pytest.raises(RuntimeError, match="distinct node"):
+        pyrucast.Matrix.block(repeated, repeated, ["q"], ["T"])
+    with pytest.raises(RuntimeError, match="distinct node"):
+        pyrucast.NodeField(repeated, ["T"])
 
 
-def test_sub_matrix_mul_dense_against_known_block():
+def test_an_assembled_matrix_seals_its_blocks():
+    """The values of an assembled matrix were computed from its blocks'
+    entries: a block takes no more once the matrix is assembled."""
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
-    b = c.add_node([1.0])
-    m = _make_block(c, [a, b], [a, b], ["q"], ["T"], symmetry="full")
-    m.add_entry(a, "q", a, "T", 2.0)
-    m.add_entry(a, "q", b, "T", -1.0)
-    m.add_entry(b, "q", a, "T", -1.0)
-    m.add_entry(b, "q", b, "T", 2.0)
-    assert m.mul_dense([1.0, 1.0]) == [1.0, 1.0]
-    assert m.mul_dense([1.0, 2.0]) == [0.0, 3.0]
-
-
-def test_sub_matrix_mul_dense_rejects_wrong_size():
-    c = pyrucast.Coords(1)
-    a = c.add_node([0.0])
-    m = _make_block(c, [a], [a], ["q"], ["T"])
-    m.add_entry(a, "q", a, "T", 1.0)
-    try:
-        m.mul_dense([1.0, 2.0])
-    except RuntimeError:
-        pass
-    else:
-        raise AssertionError("expected RuntimeError for wrong x size")
+    k = pyrucast.Matrix.block(_poi1(c, [a]), _poi1(c, [a]), ["q"], ["T"])
+    k[0].add_entry(a, "q", a, "T", 2.0)
+    k.assemble()
+    with pytest.raises(RuntimeError, match="assembled matrix"):
+        k[0].add_entry(a, "q", a, "T", 2.0)
+    assert k.get(a, "q", a, "T") == 2.0
 
 
 def test_sub_matrix_row_and_col_dofs():
@@ -213,7 +201,7 @@ def test_matrix_aggregates_two_blocks():
     k = pyrucast.Matrix()
     k.add_sub(block_a)
     k.add_sub(block_b)
-    k.finalize()
+    k.assemble()
 
     assert len(k) == 2
     assert len(k) == 2
@@ -223,12 +211,8 @@ def test_matrix_aggregates_two_blocks():
     # row slices, neither block can declare it. A rectangular block is never
     # `full`, and these two are not each other's transpose either, so no `half`
     # pair expresses it. A symmetry is forgotten, never invented.
-    assert k.dense() == [2.0, -1.0, -1.0, 2.0]
+    assert [k.get(r, "q", c, "T") for r in (a, b) for c in (a, b)] == [2, -1, -1, 2]
     assert k.symmetric is False
-    assert k.get(a, "q", a, "T") == 2.0
-    assert k.get(b, "q", b, "T") == 2.0
-    assert k.dense() == [2.0, -1.0, -1.0, 2.0]
-    assert k.mul_dense([1.0, 1.0]) == [1.0, 1.0]
 
 
 def test_matrix_compose_blocks_with_union():
@@ -249,12 +233,12 @@ def test_matrix_compose_blocks_with_union():
     bb[0].add_entry(b, "q", b, "T", 2.0)
 
     k = ba | bb
-    k.finalize()
+    k.assemble()
     assert len(k) == 2
     assert k.n_rows == 2
     assert k.n_cols == 2
     # Row slices again: symmetric as an array, undeclarable block by block.
-    assert k.dense() == [2.0, -1.0, -1.0, 2.0]
+    assert [k.get(r, "q", c, "T") for r in (a, b) for c in (a, b)] == [2, -1, -1, 2]
     assert k.symmetric is False
 
 
@@ -299,6 +283,28 @@ def test_matrix_entries_concatenates_blocks():
     assert entries[1] == (b.id, "q", b.id, "T", 2.0)
 
 
+def test_entries_reads_what_get_reads():
+    """A computed block holds no value: its `entries` raises, as its `get`
+    does. An assembled matrix lists its assembled values, row by row."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    fes = pyrucast.FiniteElementSpace(pyrucast.mesh.line(a, b, 1))
+    model = pyrucast.model.heat_conduction(fes)
+    materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
+    k = pyrucast.matrix.stiffness(model, materials)
+    with pytest.raises(RuntimeError, match="computed block holds no value"):
+        k[0].get(a, "q", a, "T")
+    with pytest.raises(RuntimeError, match="computed block holds no value"):
+        k[0].entries()
+    assert k.entries() == [
+        (a.id, "q", a.id, "T", 1.0),
+        (a.id, "q", b.id, "T", -1.0),
+        (b.id, "q", a.id, "T", -1.0),
+        (b.id, "q", b.id, "T", 1.0),
+    ]
+
+
 def test_matrix_mul_field_returns_matrix_vector_product():
     """`matrix * NodeField` (unchanged despite `__mul__` now also accepting a
     `float` — the two are dispatched by `extract`)."""
@@ -312,7 +318,7 @@ def test_matrix_mul_field_returns_matrix_vector_product():
     block.add_entry(b, "q", b, "T", 2.0)
     k = pyrucast.Matrix()
     k.add_sub(block)
-    k.finalize()
+    k.assemble()
 
     x_mesh = pyrucast.Mesh(c, "POI1")
     x_mesh.unit().add_cell([a])
@@ -339,14 +345,14 @@ def test_matrix_mul_and_truediv_scale_by_factor():
     scaled = k * 2.5
     assert scaled[0].factor == 2.5
     assert k[0].factor == 1.0, "k must be untouched by scaling"
-    scaled.finalize()
+    scaled.assemble()
     assert scaled.get(a, "q", a, "T") == 5.0
     assert scaled.get(b, "q", b, "T") == 10.0
 
     halved = scaled / 2.0
     assert halved[0].factor == 1.25
     assert scaled[0].factor == 2.5, "/ must not mutate its source either"
-    halved.finalize()
+    halved.assemble()
     assert halved.get(a, "q", a, "T") == 2.5
     assert halved.get(b, "q", b, "T") == 5.0
 
@@ -361,11 +367,11 @@ def test_scalar_reads_on_either_side_and_negates():
     k.add_sub(block)
 
     left = 3.0 * k
-    left.finalize()
+    left.assemble()
     assert left.get(a, "q", a, "T") == 6.0
 
     negated = -k
-    negated.finalize()
+    negated.assemble()
     assert negated.get(a, "q", a, "T") == -2.0
     assert k[0].factor == 1.0, "k must be untouched"
     assert (-block).factor == -1.0
@@ -413,7 +419,7 @@ def test_sub_matrix_scales_like_the_matrix():
 
     # And a scaled block still sums like any other.
     total = scaled + block
-    total.finalize()
+    total.assemble()
     assert total.get(a, "q", a, "T") == 8.0
 
 
@@ -429,16 +435,16 @@ def test_sum_counts_a_shared_block_twice_where_union_drops_it():
 
     total = k + k
     assert len(total) == 2
-    total.finalize()
+    total.assemble()
     assert total.get(a, "q", a, "T") == 4.0, "k + k is 2k"
 
     union = k | k
     assert len(union) == 1
-    union.finalize()
+    union.assemble()
     assert union.get(a, "q", a, "T") == 2.0, "k | k is k"
 
     diff = k - k
-    diff.finalize()
+    diff.assemble()
     assert diff.get(a, "q", a, "T") == 0.0
     assert k[0].factor == 1.0, "the operands are untouched"
 
@@ -454,7 +460,7 @@ def test_a_block_and_a_matrix_mix_in_a_sum():
 
     for total in (k + block, block + k, block + block):
         assert len(total) == 2
-        total.finalize()
+        total.assemble()
         assert total.get(a, "q", a, "T") == 4.0
 
     with pytest.raises(TypeError):
@@ -644,7 +650,7 @@ def test_matrix_dump_prints_global_grid_and_elides(capsys):
     k.add_sub(block_a)
     k.add_sub(block_b)
 
-    # Global labelled grid, built without finalize(), printed to stdout.
+    # Global labelled grid, built without assemble(), printed to stdout.
     k.dump()
     s = capsys.readouterr().out
     assert s.splitlines()[0].startswith("Matrix")
@@ -668,3 +674,35 @@ def test_model_stiffness_matrix_is_the_conductivity_of_a_unit_quad():
     kmat = model.stiffness_matrix(materials)
     for j, coef in enumerate([4.0, -1.0, -2.0, -1.0]):
         assert kmat.get(n[0], "q", n[j], "T") == pytest.approx(k * coef / 6.0)
+
+
+def test_a_lumped_mass_describes_itself_like_any_matrix(tmp_path):
+    """`lump` returns a matrix with diagonal blocks on the row supports of the
+    mass: it solves, multiplies, filters and survives a save like the mass."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    bar = pyrucast.mesh.line(a, b, 2)
+    model = pyrucast.model.heat_conduction(pyrucast.FiniteElementSpace(bar))
+    materials = pyrucast.element_field.material_field(
+        model, [("k", 1.0), ("rho", 1.0), ("cp", 1.0)]
+    )
+    lumped = pyrucast.matrix.mass(model, materials).lump()
+    assert len(lumped) == 1
+    assert lumped.physics() == ["thermal"]
+    assert lumped.symmetric
+    # Row sums of a unit capacity on two SEG2 of length 1/2: 1/4, 1/2, 1/4.
+    assert [v for *_, v in lumped.entries()] == pytest.approx([0.25, 0.5, 0.25])
+
+    rhs = pyrucast.NodeField(bar, ["q"])
+    rhs.unit().set_uniform("q", 1.0)
+    t = lumped.solve(rhs)
+    assert t.value(a, "T") == pytest.approx(4.0)
+    assert (lumped * t).value(a, "q") == pytest.approx(1.0)
+    assert len(lumped.filter("thermal")) == 1
+
+    path = str(tmp_path / "lumped.pyr")
+    pyrucast.save(path, {"m": lumped})
+    reloaded = pyrucast.load(path)["m"]
+    reloaded.assemble()
+    assert [v for *_, v in reloaded.entries()] == pytest.approx([0.25, 0.5, 0.25])

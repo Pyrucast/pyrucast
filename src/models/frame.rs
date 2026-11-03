@@ -123,8 +123,8 @@ fn matmul(a: &[[f64; 6]; 6], b: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
 /// // The raw sum of the entries is not zero: the DOFs mix translations and
 /// // rotations, and only the **translation** mode is rigid. The symmetry,
 /// // proper to any stiffness, is checked instead.
-/// let d = bloc.dense();
-/// assert!((0..6).all(|i| (0..6).all(|j| (d[i * 6 + j] - d[j * 6 + i]).abs() < 1e-6)));
+/// let d = bloc.to_dmatrix()?;
+/// assert!((&d - d.transpose()).amax() < 1e-6);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn element_stiffness(
@@ -296,7 +296,7 @@ pub fn element_mass(
 ///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, Some(&mat),
 ///     |geoms, m, s, ke| frame::element_geometric(&geoms[0], 100.0, ke),
 /// )?;
-/// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+/// let total: f64 = bloc.iter_entries()?.into_iter().map(|(_, _, _, _, v)| v).sum();
 /// // It is this matrix's sign that decides the critical load.
 /// assert!(total.abs() < 1e-6);
 /// # Ok::<(), pyrucast::PyrucastError>(())

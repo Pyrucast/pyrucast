@@ -6,14 +6,12 @@ abscissas
 component_count
 component_index
 div_to_component
-entries
 factor
 field_names
 geometric_matrix
 get_by_node
 is_alive
 mass_matrix
-mul_dense
 node_values
 ordinate_type
 out_of_range

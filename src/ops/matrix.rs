@@ -45,7 +45,7 @@ use crate::ops::element_field::behavior::previous_state_names;
 /// Each [`crate::containers::model::SubModel`] contributes one or more
 /// [`crate::containers::matrix::SubMatrix`] blocks
 /// (`HeatConduction` → 1 block, `Dirichlet` → C + Cᵀ).
-/// The aggregate is finalized before being returned.
+/// The matrix is returned assembled.
 ///
 /// ```
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -203,11 +203,11 @@ impl AssemblyInputs<'_> {
 /// // A single machinery for the four kinds: `stiffness` and `mass` are only
 /// // its named forms.
 /// let k = matrix::assemble_kind(&modele, &materiaux, MatrixKind::Stiffness, matrix::AssemblyInputs::MaterialOnly)?;
-/// assert_eq!(k.dense()?, matrix::stiffness(&modele, &materiaux)?.dense()?);
+/// assert_eq!(k.to_dmatrix()?, matrix::stiffness(&modele, &materiaux)?.to_dmatrix()?);
 /// let m = matrix::assemble_kind(&modele, &materiaux, MatrixKind::Mass, matrix::AssemblyInputs::MaterialOnly)?;
 /// // The capacity sums to ρ·c_p × area; the conduction sums to zero.
-/// assert!((m.dense()?.iter().sum::<f64>() - 2.0 * 3.0 * 0.5).abs() < 1e-9);
-/// assert!(k.dense()?.iter().sum::<f64>().abs() < 1e-9);
+/// assert!((m.to_dmatrix()?.sum() - 2.0 * 3.0 * 0.5).abs() < 1e-9);
+/// assert!(k.to_dmatrix()?.sum().abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn assemble_kind(
@@ -285,9 +285,9 @@ pub fn assemble_kind(
         }
     }
 
-    // Pass 2 — global assembly, injected via `set_assembled` (Option B: the
-    // global assembler lives here, not in `Matrix`, so there is no
-    // matrix↔kernel cycle). The CSR sparsity ([`crate::ops::scatter::build_pattern`]) is a
+    // Pass 2 — global assembly, injected via `set_assembled`: the global
+    // assembler lives here, not in `Matrix`, since a container does not
+    // depend on the models' kernels. The CSR sparsity ([`crate::ops::scatter::build_pattern`]) is a
     // function of the model's block topology for this `kind`, so it is memoised
     // per kind on the model and reused across assemblies; the values are
     // scattered into it in parallel by cell colour ([`crate::ops::scatter::scatter_parallel`]).
@@ -312,22 +312,51 @@ impl Matrix {
     /// configuration active now.
     ///
     /// A matrix is assembled once: one that already is keeps its values, and
-    /// this does nothing (as [`Matrix::finalize`]). The values of another
-    /// configuration come from a new matrix.
+    /// this does nothing. The values of another configuration come from a new
+    /// matrix.
     ///
     /// The sparsity is built from the blocks
     /// ([`crate::ops::scatter::build_pattern`], self-contained: a computed
-    /// block resolves its fill through its recipe, a literal block through its
-    /// COO) and the values are scattered into it. This is the composition path,
-    /// for a matrix whose blocks were put together without their values:
-    /// `add_sub`, `|`, `filter`, `exclude` — which [`Matrix::finalize`] cannot
-    /// handle once computed blocks are present, and which [`stiffness`] cannot
-    /// reach (it only knows a `Model`).
+    /// block resolves its fill through its recipe, a written block through its
+    /// COO) and the values are scattered into it. This is the path of a matrix
+    /// whose blocks were put together without their values: written by hand,
+    /// `add_sub`, `|`, `filter`, `exclude` — which [`stiffness`] cannot reach
+    /// (it only knows a `Model`).
     ///
-    /// ```ignore
-    /// let mut k = crate::ops::matrix::stiffness(&model, &materials)?;
-    /// k.add_sub(Handle::new(some_block))?;   // invalidates the assembled state
-    /// k.assemble()?;                    // assembles, new block included
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
+    /// # use pyrucast::containers::mesh::SubMesh;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let support = {
+    /// #     let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+    /// #     sm.add_cell(&[a.id()]).unwrap();
+    /// #     sm.add_cell(&[b.id()]).unwrap();
+    /// #     Handle::new(sm)
+    /// # };
+    /// # let mut bloc = SubMatrix::new(
+    /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
+    /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
+    /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
+    /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
+    /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
+    /// let mut k = Matrix::empty();
+    /// k.add_sub(Handle::new(bloc))?;
+    /// // The size reads off the blocks, without assembly…
+    /// assert_eq!((k.n_rows()?, k.n_cols()?), (2, 2));
+    /// // …but the values exist only once the matrix is assembled.
+    /// assert!(k.to_csr().is_err());
+    /// k.assemble()?;
+    /// assert_eq!(k.to_csr()?.nnz(), 4);
+    /// // Once is enough: a second call reassembles nothing.
+    /// k.assemble()?;
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     ///
     /// Unlike [`stiffness`], this does not consult the model's cached pattern
@@ -376,7 +405,7 @@ fn build_contribution(
                 layout.ordering,
                 layout.symmetry,
                 recipe,
-            )]
+            )?]
         }
         // An inter-mesh block: same computed path, but rows and columns on
         // different supports. Never symmetric on its own — the law declares its
@@ -399,7 +428,7 @@ fn build_contribution(
                 layout.ordering,
                 layout.symmetry,
                 recipe,
-            )]
+            )?]
         }
         Contribution::Literal(blocks) => blocks,
     };
@@ -446,7 +475,7 @@ fn build_contribution(
 /// let m = matrix::mass(&model, &materials).unwrap();
 ///
 /// // Capacité totale d'un SEG2 de longueur 1, ρ = 2, c_p = 1 : 2.
-/// let total: f64 = m.dense().unwrap().iter().sum();
+/// let total: f64 = m.to_dmatrix().unwrap().sum();
 /// assert!((total - 2.0).abs() < 1e-12);
 /// ```
 pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
@@ -551,7 +580,7 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 /// let kt = matrix::tangent(&model, &materials, &strain, None, None).unwrap();
 /// let k = matrix::stiffness(&model, &materials).unwrap();
 ///
-/// assert_eq!(kt.dense().unwrap(), k.dense().unwrap());
+/// assert_eq!(kt.to_dmatrix().unwrap(), k.to_dmatrix().unwrap());
 /// ```
 pub fn tangent(
     model: &Model,
@@ -579,9 +608,17 @@ pub fn tangent(
 /// (`Σ_i M_lumped[i,i] = Σ_ij M[i,j]`) — the cheap, decoupled form used by
 /// explicit transient schemes and simple eigen estimates.
 ///
-/// The input must be assembled and square (row and column DOFs coincide
-/// position-for-position, as they do for a mass/capacity matrix). The result is
-/// a new assembled [`Matrix`] with the same DOF layout; the input is untouched.
+/// The input must be assembled and square, row `i` and column `i` naming the
+/// same node, as they do for a mass/capacity matrix. The result is a new
+/// assembled [`Matrix`] with the same rows and columns, in the same order; the
+/// input is untouched. It describes itself like any other matrix: one
+/// diagonal block per row support of the input, carrying the variables and
+/// physics of the blocks found there, so `solve`, `* x`, `filter` and a save
+/// read it as they read the input.
+///
+/// **Errors**: a matrix that is not assembled or not square, or whose row `i`
+/// and column `i` name two nodes, or pair one dual variable with two primal
+/// ones.
 ///
 /// ```
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -607,38 +644,170 @@ pub fn tangent(
 ///
 /// // The sum is preserved; the off-diagonal terms are folded onto it.
 /// let somme = |x: &pyrucast::containers::matrix::Matrix| -> f64 {
-///     x.dense().unwrap().iter().sum()
+///     x.to_dmatrix().unwrap().sum()
 /// };
 /// assert!((somme(&m) - somme(&diagonale)).abs() < 1e-12);
 /// assert_eq!(diagonale.get(a.id(), "q", b.id(), "T").unwrap(), 0.0);
 /// ```
 pub fn lump(m: &Matrix) -> Result<Matrix> {
+    use crate::containers::matrix::{dof_node, dof_var, AssembledCsr, Symmetry};
+    use nalgebra_sparse::CooMatrix;
+
     let (offsets, _, values) = m.csr_arrays()?;
     let vars = m.dof_vars();
     let row_keys = m.row_dof_keys()?;
     let col_keys = m.col_dof_keys()?;
     let n = row_keys.len();
     if col_keys.len() != n {
-        return Err(crate::error::PyrucastError::Message(format!(
+        return Err(PyrucastError::Message(format!(
             "lump: matrix must be square, got {}×{}",
             n,
             col_keys.len()
         )));
     }
-    // Diagonal = per-row sum, written straight into a diagonal CSR: one entry
-    // per row, so the offsets are the row index itself.
-    let diag_values: Vec<f64> = (0..n)
-        .map(|r| values[offsets[r]..offsets[r + 1]].iter().sum())
+
+    // One diagonal block per distinct row support of `m`, holding the dual
+    // variables its blocks put there: together they hold exactly `m`'s rows.
+    let mut groups: Vec<LumpedBlock> = Vec::new();
+    for h in m {
+        let b = h.read();
+        let g = match groups
+            .iter()
+            .position(|g| g.support.same_object(b.row_support()))
+        {
+            Some(g) => g,
+            None => {
+                groups.push(LumpedBlock::new(
+                    b.row_support().clone(),
+                    b.ordering(),
+                    vars.len(),
+                ));
+                groups.len() - 1
+            }
+        };
+        let g = &mut groups[g];
+        for d in b.dual_vars() {
+            let slot = vars
+                .iter()
+                .position(|v| v == d)
+                .expect("the name table holds every variable of the blocks");
+            if g.rank[slot] == NONE {
+                g.rank[slot] = g.duals.len();
+                g.duals.push(slot);
+            }
+        }
+        for &p in b.physics() {
+            if !g.physics.contains(&p) {
+                g.physics.push(p);
+            }
+        }
+    }
+
+    // Row by row: its sum, and its place in the first block whose support and
+    // variables hold it. The primal variable of each dual one is read off
+    // column `i`, which must name the same node.
+    let supports: Vec<_> = groups.iter().map(|g| g.support.read()).collect();
+    let mut entries: Vec<Vec<(usize, f64)>> = groups
+        .iter()
+        .zip(&supports)
+        .map(|(g, s)| Vec::with_capacity(s.cell_count() * g.duals.len()))
         .collect();
-    let diag = crate::containers::matrix::AssembledCsr {
+    let mut primal_of = vec![NONE; vars.len()];
+    let mut diag_values = Vec::with_capacity(n);
+    'rows: for i in 0..n {
+        let (row, col) = (row_keys[i], col_keys[i]);
+        let node = dof_node(row);
+        let (dual, primal) = (dof_var(row) as usize, dof_var(col) as usize);
+        if dof_node(col) != node || (primal_of[dual] != NONE && primal_of[dual] != primal) {
+            return Err(PyrucastError::Message(format!(
+                "lump: row {i} and column {i} do not pair one degree of freedom \
+                 with its conjugate (same node, one primal per dual variable); \
+                 only a mass-like matrix can be lumped"
+            )));
+        }
+        primal_of[dual] = primal;
+        let value: f64 = values[offsets[i]..offsets[i + 1]].iter().sum();
+        diag_values.push(value);
+        for ((g, s), e) in groups.iter().zip(&supports).zip(&mut entries) {
+            if g.rank[dual] == NONE {
+                continue;
+            }
+            if let Some(&local) = s.node_index().get(&node) {
+                let k = g
+                    .ordering
+                    .to_index(local, g.rank[dual], s.cell_count(), g.duals.len());
+                e.push((k, value));
+                continue 'rows;
+            }
+        }
+        unreachable!("every row of a matrix comes from one of its blocks");
+    }
+    drop(supports);
+
+    let mut out = Matrix::empty();
+    for (g, e) in groups.into_iter().zip(entries) {
+        let size = g.support.read().cell_count() * g.duals.len();
+        let (idx, vals): (Vec<usize>, Vec<f64>) = e.into_iter().unzip();
+        let coo = CooMatrix::try_from_triplets(size, size, idx.clone(), idx, vals)
+            .map_err(|e| PyrucastError::Message(format!("lump: invalid COO: {e}")))?;
+        let duals = g.duals.iter().map(|&d| vars[d].clone()).collect();
+        let primals = g
+            .duals
+            .iter()
+            .map(|&d| vars[primal_of[d]].clone())
+            .collect();
+        let mut block = SubMatrix::from_coo(
+            g.support.clone(),
+            g.support,
+            duals,
+            primals,
+            g.ordering,
+            Symmetry::Full,
+            coo,
+        )?;
+        block.set_physics(g.physics);
+        out.add_sub(Handle::new(block))?;
+    }
+    // Diagonal CSR: one entry per row, so the offsets are the row index itself.
+    let diag = AssembledCsr {
         row_offsets: std::sync::Arc::new((0..=n).collect()),
         col_indices: std::sync::Arc::new((0..n).collect()),
         values: diag_values,
         ncols: n,
     };
-    let mut out = Matrix::empty();
     out.set_assembled(vars, row_keys, col_keys, diag);
     Ok(out)
+}
+
+/// Marks a variable slot that no block of the group, or no column, names yet.
+const NONE: usize = usize::MAX;
+
+/// One diagonal block of [`lump`]'s result while it is gathered: a row support
+/// of the input, the dual variables the input's blocks put there (as slots of
+/// the name table, `rank[slot]` being their place in the block), and their
+/// physics.
+struct LumpedBlock {
+    support: Handle<crate::containers::mesh::SubMesh>,
+    ordering: crate::containers::matrix::DofOrdering,
+    duals: Vec<usize>,
+    rank: Vec<usize>,
+    physics: Vec<crate::models::Physics>,
+}
+
+impl LumpedBlock {
+    fn new(
+        support: Handle<crate::containers::mesh::SubMesh>,
+        ordering: crate::containers::matrix::DofOrdering,
+        n_vars: usize,
+    ) -> Self {
+        Self {
+            support,
+            ordering,
+            duals: Vec::new(),
+            rank: vec![NONE; n_vars],
+            physics: Vec::new(),
+        }
+    }
 }
 
 // ─── Delegation methods ─────────────────────────────────────────────────────
@@ -701,9 +870,9 @@ mod tests {
     use crate::ops::element_field::StrainMeasure;
 
     /// Assemble the stiffness the **literal** way: every sub-model fills its
-    /// `SubMatrix` blocks eagerly and `finalize` scatters them. This is the
-    /// historical path the computed path must match bit-for-bit — kept here
-    /// purely as the equivalence reference.
+    /// `SubMatrix` blocks eagerly and `assemble_written` sums them. The
+    /// computed path must match it bit-for-bit: it is kept here as the
+    /// reference.
     ///
     /// It reuses the [`Contribution`] seam so it stays honest: a `Literal`
     /// contribution (Dirichlet's C / Cᵀ) is taken as-is, while a `Computed` one
@@ -753,57 +922,8 @@ mod tests {
                 k.add_sub(Handle::new(block))?;
             }
         }
-        k.finalize()?;
+        k.assemble_written()?;
         Ok(k)
-    }
-
-    /// Two heat-conduction zones sharing a node, plus a Dirichlet constraint —
-    /// so the assembly mixes **computed** blocks (the two zones) with **literal**
-    /// ones (Dirichlet's C / Cᵀ), and a shared node forces accumulation.
-    fn two_zone_heat_with_dirichlet() -> (Model, ElementField) {
-        let coords = Handle::new(Coords::new(1).unwrap());
-        let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
-        let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
-        let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();
-        let mut mesh = Mesh::empty();
-        let sm_a = {
-            let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-            sm.add_cell(&[n0.id(), n1.id()]).unwrap();
-            Handle::new(sm)
-        };
-        let sm_b = {
-            let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-            sm.add_cell(&[n1.id(), n2.id()]).unwrap();
-            Handle::new(sm)
-        };
-        mesh.add_sub(sm_a).unwrap();
-        mesh.add_sub(sm_b).unwrap();
-        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-
-        let mut model = Model::empty();
-        model
-            .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
-                    .unwrap(),
-            ))
-            .unwrap();
-        let imposed =
-            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
-        model
-            .add_sub(Handle::new(
-                SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap(),
-            ))
-            .unwrap();
-        model
-            .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(1).unwrap(), MaterialSymmetry::Isotropic)
-                    .unwrap(),
-            ))
-            .unwrap();
-
-        let materials =
-            material_field_per_sub_model(&model, &[&[("k", 1.0)], &[], &[("k", 4.0)]]).unwrap();
-        (model, materials)
     }
 
     /// A single heat-conduction zone over an `n_elems`-element SEG2 chain, plus
@@ -998,9 +1118,9 @@ mod tests {
     /// The case that proved the two DOF orders were collected independently.
     ///
     /// `embedded` brings **two** new nodes at once — the immersed node, which no
-    /// physics ever numbered, and its multiplier — and the two walks used to
-    /// discover them in opposite order: the array came out `0.5` away from
-    /// symmetric while the flag said it was symmetric. A plain Dirichlet hid
+    /// physics ever numbered, and its multiplier. Two independent walks would
+    /// discover them in opposite order, leaving the array `0.5` away from
+    /// symmetric while the flag says symmetric. A plain Dirichlet cannot show
     /// this, its constrained node being numbered by the physics already.
     #[test]
     fn an_immersed_node_does_not_cross_the_two_dof_orders() {
@@ -1014,15 +1134,15 @@ mod tests {
         assert!(k.symmetric(), "and the declaration must agree");
     }
 
-    /// The same, through the other assembly path. `finalize` (literal blocks) and
-    /// `assemble` (scattered kernels) are deliberately parallel so the two can be
+    /// The same, through the other assembly path. `assemble_written` (written
+    /// blocks) and `assemble` (scattered kernels) are deliberately parallel so the two can be
     /// compared — which only means something if they number the DOFs alike.
     #[test]
     fn both_assembly_paths_number_the_immersed_case_alike() {
         let (model, materials) = immersed_node_in_a_triangle();
         let scattered = stiffness(&model, &materials).unwrap();
         let mut literal = assemble_literal_reference(&model, &materials).unwrap();
-        literal.finalize().unwrap();
+        literal.assemble_written().unwrap();
 
         assert_eq!(scattered.row_dofs().unwrap(), literal.row_dofs().unwrap());
         assert_eq!(scattered.col_dofs().unwrap(), literal.col_dofs().unwrap());
@@ -1088,9 +1208,8 @@ mod tests {
     /// mesh, and interior nodes are shared so the parallel scatter genuinely
     /// colours the cells.
     ///
-    /// It used to be a Timoshenko beam, which carried the same two-quadrature
-    /// layout. The beam now assembles an exact closed form on a single space, so
-    /// the shell is what still exercises this path.
+    /// The beam assembles an exact closed form on a single space, so the shell
+    /// is what exercises this two-quadrature path.
     fn multi_fespace_shell(n: usize) -> (Model, ElementField) {
         let coords = Handle::new(Coords::new(3).unwrap());
         let mut row = Vec::new();
@@ -1236,7 +1355,7 @@ mod tests {
         let k = stiffness(&model, &materials).unwrap();
         let scaled = &k * 2.5;
 
-        // Read straight back: no `finalize()` / `assemble()` in between.
+        // Read straight back: no `assemble()` in between.
         let k_ref = assemble_literal_reference(&model, &materials).unwrap();
         let csr_new = scaled.to_csr().unwrap();
         let csr_ref = k_ref.to_csr().unwrap();
@@ -1266,15 +1385,12 @@ mod tests {
             );
         }
 
-        // A scaled matrix that was **not** assembled still cannot be finalized:
-        // the element kernel lives outside `containers`, so a computed block
-        // sends the caller to `assemble()`. (Owned `*`, so this also exercises
-        // the in-place path.)
+        // A scaled matrix that was **not** assembled has no values until
+        // `assemble()`. (Owned `*`, so this also exercises the in-place path.)
         let mut unassembled = assemble_computed_blocks(&model, &materials) * 2.5;
-        assert!(
-            unassembled.finalize().is_err(),
-            "finalize must still refuse an unassembled computed block"
-        );
+        assert!(unassembled.to_csr().is_err());
+        unassembled.assemble().unwrap();
+        assert!(unassembled.to_csr().is_ok());
     }
 
     /// A bar of two SEG2 of length 1 and conductivity 1, with a second
@@ -1382,10 +1498,10 @@ mod tests {
         }
         assert!(sum.symmetric());
         let n = rows.len();
-        let dense = sum.dense().unwrap();
+        let dense = sum.to_dmatrix().unwrap();
         for i in 0..n {
             for j in 0..n {
-                assert_eq!(dense[i * n + j], dense[j * n + i], "({i}, {j})");
+                assert_eq!(dense[(i, j)], dense[(j, i)], "({i}, {j})");
             }
         }
     }
@@ -1411,8 +1527,46 @@ mod tests {
         }
     }
 
+    /// The lumped mass describes itself: a diagonal block on the mass's row
+    /// support, tagged like the mass, in the mass's row order — so the solver
+    /// lays its result on that support.
+    #[test]
+    fn a_lumped_mass_carries_its_diagonal_block() {
+        use crate::containers::field::SubField;
+        use crate::containers::node_field::NodeField;
+        let (model, _) = chain_heat_with_dirichlet(3);
+        let conduction = model.exclude(crate::models::Physics::Constraint);
+        let heat =
+            material_field_per_sub_model(&conduction, &[&[("k", 1.0), ("rho", 1.0), ("cp", 1.0)]])
+                .unwrap();
+        let m = mass(&conduction, &heat).unwrap();
+        let lumped = lump(&m).unwrap();
+        assert_eq!(lumped.len(), 1);
+        assert_eq!(lumped.physics(), m.physics());
+        assert!(lumped.symmetric());
+        assert_eq!(lumped.row_dofs().unwrap(), m.row_dofs().unwrap());
+        assert_eq!(lumped.col_dofs().unwrap(), m.col_dofs().unwrap());
+
+        let rhs = NodeField::from_submesh(
+            &lumped.row_mesh().unwrap().get(0).unwrap(),
+            vec!["q".into()],
+        )
+        .unwrap();
+        rhs.get(0)
+            .unwrap()
+            .write()
+            .add_to_component("q", 1.0)
+            .unwrap();
+        let t = crate::ops::solver::solve(&lumped, &rhs).unwrap();
+        for (node, _) in lumped.row_dofs().unwrap() {
+            let d = lumped.get(node, "q", node, "T").unwrap();
+            assert!((t.value(node, "T").unwrap() * d - 1.0).abs() < 1e-12);
+        }
+    }
+
     /// Blocks put together without their values — `filter` here — have none to
-    /// add or read until assembled: an error, not a zero.
+    /// add or read until assembled: an error, not a zero. A computed block has
+    /// none of its own either.
     #[test]
     fn values_never_assembled_are_an_error_to_add_or_read() {
         let (model, materials) = chain_heat_with_dirichlet(2);
@@ -1422,10 +1576,24 @@ mod tests {
         assert!((&thermal + &k).is_err());
         assert!((&k - &thermal).is_err());
         assert!(thermal.get(a, "q", a, "T").is_err());
-        let block = k.iter().find(|h| h.read().is_computed()).unwrap();
-        assert!(block.read().get(a, "q", a, "T").is_err());
+        assert!(thermal.iter_entries().is_err());
+        // A computed block holds no value: every reader says so alike.
+        {
+            let block = k.iter().find(|h| h.read().is_computed()).unwrap();
+            let block = block.read();
+            assert!(block.get(a, "q", a, "T").is_err());
+            assert!(block.iter_entries().is_err());
+            assert!(block.to_dmatrix().is_err());
+            assert!(block.to_coo().is_err());
+            assert!(block.to_csr().is_err());
+            assert!(block.to_csc().is_err());
+        }
 
         thermal.assemble().unwrap();
+        // Assembled, its entries are the values `get` reads.
+        for (rn, rv, cn, cv, v) in thermal.iter_entries().unwrap() {
+            assert_eq!(v, thermal.get(rn, &rv, cn, &cv).unwrap());
+        }
         let sum = (&thermal + &k).unwrap();
         let expected = 2.0 * k.get(a, "q", a, "T").unwrap();
         assert!((sum.get(a, "q", a, "T").unwrap() - expected).abs() < 1e-12);
@@ -1511,9 +1679,8 @@ mod tests {
 
     /// Composition: after `stiffness`, add a **literal block of arbitrary
     /// provenance** to the (computed-block) matrix and re-assemble it with the
-    /// self-contained [`assemble`]. `finalize` refuses (computed blocks present),
-    /// but `assemble` rebuilds the sparsity from the blocks and folds the new
-    /// contribution in.
+    /// self-contained [`assemble`], which rebuilds the sparsity from the blocks
+    /// and folds the new contribution in.
     #[test]
     fn assemble_composes_extra_literal_block() {
         // One heat element on nodes a—b.
@@ -1545,12 +1712,11 @@ mod tests {
             vec!["T".into()],
             crate::containers::matrix::DofOrdering::NodesThenVars,
             Symmetry::Full,
-        );
+        )
+        .unwrap();
         blk.add_entry(a.id(), "q", a.id(), "T", 10.0).unwrap();
         k.add_sub(Handle::new(blk)).unwrap();
 
-        // `finalize` can't (computed block present); the self-contained path can.
-        assert!(k.finalize().is_err());
         k.assemble().unwrap();
 
         let after = k.get(a.id(), "q", a.id(), "T").unwrap();
@@ -1558,47 +1724,6 @@ mod tests {
             (after - (before + 10.0)).abs() <= 1e-12 * (1.0 + before.abs()),
             "composition failed: before {before}, after {after}"
         );
-    }
-
-    /// A matrix carrying a computed block cannot be assembled through
-    /// `finalize` — it must go through `ops::matrix`. `finalize` says so
-    /// rather than silently dropping the computed contribution.
-    #[test]
-    fn finalize_rejects_computed_block() {
-        let (model, materials) = two_zone_heat_with_dirichlet();
-        // Build the blocks (computed for the HC zones) but stop before the
-        // global assembly, then try to finalize directly.
-        let mut k = Matrix::empty();
-        for sub_h in &model {
-            let built = {
-                let sub = sub_h.read();
-                let material = sub
-                    .material_fespace()
-                    .map(|fespace| materials.sub_for_fespace(&fespace).unwrap());
-                sub.as_kind().stiffness_layout().map(|layout| {
-                    SubMatrix::computed(
-                        layout.support.clone(),
-                        layout.support,
-                        layout.dual_vars,
-                        layout.primal_vars,
-                        layout.ordering,
-                        layout.symmetry,
-                        ComputedRecipe {
-                            submodel: sub_h.clone(),
-                            fespaces: layout.fespaces,
-                            material,
-                            kind: MatrixKind::Stiffness,
-                            inputs: KernelInputs::MaterialOnly,
-                            col_fespaces: Vec::new(),
-                        },
-                    )
-                })
-            };
-            if let Some(block) = built {
-                k.add_sub(Handle::new(block)).unwrap();
-            }
-        }
-        assert!(k.finalize().is_err());
     }
 
     /// The support a stiffness block carries (its `col_support`) is the cached

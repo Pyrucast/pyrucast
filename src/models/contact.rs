@@ -489,7 +489,7 @@ impl SubModelKind for Contact {
             variables,
             DofOrdering::NodesThenVars,
             Symmetry::Half(id_c),
-        );
+        )?;
         // Every row is a unilateral relation: the solver reads it here.
         c.set_row_sense(RelationSense::GreaterEqual);
         // Cᵀ: rows (support, every dual), cols (multiplier, MULTIPLIER).
@@ -500,7 +500,7 @@ impl SubModelKind for Contact {
             vec![MULTIPLIER.to_string()],
             DofOrdering::NodesThenVars,
             Symmetry::Half(id_ct),
-        );
+        )?;
         for (r, p) in self.pairings.iter().enumerate() {
             let m = self.multiplier_node(r)?;
             let s = self.slave_node(r)?;

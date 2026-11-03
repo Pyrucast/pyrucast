@@ -299,6 +299,30 @@ impl SubMesh {
         })
     }
 
+    /// Refuse a support that cannot number one row per node: not a POI1, or a
+    /// POI1 that lists a node twice. A field and a matrix block address a
+    /// node through [`node_index`](Self::node_index), which ranks the
+    /// **distinct** nodes; on a repeated node that rank parts from the cell
+    /// position the rows follow. `who` names the consumer in the message.
+    pub(crate) fn check_node_support(&self, who: &str) -> Result<()> {
+        if self.element_type != ElementType::POI1 {
+            return Err(PyrucastError::Message(format!(
+                "{who} requires a POI1 SubMesh, got {}",
+                self.element_type
+            )));
+        }
+        let distinct = self.node_index().len();
+        if distinct != self.cell_count() {
+            return Err(PyrucastError::Message(format!(
+                "{who}: the POI1 support lists {} cell(s) but {distinct} distinct \
+                 node(s) — it holds one row per node; take the distinct nodes \
+                 with `to_poi1`",
+                self.cell_count()
+            )));
+        }
+        Ok(())
+    }
+
     /// Drop the caches derived from the connectivity — the `NodeId → index`
     /// map and the POI1 companion. Called by every mutator, right after the
     /// connectivity moves.
