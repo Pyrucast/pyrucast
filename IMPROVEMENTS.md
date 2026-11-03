@@ -90,15 +90,6 @@ way: `book/src/sauvegarde.md` (a reloaded `Coords` alone "qu'un `gc()`
 collectera"), `book/src/aspect-informatique.md` ("`coords.gc()` collecte…"),
 and the Rust docs of `src/coords.rs` and `src/atoms/node.rs`.
 
-## Rust comments that describe removed or older things
-
-- `src/ops/coloring.rs`: the module doc announces "a future global colouring
-  (keys = shared global / master DOFs after MPC condensation)", a plan; the
-  `color_dense` doc tells what it replaced ("The map of vectors it replaces
-  allocated a `Vec` per key…"). The generic `greedy_color` has no caller
-  outside tests and doctests: only `greedy_color_nodes` runs. Decide: remove
-  `greedy_color`, or keep it.
-
 ## Book pages not reviewed yet
 
 Same rules as the reviewed pages: checked against the code, Python first then
