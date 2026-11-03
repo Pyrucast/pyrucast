@@ -15,8 +15,9 @@ plus courantes (ajouter une physique, ajouter un élément fini).
 - [Documentation et tests](developper/documentation-et-tests.md) — les types de
   test et ce que chacun prouve, où vit un exemple, la règle « aucune page ne
   possède de code », et ce qui n'est pas vérifié.
-- [Modèle mémoire](memory-model.md) — les objets derrière un `Handle`, les
-  guards, le compteur par nœud de `Coords`, et la mécanique de l'archive.
+- [Modèle mémoire](memory-model.md) — ce que Python en voit (partage, durée
+  de vie, caches), puis les objets derrière un `Handle`, les guards, le compteur
+  par nœud de `Coords` et la mécanique de l'archive.
 - [Parallélisme](developper/parallelisme.md) — rayon porté *au-dessus* des
   noyaux, zéro-copie, déterminisme, et ce qui reste séquentiel.
 - [Compilation et tests](compilation.md) — installation détaillée, *features*
