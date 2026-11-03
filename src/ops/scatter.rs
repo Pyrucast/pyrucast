@@ -1,9 +1,9 @@
 //! Global assembly by **scatter into a fixed CSR pattern**.
 //!
-//! The historical path turned every block into global `(row, col, value)`
-//! triplets and rebuilt a CSR from them (a counting-sort with serial
-//! histogram / scatter / dedup passes — the assembly bottleneck). This module
-//! splits that into two phases.
+//! Rather than turning every block into global `(row, col, value)` triplets
+//! and rebuilding a CSR from them (the path of `Matrix::assemble_written`, a
+//! counting sort with serial histogram / scatter / dedup passes), this module
+//! assembles in two phases.
 //!
 //! **Symbolic** ([`build_pattern`]): the global CSR sparsity (`row_offsets` +
 //! `col_indices`) from the blocks' topology alone — no kernel eval. It is a
@@ -16,8 +16,8 @@
 //! pattern's, and the assembled matrix shares it rather than copying it.
 //!
 //! [`scatter_serial`] visits blocks — and, within a block, cells / COO entries —
-//! in the same order the triplet stream had, accumulating each slot in that
-//! order, so its result is **bit-for-bit** identical to the triplet path. The
+//! in the order the triplet path takes them, accumulating each slot in that
+//! order, so its result is **bit-for-bit** identical to it. The
 //! parallel colour-driven scatter (the actual speed-up) builds on this same
 //! pattern.
 
@@ -36,9 +36,8 @@ use std::sync::atomic::AtomicU64;
 /// DOF key → global index, for the one lookup the symbolic phase does per block
 /// DOF.
 ///
-/// A `HashMap<(NodeId, String), usize>` was thirty million string hashes on a
-/// solid mesh. Node ids index `Coords` directly, so `node × n_vars + var` is a
-/// perfect hash — a plain slice indexed in constant time, with no hashing at
+/// A `HashMap<(NodeId, String), usize>` would hash one string per DOF. Node
+/// ids index `Coords` directly, so `node × n_vars + var` is a perfect hash — a plain slice indexed in constant time, with no hashing at
 /// all. It only stops paying when the id space is far larger than the DOF set
 /// it holds (a `Coords` riddled with deletions), and there the compact `u64`
 /// keys still hash for a fraction of a string's cost.
@@ -206,8 +205,7 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
     //
     // A computed block hands row `(li, di)` of a cell one run of
     // `col_nodes × n_primal` columns, so counting needs no column enumerated at
-    // all. This is what a `Vec<Vec<usize>>` — one growing vector per row, thirty
-    // million of them — used to discover the hard way.
+    // all, and no growing vector per row is needed.
     let mut counts = vec![0usize; nrows];
     for shape in &shapes {
         match shape {

@@ -11,12 +11,12 @@
 //!   the numbering cannot drift (see `book/src/developper/parallelisme.md`
 //!   § Zéro-copie).  The actual non-zeros are stored in a
 //!   [`nalgebra_sparse::CooMatrix`]; [`SubMatrix::add_entry`] appends
-//!   triplets that accumulate on `get` / densification.
+//!   triplets that accumulate when read or assembled.
 //! - [`Matrix`] — aggregate of [`SubMatrix`] blocks (one
-//!   `Vec<Handle<SubMatrix>>`), produced by
-//!   [`crate::containers::model::Model`] assembly (one or several blocks
-//!   per sub-model).  Read-only: every accessor unions the blocks on the
-//!   fly.
+//!   `Vec<Handle<SubMatrix>>`), produced by the assemblers of
+//!   [`crate::ops::matrix`] (one or several blocks per sub-model), plus its
+//!   **assembled values**: one CSR, the matrix the solver reads. The sizes,
+//!   DOF lists and supports read the blocks; the values read the CSR.
 //!
 //! Each [`SubMatrix`] declares what share of the matrix's symmetry it carries
 //! ([`Symmetry`]), and the aggregate [`Matrix`] adds those declarations up
@@ -570,8 +570,7 @@ pub struct SubMatrix {
     symmetry: Symmetry,
     /// `Some` ⇒ this is a **computed** block: `coo` is an empty placeholder and
     /// the contribution is produced on the fly by the global assembler from this
-    /// recipe. `None` ⇒ **literal** block, `coo` holds the values (the historical
-    /// behaviour, unchanged).
+    /// recipe. `None` ⇒ **literal** block, `coo` holds the values.
     recipe: Option<ComputedRecipe>,
     /// The set of [`Physics`] natures of the sub-model that produced this block,
     /// set by the assembler ([`crate::ops::matrix`]) for **both** the computed
@@ -2434,12 +2433,11 @@ mod coo_serde {
 
 /// The assembled CSR, its **index arrays shared** with whatever produced them.
 ///
-/// A `CsrMatrix` owns its three arrays, so storing one here meant copying the
-/// sparsity out of the assembler's (already shared, already memoised) pattern at
-/// every assembly — twenty gigabytes of `memcpy` on a solid mesh, to reproduce
-/// something that had not changed. Only the values are new from one assembly to
-/// the next; the offsets and the column indices are the pattern's, held by
-/// `Arc`. A `CsrMatrix` is built on demand, where one is actually wanted.
+/// A `CsrMatrix` owns its three arrays: storing one here would copy the
+/// sparsity out of the assembler's pattern, shared and kept by the model, at
+/// every assembly. Only the values are new from one assembly to the next; the
+/// offsets and the column indices are the pattern's, held by `Arc`. A
+/// `CsrMatrix` is built on demand, where one is actually wanted.
 pub(crate) struct AssembledCsr {
     pub(crate) row_offsets: std::sync::Arc<Vec<usize>>,
     pub(crate) col_indices: std::sync::Arc<Vec<usize>>,
@@ -2487,8 +2485,8 @@ impl AssembledCsr {
 /// The values of an assembled matrix: DOF numbering + CSR.
 ///
 /// The numbering is held as packed [`DofKey`]s over a shared name table, not as
-/// a `Vec<(NodeId, String)>`: on a solid mesh the materialised form is thirty
-/// million `String`s, rebuilt at every assembly, for a handful of distinct
+/// a `Vec<(NodeId, String)>`: the materialised form is one `String` per
+/// degree of freedom, rebuilt at every assembly, for a handful of distinct
 /// names.
 struct AssembledData {
     vars: std::sync::Arc<Vec<String>>,
@@ -2762,12 +2760,11 @@ pub type NamedDof = (NodeId, String);
 /// A DOF in **packed** form: the node id in the high 32 bits, the index of its
 /// variable in the matrix's name table in the low 32.
 ///
-/// The materialised [`NamedDof`] carries a `String` per DOF. That is one heap
+/// The materialised [`NamedDof`] carries a `String` per DOF: one heap
 /// allocation, one hash of a string and one clone for every degree of freedom
-/// of the problem — thirty million of each on a solid mesh, paid again at every
-/// assembly, to re-express what a handful of variable names already say. The
-/// key says the same thing in eight bytes, and the names live once in the
-/// table the key indexes ([`Matrix::dof_vars`]).
+/// of the problem, at every assembly, to re-express what a handful of variable
+/// names already say. The key says the same thing in eight bytes, and the
+/// names live once in the table the key indexes ([`Matrix::dof_vars`]).
 ///
 /// ```
 /// # use pyrucast::atoms::NodeId;
@@ -3561,8 +3558,7 @@ impl Matrix {
     /// Order: **solver order** when the backing `Coords` carries a
     /// [`permutation`](crate::coords::Coords::permutation) (stable
     /// sort by the node's permutation index, so the per-node variable order is
-    /// preserved); otherwise **first-seen** (identical to the historical
-    /// behaviour, hence bit-for-bit stable when no permutation is set).
+    /// preserved); otherwise **first-seen**: the blocks alone decide it.
     fn collect_dof_keys(&self, row: bool, vars: &[String]) -> Result<Vec<DofKey>> {
         let slot_of: HashMap<String, u32> = vars
             .iter()
@@ -5352,9 +5348,9 @@ impl std::ops::Mul<&NodeField> for Matrix {
 // `&matrix * s`, `/ s` and `-matrix` — a fresh `Matrix` whose blocks are scaled
 // clones of `self`'s, carrying the assembled CSR along, scaled (see `scaled`).
 // The owning forms rescale in place whatever block no one else holds
-// (`scale_in_place`). **Infallible**: cloning a block and appending it cannot
-// fail, `Matrix` being the one aggregate that declares no `check_push` — except
-// a division, which refuses a divisor no matrix can survive (`check_divisor`).
+// (`scale_in_place`). **Infallible**: the clones come from one matrix, hence
+// from one `Coords`, so `check_push` has nothing to refuse — except a
+// division, which refuses a divisor no matrix can survive (`check_divisor`).
 
 impl std::ops::Mul<f64> for &Matrix {
     type Output = Matrix;

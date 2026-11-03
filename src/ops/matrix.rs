@@ -285,9 +285,9 @@ pub fn assemble_kind(
         }
     }
 
-    // Pass 2 — global assembly, injected via `set_assembled` (Option B: the
-    // global assembler lives here, not in `Matrix`, so there is no
-    // matrix↔kernel cycle). The CSR sparsity ([`crate::ops::scatter::build_pattern`]) is a
+    // Pass 2 — global assembly, injected via `set_assembled`: the global
+    // assembler lives here, not in `Matrix`, since a container does not
+    // depend on the models' kernels. The CSR sparsity ([`crate::ops::scatter::build_pattern`]) is a
     // function of the model's block topology for this `kind`, so it is memoised
     // per kind on the model and reused across assemblies; the values are
     // scattered into it in parallel by cell colour ([`crate::ops::scatter::scatter_parallel`]).
@@ -1118,9 +1118,9 @@ mod tests {
     /// The case that proved the two DOF orders were collected independently.
     ///
     /// `embedded` brings **two** new nodes at once — the immersed node, which no
-    /// physics ever numbered, and its multiplier — and the two walks used to
-    /// discover them in opposite order: the array came out `0.5` away from
-    /// symmetric while the flag said it was symmetric. A plain Dirichlet hid
+    /// physics ever numbered, and its multiplier. Two independent walks would
+    /// discover them in opposite order, leaving the array `0.5` away from
+    /// symmetric while the flag says symmetric. A plain Dirichlet cannot show
     /// this, its constrained node being numbered by the physics already.
     #[test]
     fn an_immersed_node_does_not_cross_the_two_dof_orders() {
@@ -1208,9 +1208,8 @@ mod tests {
     /// mesh, and interior nodes are shared so the parallel scatter genuinely
     /// colours the cells.
     ///
-    /// It used to be a Timoshenko beam, which carried the same two-quadrature
-    /// layout. The beam now assembles an exact closed form on a single space, so
-    /// the shell is what still exercises this path.
+    /// The beam assembles an exact closed form on a single space, so the shell
+    /// is what exercises this two-quadrature path.
     fn multi_fespace_shell(n: usize) -> (Model, ElementField) {
         let coords = Handle::new(Coords::new(3).unwrap());
         let mut row = Vec::new();

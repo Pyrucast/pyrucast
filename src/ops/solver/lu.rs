@@ -220,13 +220,11 @@ fn transpose_to_csc(
 ///
 /// Takes the three CSR arrays **borrowed** rather than a `CscMatrix`, and hands
 /// faer a borrowed [`SparseColMatRef`] rather than an owned matrix built from
-/// triplets. What that removes, in the order it used to happen: the CSR→CSC
-/// materialisation, the `Vec<Triplet>` it was unfolded into (24 bytes per
-/// non-zero), the index-sorting array faer allocates to put that back in order,
-/// and the owned `SparseColMat` at the end. All four used to be **live at once
-/// during `sp_lu`** — the moment the factorization is allocating its own
-/// factors, which is the worst possible time to be holding four copies of the
-/// matrix. Only the counting-sort transpose below remains.
+/// triplets. Neither a CSR→CSC materialisation, nor a `Vec<Triplet>` (24 bytes
+/// per non-zero), nor the index-sorting array faer would allocate to put it
+/// back in order, nor an owned `SparseColMat` is held **during `sp_lu`** —
+/// the moment the factorization allocates its own factors. Only the
+/// counting-sort transpose below remains, and only for an unsymmetric matrix.
 ///
 /// The caller's arrays must satisfy what faer checks: offsets non-decreasing,
 /// and each row's column indices strictly increasing (sorted, no duplicate).
@@ -363,7 +361,7 @@ pub(crate) fn factorize_csc_arrays(
 /// faer solves in place, so `b` is both the right-hand side and the result.
 /// Wrapping the caller's buffer as a one-column matrix rather than copying it
 /// into a fresh `faer::Mat` spares two vectors of length `n` and the two
-/// element-by-element passes that used to fill and drain them.
+/// element-by-element passes that would fill and drain them.
 pub(crate) fn lu_solve_in_place(lu: &SparseLu, b: &mut [f64]) {
     let n = b.len();
     let x = faer::MatMut::from_column_major_slice_mut(b, n, 1);
@@ -597,8 +595,8 @@ pub(super) fn solve(
     // ── Step 3 — substitution ──────────────────────────────────────────
     let x = fact.solve_vec(&b);
     // A singular matrix factorizes with a zero pivot; the back-substitution
-    // then divides by it, yielding non-finite entries. Flag it like the old
-    // dense solver did, instead of returning a garbage field.
+    // then divides by it, yielding non-finite entries: an error, rather than a
+    // garbage field.
     if x.iter().any(|v| !v.is_finite()) {
         return Err(PyrucastError::Message(
             "solve: LU failed (matrix is singular)".into(),

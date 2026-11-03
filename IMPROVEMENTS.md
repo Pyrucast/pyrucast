@@ -49,23 +49,38 @@ in the volume zone. Only an explicit `check()` reports it.
   `|`, solver outputs reuse the blocks' supports and reads are zero-copy — a
   redesign.
 
-## Matrix comments that describe older things
+## `Aggregate::finalize` still answers on a matrix
 
-- `src/containers/matrix.rs` module doc: `Matrix` is "Read-only: every
-  accessor unions the blocks on the fly" — it holds an assembled CSR.
-- `SubMatrix::recipe` member: "(the historical behaviour, unchanged)".
-- `AssembledCsr`: "storing one here meant copying… twenty gigabytes of
-  `memcpy`".
-- `DofKey`: "thirty million of each on a solid mesh".
-- `src/ops/matrix.rs`: "Option B".
-- `collect_dof_keys`: "identical to the historical behaviour".
-- Matrix scalar operators comment: "`Matrix` being the one aggregate that
-  declares no `check_push`" — it declares one (same `Coords`).
-- `src/ops/scatter.rs`: "The historical path turned every block…", "A
-  `HashMap<(NodeId, String), usize>` was thirty million string hashes".
-- `src/ops/solver/lu.rs`: "in the order it used to happen", "All four used to
-  be live at once", "the passes that used to fill and drain them", "like the
-  old dense solver did".
+`Matrix::finalize` is gone (`assemble` is the one entry point), but the
+`Aggregate` trait has a hook of the same name (`src/aggregate.rs`), run after a
+union: fields fuse or check their zones there, a matrix does nothing. With the
+trait in scope, `k.finalize()` still compiles on a matrix, does nothing, and
+the next `solve` reports a matrix without values. Lead: rename the hook after
+what it does (e.g. `after_union`), in `aggregate.rs`, `node_field.rs` and
+`element_field.rs`.
+
+## A matrix declaring an inequality it does not hold refactorizes every solve
+
+`solve` sends a matrix with `has_inequality()` to the active-set path
+(`src/ops/solver/unilateral.rs`), which caches its state and, finding no
+inequality row, hands over to the LU path, which caches a factorization in the
+same slot. The next solve finds no active-set state, rebuilds it, and the LU
+path finds no factorization: each solve refactorizes. It takes a block that
+declares a sense on rows it does not hold. Lead: decide the path from the
+inequality rows themselves, before caching anything.
+
+## Schur base of an elimination: a Cholesky of `K̂` would do
+
+With `relations="eliminate"` and kept inequalities, the `"schur"` method
+factorizes by LU the base `[[K̂, Bᵀ], [0, I]]` (every inequality released,
+`SchurCache` in `src/ops/solver/unilateral.rs`). That base is block
+triangular: solving with it gives `λ` directly, then one solve with `K̂`; the
+Schur columns are `−K̂⁻¹·Bᵀeᵢ`. `K̂` is positive definite once the equalities
+are eliminated, so a Cholesky of `K̂` would replace the LU of the whole base; a
+singular `K̂` (a structure held by contact alone) is refused by Cholesky and
+falls back as a singular base does today. With `"lagrange"` the base keeps the
+equality multipliers, a saddle-point: the LU stays. To measure on a release
+build before deciding.
 
 ## `NodeField::with` and `with_components_per_submesh`
 
