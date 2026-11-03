@@ -1185,14 +1185,6 @@ class Matrix:
         Raises on an unassembled matrix carrying a computed block, whose values
         do not exist yet.
         """
-    def dense(self) -> builtins.list[builtins.float]:
-        r"""
-        Dense row-major buffer of the finalized matrix (`n_rows × n_cols`).
-        """
-    def mul_dense(self, x: typing.Sequence[builtins.float]) -> builtins.list[builtins.float]:
-        r"""
-        `y = A · x` against a dense vector `x`.
-        """
     def __truediv__(self, rhs: builtins.float) -> Matrix:
         r"""
         `matrix / scalar` — a fresh `Matrix` whose blocks carry the divided
@@ -1211,8 +1203,11 @@ class Matrix:
         """
     def entries(self) -> builtins.list[tuple[builtins.int, builtins.str, builtins.int, builtins.str, builtins.float]]:
         r"""
-        List of `(row_node, row_field, col_node, col_field, value)`
-        tuples — every entry across every block, in block-insertion order.
+        List of `(row_node, row_field, col_node, col_field, value)` tuples: the
+        values `get` reads. An assembled matrix lists its assembled values, row
+        by row; an unassembled one lists the entries written in its blocks, in
+        insertion order. Raises on an unassembled matrix carrying a computed
+        block, as `get` does.
         """
     @typing.overload
     def __mul__(self, rhs: NodeField) -> NodeField:
@@ -3516,18 +3511,11 @@ class SubMatrix:
         r"""
         `(node_id, field_name)` tuples for each column, in order.
         """
-    def dense(self) -> builtins.list[builtins.float]:
-        r"""
-        Dense row-major buffer, length `n_rows × n_cols`.
-        """
-    def mul_dense(self, x: typing.Sequence[builtins.float]) -> builtins.list[builtins.float]:
-        r"""
-        `y = A · x` (dense).
-        """
     def entries(self) -> builtins.list[tuple[builtins.int, builtins.str, builtins.int, builtins.str, builtins.float]]:
         r"""
         List of `(row_node, row_field, col_node, col_field, value)`
-        tuples, in insertion order.
+        tuples, in insertion order. Raises on a computed block, which holds no
+        value, as `get` does.
         """
     def __len__(self) -> builtins.int: ...
     def __add__(self, rhs: Matrix  |  SubMatrix) -> Matrix:

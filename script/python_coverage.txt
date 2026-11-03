@@ -13,7 +13,6 @@ geometric_matrix
 get_by_node
 is_alive
 mass_matrix
-mul_dense
 node_values
 ordinate_type
 out_of_range

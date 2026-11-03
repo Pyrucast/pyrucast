@@ -81,15 +81,9 @@ factorization: after it, `k.get(...)` and `k[0].get(...)` disagree, and
 to a finalized block. Decide: refuse the write on a block that an assembled
 matrix holds, or let the matrix see it.
 
-## Reading a computed block
-
-On a computed block, `SubMatrix.get` raises ("a computed block holds no
-value"), but `dense()` and `mul_dense()` return zeros and `entries()` an empty
-list. One rule for all four.
-
 ## "call finalize()" on a matrix that needs `assemble()`
 
-`dense`, `mul_dense`, `matrix * x` and `solve` on an unassembled matrix raise
+`matrix * x` and `solve` on an unassembled matrix raise
 "Matrix has not been finalized; call finalize() before solving"
 (`assembled_or_err`, `src/containers/matrix.rs`), also when the matrix carries
 a computed block, which `finalize()` refuses. The message should name

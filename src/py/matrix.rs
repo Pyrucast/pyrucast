@@ -195,25 +195,17 @@ impl PySubMatrix {
             .collect()
     }
 
-    /// Dense row-major buffer, length `n_rows × n_cols`.
-    fn dense(&self) -> Vec<f64> {
-        self.handle.read().dense()
-    }
-
-    /// `y = A · x` (dense).
-    fn mul_dense(&self, x: Vec<f64>) -> PyResult<Vec<f64>> {
-        Ok(self.handle.read().mul_dense(&x)?)
-    }
-
     /// List of `(row_node, row_field, col_node, col_field, value)`
-    /// tuples, in insertion order.
-    fn entries(&self) -> PyMatrixEntries {
-        self.handle
+    /// tuples, in insertion order. Raises on a computed block, which holds no
+    /// value, as `get` does.
+    fn entries(&self) -> PyResult<PyMatrixEntries> {
+        Ok(self
+            .handle
             .read()
-            .iter_entries()
+            .iter_entries()?
             .into_iter()
             .map(|(rn, rf, cn, cf, v)| (rn.0, rf, cn.0, cf, v))
-            .collect()
+            .collect())
     }
 
     fn __len__(&self) -> usize {
@@ -417,16 +409,6 @@ impl PyMatrix {
         Ok(self.inner.get(rn, row_field, cn, col_field)?)
     }
 
-    /// Dense row-major buffer of the finalized matrix (`n_rows × n_cols`).
-    fn dense(&self) -> PyResult<Vec<f64>> {
-        Ok(self.inner.dense()?)
-    }
-
-    /// `y = A · x` against a dense vector `x`.
-    fn mul_dense(&self, x: Vec<f64>) -> PyResult<Vec<f64>> {
-        Ok(self.inner.mul_dense(&x)?)
-    }
-
     /// `matrix / scalar` — a fresh `Matrix` whose blocks carry the divided
     /// `factor` (lazy). Not finalized; see `__mul__`. Raises `ZeroDivisionError`
     /// for a divisor of zero, and `ValueError` for one that is not finite:
@@ -453,14 +435,18 @@ impl PyMatrix {
         }
     }
 
-    /// List of `(row_node, row_field, col_node, col_field, value)`
-    /// tuples — every entry across every block, in block-insertion order.
-    fn entries(&self) -> PyMatrixEntries {
-        self.inner
-            .iter_entries()
+    /// List of `(row_node, row_field, col_node, col_field, value)` tuples: the
+    /// values `get` reads. An assembled matrix lists its assembled values, row
+    /// by row; an unassembled one lists the entries written in its blocks, in
+    /// insertion order. Raises on an unassembled matrix carrying a computed
+    /// block, as `get` does.
+    fn entries(&self) -> PyResult<PyMatrixEntries> {
+        Ok(self
+            .inner
+            .iter_entries()?
             .into_iter()
             .map(|(rn, rf, cn, cf, v)| (rn.0, rf, cn.0, cf, v))
-            .collect()
+            .collect())
     }
 }
 

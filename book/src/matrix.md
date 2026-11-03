@@ -29,9 +29,10 @@ nœud, la duale en ligne et son inconnue en colonne (`q` et `T`, `imposed` et
 `lambda`). Une matrice peut aussi être rectangulaire : un bloc de contrainte a
 une ligne par relation et une colonne par nœud que les relations relient.
 
-`get` rend 0 pour une case que la matrice ne contient pas. `dense()` rend la
-matrice pleine, ligne par ligne, et `dump()` l'affiche en tableau : deux
-lectures à réserver aux petites matrices.
+`get` rend 0 pour une case que la matrice ne contient pas. `entries()` rend
+toutes les valeurs, ligne par ligne, chacune en tuple (nœud, duale, nœud,
+inconnue, valeur). `dump()` affiche la matrice en tableau, une lecture à
+réserver aux petites matrices.
 
 ## Les blocs
 
@@ -54,10 +55,9 @@ Un bloc est de l'une de deux sortes :
 - **écrit** : il garde ses valeurs, une par une. Ce sont les blocs des
   contraintes, et ceux qu'on écrit soi-même.
 
-Les valeurs se lisent donc sur la matrice, pas sur ses blocs. Sur un bloc
-calculé, `get` lève une erreur, `dense` et `mul_dense` lisent des zéros, et
-`entries` une liste vide. De même, `entry_count` et `entries()` de la matrice
-ne comptent que les valeurs écrites dans ses blocs.
+Les valeurs se lisent donc sur la matrice, pas sur ses blocs : sur un bloc
+calculé, `get` et `entries` lèvent une erreur. `entry_count`, sur un bloc comme
+sur la matrice, compte les valeurs écrites dans les blocs.
 
 Pour écrire un bloc soi-même, `Matrix.block` rend une matrice d'un seul bloc,
 vide, qu'on remplit par `add_entry`. Deux valeurs écrites dans la même case
@@ -91,8 +91,9 @@ seulement, et refuse un bloc calculé.
 {{#include ../../tests/python/test_doc_matrice.py:assembler}}
 ```
 
-Sur une matrice sans valeurs, `dense`, `mul_dense`, `K * x` et `solve` lèvent
-une erreur, et `get` aussi dès qu'un bloc est calculé.
+Sur une matrice sans valeurs, `K * x` et `solve` lèvent une erreur. `get` et
+`entries` lisent les valeurs écrites dans les blocs, et lèvent une erreur dès
+qu'un bloc est calculé.
 
 Une matrice est assemblée **une fois** : ses valeurs ne bougent plus, et un
 second `assemble()` ne fait rien. Les valeurs d'une autre configuration
@@ -262,6 +263,9 @@ table de noms de la matrice (`dof_vars()`). `row_dofs()` rend la forme lisible,
 - `symmetry`, `physics`, `factor`, et `row_sense`, le sens (égalité ou
   inégalité) des lignes `imposed`, que lit le solveur.
 
+Sur un bloc calculé, toute lecture de valeurs (`get`, `iter_entries`,
+`to_dmatrix`, `to_coo`, `to_csr`, `to_csc`) rend une erreur.
+
 **Assemblage.** `ops::matrix::stiffness`, comme `mass`, `geometric` et
 `tangent`, demande ses blocs à chaque sous-modèle, prend le motif du modèle
 (construit au premier appel par `ops::scatter::build_pattern`), calcule les
@@ -273,7 +277,7 @@ et `containers` n'en dépend pas. `Matrix::assemble`, défini dans `ops::matrix`
 construit le motif depuis les blocs à chaque appel.
 
 **Facteur.** Il s'applique partout où une valeur du bloc est lue ou émise
-(`get`, `dense`, les conversions, `mul_dense`, l'assemblage), sauf dans
+(`get`, `iter_entries`, les conversions, l'assemblage), sauf dans
 `local_triplets` et `local_coo_arrays`, les valeurs brutes que chaque lecteur
 multiplie lui-même. `&k * s` copie chaque bloc ; `k * s`, qui prend `k`,
 multiplie en place les blocs que personne d'autre ne tient

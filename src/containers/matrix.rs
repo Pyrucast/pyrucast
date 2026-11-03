@@ -89,7 +89,7 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::{Handle, ReadGuard};
 use crate::models::{MatrixKind, Physics, RelationSense, IMPOSED};
 use crate::parallel::*;
-use nalgebra::{DMatrix, DVector};
+use nalgebra::DMatrix;
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -127,7 +127,7 @@ use std::fmt;
 /// # use pyrucast::containers::matrix::MatrixEntry;
 /// // An entry whose DOFs are **materialized**: no more indices, but
 /// // `(node, variable)` already resolved.
-/// let entrees: Vec<MatrixEntry> = bloc().iter_entries();
+/// let entrees: Vec<MatrixEntry> = bloc().iter_entries()?;
 /// assert_eq!(entrees.len(), 4);
 /// assert_eq!((entrees[0].1.as_str(), entrees[0].3.as_str()), ("q", "T"));
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1835,13 +1835,7 @@ impl SubMatrix {
         col_node: NodeId,
         col_var: &str,
     ) -> Result<f64> {
-        if self.recipe.is_some() {
-            return Err(PyrucastError::Message(
-                "SubMatrix::get: a computed block holds no value; read the \
-                 assembled Matrix it belongs to"
-                    .into(),
-            ));
-        }
+        self.check_has_values("get")?;
         let (row_g, col_g) = self.support_guards();
         Ok(self.get_with(
             &row_g,
@@ -1851,6 +1845,19 @@ impl SubMatrix {
             col_node,
             col_var,
         ))
+    }
+
+    /// Refuse a value read on a computed block, whose values exist only in the
+    /// assembled [`Matrix`] it belongs to. Every reader of the stored values
+    /// goes through here, so they all answer alike.
+    fn check_has_values(&self, what: &str) -> Result<()> {
+        if self.recipe.is_some() {
+            return Err(PyrucastError::Message(format!(
+                "SubMatrix::{what}: a computed block holds no value; read the \
+                 assembled Matrix it belongs to"
+            )));
+        }
+        Ok(())
     }
 
     /// Read guards on both supports, taking a **single** one when rows and
@@ -1921,6 +1928,8 @@ impl SubMatrix {
     /// All COO triplets, in insertion order, with DOFs materialised as
     /// `(NodeId, var_name)` pairs.
     ///
+    /// **Errors**: a computed block holds no value, as for [`get`](Self::get).
+    ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
@@ -1940,12 +1949,14 @@ impl SubMatrix {
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
     /// // Insertion order preserved; variable names already resolved.
-    /// assert_eq!(bloc.iter_entries().len(), 4);
-    /// assert_eq!(bloc.iter_entries()[0].4, 2.0);
+    /// assert_eq!(bloc.iter_entries()?.len(), 4);
+    /// assert_eq!(bloc.iter_entries()?[0].4, 2.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn iter_entries(&self) -> Vec<MatrixEntry> {
+    pub fn iter_entries(&self) -> Result<Vec<MatrixEntry>> {
+        self.check_has_values("iter_entries")?;
         let (row_g, col_g) = self.support_guards();
-        self.iter_entries_with(&row_g, col_g.as_deref().unwrap_or(&row_g))
+        Ok(self.iter_entries_with(&row_g, col_g.as_deref().unwrap_or(&row_g)))
     }
 
     /// [`iter_entries`](Self::iter_entries) reading support guards the caller
@@ -1981,42 +1992,11 @@ impl SubMatrix {
             .collect()
     }
 
-    /// Materialise as a row-major dense buffer of length `n_rows × n_cols`.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(1).unwrap());
-    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
-    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-    /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
-    /// # let mut bloc = SubMatrix::new(
-    /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
-    /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
-    /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
-    /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
-    /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// assert_eq!(bloc.dense(), vec![2.0, -1.0, -1.0, 2.0]); // ligne-major
-    /// ```
-    pub fn dense(&self) -> Vec<f64> {
-        let m = self.to_dmatrix();
-        let mut out = Vec::with_capacity(m.nrows() * m.ncols());
-        for i in 0..m.nrows() {
-            for j in 0..m.ncols() {
-                out.push(m[(i, j)]);
-            }
-        }
-        out
-    }
-
     /// Materialise as a [`nalgebra::DMatrix<f64>`]. Entries at the same
     /// `(row, col)` are summed.
     ///
+    /// **Errors**: a computed block holds no value, as for [`get`](Self::get).
+    ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
@@ -2035,9 +2015,18 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// assert_eq!(bloc.to_dmatrix()[(0, 1)], -1.0);
+    /// assert_eq!(bloc.to_dmatrix()?[(0, 1)], -1.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn to_dmatrix(&self) -> DMatrix<f64> {
+    pub fn to_dmatrix(&self) -> Result<DMatrix<f64>> {
+        self.check_has_values("to_dmatrix")?;
+        Ok(self.values_dmatrix())
+    }
+
+    /// The stored values as a dense matrix, factor applied — what
+    /// [`to_dmatrix`](Self::to_dmatrix) returns, and an empty grid for a
+    /// computed block.
+    fn values_dmatrix(&self) -> DMatrix<f64> {
         let nr = self.coo.nrows();
         let nc = self.coo.ncols();
         let mut out = DMatrix::<f64>::zeros(nr, nc);
@@ -2056,6 +2045,8 @@ impl SubMatrix {
     /// The internal COO matrix, with [`SubMatrix::factor`] baked in (cloned as-is
     /// when the factor is `1.0`, rebuilt with scaled values otherwise).
     ///
+    /// **Errors**: a computed block holds no value, as for [`get`](Self::get).
+    ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
@@ -2074,21 +2065,25 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// assert_eq!(bloc.to_coo().nnz(), 4);
+    /// assert_eq!(bloc.to_coo()?.nnz(), 4);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn to_coo(&self) -> CooMatrix<f64> {
+    pub fn to_coo(&self) -> Result<CooMatrix<f64>> {
+        self.check_has_values("to_coo")?;
         if self.factor == 1.0 {
-            return self.coo.clone();
+            return Ok(self.coo.clone());
         }
         let mut out = CooMatrix::new(self.coo.nrows(), self.coo.ncols());
         for (r, c, &v) in self.coo.triplet_iter() {
             out.push(r, c, v * self.factor);
         }
-        out
+        Ok(out)
     }
 
     /// Convert this block to a [`nalgebra_sparse::CsrMatrix`] (factor applied).
     ///
+    /// **Errors**: a computed block holds no value, as for [`get`](Self::get).
+    ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
@@ -2107,39 +2102,16 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// assert_eq!(bloc.to_csr().nnz(), 4);
+    /// assert_eq!(bloc.to_csr()?.nnz(), 4);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn to_csr(&self) -> CsrMatrix<f64> {
-        CsrMatrix::from(&self.to_coo())
+    pub fn to_csr(&self) -> Result<CsrMatrix<f64>> {
+        Ok(CsrMatrix::from(&self.to_coo()?))
     }
 
     /// Convert this block to a [`nalgebra_sparse::CscMatrix`] (factor applied).
     ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(1).unwrap());
-    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
-    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-    /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
-    /// # let mut bloc = SubMatrix::new(
-    /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
-    /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
-    /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
-    /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
-    /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// assert_eq!(bloc.to_csc().nrows(), 2);
-    /// ```
-    pub fn to_csc(&self) -> CscMatrix<f64> {
-        CscMatrix::from(&self.to_coo())
-    }
-
-    /// `y = A · x` (dense). Returns an error if `x.len() != n_cols`.
+    /// **Errors**: a computed block holds no value, as for [`get`](Self::get).
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -2159,21 +2131,11 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// // [[2, -1], [-1, 2]] · [1, 1] = [1, 1].
-    /// assert_eq!(bloc.mul_dense(&[1.0, 1.0]).unwrap(), vec![1.0, 1.0]);
+    /// assert_eq!(bloc.to_csc()?.nrows(), 2);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn mul_dense(&self, x: &[f64]) -> Result<Vec<f64>> {
-        if x.len() != self.n_cols() {
-            return Err(PyrucastError::Message(format!(
-                "mul_dense: x has length {} but sub-matrix has {} columns",
-                x.len(),
-                self.n_cols()
-            )));
-        }
-        let csr = self.to_csr();
-        let x_vec = DVector::<f64>::from_column_slice(x);
-        let y_vec: DVector<f64> = &csr * &x_vec;
-        Ok(y_vec.iter().copied().collect())
+    pub fn to_csc(&self) -> Result<CscMatrix<f64>> {
+        Ok(CscMatrix::from(&self.to_coo()?))
     }
 }
 
@@ -2365,7 +2327,8 @@ impl crate::dump::Dump for SubMatrix {
         }
         let row_labels: Vec<String> = self.row_dofs().iter().map(dof_label).collect();
         let col_labels: Vec<String> = self.col_dofs().iter().map(dof_label).collect();
-        let data = self.dense();
+        // Row-major: the column-major storage of the transpose.
+        let data = self.values_dmatrix().transpose().as_slice().to_vec();
         // What `Display` does not say — the DOF ordering decides how to read the
         // grid that follows, and the factor decides its values. Without this
         // line, the "content" level would teach less than the structure does.
@@ -4461,14 +4424,7 @@ impl Matrix {
                 _ => 0.0,
             });
         }
-        if self.iter().any(|h| h.read().is_computed()) {
-            return Err(PyrucastError::Message(
-                "Matrix::get: this matrix carries a computed block that was never \
-                 assembled, so its values do not exist yet; assemble it first \
-                 (m.assemble())"
-                    .into(),
-            ));
-        }
+        self.check_no_unassembled_computed("get")?;
         let mut total = 0.0;
         for h in self {
             total += h.read().get(row_node, row_field, col_node, col_field)?;
@@ -4476,7 +4432,14 @@ impl Matrix {
         Ok(total)
     }
 
-    /// All COO entries across every block, in block-insertion order.
+    /// Every entry, as `(row node, dual var, column node, primal var, value)`:
+    /// the values [`get`](Self::get) reads. An assembled matrix lists its
+    /// assembled values, row by row in its row order; an unassembled one lists
+    /// the entries written in its blocks, block by block in insertion order, a
+    /// coordinate written twice appearing twice.
+    ///
+    /// **Errors**: an unassembled matrix carrying a computed block, as for
+    /// [`get`](Self::get).
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -4499,18 +4462,45 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // One 5-tuple per entry: row node, dual var, column node,
-    /// // primal var, value — names are already resolved there. Like
-    /// // `entry_count` walks the entries **stored**: a
-    /// // computed one has none, its values living in the global CSR.
-    /// assert!(k.iter_entries().is_empty());
+    /// // One 5-tuple per value of the assembled matrix, names resolved:
+    /// // K = [[1, -1], [-1, 1]], row by row.
+    /// let entries = k.iter_entries()?;
+    /// assert_eq!(entries.len(), 4);
+    /// assert_eq!(entries[1], (a.id(), "q".to_string(), b.id(), "T".to_string(), -1.0));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn iter_entries(&self) -> Vec<MatrixEntry> {
+    pub fn iter_entries(&self) -> Result<Vec<MatrixEntry>> {
+        if let Some(a) = &self.assembled {
+            let named = |key: DofKey| (dof_node(key), a.vars[dof_var(key) as usize].clone());
+            return Ok(a
+                .csr
+                .triplets()
+                .map(|(r, c, v)| {
+                    let (row_node, row_var) = named(a.row_keys[r]);
+                    let (col_node, col_var) = named(a.col_keys[c]);
+                    (row_node, row_var, col_node, col_var, v)
+                })
+                .collect());
+        }
+        self.check_no_unassembled_computed("iter_entries")?;
         let mut out = Vec::new();
         for h in self {
-            out.extend(h.read().iter_entries());
+            out.extend(h.read().iter_entries()?);
         }
-        out
+        Ok(out)
+    }
+
+    /// Refuse a value read on an unassembled matrix that carries a computed
+    /// block: its values do not exist until the matrix is assembled.
+    fn check_no_unassembled_computed(&self, what: &str) -> Result<()> {
+        if self.assembled.is_none() && self.iter().any(|h| h.read().is_computed()) {
+            return Err(PyrucastError::Message(format!(
+                "Matrix::{what}: this matrix carries a computed block that was never \
+                 assembled, so its values do not exist yet; assemble it first \
+                 (m.assemble())"
+            )));
+        }
+        Ok(())
     }
 
     // ── Solver-facing (require finalize) ────────────────────────────────
@@ -4627,45 +4617,6 @@ impl Matrix {
         Ok(out)
     }
 
-    /// Row-major dense buffer. Requires [`finalize`](Self::finalize).
-    ///
-    /// ```
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::Matrix;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::Model;
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::ops::{element_field, matrix};
-    /// # use pyrucast::ops::model;
-    /// # let coords = Handle::new(Coords::new(1).unwrap());
-    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
-    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
-    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
-    /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // Vue dense ligne-major, longueur n_rows × n_cols.
-    /// let d = k.dense().unwrap();
-    /// assert_eq!(d.len(), k.n_rows().unwrap() * k.n_cols().unwrap());
-    /// assert_eq!(d, vec![1.0, -1.0, -1.0, 1.0]);
-    /// ```
-    pub fn dense(&self) -> Result<Vec<f64>> {
-        let m = self.to_dmatrix()?;
-        let mut out = Vec::with_capacity(m.nrows() * m.ncols());
-        for i in 0..m.nrows() {
-            for j in 0..m.ncols() {
-                out.push(m[(i, j)]);
-            }
-        }
-        Ok(out)
-    }
-
     /// Assembled COO (rebuilt from the CSR). Requires [`finalize`](Self::finalize).
     ///
     /// ```
@@ -4729,42 +4680,10 @@ impl Matrix {
         Ok(CscMatrix::from(&self.assembled_or_err()?.csr.to_csr()?))
     }
 
-    /// `y = A · x` (dense). Requires [`finalize`](Self::finalize).
-    ///
-    /// ```
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::Matrix;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::Model;
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::ops::{element_field, matrix};
-    /// # use pyrucast::ops::model;
-    /// # let coords = Handle::new(Coords::new(1).unwrap());
-    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
-    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
-    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
-    /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // K · [1, 1] = 0: the rigid mode of a conduction.
-    /// assert_eq!(k.mul_dense(&[1.0, 1.0]).unwrap(), vec![0.0, 0.0]);
-    /// ```
-    pub fn mul_dense(&self, x: &[f64]) -> Result<Vec<f64>> {
+    /// `y = A · x` on the assembled values, `x` and `y` in the assembled column
+    /// and row orders — the arithmetic behind [`mul_field`](Self::mul_field).
+    fn mul_values(&self, x: &[f64]) -> Result<Vec<f64>> {
         let a = self.assembled_or_err()?;
-        let nc = a.col_keys.len();
-        if x.len() != nc {
-            return Err(PyrucastError::Message(format!(
-                "mul_dense: x has length {} but matrix has {} columns",
-                x.len(),
-                nc
-            )));
-        }
         // Row-wise SpMV straight on the CSR arrays: each row's dot product is
         // written once, so the result is independent of the thread count.
         let (offsets, cols, vals) = (&a.csr.row_offsets, &a.csr.col_indices, &a.csr.values);
@@ -5250,7 +5169,7 @@ impl Matrix {
     /// ```
     pub fn mul_field(&self, x_field: &NodeField) -> Result<NodeField> {
         let x = x_field.gather(&self.col_dofs()?)?;
-        let y = self.mul_dense(&x)?;
+        let y = self.mul_values(&x)?;
         self.field_from_row_values(&y)
     }
 
@@ -5920,7 +5839,7 @@ mod tests {
     }
 
     #[test]
-    fn dense_matches_get() {
+    fn to_dmatrix_matches_get() {
         let (_cfg, nodes, sup) = make_poi1(2);
         let (a, b) = (nodes[0].id(), nodes[1].id());
         let mut m = SubMatrix::new(
@@ -5935,7 +5854,10 @@ mod tests {
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
         m.add_entry(b, "q", a, "T", -1.0).unwrap();
         m.add_entry(b, "q", b, "T", 2.0).unwrap();
-        assert_eq!(m.dense(), vec![2.0, -1.0, -1.0, 2.0]);
+        assert_eq!(
+            m.to_dmatrix().unwrap(),
+            DMatrix::from_row_slice(2, 2, &[2.0, -1.0, -1.0, 2.0])
+        );
     }
 
     #[test]
@@ -5971,43 +5893,6 @@ mod tests {
             6,
             "summary + 2 metadata lines + header + 2 rows:\n{s}"
         );
-    }
-
-    #[test]
-    fn mul_dense_against_known_matrix() {
-        let (_cfg, nodes, sup) = make_poi1(2);
-        let (a, b) = (nodes[0].id(), nodes[1].id());
-        let mut m = SubMatrix::new(
-            sup.clone(),
-            sup,
-            vec!["q".into()],
-            vec!["T".into()],
-            DofOrdering::NodesThenVars,
-            Symmetry::Full,
-        );
-        m.add_entry(a, "q", a, "T", 2.0).unwrap();
-        m.add_entry(a, "q", b, "T", -1.0).unwrap();
-        m.add_entry(b, "q", a, "T", -1.0).unwrap();
-        m.add_entry(b, "q", b, "T", 2.0).unwrap();
-        assert_eq!(m.mul_dense(&[1.0, 1.0]).unwrap(), vec![1.0, 1.0]);
-        assert_eq!(m.mul_dense(&[1.0, 2.0]).unwrap(), vec![0.0, 3.0]);
-    }
-
-    #[test]
-    fn mul_dense_rejects_wrong_size() {
-        let (_cfg, nodes, sup) = make_poi1(1);
-        let a = nodes[0].id();
-        let mut m = SubMatrix::new(
-            sup.clone(),
-            sup,
-            vec!["q".into()],
-            vec!["T".into()],
-            DofOrdering::NodesThenVars,
-            Symmetry::None,
-        );
-        m.add_entry(a, "q", a, "T", 1.0).unwrap();
-        // 1 col, but x has 2 elements
-        assert!(m.mul_dense(&[1.0, 2.0]).is_err());
     }
 
     #[test]
@@ -6047,7 +5932,7 @@ mod tests {
         m.add_entry(a, "q", a, "T", 1.0).unwrap();
         m.add_entry(b, "q", b, "T", 2.0).unwrap();
         m.add_entry(a, "q", a, "T", 3.0).unwrap();
-        let entries = m.iter_entries();
+        let entries = m.iter_entries().unwrap();
         assert_eq!(entries.len(), 3);
         assert_eq!(entries[0].4, 1.0);
         assert_eq!(entries[1].4, 2.0);
@@ -6073,8 +5958,7 @@ mod tests {
         let scaled = &m * 3.0;
         assert_eq!(scaled.factor(), 3.0);
         assert_eq!(scaled.get(a, "q", a, "T").unwrap(), 6.0);
-        assert_eq!(scaled.dense(), vec![6.0]);
-        assert_eq!(scaled.iter_entries()[0].4, 6.0);
+        assert_eq!(scaled.iter_entries().unwrap()[0].4, 6.0);
         assert_eq!(
             m.get(a, "q", a, "T").unwrap(),
             2.0,
@@ -6085,11 +5969,10 @@ mod tests {
         let halved = scaled / 2.0;
         assert_eq!(halved.factor(), 1.5);
         assert_eq!(halved.get(a, "q", a, "T").unwrap(), 3.0);
-        assert_eq!(halved.to_coo().values(), &[3.0]);
-        assert_eq!(halved.to_csr().values(), &[3.0]);
-        assert_eq!(halved.to_csc().values(), &[3.0]);
-        assert_eq!(halved.to_dmatrix()[(0, 0)], 3.0);
-        assert_eq!(halved.mul_dense(&[1.0]).unwrap(), vec![3.0]);
+        assert_eq!(halved.to_coo().unwrap().values(), &[3.0]);
+        assert_eq!(halved.to_csr().unwrap().values(), &[3.0]);
+        assert_eq!(halved.to_csc().unwrap().values(), &[3.0]);
+        assert_eq!(halved.to_dmatrix().unwrap()[(0, 0)], 3.0);
         // The raw local form is untouched by the factor.
         assert_eq!(halved.local_coo_arrays().2, &[2.0]);
     }
@@ -6742,13 +6625,12 @@ mod tests {
         // must not succeed before finalize
         assert!(k.to_csr().is_err());
         assert!(k.to_dmatrix().is_err());
-        assert!(k.mul_dense(&[1.0]).is_err());
         k.finalize().unwrap();
         assert!(k.to_csr().is_ok());
     }
 
     #[test]
-    fn aggregate_mul_dense_matches_dense() {
+    fn aggregate_of_row_blocks_assembles_both() {
         let (_cfg_a, nodes_a, sup_a) = make_poi1(2);
         let (na0, na1) = (nodes_a[0].id(), nodes_a[1].id());
         // row block a: only node na0 as row
@@ -6788,12 +6670,14 @@ mod tests {
         k.add_sub(Handle::new(b)).unwrap();
         k.finalize().unwrap();
 
-        assert_eq!(k.mul_dense(&[1.0, 1.0]).unwrap(), vec![1.0, 1.0]);
-        assert_eq!(k.mul_dense(&[1.0, 2.0]).unwrap(), vec![0.0, 3.0]);
+        assert_eq!(
+            k.to_dmatrix().unwrap(),
+            DMatrix::from_row_slice(2, 2, &[2.0, -1.0, -1.0, 2.0])
+        );
     }
 
     #[test]
-    fn aggregate_mul_field_matches_mul_dense_and_operator() {
+    fn aggregate_mul_field_and_its_operator() {
         use crate::containers::node_field::{NodeField, SubNodeField};
 
         // K = [[2,-1],[-1,2]] with dual rows "q" and primal columns "T".
@@ -6874,7 +6758,7 @@ mod tests {
         k.add_sub(Handle::new(a)).unwrap();
         k.add_sub(Handle::new(b)).unwrap();
 
-        let entries = k.iter_entries();
+        let entries = k.iter_entries().unwrap();
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].4, 1.0);
         assert_eq!(entries[1].4, 2.0);

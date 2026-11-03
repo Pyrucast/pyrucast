@@ -223,8 +223,8 @@ const K_S_SLOT: usize = 1;
 /// // The block carries each node's six DOFs: 18 × 18 on a TRI3.
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (18, 18));
 /// // And it is symmetric, like any stiffness.
-/// let d = bloc.dense();
-/// assert!((0..18).all(|i| (0..18).all(|j| (d[i * 18 + j] - d[j * 18 + i]).abs() < 1e-6)));
+/// let d = bloc.to_dmatrix()?;
+/// assert!((&d - d.transpose()).amax() < 1e-6);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn element_stiffness(

@@ -118,10 +118,8 @@ fn lire_une_matrice_assemblee() -> Result<()> {
     let a: NodeId = k.row_mesh()?.node(0, 0, 0)?.id();
     let x = NodeField::from_submesh(&k.col_mesh()?.get(0)?, vec!["T".into()])?;
 
-    // Une valeur, et la matrice pleine, ligne par ligne.
+    // Une valeur.
     let v: f64 = k.get(a, "q", a, "T")?;
-    let d: Vec<f64> = k.dense()?;
-    assert_eq!(d.len(), k.n_rows()? * k.n_cols()?);
 
     // Les trois tableaux de la matrice creuse, prêtés sans copie…
     let (debuts, colonnes, valeurs): (&[usize], &[usize], &[f64]) = k.csr_arrays()?;

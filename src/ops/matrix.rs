@@ -203,11 +203,11 @@ impl AssemblyInputs<'_> {
 /// // A single machinery for the four kinds: `stiffness` and `mass` are only
 /// // its named forms.
 /// let k = matrix::assemble_kind(&modele, &materiaux, MatrixKind::Stiffness, matrix::AssemblyInputs::MaterialOnly)?;
-/// assert_eq!(k.dense()?, matrix::stiffness(&modele, &materiaux)?.dense()?);
+/// assert_eq!(k.to_dmatrix()?, matrix::stiffness(&modele, &materiaux)?.to_dmatrix()?);
 /// let m = matrix::assemble_kind(&modele, &materiaux, MatrixKind::Mass, matrix::AssemblyInputs::MaterialOnly)?;
 /// // The capacity sums to ρ·c_p × area; the conduction sums to zero.
-/// assert!((m.dense()?.iter().sum::<f64>() - 2.0 * 3.0 * 0.5).abs() < 1e-9);
-/// assert!(k.dense()?.iter().sum::<f64>().abs() < 1e-9);
+/// assert!((m.to_dmatrix()?.sum() - 2.0 * 3.0 * 0.5).abs() < 1e-9);
+/// assert!(k.to_dmatrix()?.sum().abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn assemble_kind(
@@ -446,7 +446,7 @@ fn build_contribution(
 /// let m = matrix::mass(&model, &materials).unwrap();
 ///
 /// // Capacité totale d'un SEG2 de longueur 1, ρ = 2, c_p = 1 : 2.
-/// let total: f64 = m.dense().unwrap().iter().sum();
+/// let total: f64 = m.to_dmatrix().unwrap().sum();
 /// assert!((total - 2.0).abs() < 1e-12);
 /// ```
 pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
@@ -551,7 +551,7 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 /// let kt = matrix::tangent(&model, &materials, &strain, None, None).unwrap();
 /// let k = matrix::stiffness(&model, &materials).unwrap();
 ///
-/// assert_eq!(kt.dense().unwrap(), k.dense().unwrap());
+/// assert_eq!(kt.to_dmatrix().unwrap(), k.to_dmatrix().unwrap());
 /// ```
 pub fn tangent(
     model: &Model,
@@ -607,7 +607,7 @@ pub fn tangent(
 ///
 /// // The sum is preserved; the off-diagonal terms are folded onto it.
 /// let somme = |x: &pyrucast::containers::matrix::Matrix| -> f64 {
-///     x.dense().unwrap().iter().sum()
+///     x.to_dmatrix().unwrap().sum()
 /// };
 /// assert!((somme(&m) - somme(&diagonale)).abs() < 1e-12);
 /// assert_eq!(diagonale.get(a.id(), "q", b.id(), "T").unwrap(), 0.0);
@@ -1382,10 +1382,10 @@ mod tests {
         }
         assert!(sum.symmetric());
         let n = rows.len();
-        let dense = sum.dense().unwrap();
+        let dense = sum.to_dmatrix().unwrap();
         for i in 0..n {
             for j in 0..n {
-                assert_eq!(dense[i * n + j], dense[j * n + i], "({i}, {j})");
+                assert_eq!(dense[(i, j)], dense[(j, i)], "({i}, {j})");
             }
         }
     }
@@ -1412,7 +1412,8 @@ mod tests {
     }
 
     /// Blocks put together without their values — `filter` here — have none to
-    /// add or read until assembled: an error, not a zero.
+    /// add or read until assembled: an error, not a zero. A computed block has
+    /// none of its own either.
     #[test]
     fn values_never_assembled_are_an_error_to_add_or_read() {
         let (model, materials) = chain_heat_with_dirichlet(2);
@@ -1422,10 +1423,22 @@ mod tests {
         assert!((&thermal + &k).is_err());
         assert!((&k - &thermal).is_err());
         assert!(thermal.get(a, "q", a, "T").is_err());
+        assert!(thermal.iter_entries().is_err());
+        // A computed block holds no value: every reader says so alike.
         let block = k.iter().find(|h| h.read().is_computed()).unwrap();
-        assert!(block.read().get(a, "q", a, "T").is_err());
+        let block = block.read();
+        assert!(block.get(a, "q", a, "T").is_err());
+        assert!(block.iter_entries().is_err());
+        assert!(block.to_dmatrix().is_err());
+        assert!(block.to_coo().is_err());
+        assert!(block.to_csr().is_err());
+        assert!(block.to_csc().is_err());
 
         thermal.assemble().unwrap();
+        // Assembled, its entries are the values `get` reads.
+        for (rn, rv, cn, cv, v) in thermal.iter_entries().unwrap() {
+            assert_eq!(v, thermal.get(rn, &rv, cn, &cv).unwrap());
+        }
         let sum = (&thermal + &k).unwrap();
         let expected = 2.0 * k.get(a, "q", a, "T").unwrap();
         assert!((sum.get(a, "q", a, "T").unwrap() - expected).abs() < 1e-12);

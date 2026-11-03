@@ -112,8 +112,8 @@ fn hex27_assembles_a_singular_stiffness() -> Result<()> {
 
     // A rigid translation along any axis costs no energy, so each row sums to
     // zero over the columns of that axis — and the whole matrix over all three.
-    let total: f64 = k.dense()?.iter().sum();
-    let scale: f64 = k.dense()?.iter().map(|v| v.abs()).fold(0.0, f64::max);
+    let total: f64 = k.to_dmatrix()?.sum();
+    let scale: f64 = k.to_dmatrix()?.amax();
     assert!(
         total.abs() < 1e-9 * scale,
         "rigid modes carry {total} (largest entry {scale})"

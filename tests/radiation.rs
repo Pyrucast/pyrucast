@@ -110,11 +110,9 @@ fn the_tangent_is_the_derivative_of_the_residual() -> Result<()> {
     let temperature = uniform_temperature(&fixture, t0)?;
     let at_gauss = element_field::interp_to_gauss(&temperature, &fixture.boundary_fes)?;
     let kt = pyrucast::ops::matrix::tangent(&fixture.radiation, &materials, &at_gauss, None, None)?;
-    let dense = kt.dense()?;
+    let dense = kt.to_dmatrix()?;
     let n = kt.row_dofs()?.len();
-    let analytic: Vec<f64> = (0..n)
-        .map(|i| (0..n).map(|j| dense[i * n + j]).sum())
-        .collect();
+    let analytic: Vec<f64> = (0..n).map(|i| dense.row(i).sum()).collect();
 
     // Finite difference on the same quantity (a uniform temperature bump).
     let dt = 1e-4 * t0;
@@ -181,7 +179,7 @@ fn no_flux_at_equilibrium() -> Result<()> {
     // no longer comes out of the behaviour — it is asked for, which is the whole
     // séparation.
     let kt = pyrucast::ops::matrix::tangent(&fixture.radiation, &materials, &at_gauss, None, None)?;
-    let dense = kt.dense()?;
+    let dense = kt.to_dmatrix()?;
     assert!(dense.iter().any(|v| v.abs() > 0.0));
     Ok(())
 }

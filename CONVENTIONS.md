@@ -633,8 +633,6 @@ waiver, recorded in `tests/python/test_mirror_completeness.py`.
   their result is a vector, not an operator. The machinery they share with
   `ops::matrix` (`ops::coloring`, `ops::scatter`) lives at the root of `ops` —
   those are not operators.
-- `mul_dense(self, x: &[f64])` → **method** (`x` is a slice, not a heavy
-  container: a single-container matrix-vector product).
 - `support()` on every field → **method**, the same name for both families and
   both levels: the `Mesh` (`SubMesh`) of POI1 zones a node field (zone) lives
   on, the `FiniteElementSpace` (`SubFiniteElementSpace`) of a field at the

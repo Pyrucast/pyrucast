@@ -391,7 +391,7 @@ pub(crate) fn target_pairs(
 ///     },
 /// )?;
 /// // The entries sum to h × the segment's length.
-/// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+/// let total: f64 = bloc.iter_entries()?.into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!((total - 2.0).abs() < 1e-12);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```

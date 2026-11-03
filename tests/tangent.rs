@@ -266,7 +266,10 @@ fn a_linear_physics_tangent_is_its_stiffness() -> Result<()> {
         let t = kt.get(n[0].id(), "q", n[j].id(), "T").unwrap();
         assert!((t - k * coef / 6.0).abs() < 1e-12, "q0 T{j}: {t}");
     }
-    assert_eq!(kt.dense()?, stiffness(&conduction, &materials)?.dense()?);
+    assert_eq!(
+        kt.to_dmatrix()?,
+        stiffness(&conduction, &materials)?.to_dmatrix()?
+    );
     Ok(())
 }
 
@@ -294,7 +297,7 @@ fn constraints_enter_the_tangent() -> Result<()> {
     let k = stiffness(&constrained, &materials)?;
     // Four temperatures plus the multiplier: the constraint row is there.
     assert_eq!(kt.n_rows()?, 5);
-    assert_eq!(kt.dense()?, k.dense()?);
+    assert_eq!(kt.to_dmatrix()?, k.to_dmatrix()?);
     Ok(())
 }
 

@@ -199,12 +199,12 @@ fn a_stiff_interface_recovers_a_continuous_body() -> Result<()> {
 fn the_four_blocks_sum_to_a_symmetric_operator() -> Result<()> {
     let (_, model, materials) = two_square_model(3.0)?;
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
-    let dense = k.dense()?;
+    let dense = k.to_dmatrix()?;
     let n = k.row_dofs()?.len();
-    assert_eq!(dense.len(), n * n);
+    assert_eq!(dense.shape(), (n, n));
     for i in 0..n {
         for j in 0..n {
-            let (a, b) = (dense[i * n + j], dense[j * n + i]);
+            let (a, b) = (dense[(i, j)], dense[(j, i)]);
             assert!((a - b).abs() < 1e-12, "K[{i},{j}] = {a} ≠ {b} = K[{j},{i}]");
         }
     }
@@ -212,7 +212,7 @@ fn the_four_blocks_sum_to_a_symmetric_operator() -> Result<()> {
     // right-side one, which a pair of independent bodies could never produce.
     let coupling = (0..n)
         .flat_map(|i| (0..n).map(move |j| (i, j)))
-        .any(|(i, j)| i != j && dense[i * n + j].abs() > 1e-12);
+        .any(|(i, j)| i != j && dense[(i, j)].abs() > 1e-12);
     assert!(coupling, "the interface must couple the two meshes");
     Ok(())
 }

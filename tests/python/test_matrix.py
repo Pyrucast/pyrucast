@@ -105,44 +105,6 @@ def test_sub_matrix_repeated_entries_sum():
     assert m.entry_count == 3
 
 
-def test_sub_matrix_dense_layout_is_row_major():
-    c = pyrucast.Coords(1)
-    a = c.add_node([0.0])
-    b = c.add_node([1.0])
-    m = _make_block(c, [a, b], [a, b], ["q"], ["T"])
-    m.add_entry(a, "q", a, "T", 2.0)
-    m.add_entry(a, "q", b, "T", -1.0)
-    m.add_entry(b, "q", a, "T", -1.0)
-    m.add_entry(b, "q", b, "T", 2.0)
-    assert m.dense() == [2.0, -1.0, -1.0, 2.0]
-
-
-def test_sub_matrix_mul_dense_against_known_block():
-    c = pyrucast.Coords(1)
-    a = c.add_node([0.0])
-    b = c.add_node([1.0])
-    m = _make_block(c, [a, b], [a, b], ["q"], ["T"], symmetry="full")
-    m.add_entry(a, "q", a, "T", 2.0)
-    m.add_entry(a, "q", b, "T", -1.0)
-    m.add_entry(b, "q", a, "T", -1.0)
-    m.add_entry(b, "q", b, "T", 2.0)
-    assert m.mul_dense([1.0, 1.0]) == [1.0, 1.0]
-    assert m.mul_dense([1.0, 2.0]) == [0.0, 3.0]
-
-
-def test_sub_matrix_mul_dense_rejects_wrong_size():
-    c = pyrucast.Coords(1)
-    a = c.add_node([0.0])
-    m = _make_block(c, [a], [a], ["q"], ["T"])
-    m.add_entry(a, "q", a, "T", 1.0)
-    try:
-        m.mul_dense([1.0, 2.0])
-    except RuntimeError:
-        pass
-    else:
-        raise AssertionError("expected RuntimeError for wrong x size")
-
-
 def test_sub_matrix_row_and_col_dofs():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
@@ -223,12 +185,8 @@ def test_matrix_aggregates_two_blocks():
     # row slices, neither block can declare it. A rectangular block is never
     # `full`, and these two are not each other's transpose either, so no `half`
     # pair expresses it. A symmetry is forgotten, never invented.
-    assert k.dense() == [2.0, -1.0, -1.0, 2.0]
+    assert [k.get(r, "q", c, "T") for r in (a, b) for c in (a, b)] == [2, -1, -1, 2]
     assert k.symmetric is False
-    assert k.get(a, "q", a, "T") == 2.0
-    assert k.get(b, "q", b, "T") == 2.0
-    assert k.dense() == [2.0, -1.0, -1.0, 2.0]
-    assert k.mul_dense([1.0, 1.0]) == [1.0, 1.0]
 
 
 def test_matrix_compose_blocks_with_union():
@@ -254,7 +212,7 @@ def test_matrix_compose_blocks_with_union():
     assert k.n_rows == 2
     assert k.n_cols == 2
     # Row slices again: symmetric as an array, undeclarable block by block.
-    assert k.dense() == [2.0, -1.0, -1.0, 2.0]
+    assert [k.get(r, "q", c, "T") for r in (a, b) for c in (a, b)] == [2, -1, -1, 2]
     assert k.symmetric is False
 
 
@@ -297,6 +255,28 @@ def test_matrix_entries_concatenates_blocks():
     assert len(entries) == 2
     assert entries[0] == (a.id, "q", a.id, "T", 1.0)
     assert entries[1] == (b.id, "q", b.id, "T", 2.0)
+
+
+def test_entries_reads_what_get_reads():
+    """A computed block holds no value: its `entries` raises, as its `get`
+    does. An assembled matrix lists its assembled values, row by row."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    fes = pyrucast.FiniteElementSpace(pyrucast.mesh.line(a, b, 1))
+    model = pyrucast.model.heat_conduction(fes)
+    materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
+    k = pyrucast.matrix.stiffness(model, materials)
+    with pytest.raises(RuntimeError, match="computed block holds no value"):
+        k[0].get(a, "q", a, "T")
+    with pytest.raises(RuntimeError, match="computed block holds no value"):
+        k[0].entries()
+    assert k.entries() == [
+        (a.id, "q", a.id, "T", 1.0),
+        (a.id, "q", b.id, "T", -1.0),
+        (b.id, "q", a.id, "T", -1.0),
+        (b.id, "q", b.id, "T", 1.0),
+    ]
 
 
 def test_matrix_mul_field_returns_matrix_vector_product():
