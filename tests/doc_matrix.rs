@@ -84,7 +84,7 @@ fn ecrire_un_bloc() -> Result<()> {
 
     let mut k = Matrix::empty();
     k.add_sub(Handle::new(bloc))?;
-    k.finalize()?; // assemble les blocs écrits
+    k.assemble()?; // assemble les blocs écrits
 
     assert_eq!((k.n_rows()?, k.n_cols()?), (2, 2));
     assert!(k.symmetric());

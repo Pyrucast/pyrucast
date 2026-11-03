@@ -175,7 +175,7 @@ def test_matrix_aggregates_two_blocks():
     k = pyrucast.Matrix()
     k.add_sub(block_a)
     k.add_sub(block_b)
-    k.finalize()
+    k.assemble()
 
     assert len(k) == 2
     assert len(k) == 2
@@ -207,7 +207,7 @@ def test_matrix_compose_blocks_with_union():
     bb[0].add_entry(b, "q", b, "T", 2.0)
 
     k = ba | bb
-    k.finalize()
+    k.assemble()
     assert len(k) == 2
     assert k.n_rows == 2
     assert k.n_cols == 2
@@ -292,7 +292,7 @@ def test_matrix_mul_field_returns_matrix_vector_product():
     block.add_entry(b, "q", b, "T", 2.0)
     k = pyrucast.Matrix()
     k.add_sub(block)
-    k.finalize()
+    k.assemble()
 
     x_mesh = pyrucast.Mesh(c, "POI1")
     x_mesh.unit().add_cell([a])
@@ -319,14 +319,14 @@ def test_matrix_mul_and_truediv_scale_by_factor():
     scaled = k * 2.5
     assert scaled[0].factor == 2.5
     assert k[0].factor == 1.0, "k must be untouched by scaling"
-    scaled.finalize()
+    scaled.assemble()
     assert scaled.get(a, "q", a, "T") == 5.0
     assert scaled.get(b, "q", b, "T") == 10.0
 
     halved = scaled / 2.0
     assert halved[0].factor == 1.25
     assert scaled[0].factor == 2.5, "/ must not mutate its source either"
-    halved.finalize()
+    halved.assemble()
     assert halved.get(a, "q", a, "T") == 2.5
     assert halved.get(b, "q", b, "T") == 5.0
 
@@ -341,11 +341,11 @@ def test_scalar_reads_on_either_side_and_negates():
     k.add_sub(block)
 
     left = 3.0 * k
-    left.finalize()
+    left.assemble()
     assert left.get(a, "q", a, "T") == 6.0
 
     negated = -k
-    negated.finalize()
+    negated.assemble()
     assert negated.get(a, "q", a, "T") == -2.0
     assert k[0].factor == 1.0, "k must be untouched"
     assert (-block).factor == -1.0
@@ -393,7 +393,7 @@ def test_sub_matrix_scales_like_the_matrix():
 
     # And a scaled block still sums like any other.
     total = scaled + block
-    total.finalize()
+    total.assemble()
     assert total.get(a, "q", a, "T") == 8.0
 
 
@@ -409,16 +409,16 @@ def test_sum_counts_a_shared_block_twice_where_union_drops_it():
 
     total = k + k
     assert len(total) == 2
-    total.finalize()
+    total.assemble()
     assert total.get(a, "q", a, "T") == 4.0, "k + k is 2k"
 
     union = k | k
     assert len(union) == 1
-    union.finalize()
+    union.assemble()
     assert union.get(a, "q", a, "T") == 2.0, "k | k is k"
 
     diff = k - k
-    diff.finalize()
+    diff.assemble()
     assert diff.get(a, "q", a, "T") == 0.0
     assert k[0].factor == 1.0, "the operands are untouched"
 
@@ -434,7 +434,7 @@ def test_a_block_and_a_matrix_mix_in_a_sum():
 
     for total in (k + block, block + k, block + block):
         assert len(total) == 2
-        total.finalize()
+        total.assemble()
         assert total.get(a, "q", a, "T") == 4.0
 
     with pytest.raises(TypeError):
@@ -624,7 +624,7 @@ def test_matrix_dump_prints_global_grid_and_elides(capsys):
     k.add_sub(block_a)
     k.add_sub(block_b)
 
-    # Global labelled grid, built without finalize(), printed to stdout.
+    # Global labelled grid, built without assemble(), printed to stdout.
     k.dump()
     s = capsys.readouterr().out
     assert s.splitlines()[0].startswith("Matrix")

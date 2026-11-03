@@ -83,7 +83,7 @@ b = B.unit()
 b.add_entry(o, "q", o, "T", 1.0)
 b.add_entry(l, "q", l, "T", 1.0)
 b.add_entry(o, "q", o, "T", 0.5)  # s'ajoute à la précédente
-B.finalize()
+B.assemble()
 print(B.get(o, "q", o, "T"))  # 1.5
 print(b.memory_bytes)  # 72 : trois valeurs écrites, 24 octets chacune
 # ANCHOR_END: bloc_ecrit

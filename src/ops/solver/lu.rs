@@ -508,7 +508,7 @@ pub(super) struct Factorization {
 }
 
 impl Factorization {
-    /// Factorize `matrix` (must be square and finalized) with the method
+    /// Factorize `matrix` (must be square and assembled) with the method
     /// `options` names.
     pub(super) fn new(matrix: &Matrix, options: &SolveOptions) -> Result<Self> {
         let vars = matrix.dof_vars();
@@ -842,7 +842,7 @@ mod tests {
         // 2 rows × 1 col — rectangular.
         let mut m = crate::containers::matrix::Matrix::empty();
         m.add_sub(Handle::new(block)).unwrap();
-        m.finalize().unwrap();
+        m.assemble().unwrap();
 
         // Build a minimal rhs on the same coords.
         let mut rhs_sm = SubMesh::new(coords.clone(), ElementType::POI1);
@@ -878,7 +878,7 @@ mod tests {
         block.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
         let mut m = crate::containers::matrix::Matrix::empty();
         m.add_sub(Handle::new(block)).unwrap();
-        m.finalize().unwrap();
+        m.assemble().unwrap();
 
         let mut rhs = SubNodeField::from_poi1(&sm, vec!["q".into()]).unwrap();
         rhs.set_value(a.id(), "q", 6.0).unwrap();
@@ -942,7 +942,7 @@ mod tests {
         }
         let mut m = crate::containers::matrix::Matrix::empty();
         m.add_sub(Handle::new(block)).unwrap();
-        m.finalize().unwrap();
+        m.assemble().unwrap();
 
         let mut rhs = SubNodeField::from_poi1(&sm, vec!["q".into()]).unwrap();
         for &id in &ids {

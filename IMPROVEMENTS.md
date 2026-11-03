@@ -81,27 +81,7 @@ factorization: after it, `k.get(...)` and `k[0].get(...)` disagree, and
 to a finalized block. Decide: refuse the write on a block that an assembled
 matrix holds, or let the matrix see it.
 
-## "call finalize()" on a matrix that needs `assemble()`
-
-`matrix * x` and `solve` on an unassembled matrix raise
-"Matrix has not been finalized; call finalize() before solving"
-(`assembled_or_err`, `src/containers/matrix.rs`), also when the matrix carries
-a computed block, which `finalize()` refuses. The message should name
-`assemble()`.
-
-## Matrix docstrings and comments that describe older things
-
-Python (the `.pyi` stub, from `src/py/matrix.rs`):
-
-- `Matrix`: "call `finalize()` before solving" — an assembler returns an
-  assembled matrix; a matrix of computed blocks needs `assemble()`.
-- `Matrix()`: "Populate via `add_sub_matrix`", which does not exist.
-- `n_rows`, `n_cols`: "(finalized)" — they read the blocks.
-- `finalize`: "Must be called before any solver-facing method".
-- `__truediv__`: "Not finalized; see `__mul__`" — the result stays assembled.
-- `__or__`: "then call `finalize()` before solving".
-
-Rust:
+## Matrix comments that describe older things
 
 - `src/containers/matrix.rs` module doc: `Matrix` is "Read-only: every
   accessor unions the blocks on the fly" — it holds an assembled CSR.
@@ -109,7 +89,7 @@ Rust:
 - `AssembledCsr`: "storing one here meant copying… twenty gigabytes of
   `memcpy`".
 - `DofKey`: "thirty million of each on a solid mesh".
-- `set_assembled`: "the cycle Option B avoids"; `src/ops/matrix.rs` "Option B".
+- `src/ops/matrix.rs`: "Option B".
 - `collect_dof_keys`: "identical to the historical behaviour".
 - Matrix scalar operators comment: "`Matrix` being the one aggregate that
   declares no `check_push`" — it declares one (same `Coords`).

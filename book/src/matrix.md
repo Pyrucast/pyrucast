@@ -61,7 +61,7 @@ sur la matrice, compte les valeurs écrites dans les blocs.
 
 Pour écrire un bloc soi-même, `Matrix.block` rend une matrice d'un seul bloc,
 vide, qu'on remplit par `add_entry`. Deux valeurs écrites dans la même case
-s'additionnent. `finalize()` assemble ensuite la matrice.
+s'additionnent. `assemble()` donne ensuite ses valeurs à la matrice.
 
 ```python
 {{#include ../../tests/python/test_doc_matrice.py:bloc_ecrit}}
@@ -84,8 +84,7 @@ effacent ses valeurs.
 
 `assemble()` calcule les valeurs à partir des blocs seuls, sans modèle, sur la
 configuration active : un bloc calculé refait son calcul, un bloc écrit apporte
-ses valeurs. `finalize()` fait de même pour une matrice de blocs écrits
-seulement, et refuse un bloc calculé.
+ses valeurs.
 
 ```python
 {{#include ../../tests/python/test_doc_matrice.py:assembler}}
@@ -271,10 +270,10 @@ Sur un bloc calculé, toute lecture de valeurs (`get`, `iter_entries`,
 (construit au premier appel par `ops::scatter::build_pattern`), calcule les
 valeurs en parallèle par coloriage des mailles (voir
 [Parallélisme](developper/parallelisme.md)) et les remet à la matrice par
-`set_assembled`. `Matrix::finalize` n'assemble que des blocs écrits :
-calculer un bloc calculé demande le calcul élémentaire, qui vit dans `models`,
-et `containers` n'en dépend pas. `Matrix::assemble`, défini dans `ops::matrix`,
-construit le motif depuis les blocs à chaque appel.
+`set_assembled`. `Matrix::assemble` est défini dans `ops::matrix` et non avec
+la matrice : calculer un bloc calculé demande le calcul élémentaire, qui vit
+dans `models`, dont `containers` ne dépend pas. Il construit le motif depuis
+les blocs à chaque appel.
 
 **Facteur.** Il s'applique partout où une valeur du bloc est lue ou émise
 (`get`, `iter_entries`, les conversions, l'assemblage), sauf dans

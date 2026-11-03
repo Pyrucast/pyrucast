@@ -6,7 +6,7 @@ configuration active at the call; a sum of matrices adds those values.
 
 Assembling a matrix from its blocks alone is not here: it mutates a single
 container while preserving its invariant, hence a method
-— ``matrix.assemble()``, next to ``matrix.finalize()``.
+— ``matrix.assemble()``.
 """
 
 from ._pyrucast import (

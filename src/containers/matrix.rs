@@ -2444,7 +2444,7 @@ impl AssembledCsr {
     }
 }
 
-/// Snapshot produced by [`Matrix::finalize`]: DOF numbering + assembled CSR.
+/// The values of an assembled matrix: DOF numbering + CSR.
 ///
 /// The numbering is held as packed [`DofKey`]s over a shared name table, not as
 /// a `Vec<(NodeId, String)>`: on a solid mesh the materialised form is thirty
@@ -2470,7 +2470,7 @@ impl AssembledData {
     /// the result shares the pattern too. Otherwise the DOFs are numbered as the
     /// blocks of both assembled together would be: `self`'s, then those only
     /// `other` has, in `other`'s order — sorted by the solver permutation `perm`
-    /// when the coordinates carry one, as [`Matrix::finalize`] does, and as
+    /// when the coordinates carry one, as an assembly does, and as
     /// conjugate pairs when the sum is `conjugate` (symmetric). A DOF and its
     /// conjugate are both new or both known, so each side keeps its
     /// rank-for-rank conjugacy.
@@ -2593,10 +2593,11 @@ fn merged_order(
 
 /// Aggregate of [`SubMatrix`] blocks.
 ///
-/// Call [`Matrix::finalize`] before passing to a solver. Solver-facing methods
-/// (`to_csr`, `to_dmatrix`, `mul_dense`, `dense`, `to_coo`, `to_csc`) return
-/// an error if the matrix has not been finalized. `add_sub` invalidates the
-/// assembled state.
+/// An assembler returns it assembled; a matrix put together from blocks
+/// (`add_sub`, `|`, `filter`) gets its values from [`Matrix::assemble`]. The
+/// readers of the assembled values (`to_csr`, `to_dmatrix`, `to_coo`,
+/// `to_csc`, `mul_field`) and the solver return an error on a matrix without
+/// values. `add_sub` clears the values.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -2622,7 +2623,7 @@ fn merged_order(
 /// // The aggregate: blocks, a global numbering, an assembled state.
 /// let mut k = Matrix::empty();
 /// k.add_sub(Handle::new(bloc))?;
-/// k.finalize()?;
+/// k.assemble()?;
 /// assert_eq!((k.n_rows()?, k.n_cols()?), (2, 2));
 /// assert_eq!(k.to_csr()?.nnz(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -2710,7 +2711,7 @@ crate::impl_aggregate!(Matrix, SubMatrix, sub_matrix, "sub-matrix(es)", {
 /// # use pyrucast::containers::matrix::NamedDof;
 /// let mut k = Matrix::empty();
 /// k.add_sub(Handle::new(bloc()))?;
-/// k.finalize()?;
+/// k.assemble()?;
 /// // A row or column DOF of the aggregate, in materialized form.
 /// let dofs: Vec<NamedDof> = k.row_dofs()?;
 /// assert_eq!(dofs[0], (a.id(), "q".to_string()));
@@ -2953,7 +2954,7 @@ fn conjugate_lengths(rows: usize, cols: usize, what: &str) -> Result<()> {
 /// # use pyrucast::ops::scatter;
 /// let mut k = Matrix::empty();
 /// k.add_sub(Handle::new(bloc()))?;
-/// k.finalize()?;
+/// k.assemble()?;
 /// // A pure function of the model's **structure**, not of its materials:
 /// // built once, reused from one assembly to the next.
 /// let motif = scatter::build_pattern(&k)?;
@@ -3026,7 +3027,7 @@ pub struct AssemblyPattern {
 /// # use pyrucast::ops::scatter;
 /// let mut k = Matrix::empty();
 /// k.add_sub(Handle::new(bloc()))?;
-/// k.finalize()?;
+/// k.assemble()?;
 /// // A **literal** block lays its slots out in its COO order;
 /// // a computed block groups them per cell, in the order the kernel
 /// // produit.
@@ -3151,7 +3152,7 @@ impl AssemblyPattern {
     /// # use pyrucast::ops::scatter;
     /// let mut k = Matrix::empty();
     /// k.add_sub(Handle::new(bloc()))?;
-    /// k.finalize()?;
+    /// k.assemble()?;
     /// let motif = scatter::build_pattern(&k)?;
     /// // The number of **stored** entries — the CSR's, not the blocks'.
     /// assert_eq!(motif.nnz(), motif.col_indices.len());
@@ -3330,69 +3331,25 @@ fn csr_from_triplets_parallel(
 }
 
 impl Matrix {
-    /// Build the global DOF union + CSR. Must be called before any
-    /// solver-facing method (`to_csr`, `to_dmatrix`, `mul_dense`, `dense`,
-    /// `to_coo`, `to_csc`). Idempotent: a second call is a no-op if no
-    /// `add_sub` has occurred since the last `finalize`.
+    /// Assemble a matrix of **written** blocks only, without leaving this
+    /// container: the DOF orders, then the values summed into a CSR. A sum
+    /// with an unassembled operand needs it ([`literal_values`](Self::literal_values)),
+    /// and so do the tests that check the assemblers against it. The public
+    /// entry point is [`assemble`](Self::assemble), which also computes the
+    /// computed blocks. Does nothing on an assembled matrix.
     ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
-    /// # use pyrucast::containers::mesh::SubMesh;
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # let coords = Handle::new(Coords::new(1).unwrap());
-    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
-    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-    /// # let support = {
-    /// #     let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
-    /// #     sm.add_cell(&[a.id()]).unwrap();
-    /// #     sm.add_cell(&[b.id()]).unwrap();
-    /// #     Handle::new(sm)
-    /// # };
-    /// # let bloc = || {
-    /// #     let mut z = SubMatrix::new(
-    /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
-    /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
-    /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
-    /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
-    /// #     z.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// #     z
-    /// # };
-    /// let mut k = Matrix::empty();
-    /// k.add_sub(Handle::new(bloc()))?;
-    /// // The size reads off the blocks, without assembly…
-    /// assert_eq!((k.n_rows()?, k.n_cols()?), (2, 2));
-    /// // …but the sparse views exist only once the matrix is finalized.
-    /// assert!(k.to_csr().is_err());
-    /// k.finalize()?;
-    /// assert_eq!(k.to_csr()?.nnz(), 4);
-    /// // Idempotent: a second call reassembles nothing.
-    /// k.finalize()?;
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn finalize(&mut self) -> Result<()> {
+    /// **Errors**: a computed block, whose values only the model's kernel
+    /// computes — and `containers` does not depend on `models`.
+    pub(crate) fn assemble_written(&mut self) -> Result<()> {
         if self.assembled.is_some() {
             return Ok(());
         }
-        // A *computed* block carries no values: producing them means driving a
-        // model kernel that lives in `crate::models` (outside `containers`).
-        // Assembling it here would force a matrix↔kernel cycle, so we don't —
-        // the global assembler in `ops::matrix::stiffness` handles computed
-        // blocks and injects the finished CSR via `set_assembled`.
-        for h in &*self {
-            if h.read().is_computed() {
-                return Err(PyrucastError::Message(
-                    "Matrix::finalize: this matrix carries a computed block; \
-                     assemble it with m.assemble() (or \
-                     ops::matrix::stiffness), which scatters the kernel into \
-                     the global CSR — finalize() cannot (it must not reach into \
-                     the model/kernel)"
-                        .into(),
-                ));
-            }
+        if self.iter().any(|h| h.read().is_computed()) {
+            return Err(PyrucastError::Message(
+                "Matrix::assemble_written: this matrix carries a computed block, \
+                 whose values only Matrix::assemble computes"
+                    .into(),
+            ));
         }
         let vars = std::sync::Arc::new(self.field_names());
         let (row_keys, col_keys) = self.dof_orders(&vars)?;
@@ -3414,13 +3371,11 @@ impl Matrix {
         Ok(())
     }
 
-    /// Inject a globally-assembled CSR built by an external assembler
-    /// ([`crate::ops::matrix`]), bypassing [`finalize`](Self::finalize).
-    /// `row_dofs` / `col_dofs` must be this matrix' global DOF union (as
-    /// returned by [`row_dofs`](Self::row_dofs) / [`col_dofs`](Self::col_dofs))
-    /// and index `csr`. This is the path for matrices carrying *computed*
-    /// blocks, which `finalize` cannot assemble on its own (it would have to
-    /// reach into the model/kernel — the cycle Option B avoids).
+    /// Hand over the values an assembler of [`crate::ops::matrix`] computed.
+    /// `row_keys` / `col_keys` are this matrix's DOF orders (those of
+    /// [`row_dofs`](Self::row_dofs) / [`col_dofs`](Self::col_dofs)) and index
+    /// `csr`. The values of a computed block are computed there, by the
+    /// model's kernel, which `containers` does not depend on.
     pub(crate) fn set_assembled(
         &mut self,
         vars: std::sync::Arc<Vec<String>>,
@@ -3436,17 +3391,15 @@ impl Matrix {
         });
     }
 
-    /// Whether the values are there: assembled by an assembler, finalized, or
-    /// added by a sum.
+    /// Whether the values are there: assembled by an assembler or by
+    /// [`assemble`](Self::assemble), or added by a sum.
     pub(crate) fn is_assembled(&self) -> bool {
         self.assembled.is_some()
     }
 
     fn assembled_or_err(&self) -> Result<&AssembledData> {
         self.assembled.as_ref().ok_or_else(|| {
-            PyrucastError::Message(
-                "Matrix has not been finalized; call finalize() before solving".into(),
-            )
+            PyrucastError::Message("Matrix has no assembled values; call assemble() first".into())
         })
     }
 
@@ -3482,7 +3435,7 @@ impl Matrix {
     /// # use std::sync::Arc;
     /// let mut k = Matrix::empty();
     /// k.add_sub(Handle::new(bloc()))?;
-    /// k.finalize()?;
+    /// k.assemble()?;
     /// assert!(k.cached_factorization::<usize>().is_none()); // rien encore
     /// k.store_factorization(Arc::new(42usize));
     /// // The downcast is checked: another type yields nothing.
@@ -3529,7 +3482,7 @@ impl Matrix {
     /// # use std::sync::Arc;
     /// let mut k = Matrix::empty();
     /// k.add_sub(Handle::new(bloc()))?;
-    /// k.finalize()?;
+    /// k.assemble()?;
     /// // The solver drops its factorization here to reuse it as is at the next
     /// // step; any change to the matrix wipes it.
     /// k.store_factorization(Arc::new(42usize));
@@ -3543,7 +3496,7 @@ impl Matrix {
         *self.factorization.lock() = Some(factorization);
     }
 
-    // ── Block-traversal helpers (no finalize required) ──────────────────
+    // ── Block-traversal helpers (no assembly required) ──────────────────
 
     /// Deduplicated concatenation of the blocks' row (or col) DOFs, as packed
     /// [`DofKey`]s — the global DOF numbering.
@@ -3965,7 +3918,7 @@ impl Matrix {
     }
 
     /// Union of all row DOFs across blocks, in first-seen order.
-    /// If finalized, returns the cached order (consistent with the CSR).
+    /// If assembled, returns the assembled order (consistent with the CSR).
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -3999,7 +3952,7 @@ impl Matrix {
     }
 
     /// Union of all column DOFs across blocks, in first-seen order.
-    /// If finalized, returns the cached order (consistent with the CSR).
+    /// If assembled, returns the assembled order (consistent with the CSR).
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -4503,9 +4456,9 @@ impl Matrix {
         Ok(())
     }
 
-    // ── Solver-facing (require finalize) ────────────────────────────────
+    // ── Solver-facing (require the assembled values) ────────────────────────────────
 
-    /// Assembled CSR, **materialised**. Requires [`finalize`](Self::finalize).
+    /// Assembled CSR, **materialised**. Requires an assembled matrix.
     ///
     /// The assembled state holds the sparsity by `Arc`, shared with the
     /// assembler's memoised pattern, and only the values as its own. Building a
@@ -4542,7 +4495,7 @@ impl Matrix {
     }
 
     /// The assembled CSR **borrowed**: `(row_offsets, col_indices, values)`.
-    /// Requires [`finalize`](Self::finalize).
+    /// Requires an assembled matrix.
     ///
     /// The reading form of [`to_csr`](Self::to_csr), copying nothing.
     ///
@@ -4579,7 +4532,7 @@ impl Matrix {
         Ok((&a.csr.row_offsets, &a.csr.col_indices, &a.csr.values))
     }
 
-    /// Assembled dense matrix. Requires [`finalize`](Self::finalize).
+    /// Assembled dense matrix. Requires an assembled matrix.
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -4617,7 +4570,7 @@ impl Matrix {
         Ok(out)
     }
 
-    /// Assembled COO (rebuilt from the CSR). Requires [`finalize`](Self::finalize).
+    /// Assembled COO (rebuilt from the CSR). Requires an assembled matrix.
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -4651,7 +4604,7 @@ impl Matrix {
         Ok(coo)
     }
 
-    /// Assembled CSC. Requires [`finalize`](Self::finalize).
+    /// Assembled CSC. Requires an assembled matrix.
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -4707,8 +4660,8 @@ impl Matrix {
     /// matrix's row-side fields: `restrict(&f_ext, &k.row_mesh()?)` lands the
     /// external forces on the very supports [`mul_field`](Self::mul_field)
     /// (internal forces `K·u`) lives on, so `&f_ext_r - &f_int` aligns zone by
-    /// zone instead of passing through. Available before
-    /// [`finalize`](Self::finalize) (the supports are structural).
+    /// zone instead of passing through. Available before assembly (the
+    /// supports are structural).
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -4942,7 +4895,7 @@ impl Matrix {
     /// shared by several supports are stored once per zone, with equal values
     /// by construction (they come from the same vector).
     ///
-    /// Requires [`finalize`](Self::finalize).
+    /// Requires an assembled matrix.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -4973,7 +4926,7 @@ impl Matrix {
     /// # use pyrucast::containers::field::SubField;
     /// let mut k = Matrix::empty();
     /// k.add_sub(Handle::new(bloc()))?;
-    /// k.finalize()?;
+    /// k.assemble()?;
     /// // A flat vector, in column DOF order, becomes a field again —
     /// // laid on the **existing** POI1 supports, materializing no other.
     /// let f = k.field_from_col_values(&[10.0, 20.0])?;
@@ -5018,7 +4971,7 @@ impl Matrix {
     /// # use pyrucast::containers::field::SubField;
     /// let mut k = Matrix::empty();
     /// k.add_sub(Handle::new(bloc()))?;
-    /// k.finalize()?;
+    /// k.assemble()?;
     /// // Le jumeau côté lignes : la disposition dans laquelle arrive `A · x`,
     /// // and whose components are the **dual** variables.
     /// let f = k.field_from_row_values(&[1.0, 2.0])?;
@@ -5123,9 +5076,8 @@ impl Matrix {
     /// [`crate::ops::solver::solve`], which reads a *dual* right-hand side at the
     /// rows and produces a *primal* solution at the columns. Both use
     /// [`NodeField::gather`] / [`NodeField::from_dof_values`] to bridge the
-    /// abstract field and the flat DOF vector. Requires
-    /// [`finalize`](Self::finalize); the `*` operator (`&matrix * &field`) is
-    /// sugar for this method.
+    /// abstract field and the flat DOF vector. Requires an assembled matrix;
+    /// the `*` operator (`&matrix * &field`) is sugar for this method.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -5157,7 +5109,7 @@ impl Matrix {
     /// # use pyrucast::containers::node_field::NodeField;
     /// let mut k = Matrix::empty();
     /// k.add_sub(Handle::new(bloc()))?;
-    /// k.finalize()?;
+    /// k.assemble()?;
     /// // `x` is read at the **column** DOFs (primal), the result lives on the
     /// // **Row** DOFs (dual): K · u = f. The `*` operator is its sugar.
     /// let x = NodeField::from_submesh(&k.col_mesh()?.get(0)?, vec!["T".into()])?;
@@ -5271,8 +5223,8 @@ impl Matrix {
     /// contribution as many times as it is handed over — `k + k` is `2k`.
     ///
     /// **Errors**: an operand that carries a computed block and was never
-    /// assembled — its values do not exist yet. A literal-only operand is
-    /// finalized on the way.
+    /// assembled — its values do not exist yet. An operand of written blocks
+    /// only is assembled on the way.
     fn added(&self, other: &Matrix) -> Result<Matrix> {
         let (own_a, own_b);
         let a = match &self.assembled {
@@ -5319,15 +5271,18 @@ impl Matrix {
             literal.push(h.clone());
         }
         literal.post_push();
-        literal.finalize()?;
-        Ok(literal.assembled.take().expect("finalize assembles"))
+        literal.assemble_written()?;
+        Ok(literal
+            .assembled
+            .take()
+            .expect("assemble_written assembles"))
     }
 }
 
 impl std::ops::Mul<&NodeField> for &Matrix {
     type Output = Result<NodeField>;
     /// `&matrix * &field` — sugar for [`Matrix::mul_field`]. Fallible (the
-    /// matrix must be finalized), so the result is a `Result`: `(&k * &x)?`.
+    /// matrix must be assembled), so the result is a `Result`: `(&k * &x)?`.
     fn mul(self, rhs: &NodeField) -> Self::Output {
         self.mul_field(rhs)
     }
@@ -5540,7 +5495,7 @@ forward_ref_binop!(Sub, sub, SubMatrix, SubMatrix);
 impl crate::dump::Dump for Matrix {
     fn render(&self, opts: &crate::dump::DumpOptions) -> String {
         // Build the global labelled grid on the fly — `collect_*_dofs` and
-        // `build_global_triplets` take `&self`, so no `finalize()` (which needs
+        // `build_global_triplets` take `&self`, so no assembly (which needs
         // `&mut`) is required: a matrix dumps the same content whether assembled
         // or not.
         let grid = (|| -> Result<String> {
@@ -6269,11 +6224,11 @@ mod tests {
         let (_cfg, nodes, sup) = make_poi1(2);
         let (a, b) = (nodes[0].id(), nodes[1].id());
         let mut k = diag(&sup, &[a, b], 2.0);
-        k.finalize().unwrap();
+        k.assemble().unwrap();
 
         let scaled = &k * 3.0;
 
-        // Assembled on arrival: no `finalize()` / `assemble()` in between.
+        // Assembled on arrival: no `assemble()` in between.
         assert_eq!(scaled.to_csr().unwrap().values(), &[6.0, 6.0]);
         assert_eq!(scaled.get(a, "q", a, "T").unwrap(), 6.0);
         // The sparsity is untouched, so the index arrays are *shared*, not copied.
@@ -6341,7 +6296,7 @@ mod tests {
         assert_eq!(sum.get(a, "q", a, "T").unwrap(), 4.0, "k + k is 2k");
 
         let mut union = k.union(&k).unwrap();
-        union.finalize().unwrap();
+        union.assemble().unwrap();
         assert_eq!(union.len(), 1);
         assert_eq!(union.get(a, "q", a, "T").unwrap(), 2.0, "k | k is k");
 
@@ -6542,7 +6497,7 @@ mod tests {
         let mut k = Matrix::empty();
         k.add_sub(Handle::new(a)).unwrap();
         k.add_sub(Handle::new(b)).unwrap();
-        k.finalize().unwrap();
+        k.assemble().unwrap();
 
         let d = k.to_dmatrix().unwrap();
         assert_eq!(d.nrows(), 2);
@@ -6597,7 +6552,7 @@ mod tests {
         perm.swap(na.0 as usize, nb.0 as usize);
         coords.write().set_permutation(perm).unwrap();
 
-        k.finalize().unwrap();
+        k.assemble().unwrap();
 
         let rows = k.row_dofs().unwrap();
         assert_eq!(rows[0], (nb, "q".to_string()));
@@ -6608,7 +6563,7 @@ mod tests {
     }
 
     #[test]
-    fn not_finalized_yields_error() {
+    fn unassembled_yields_error() {
         let (_cfg, nodes, sup) = make_poi1(1);
         let a = nodes[0].id();
         let mut m = SubMatrix::new(
@@ -6622,10 +6577,10 @@ mod tests {
         m.add_entry(a, "q", a, "T", 1.0).unwrap();
         let mut k = Matrix::empty();
         k.add_sub(Handle::new(m)).unwrap();
-        // must not succeed before finalize
+        // must not succeed before assembly
         assert!(k.to_csr().is_err());
         assert!(k.to_dmatrix().is_err());
-        k.finalize().unwrap();
+        k.assemble().unwrap();
         assert!(k.to_csr().is_ok());
     }
 
@@ -6668,7 +6623,7 @@ mod tests {
         let mut k = Matrix::empty();
         k.add_sub(Handle::new(a)).unwrap();
         k.add_sub(Handle::new(b)).unwrap();
-        k.finalize().unwrap();
+        k.assemble().unwrap();
 
         assert_eq!(
             k.to_dmatrix().unwrap(),
@@ -6697,7 +6652,7 @@ mod tests {
         sm.add_entry(b, "q", b, "T", 2.0).unwrap();
         let mut k = Matrix::empty();
         k.add_sub(Handle::new(sm)).unwrap();
-        k.finalize().unwrap();
+        k.assemble().unwrap();
 
         // x = T:[1, 2] over both column nodes ⇒ y = K·x = [0, 3] at the "q" rows.
         let mut x_sub = SubNodeField::from_poi1(&sup, vec!["T".into()]).unwrap();
@@ -6850,9 +6805,9 @@ mod tests {
         m.add_sub(Handle::new(c)).unwrap();
         m.add_sub(Handle::new(ct)).unwrap();
 
-        // Not finalized yet ⇒ error.
+        // Not assembled yet ⇒ error.
         assert!(m.field_from_col_values(&[0.0]).is_err());
-        m.finalize().unwrap();
+        m.assemble().unwrap();
 
         // x holds its own flat index at every column DOF.
         let col_dofs = m.col_dofs().unwrap();
@@ -6905,7 +6860,7 @@ mod tests {
         let mut m = Matrix::empty();
         m.add_sub(Handle::new(a)).unwrap();
         m.add_sub(Handle::new(b)).unwrap();
-        m.finalize().unwrap();
+        m.assemble().unwrap();
 
         let col_dofs = m.col_dofs().unwrap();
         let x: Vec<f64> = (0..col_dofs.len()).map(|i| 10.0 + i as f64).collect();
@@ -6970,7 +6925,7 @@ mod tests {
         m.add_sub(Handle::new(k)).unwrap();
         m.add_sub(Handle::new(c)).unwrap();
 
-        // Meshes: available pre-finalize, deduplicated, sharing the handles.
+        // Meshes: available before assembly, deduplicated, sharing the handles.
         let rm = m.row_mesh().unwrap();
         assert_eq!(rm.len(), 2);
         assert!(rm.get(0).unwrap().same_object(&phys));
@@ -6979,7 +6934,7 @@ mod tests {
         assert_eq!(cm.len(), 1, "K and C share the phys column support");
         assert!(cm.get(0).unwrap().same_object(&phys));
 
-        m.finalize().unwrap();
+        m.assemble().unwrap();
 
         // f_int = A · x with x: T = [1, 1] on phys.
         let x = NodeField::from_sub(
@@ -7062,7 +7017,7 @@ mod tests {
 
         let mut m = Matrix::empty();
         m.add_sub(Handle::new(blk)).unwrap();
-        m.finalize().unwrap();
+        m.assemble().unwrap();
 
         let f = m.field_from_row_values(&[3.0, 7.0]).unwrap();
         assert_eq!(f.len(), 1);

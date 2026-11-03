@@ -734,7 +734,7 @@ mod tests {
         block.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
         let mut m = Matrix::empty();
         m.add_sub(Handle::new(block)).unwrap();
-        m.finalize().unwrap();
+        m.assemble().unwrap();
 
         let mut rhs = SubNodeField::from_poi1(&sm, vec!["q".into()]).unwrap();
         rhs.set_value(a.id(), "q", 6.0).unwrap();

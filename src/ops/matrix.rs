@@ -45,7 +45,7 @@ use crate::ops::element_field::behavior::previous_state_names;
 /// Each [`crate::containers::model::SubModel`] contributes one or more
 /// [`crate::containers::matrix::SubMatrix`] blocks
 /// (`HeatConduction` → 1 block, `Dirichlet` → C + Cᵀ).
-/// The aggregate is finalized before being returned.
+/// The matrix is returned assembled.
 ///
 /// ```
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -312,22 +312,51 @@ impl Matrix {
     /// configuration active now.
     ///
     /// A matrix is assembled once: one that already is keeps its values, and
-    /// this does nothing (as [`Matrix::finalize`]). The values of another
-    /// configuration come from a new matrix.
+    /// this does nothing. The values of another configuration come from a new
+    /// matrix.
     ///
     /// The sparsity is built from the blocks
     /// ([`crate::ops::scatter::build_pattern`], self-contained: a computed
-    /// block resolves its fill through its recipe, a literal block through its
-    /// COO) and the values are scattered into it. This is the composition path,
-    /// for a matrix whose blocks were put together without their values:
-    /// `add_sub`, `|`, `filter`, `exclude` — which [`Matrix::finalize`] cannot
-    /// handle once computed blocks are present, and which [`stiffness`] cannot
-    /// reach (it only knows a `Model`).
+    /// block resolves its fill through its recipe, a written block through its
+    /// COO) and the values are scattered into it. This is the path of a matrix
+    /// whose blocks were put together without their values: written by hand,
+    /// `add_sub`, `|`, `filter`, `exclude` — which [`stiffness`] cannot reach
+    /// (it only knows a `Model`).
     ///
-    /// ```ignore
-    /// let mut k = crate::ops::matrix::stiffness(&model, &materials)?;
-    /// k.add_sub(Handle::new(some_block))?;   // invalidates the assembled state
-    /// k.assemble()?;                    // assembles, new block included
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
+    /// # use pyrucast::containers::mesh::SubMesh;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let support = {
+    /// #     let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+    /// #     sm.add_cell(&[a.id()]).unwrap();
+    /// #     sm.add_cell(&[b.id()]).unwrap();
+    /// #     Handle::new(sm)
+    /// # };
+    /// # let mut bloc = SubMatrix::new(
+    /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
+    /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
+    /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
+    /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
+    /// let mut k = Matrix::empty();
+    /// k.add_sub(Handle::new(bloc))?;
+    /// // The size reads off the blocks, without assembly…
+    /// assert_eq!((k.n_rows()?, k.n_cols()?), (2, 2));
+    /// // …but the values exist only once the matrix is assembled.
+    /// assert!(k.to_csr().is_err());
+    /// k.assemble()?;
+    /// assert_eq!(k.to_csr()?.nnz(), 4);
+    /// // Once is enough: a second call reassembles nothing.
+    /// k.assemble()?;
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     ///
     /// Unlike [`stiffness`], this does not consult the model's cached pattern
@@ -701,9 +730,9 @@ mod tests {
     use crate::ops::element_field::StrainMeasure;
 
     /// Assemble the stiffness the **literal** way: every sub-model fills its
-    /// `SubMatrix` blocks eagerly and `finalize` scatters them. This is the
-    /// historical path the computed path must match bit-for-bit — kept here
-    /// purely as the equivalence reference.
+    /// `SubMatrix` blocks eagerly and `assemble_written` sums them. The
+    /// computed path must match it bit-for-bit: it is kept here as the
+    /// reference.
     ///
     /// It reuses the [`Contribution`] seam so it stays honest: a `Literal`
     /// contribution (Dirichlet's C / Cᵀ) is taken as-is, while a `Computed` one
@@ -753,57 +782,8 @@ mod tests {
                 k.add_sub(Handle::new(block))?;
             }
         }
-        k.finalize()?;
+        k.assemble_written()?;
         Ok(k)
-    }
-
-    /// Two heat-conduction zones sharing a node, plus a Dirichlet constraint —
-    /// so the assembly mixes **computed** blocks (the two zones) with **literal**
-    /// ones (Dirichlet's C / Cᵀ), and a shared node forces accumulation.
-    fn two_zone_heat_with_dirichlet() -> (Model, ElementField) {
-        let coords = Handle::new(Coords::new(1).unwrap());
-        let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
-        let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
-        let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();
-        let mut mesh = Mesh::empty();
-        let sm_a = {
-            let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-            sm.add_cell(&[n0.id(), n1.id()]).unwrap();
-            Handle::new(sm)
-        };
-        let sm_b = {
-            let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-            sm.add_cell(&[n1.id(), n2.id()]).unwrap();
-            Handle::new(sm)
-        };
-        mesh.add_sub(sm_a).unwrap();
-        mesh.add_sub(sm_b).unwrap();
-        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-
-        let mut model = Model::empty();
-        model
-            .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
-                    .unwrap(),
-            ))
-            .unwrap();
-        let imposed =
-            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
-        model
-            .add_sub(Handle::new(
-                SubModel::dirichlet(&imposed, &model, "T", Default::default()).unwrap(),
-            ))
-            .unwrap();
-        model
-            .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(1).unwrap(), MaterialSymmetry::Isotropic)
-                    .unwrap(),
-            ))
-            .unwrap();
-
-        let materials =
-            material_field_per_sub_model(&model, &[&[("k", 1.0)], &[], &[("k", 4.0)]]).unwrap();
-        (model, materials)
     }
 
     /// A single heat-conduction zone over an `n_elems`-element SEG2 chain, plus
@@ -1014,15 +994,15 @@ mod tests {
         assert!(k.symmetric(), "and the declaration must agree");
     }
 
-    /// The same, through the other assembly path. `finalize` (literal blocks) and
-    /// `assemble` (scattered kernels) are deliberately parallel so the two can be
+    /// The same, through the other assembly path. `assemble_written` (written
+    /// blocks) and `assemble` (scattered kernels) are deliberately parallel so the two can be
     /// compared — which only means something if they number the DOFs alike.
     #[test]
     fn both_assembly_paths_number_the_immersed_case_alike() {
         let (model, materials) = immersed_node_in_a_triangle();
         let scattered = stiffness(&model, &materials).unwrap();
         let mut literal = assemble_literal_reference(&model, &materials).unwrap();
-        literal.finalize().unwrap();
+        literal.assemble_written().unwrap();
 
         assert_eq!(scattered.row_dofs().unwrap(), literal.row_dofs().unwrap());
         assert_eq!(scattered.col_dofs().unwrap(), literal.col_dofs().unwrap());
@@ -1236,7 +1216,7 @@ mod tests {
         let k = stiffness(&model, &materials).unwrap();
         let scaled = &k * 2.5;
 
-        // Read straight back: no `finalize()` / `assemble()` in between.
+        // Read straight back: no `assemble()` in between.
         let k_ref = assemble_literal_reference(&model, &materials).unwrap();
         let csr_new = scaled.to_csr().unwrap();
         let csr_ref = k_ref.to_csr().unwrap();
@@ -1266,15 +1246,12 @@ mod tests {
             );
         }
 
-        // A scaled matrix that was **not** assembled still cannot be finalized:
-        // the element kernel lives outside `containers`, so a computed block
-        // sends the caller to `assemble()`. (Owned `*`, so this also exercises
-        // the in-place path.)
+        // A scaled matrix that was **not** assembled has no values until
+        // `assemble()`. (Owned `*`, so this also exercises the in-place path.)
         let mut unassembled = assemble_computed_blocks(&model, &materials) * 2.5;
-        assert!(
-            unassembled.finalize().is_err(),
-            "finalize must still refuse an unassembled computed block"
-        );
+        assert!(unassembled.to_csr().is_err());
+        unassembled.assemble().unwrap();
+        assert!(unassembled.to_csr().is_ok());
     }
 
     /// A bar of two SEG2 of length 1 and conductivity 1, with a second
@@ -1524,9 +1501,8 @@ mod tests {
 
     /// Composition: after `stiffness`, add a **literal block of arbitrary
     /// provenance** to the (computed-block) matrix and re-assemble it with the
-    /// self-contained [`assemble`]. `finalize` refuses (computed blocks present),
-    /// but `assemble` rebuilds the sparsity from the blocks and folds the new
-    /// contribution in.
+    /// self-contained [`assemble`], which rebuilds the sparsity from the blocks
+    /// and folds the new contribution in.
     #[test]
     fn assemble_composes_extra_literal_block() {
         // One heat element on nodes a—b.
@@ -1562,8 +1538,6 @@ mod tests {
         blk.add_entry(a.id(), "q", a.id(), "T", 10.0).unwrap();
         k.add_sub(Handle::new(blk)).unwrap();
 
-        // `finalize` can't (computed block present); the self-contained path can.
-        assert!(k.finalize().is_err());
         k.assemble().unwrap();
 
         let after = k.get(a.id(), "q", a.id(), "T").unwrap();
@@ -1571,47 +1545,6 @@ mod tests {
             (after - (before + 10.0)).abs() <= 1e-12 * (1.0 + before.abs()),
             "composition failed: before {before}, after {after}"
         );
-    }
-
-    /// A matrix carrying a computed block cannot be assembled through
-    /// `finalize` — it must go through `ops::matrix`. `finalize` says so
-    /// rather than silently dropping the computed contribution.
-    #[test]
-    fn finalize_rejects_computed_block() {
-        let (model, materials) = two_zone_heat_with_dirichlet();
-        // Build the blocks (computed for the HC zones) but stop before the
-        // global assembly, then try to finalize directly.
-        let mut k = Matrix::empty();
-        for sub_h in &model {
-            let built = {
-                let sub = sub_h.read();
-                let material = sub
-                    .material_fespace()
-                    .map(|fespace| materials.sub_for_fespace(&fespace).unwrap());
-                sub.as_kind().stiffness_layout().map(|layout| {
-                    SubMatrix::computed(
-                        layout.support.clone(),
-                        layout.support,
-                        layout.dual_vars,
-                        layout.primal_vars,
-                        layout.ordering,
-                        layout.symmetry,
-                        ComputedRecipe {
-                            submodel: sub_h.clone(),
-                            fespaces: layout.fespaces,
-                            material,
-                            kind: MatrixKind::Stiffness,
-                            inputs: KernelInputs::MaterialOnly,
-                            col_fespaces: Vec::new(),
-                        },
-                    )
-                })
-            };
-            if let Some(block) = built {
-                k.add_sub(Handle::new(block)).unwrap();
-            }
-        }
-        assert!(k.finalize().is_err());
     }
 
     /// The support a stiffness block carries (its `col_support`) is the cached

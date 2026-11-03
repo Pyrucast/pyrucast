@@ -218,8 +218,9 @@ impl PySubMatrix {
 /// A global finite-element matrix, assembled from rectangular blocks
 /// (`SubMatrix`).
 ///
-/// Build blocks with `Matrix.block(...)`, compose them with `|`, then call
-/// `finalize()` before solving. Index it (`matrix[i]`) to reach a block.
+/// An assembler (`pyrucast.matrix.stiffness`, …) returns it assembled. Blocks
+/// written with `Matrix.block(...)` and composed with `|` get their values from
+/// `assemble()`. Index it (`matrix[i]`) to reach a block.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Matrix")]
 pub struct PyMatrix {
@@ -229,8 +230,8 @@ pub struct PyMatrix {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyMatrix {
-    /// `Matrix()` — empty aggregate. Populate via `add_sub_matrix`, or
-    /// build blocks with `Matrix.block(...)` and compose them with `|`.
+    /// `Matrix()` — empty matrix. Add blocks with `add_sub`, or build them with
+    /// `Matrix.block(...)` and compose them with `|`.
     #[new]
     fn py_new() -> Self {
         Self {
@@ -243,7 +244,7 @@ impl PyMatrix {
     /// `col_support` may each be a `SubMesh` view or a **unitary** `Mesh`.
     /// `ordering` is `"nodes_then_vars"` (default) or `"vars_then_nodes"`.
     /// Fill entries via the block view (`block[0].add_entry(...)`) and
-    /// compose several blocks with `|`, then `finalize()`.
+    /// compose several blocks with `|`, then `assemble()`.
     #[classmethod]
     #[pyo3(signature = (row_support, col_support, dual_vars, primal_vars, ordering="nodes_then_vars", symmetry=Symmetry::None))]
     fn block(
@@ -273,32 +274,23 @@ impl PyMatrix {
     }
 
     /// Assemble this matrix **from its blocks alone** — no `Model` — on the
-    /// configuration active now, mutating it in place. A matrix is assembled
-    /// once: on one that already is, this does nothing.
+    /// configuration active now, in place: a computed block is computed, a
+    /// written block brings its values. A matrix is assembled once: on one
+    /// that already is, this does nothing.
     ///
-    /// The composition path, for blocks put together without their values
-    /// (`|` union, `add_sub`, `filter`, `exclude`), including *computed* ones
-    /// (which `finalize()` refuses — the element kernel lives outside
-    /// `containers`). Not needed after `matrix * scalar` nor after a sum: both
-    /// carry the assembled values along — `pyrucast.solver.solve(m / dt + k,
-    /// rhs)`.
+    /// Needed for blocks put together without their values (`Matrix.block`,
+    /// `|`, `add_sub`, `filter`, `exclude`). Not needed after `matrix * scalar`
+    /// nor after a sum: both carry the assembled values along —
+    /// `pyrucast.solver.solve(m / dt + k, rhs)`.
     fn assemble(&mut self) -> PyResult<()> {
         self.inner.assemble()?;
-        Ok(())
-    }
-
-    /// Build the global DOF table and CSR. Must be called before any
-    /// solver-facing method (`dense`, `mul_dense`, …).
-    fn finalize(&mut self) -> PyResult<()> {
-        self.inner.finalize()?;
         Ok(())
     }
 
     /// `Matrix.filter(physics)` — a new `Matrix` holding only the blocks **whose
     /// nature set contains** the given physics (`"mechanical"`, `"thermal"`,
     /// `"constraint"`, `"other"`, `"diffusion"`, `"radiation"`). The result is
-    /// **not** finalized — call `assemble` (or `finalize` for literal-only
-    /// blocks) before solving.
+    /// without values: call `assemble()` before solving.
     fn filter(&self, physics: Physics) -> Self {
         Self {
             inner: self.inner.filter(physics),
@@ -308,7 +300,7 @@ impl PyMatrix {
     /// `Matrix.exclude(physics)` — the complement of `filter`: a new `Matrix`
     /// holding only the blocks **whose nature set does not contain** the given
     /// physics. Composes with `filter`: `k.filter("thermal").exclude("constraint")`
-    /// keeps the conduction blocks without the Dirichlet pair. Not finalized,
+    /// keeps the conduction blocks without the Dirichlet pair. Without values,
     /// like `filter`.
     fn exclude(&self, physics: Physics) -> Self {
         Self {
@@ -328,13 +320,15 @@ impl PyMatrix {
             .collect()
     }
 
-    /// Total number of rows of the (finalized) global matrix.
+    /// Number of rows: the distinct (node, dual) pairs of the blocks, read
+    /// off the blocks, assembled or not.
     #[getter]
     fn n_rows(&self) -> PyResult<usize> {
         Ok(self.inner.n_rows()?)
     }
 
-    /// Total number of columns of the (finalized) global matrix.
+    /// Number of columns: the distinct (node, primal) pairs of the blocks,
+    /// read off the blocks, assembled or not.
     #[getter]
     fn n_cols(&self) -> PyResult<usize> {
         Ok(self.inner.n_cols()?)
@@ -410,7 +404,7 @@ impl PyMatrix {
     }
 
     /// `matrix / scalar` — a fresh `Matrix` whose blocks carry the divided
-    /// `factor` (lazy). Not finalized; see `__mul__`. Raises `ZeroDivisionError`
+    /// `factor` (lazy), assembled if the matrix was. Raises `ZeroDivisionError`
     /// for a divisor of zero, and `ValueError` for one that is not finite:
     /// either would make every value of the result non-finite.
     fn __truediv__(&self, rhs: f64) -> PyResult<PyMatrix> {
@@ -459,8 +453,7 @@ impl PyMatrix {
     /// read at the matrix's column DOFs, result a fresh `NodeField` over its row
     /// DOFs) or, for a `float`, a scalar scale: a fresh `Matrix` whose blocks
     /// carry the scaled `factor` (lazy — no value is rewritten). The scaled
-    /// result is **not** finalized; call `finalize()` (or `assemble` for computed
-    /// blocks) before solving or querying it.
+    /// result is assembled if the matrix was.
     fn __mul__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let py = rhs.py();
         if let Ok(field) = rhs.extract::<PyRef<'_, PyNodeField>>() {
@@ -631,7 +624,8 @@ class PyMatrix:
     def __or__(self, other: pyo3_stub_gen.RustType["PyMatrix"] | pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
         """`matrix | other` → a fresh `Matrix` holding the blocks of both, in
         first-seen order and deduplicated by object identity. Assemble the global
-        operator this way, then call `finalize()` before solving."""
+        operator this way; the result has no values, call `assemble()` before
+        solving."""
     def __ror__(self, other: pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
         """`sub_matrix | matrix` — the mirror of `matrix | sub_matrix`,
         differing only in that the lone block comes first."""
