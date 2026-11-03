@@ -93,17 +93,9 @@ and the Rust docs of `src/coords.rs` and `src/atoms/node.rs`.
 
 ## Rust comments that describe removed or older things
 
-- `src/handle.rs` module doc: the locking rule only forbids a second guard
-  under a write guard; parking_lot's lock is task-fair, so a second **read**
-  guard in the same thread also deadlocks once a writer waits (the
-  `ReadGuard` doctest takes two reads in one thread). The `Debug` impl doc
-  tells the older `Handle<…> { #7f3a2c }` format.
 - `SubFiniteElementSpace::coloring` doc: "like the lazy index maps on
   `SubMatrix`" (there are none); `coloring()` doc: "global/master DOFs once
   MPC condensation lands" is a plan.
-- `SubMesh::to_poi1` comments: "a different slot", "the previous
-  `Handle::new(sm.read().to_poi1()?)` idiom", and "640 k QUA4 took ~8 min,
-  versus ~40 ms now" are history.
 
 ## Book pages not reviewed yet
 
