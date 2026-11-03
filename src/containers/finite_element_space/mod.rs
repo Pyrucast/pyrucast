@@ -137,10 +137,10 @@ pub struct SubFiniteElementSpace {
     /// families fill it; empty otherwise.
     field_d2n_at_g: Vec<f64>,
 
-    /// Cell colouring for conflict-free parallel assembly, computed once and
+    /// Cell colouring for conflict-free parallel scatters, computed once and
     /// memoised. Topological (depends only on the frozen connectivity), so it is
-    /// invariant for the subspace's lifetime. Not serialised — recomputed after
-    /// a load, like the lazy index maps on `SubMatrix`.
+    /// invariant for the subspace's lifetime. Not serialised — recomputed at its
+    /// first use after a load.
     #[serde(skip)]
     coloring: OnceLock<Vec<Vec<usize>>>,
 }
@@ -276,14 +276,15 @@ impl SubFiniteElementSpace {
         })
     }
 
-    /// Cell colouring for conflict-free parallel assembly, computed **once** and
-    /// cached. Two cells of the same colour share no key, so their element
-    /// matrices scatter into the global matrix in parallel without conflict.
+    /// Cell colouring for conflict-free parallel scatters, computed **once** and
+    /// cached. Two cells of the same colour share no key, so they scatter in
+    /// parallel without conflict: element matrices into a global matrix, element
+    /// vectors into a nodal field.
     ///
-    /// The `compute` closure is supplied by the caller (the assembly `ops`), so
-    /// this container layer stays free of any assembly dependency and free to
-    /// choose the conflict keys (cell nodes today; global/master DOFs once MPC
-    /// condensation lands). It runs at most once per subspace.
+    /// The `compute` closure is supplied by the caller (the drivers of
+    /// [`crate::models::kernel`]), so this container layer stays free of any
+    /// assembly dependency; those drivers take the cell nodes as keys. It runs at
+    /// most once per subspace.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
