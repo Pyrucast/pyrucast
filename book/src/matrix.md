@@ -63,6 +63,13 @@ Pour écrire un bloc soi-même, `Matrix.block` rend une matrice d'un seul bloc,
 vide, qu'on remplit par `add_entry`. Deux valeurs écrites dans la même case
 s'additionnent. `assemble()` donne ensuite ses valeurs à la matrice.
 
+Un bloc est **scellé** dès qu'une matrice qui le contient reçoit ses valeurs :
+par `assemble()`, par un assembleur ou par une somme. `add_entry` est alors
+refusé, puisque les valeurs de la matrice ont été calculées à partir de ses
+entrées. On écrit donc un bloc avant d'assembler, comme on remplit une
+[zone de maillage](mesh.md#scellement) avant qu'un espace ou un champ ne la
+scelle.
+
 ```python
 {{#include ../../tests/python/test_doc_matrice.py:bloc_ecrit}}
 ```
@@ -262,7 +269,13 @@ table de noms de la matrice (`dof_vars()`). `row_dofs()` rend la forme lisible,
   calcul lit en plus du matériau (la contrainte pour la raideur géométrique, la
   déformation et l'état précédent pour la tangente) ;
 - `symmetry`, `physics`, `factor`, et `row_sense`, le sens (égalité ou
-  inégalité) des lignes `imposed`, que lit le solveur.
+  inégalité) des lignes `imposed`, que lit le solveur ;
+- `sealed`, posé quand une matrice qui contient le bloc reçoit ses valeurs
+  (`Matrix::set_values`, par où passent l'assemblage et la somme), et lu par
+  `add_entry`. Il se pose comme celui d'une zone de maillage : la fonction
+  `seal` lit d'abord, et ne prend le verrou d'écriture que si le bloc n'est
+  pas encore scellé. Il n'est pas sauvegardé : une matrice relue n'a pas de
+  valeurs, et son assemblage scelle de nouveau ses blocs.
 
 Sur un bloc calculé, toute lecture de valeurs (`get`, `iter_entries`,
 `to_dmatrix`, `to_coo`, `to_csr`, `to_csc`) rend une erreur.

@@ -1402,14 +1402,16 @@ mod tests {
         assert!(thermal.get(a, "q", a, "T").is_err());
         assert!(thermal.iter_entries().is_err());
         // A computed block holds no value: every reader says so alike.
-        let block = k.iter().find(|h| h.read().is_computed()).unwrap();
-        let block = block.read();
-        assert!(block.get(a, "q", a, "T").is_err());
-        assert!(block.iter_entries().is_err());
-        assert!(block.to_dmatrix().is_err());
-        assert!(block.to_coo().is_err());
-        assert!(block.to_csr().is_err());
-        assert!(block.to_csc().is_err());
+        {
+            let block = k.iter().find(|h| h.read().is_computed()).unwrap();
+            let block = block.read();
+            assert!(block.get(a, "q", a, "T").is_err());
+            assert!(block.iter_entries().is_err());
+            assert!(block.to_dmatrix().is_err());
+            assert!(block.to_coo().is_err());
+            assert!(block.to_csr().is_err());
+            assert!(block.to_csc().is_err());
+        }
 
         thermal.assemble().unwrap();
         // Assembled, its entries are the values `get` reads.

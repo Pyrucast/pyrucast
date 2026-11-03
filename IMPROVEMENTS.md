@@ -60,15 +60,6 @@ returns a 0×0 matrix. `M.lump() / dt + K` works only because `K` brings blocks
 covering the same rows. Lead: give the result a literal diagonal block on the
 row support, so that it describes itself like any other matrix.
 
-## Writing into a block of an assembled matrix
-
-`add_entry` on a block (`k[0].add_entry(...)`) changes the block but not the
-matrix that holds it, which keeps its assembled values and its cached
-factorization: after it, `k.get(...)` and `k[0].get(...)` disagree, and
-`k.solve` returns the old solution. Measured: 2.0 against 4.0 after adding 2.0
-to a finalized block. Decide: refuse the write on a block that an assembled
-matrix holds, or let the matrix see it.
-
 ## Matrix comments that describe older things
 
 - `src/containers/matrix.rs` module doc: `Matrix` is "Read-only: every

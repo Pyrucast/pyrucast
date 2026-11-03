@@ -504,7 +504,7 @@ impl PyMatrix {
     fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyMatrix> {
         let inner = match SumOperand::extract(rhs, "matrix + x")? {
             SumOperand::Aggregate(m) => (&self.inner + &m.inner)?,
-            SumOperand::Block(b) => (&self.inner + &*b.handle.read())?,
+            SumOperand::Block(b) => (&self.inner + &b.as_operand()?)?,
         };
         Ok(PyMatrix { inner })
     }
@@ -513,9 +513,21 @@ impl PyMatrix {
     fn __sub__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyMatrix> {
         let inner = match SumOperand::extract(rhs, "matrix - x")? {
             SumOperand::Aggregate(m) => (&self.inner - &m.inner)?,
-            SumOperand::Block(b) => (&self.inner - &*b.handle.read())?,
+            SumOperand::Block(b) => (&self.inner - &b.as_operand()?)?,
         };
         Ok(PyMatrix { inner })
+    }
+}
+
+impl PySubMatrix {
+    /// A copy of this block, alone in a one-block `Matrix`: the operand of a
+    /// sum, as the Rust `&k + &block` builds it. No guard outlives the copy —
+    /// the sum seals its blocks, and `b + b` hands the same one over twice.
+    fn as_operand(&self) -> PyResult<Matrix> {
+        let copy = (*self.handle.read()).clone();
+        let mut m = Matrix::empty();
+        m.add_sub(Handle::new(copy))?;
+        Ok(m)
     }
 }
 
@@ -526,14 +538,8 @@ impl PySubMatrix {
     /// other operand's, as `Matrix.__add__` does.
     fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyMatrix> {
         let inner = match SumOperand::extract(rhs, "sub_matrix + x")? {
-            SumOperand::Aggregate(m) => (&*self.handle.read() + &m.inner)?,
-            // One guard at a time: `b + b` hands over the same block twice, and
-            // a second read on a lock this thread already holds may deadlock
-            // against a queued writer.
-            SumOperand::Block(b) => {
-                let other = (*b.handle.read()).clone();
-                (&*self.handle.read() + &other)?
-            }
+            SumOperand::Aggregate(m) => (&self.as_operand()? + &m.inner)?,
+            SumOperand::Block(b) => (&self.as_operand()? + &b.as_operand()?)?,
         };
         Ok(PyMatrix { inner })
     }
@@ -541,11 +547,8 @@ impl PySubMatrix {
     /// `sub_matrix - other` — as `+`, with the right-hand side negated.
     fn __sub__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyMatrix> {
         let inner = match SumOperand::extract(rhs, "sub_matrix - x")? {
-            SumOperand::Aggregate(m) => (&*self.handle.read() - &m.inner)?,
-            SumOperand::Block(b) => {
-                let other = (*b.handle.read()).clone();
-                (&*self.handle.read() - &other)?
-            }
+            SumOperand::Aggregate(m) => (&self.as_operand()? - &m.inner)?,
+            SumOperand::Block(b) => (&self.as_operand()? - &b.as_operand()?)?,
         };
         Ok(PyMatrix { inner })
     }

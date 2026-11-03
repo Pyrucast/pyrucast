@@ -118,6 +118,19 @@ def test_block_refuses_a_support_that_repeats_a_node():
         pyrucast.NodeField(repeated, ["T"])
 
 
+def test_an_assembled_matrix_seals_its_blocks():
+    """The values of an assembled matrix were computed from its blocks'
+    entries: a block takes no more once the matrix is assembled."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    k = pyrucast.Matrix.block(_poi1(c, [a]), _poi1(c, [a]), ["q"], ["T"])
+    k[0].add_entry(a, "q", a, "T", 2.0)
+    k.assemble()
+    with pytest.raises(RuntimeError, match="assembled matrix"):
+        k[0].add_entry(a, "q", a, "T", 2.0)
+    assert k.get(a, "q", a, "T") == 2.0
+
+
 def test_sub_matrix_row_and_col_dofs():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])

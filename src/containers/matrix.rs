@@ -595,6 +595,22 @@ pub struct SubMatrix {
     /// reads it to know which rows are inequalities, the coefficients being
     /// the row itself. Meaningless on any other row.
     row_sense: RelationSense,
+    /// Set once a matrix holding this block is assembled: the assembled values
+    /// and the solver's cache were computed from this block's entries, so
+    /// [`add_entry`](Self::add_entry) refuses to change them. Not archived: a
+    /// reloaded matrix has no values, and its assembly seals the block again.
+    #[serde(skip)]
+    sealed: bool,
+}
+
+/// Seal a block, as [`crate::containers::mesh::seal`] seals a zone: the write
+/// lock is taken only if the block is not sealed yet, so sealing again a block
+/// already sealed coexists with a reader holding it.
+fn seal(handle: &Handle<SubMatrix>) {
+    if handle.read().sealed {
+        return;
+    }
+    handle.write().sealed = true;
 }
 
 impl SubMatrix {
@@ -657,6 +673,7 @@ impl SubMatrix {
             physics: Vec::new(),
             factor: 1.0,
             row_sense: RelationSense::Equality,
+            sealed: false,
         })
     }
 
@@ -754,6 +771,7 @@ impl SubMatrix {
             physics: Vec::new(),
             factor: 1.0,
             row_sense: RelationSense::Equality,
+            sealed: false,
         })
     }
 
@@ -841,6 +859,7 @@ impl SubMatrix {
             physics: Vec::new(),
             factor: 1.0,
             row_sense: RelationSense::Equality,
+            sealed: false,
         })
     }
 
@@ -1638,8 +1657,8 @@ impl SubMatrix {
     ) -> Result<()> {
         // The supports' own `NodeId → position` tables, borrowed in place. Rows
         // and columns usually share one handle, so ask that lock only once.
-        // The computed-block refusal lives in `add_entry_with`, tested once here
-        // rather than twice.
+        // The refusals (computed or sealed block) live in `add_entry_with`,
+        // tested once here rather than twice.
         let (row_g, col_g) = self.support_guards();
         let row = &row_g;
         let col = col_g.as_deref().unwrap_or(&row_g);
@@ -1663,12 +1682,17 @@ impl SubMatrix {
         col_var: &str,
         value: f64,
     ) -> Result<()> {
-        if self.is_computed() {
-            return Err(PyrucastError::Message(
+        if self.recipe.is_some() || self.sealed {
+            return Err(PyrucastError::Message(if self.sealed {
+                "add_entry: this block belongs to an assembled matrix, whose \
+                 values were computed from its entries; write a block before \
+                 assembling it, or build a new one"
+                    .into()
+            } else {
                 "add_entry: this is a computed block (its values come from its \
                  recipe at assembly time); literal entries cannot be added"
-                    .into(),
-            ));
+                    .into()
+            }));
         }
         let n_rn = row_support.connectivity().len();
         let n_dv = self.dual_vars.len();
@@ -3378,7 +3402,7 @@ impl Matrix {
             values,
             ncols: col_keys.len(),
         };
-        self.assembled = Some(AssembledData {
+        self.set_values(AssembledData {
             vars,
             row_keys: std::sync::Arc::new(row_keys),
             col_keys: std::sync::Arc::new(col_keys),
@@ -3399,12 +3423,24 @@ impl Matrix {
         col_keys: std::sync::Arc<Vec<DofKey>>,
         csr: AssembledCsr,
     ) {
-        self.assembled = Some(AssembledData {
+        self.set_values(AssembledData {
             vars,
             row_keys,
             col_keys,
             csr,
         });
+    }
+
+    /// Give the matrix its values, and seal every block they were computed
+    /// from: a block's later [`add_entry`](SubMatrix::add_entry) would change
+    /// what the values say without changing them. Every path to an assembled
+    /// matrix goes through here, except scaling, whose blocks are copies of
+    /// blocks already sealed.
+    fn set_values(&mut self, values: AssembledData) {
+        for h in &*self {
+            seal(h);
+        }
+        self.assembled = Some(values);
     }
 
     /// Whether the values are there: assembled by an assembler or by
@@ -5267,7 +5303,7 @@ impl Matrix {
         let perm = coords.as_ref().and_then(|c| c.permutation());
         let values = a.sum(b, perm, out.symmetric());
         drop(coords);
-        out.assembled = Some(values);
+        out.set_values(values);
         Ok(out)
     }
 
@@ -5795,6 +5831,44 @@ mod tests {
 
         let halved = both.subset([0]).unwrap();
         assert!(!halved.symmetric(), "one half alone carries no symmetry");
+    }
+
+    /// Once a matrix holding it is assembled, a block takes no more entries:
+    /// the values and the solver's cache were computed from them. Before, it
+    /// does — and a sum assembles, so it seals too.
+    #[test]
+    fn an_assembled_matrix_seals_its_blocks() {
+        let (_cfg, nodes, sup) = make_poi1(1);
+        let a = nodes[0].id();
+        let block = || {
+            let mut b = SubMatrix::new(
+                sup.clone(),
+                sup.clone(),
+                vec!["q".into()],
+                vec!["T".into()],
+                DofOrdering::NodesThenVars,
+                Symmetry::Full,
+            )
+            .unwrap();
+            b.add_entry(a, "q", a, "T", 2.0).unwrap();
+            Handle::new(b)
+        };
+
+        let written = block();
+        let mut k = Matrix::empty();
+        k.add_sub(written.clone()).unwrap();
+        written.write().add_entry(a, "q", a, "T", 1.0).unwrap();
+        k.assemble().unwrap();
+        assert_eq!(k.get(a, "q", a, "T").unwrap(), 3.0);
+        let err = written.write().add_entry(a, "q", a, "T", 1.0).unwrap_err();
+        assert!(err.to_string().contains("assembled matrix"), "{err}");
+        assert_eq!(k.get(a, "q", a, "T").unwrap(), 3.0);
+
+        let summed = block();
+        let mut m = Matrix::empty();
+        m.add_sub(summed.clone()).unwrap();
+        let _sum = (&m + &m).unwrap();
+        assert!(summed.write().add_entry(a, "q", a, "T", 1.0).is_err());
     }
 
     #[test]
