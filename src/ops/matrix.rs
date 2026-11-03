@@ -608,9 +608,17 @@ pub fn tangent(
 /// (`Σ_i M_lumped[i,i] = Σ_ij M[i,j]`) — the cheap, decoupled form used by
 /// explicit transient schemes and simple eigen estimates.
 ///
-/// The input must be assembled and square (row and column DOFs coincide
-/// position-for-position, as they do for a mass/capacity matrix). The result is
-/// a new assembled [`Matrix`] with the same DOF layout; the input is untouched.
+/// The input must be assembled and square, row `i` and column `i` naming the
+/// same node, as they do for a mass/capacity matrix. The result is a new
+/// assembled [`Matrix`] with the same rows and columns, in the same order; the
+/// input is untouched. It describes itself like any other matrix: one
+/// diagonal block per row support of the input, carrying the variables and
+/// physics of the blocks found there, so `solve`, `* x`, `filter` and a save
+/// read it as they read the input.
+///
+/// **Errors**: a matrix that is not assembled or not square, or whose row `i`
+/// and column `i` name two nodes, or pair one dual variable with two primal
+/// ones.
 ///
 /// ```
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -642,32 +650,164 @@ pub fn tangent(
 /// assert_eq!(diagonale.get(a.id(), "q", b.id(), "T").unwrap(), 0.0);
 /// ```
 pub fn lump(m: &Matrix) -> Result<Matrix> {
+    use crate::containers::matrix::{dof_node, dof_var, AssembledCsr, Symmetry};
+    use nalgebra_sparse::CooMatrix;
+
     let (offsets, _, values) = m.csr_arrays()?;
     let vars = m.dof_vars();
     let row_keys = m.row_dof_keys()?;
     let col_keys = m.col_dof_keys()?;
     let n = row_keys.len();
     if col_keys.len() != n {
-        return Err(crate::error::PyrucastError::Message(format!(
+        return Err(PyrucastError::Message(format!(
             "lump: matrix must be square, got {}×{}",
             n,
             col_keys.len()
         )));
     }
-    // Diagonal = per-row sum, written straight into a diagonal CSR: one entry
-    // per row, so the offsets are the row index itself.
-    let diag_values: Vec<f64> = (0..n)
-        .map(|r| values[offsets[r]..offsets[r + 1]].iter().sum())
+
+    // One diagonal block per distinct row support of `m`, holding the dual
+    // variables its blocks put there: together they hold exactly `m`'s rows.
+    let mut groups: Vec<LumpedBlock> = Vec::new();
+    for h in m {
+        let b = h.read();
+        let g = match groups
+            .iter()
+            .position(|g| g.support.same_object(b.row_support()))
+        {
+            Some(g) => g,
+            None => {
+                groups.push(LumpedBlock::new(
+                    b.row_support().clone(),
+                    b.ordering(),
+                    vars.len(),
+                ));
+                groups.len() - 1
+            }
+        };
+        let g = &mut groups[g];
+        for d in b.dual_vars() {
+            let slot = vars
+                .iter()
+                .position(|v| v == d)
+                .expect("the name table holds every variable of the blocks");
+            if g.rank[slot] == NONE {
+                g.rank[slot] = g.duals.len();
+                g.duals.push(slot);
+            }
+        }
+        for &p in b.physics() {
+            if !g.physics.contains(&p) {
+                g.physics.push(p);
+            }
+        }
+    }
+
+    // Row by row: its sum, and its place in the first block whose support and
+    // variables hold it. The primal variable of each dual one is read off
+    // column `i`, which must name the same node.
+    let supports: Vec<_> = groups.iter().map(|g| g.support.read()).collect();
+    let mut entries: Vec<Vec<(usize, f64)>> = groups
+        .iter()
+        .zip(&supports)
+        .map(|(g, s)| Vec::with_capacity(s.cell_count() * g.duals.len()))
         .collect();
-    let diag = crate::containers::matrix::AssembledCsr {
+    let mut primal_of = vec![NONE; vars.len()];
+    let mut diag_values = Vec::with_capacity(n);
+    'rows: for i in 0..n {
+        let (row, col) = (row_keys[i], col_keys[i]);
+        let node = dof_node(row);
+        let (dual, primal) = (dof_var(row) as usize, dof_var(col) as usize);
+        if dof_node(col) != node || (primal_of[dual] != NONE && primal_of[dual] != primal) {
+            return Err(PyrucastError::Message(format!(
+                "lump: row {i} and column {i} do not pair one degree of freedom \
+                 with its conjugate (same node, one primal per dual variable); \
+                 only a mass-like matrix can be lumped"
+            )));
+        }
+        primal_of[dual] = primal;
+        let value: f64 = values[offsets[i]..offsets[i + 1]].iter().sum();
+        diag_values.push(value);
+        for ((g, s), e) in groups.iter().zip(&supports).zip(&mut entries) {
+            if g.rank[dual] == NONE {
+                continue;
+            }
+            if let Some(&local) = s.node_index().get(&node) {
+                let k = g
+                    .ordering
+                    .to_index(local, g.rank[dual], s.cell_count(), g.duals.len());
+                e.push((k, value));
+                continue 'rows;
+            }
+        }
+        unreachable!("every row of a matrix comes from one of its blocks");
+    }
+    drop(supports);
+
+    let mut out = Matrix::empty();
+    for (g, e) in groups.into_iter().zip(entries) {
+        let size = g.support.read().cell_count() * g.duals.len();
+        let (idx, vals): (Vec<usize>, Vec<f64>) = e.into_iter().unzip();
+        let coo = CooMatrix::try_from_triplets(size, size, idx.clone(), idx, vals)
+            .map_err(|e| PyrucastError::Message(format!("lump: invalid COO: {e}")))?;
+        let duals = g.duals.iter().map(|&d| vars[d].clone()).collect();
+        let primals = g
+            .duals
+            .iter()
+            .map(|&d| vars[primal_of[d]].clone())
+            .collect();
+        let mut block = SubMatrix::from_coo(
+            g.support.clone(),
+            g.support,
+            duals,
+            primals,
+            g.ordering,
+            Symmetry::Full,
+            coo,
+        )?;
+        block.set_physics(g.physics);
+        out.add_sub(Handle::new(block))?;
+    }
+    // Diagonal CSR: one entry per row, so the offsets are the row index itself.
+    let diag = AssembledCsr {
         row_offsets: std::sync::Arc::new((0..=n).collect()),
         col_indices: std::sync::Arc::new((0..n).collect()),
         values: diag_values,
         ncols: n,
     };
-    let mut out = Matrix::empty();
     out.set_assembled(vars, row_keys, col_keys, diag);
     Ok(out)
+}
+
+/// Marks a variable slot that no block of the group, or no column, names yet.
+const NONE: usize = usize::MAX;
+
+/// One diagonal block of [`lump`]'s result while it is gathered: a row support
+/// of the input, the dual variables the input's blocks put there (as slots of
+/// the name table, `rank[slot]` being their place in the block), and their
+/// physics.
+struct LumpedBlock {
+    support: Handle<crate::containers::mesh::SubMesh>,
+    ordering: crate::containers::matrix::DofOrdering,
+    duals: Vec<usize>,
+    rank: Vec<usize>,
+    physics: Vec<crate::models::Physics>,
+}
+
+impl LumpedBlock {
+    fn new(
+        support: Handle<crate::containers::mesh::SubMesh>,
+        ordering: crate::containers::matrix::DofOrdering,
+        n_vars: usize,
+    ) -> Self {
+        Self {
+            support,
+            ordering,
+            duals: Vec::new(),
+            rank: vec![NONE; n_vars],
+            physics: Vec::new(),
+        }
+    }
 }
 
 // ─── Delegation methods ─────────────────────────────────────────────────────
@@ -1385,6 +1525,43 @@ mod tests {
                 let x = sum.get(rn, &rv, cn, &cv).unwrap();
                 assert!((x - expected).abs() < 1e-12, "{rv}/{cv}: {x} vs {expected}");
             }
+        }
+    }
+
+    /// The lumped mass describes itself: a diagonal block on the mass's row
+    /// support, tagged like the mass, in the mass's row order — so the solver
+    /// lays its result on that support.
+    #[test]
+    fn a_lumped_mass_carries_its_diagonal_block() {
+        use crate::containers::field::SubField;
+        use crate::containers::node_field::NodeField;
+        let (model, _) = chain_heat_with_dirichlet(3);
+        let conduction = model.exclude(crate::models::Physics::Constraint);
+        let heat =
+            material_field_per_sub_model(&conduction, &[&[("k", 1.0), ("rho", 1.0), ("cp", 1.0)]])
+                .unwrap();
+        let m = mass(&conduction, &heat).unwrap();
+        let lumped = lump(&m).unwrap();
+        assert_eq!(lumped.len(), 1);
+        assert_eq!(lumped.physics(), m.physics());
+        assert!(lumped.symmetric());
+        assert_eq!(lumped.row_dofs().unwrap(), m.row_dofs().unwrap());
+        assert_eq!(lumped.col_dofs().unwrap(), m.col_dofs().unwrap());
+
+        let rhs = NodeField::from_submesh(
+            &lumped.row_mesh().unwrap().get(0).unwrap(),
+            vec!["q".into()],
+        )
+        .unwrap();
+        rhs.get(0)
+            .unwrap()
+            .write()
+            .add_to_component("q", 1.0)
+            .unwrap();
+        let t = crate::ops::solver::solve(&lumped, &rhs).unwrap();
+        for (node, _) in lumped.row_dofs().unwrap() {
+            let d = lumped.get(node, "q", node, "T").unwrap();
+            assert!((t.value(node, "T").unwrap() * d - 1.0).abs() < 1e-12);
         }
     }
 

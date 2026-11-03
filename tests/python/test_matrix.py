@@ -674,3 +674,35 @@ def test_model_stiffness_matrix_is_the_conductivity_of_a_unit_quad():
     kmat = model.stiffness_matrix(materials)
     for j, coef in enumerate([4.0, -1.0, -2.0, -1.0]):
         assert kmat.get(n[0], "q", n[j], "T") == pytest.approx(k * coef / 6.0)
+
+
+def test_a_lumped_mass_describes_itself_like_any_matrix(tmp_path):
+    """`lump` returns a matrix with diagonal blocks on the row supports of the
+    mass: it solves, multiplies, filters and survives a save like the mass."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    bar = pyrucast.mesh.line(a, b, 2)
+    model = pyrucast.model.heat_conduction(pyrucast.FiniteElementSpace(bar))
+    materials = pyrucast.element_field.material_field(
+        model, [("k", 1.0), ("rho", 1.0), ("cp", 1.0)]
+    )
+    lumped = pyrucast.matrix.mass(model, materials).lump()
+    assert len(lumped) == 1
+    assert lumped.physics() == ["thermal"]
+    assert lumped.symmetric
+    # Row sums of a unit capacity on two SEG2 of length 1/2: 1/4, 1/2, 1/4.
+    assert [v for *_, v in lumped.entries()] == pytest.approx([0.25, 0.5, 0.25])
+
+    rhs = pyrucast.NodeField(bar, ["q"])
+    rhs.unit().set_uniform("q", 1.0)
+    t = lumped.solve(rhs)
+    assert t.value(a, "T") == pytest.approx(4.0)
+    assert (lumped * t).value(a, "q") == pytest.approx(1.0)
+    assert len(lumped.filter("thermal")) == 1
+
+    path = str(tmp_path / "lumped.pyr")
+    pyrucast.save(path, {"m": lumped})
+    reloaded = pyrucast.load(path)["m"]
+    reloaded.assemble()
+    assert [v for *_, v in reloaded.entries()] == pytest.approx([0.25, 0.5, 0.25])

@@ -129,7 +129,9 @@ s'obtiennent en refaisant la matrice.
   est lu aux colonnes (une valeur absente vaut 0), et le résultat est un champ
   posé sur les lignes.
 - `lump()` rend la matrice diagonale dont chaque terme est la somme de sa
-  ligne : la masse concentrée.
+  ligne : la masse concentrée. Elle garde les lignes et les colonnes de la
+  matrice d'origine, avec un bloc diagonal par support de lignes, qui porte
+  ses noms et ses natures : elle se résout et se multiplie comme elle.
 
 Deux matrices ne se multiplient pas entre elles.
 

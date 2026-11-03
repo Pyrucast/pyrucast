@@ -49,17 +49,6 @@ in the volume zone. Only an explicit `check()` reports it.
   `|`, solver outputs reuse the blocks' supports and reads are zero-copy — a
   redesign.
 
-## `lump` returns a matrix without blocks
-
-`ops::matrix::lump` (`src/ops/matrix.rs`) builds the diagonal values and hands
-them to `Matrix::empty()` through `set_assembled`: the result has no block.
-Everything that reads the blocks then sees nothing. Measured from Python on a
-conduction bar: `M.lump().solve(rhs)` returns a `NodeField` with zero zones,
-`M.lump() * x` too, `M.lump().filter("thermal")` is empty, and a save/load
-returns a 0×0 matrix. `M.lump() / dt + K` works only because `K` brings blocks
-covering the same rows. Lead: give the result a literal diagonal block on the
-row support, so that it describes itself like any other matrix.
-
 ## Matrix comments that describe older things
 
 - `src/containers/matrix.rs` module doc: `Matrix` is "Read-only: every
