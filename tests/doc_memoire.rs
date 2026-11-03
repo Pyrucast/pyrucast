@@ -5,6 +5,7 @@
 //! `cargo test` runs them. The anchor covers the **whole function**, signature
 //! included: in Rust all code lives in a `fn`, and mdbook does not strip the
 //! indentation — showing the function is therefore more honest than showing a
+//! fragment of its body.
 //!
 //! Voir `book/src/developper/documentation-et-tests.md`.
 
