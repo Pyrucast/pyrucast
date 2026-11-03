@@ -40,10 +40,16 @@
 //! (`'static`): they can be returned from functions and stored in structs, so
 //! operators read the data **in place** instead of copying it out.
 //!
-//! One usage rule applies: **do not acquire a second guard on an object while
-//! holding a write guard on that same object** (and do not `write` an object
-//! while holding any guard on it) — the lock is not reentrant. Distinct
-//! objects are fully independent.
+//! Two usage rules apply, and the compiler checks neither:
+//!
+//! - **Do not take a second guard on an object the same thread already holds,
+//!   even for reading.** The lock is not reentrant, and it is task-fair: a
+//!   writer that starts waiting between the two guards makes the second reader
+//!   wait for it, while it waits for the first reader — forever.
+//! - **Nest locks in one order**: a `SubMesh` before its `Coords`, never the
+//!   reverse.
+//!
+//! Apart from that, distinct objects are independent.
 //!
 //! # Example
 //!
@@ -78,11 +84,12 @@ use std::sync::Arc;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # let handle = Handle::new(Coords::new(2).unwrap());
-/// // The lock covers **this object alone**, and lasts as long as the guard:
-/// // plusieurs lectures peuvent coexister.
-/// let a = handle.read();
-/// let b = handle.read();
-/// assert_eq!(a.dim(), b.dim());
+/// // The lock covers **this object alone**, and lasts as long as the guard.
+/// let lu = handle.read();
+/// // Another thread reads meanwhile: readers do not wait for one another.
+/// let autre = handle.clone();
+/// let dim = std::thread::spawn(move || autre.read().dim()).join().unwrap();
+/// assert_eq!(lu.dim(), dim);
 /// ```
 pub type ReadGuard<T> = ArcRwLockReadGuard<RawRwLock, T>;
 
@@ -299,10 +306,9 @@ impl<T> fmt::Display for Handle<T> {
 
 /// Same short view as [`fmt::Display`] — `<SubMesh #7f3a2c>`.
 ///
-/// The two agree on purpose. `Handle<pyrucast::containers::mesh::SubMesh> { #7f3a2c }`
-/// spelled the module path out at every occurrence, which a `Debug` of a
-/// container repeats once per field and once per zone, while the type is
-/// already given by the field's own name.
+/// The two agree on purpose: a `Debug` of a container prints one handle per
+/// member and per zone, and spelling the module path out at each would repeat
+/// what the member's own name already says.
 impl<T> fmt::Debug for Handle<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)

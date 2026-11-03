@@ -843,8 +843,7 @@ impl SubMesh {
         }
         // De-duplicate in **order of first appearance**. The membership test goes
         // through a hash set, not a linear scan of `seen`: this runs on every
-        // model construction, and a `Vec::contains` here made the whole operator
-        // quadratic (640 k QUA4 took ~8 min, versus ~40 ms now).
+        // model construction, and a `Vec::contains` would make it quadratic.
         let mut seen: Vec<NodeId> = Vec::with_capacity(self.connectivity.len());
         let mut known: HashSet<NodeId> = HashSet::with_capacity(self.connectivity.len());
         for &nid in &self.connectivity {
@@ -853,9 +852,9 @@ impl SubMesh {
             }
         }
         // Build (write-locks `Coords`) and seal the companion. `self` is behind
-        // the caller's read guard on this submesh — a different slot than the
-        // POI1 companion and `Coords` — so no lock inversion (same discipline
-        // the previous `Handle::new(sm.read().to_poi1()?)` idiom already relied on).
+        // the caller's read guard on this submesh, an object distinct from the
+        // companion and from the `Coords`, and a `SubMesh` is locked before its
+        // `Coords`: no lock inversion.
         // `seen` is **handed over**, not lent: it is already the companion's
         // connectivity, one POI1 cell per id.
         let handle = Handle::new(SubMesh::from_connectivity(
@@ -865,8 +864,8 @@ impl SubMesh {
         )?);
         seal(&handle);
         // Memoize. On a race the loser drops its build and everyone reads the
-        // winner's slot. Mutating `self` later drops this slot, so what is
-        // cached always answers for the current connectivity.
+        // winner's companion. Mutating `self` later drops the cached one, so
+        // what is cached always answers for the current connectivity.
         let _ = self.poi1_companion.set(handle);
         Ok(self
             .poi1_companion
