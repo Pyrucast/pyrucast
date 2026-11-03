@@ -188,9 +188,26 @@ en un produit de matrices triangulaires, l'étape coûteuse, et garde le résult
 dans la matrice. Les `solve` suivants sur la même matrice le reprennent et ne
 font que la descente-remontée, bien moins chère : plusieurs chargements, un
 transitoire à pas de temps constant, des itérations qui ne changent pas la
-matrice. Selon la voie du solveur, ce qui est gardé est la factorisation, la
-condensation de l'élimination ou l'état de l'ensemble actif (voir
-[Solveur](operateurs/solveur.md#factorisation-réutilisable-cache-transparent)).
+matrice.
+
+La matrice n'a qu'**une case** pour cela. Son contenu dépend de la voie du
+solveur (voir [Solveur](operateurs/solveur.md#les-voies-de-la-résolution)) :
+
+- **une factorisation** de la matrice, LU ou Cholesky, quand on résout avec
+  les multiplicateurs sans inégalité, ou par élimination une matrice sans
+  relation ;
+- **une condensation**, pour l'élimination (`relations="eliminate"`) : la
+  table `T` qui exprime chaque inconnue éliminée par les autres, la matrice
+  sans ses contraintes, et la factorisation du système réduit `K̂ = TᵀKT` ; ou,
+  si des inégalités restent, ce système réduit et l'état de l'ensemble actif
+  qui le résout ;
+- **l'état de l'ensemble actif**, quand la matrice porte des inégalités : les
+  inégalités, le dernier statut convergé (d'où repart la résolution suivante)
+  et ses factorisations LU — celle de la base de Schur et ses colonnes, ou
+  celle du dernier statut.
+
+Le contenu n'est repris que s'il répond à la demande : la même voie, et, pour
+une factorisation, la même `method`. Sinon il est recalculé et prend la place.
 
 Ce qui est gardé est oublié quand la matrice change (`add_sub`, `add_subs`).
 Une matrice neuve part sans : `2.0 * K`, `M / dt + K` ou un nouvel assemblage
