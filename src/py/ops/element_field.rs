@@ -97,9 +97,10 @@ pub fn interp_to_gauss(
 /// `"T"` (e.g. from `interp_to_gauss`); `materials` carries `"alpha"` (supplied
 /// via `material_field`). Returns the strain tensor in the same layout as
 /// `deformation`, so `deformation(u, fespace) - thermal_strain(...)` is the
-/// mechanical strain. Backbone of uncoupled thermomechanics: assemble the
-/// thermal load with `internal_forces(integrate_behavior(model, ε_th,
-/// materials))` and recover `σ = D:(ε − ε_th)`.
+/// mechanical strain. Backbone of uncoupled thermomechanics: the thermal load
+/// is `divergence(integrate_behavior(model, ε_th, materials), "sigma")`,
+/// renamed into the dual rows, and the stress is recovered as
+/// `σ = D:(ε − ε_th)`.
 ///
 /// `measure` is the strain the law reads (`"linear"`, `"green_lagrange"`,
 /// `"hencky"`): the dilation of stretch `1 + α·ΔT` is given exactly in it —

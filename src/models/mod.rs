@@ -1798,7 +1798,7 @@ pub trait Domain: Sync {
     /// a name search inside a per-cell loop re-proves at every cell what is a
     /// property of the zone.
     ///
-    /// It **never sees rayon, the store, or a lock**: the assembler drives it in
+    /// It **never sees rayon or a lock**: the assembler drives it in
     /// parallel over all cells. Default errors, like its four siblings: a
     /// physics may integrate on a subspace without producing a stiffness — a
     /// distributed load has a support and a density, and a null derivative.
@@ -2205,7 +2205,7 @@ pub trait Behavior: Domain {
     ///
     /// Write the [`behavior_output_components`](Self::behavior_output_components)
     /// values — the material state at B (σ(B), `VAR(B)`, and any echoed ε(B)) —
-    /// into `out`. It **never sees rayon, the store, or a lock**:
+    /// into `out`. It **never sees rayon or a lock**:
     /// [`integrate_behavior`](Self::integrate_behavior) drives it in parallel
     /// over all cells.
     ///

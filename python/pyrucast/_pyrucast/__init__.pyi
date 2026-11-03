@@ -2400,12 +2400,12 @@ class Model:
         r"""
         External nodal forces of `model` — the right side of `Σ f_int = Σ f_ext`.
         
-        The counterpart of `internal_forces(model, state)`. Every sub-model is asked
-        for its terms of the residual on the external side: the given data of its
-        weak form, on the right of the equals sign. A physics whose term is entirely
-        a response to `u` (elasticity, conduction, a bar) has none, so a model made
-        only of those yields an empty field — which is the honest answer, not a
-        failure.
+        The counterpart of `internal_forces(model, state, solution, materials)`.
+        Every sub-model is asked for its terms of the residual on the external side:
+        the given data of its weak form, on the right of the equals sign. A physics
+        whose term is entirely a response to `u` (elasticity, conduction, a bar) has
+        none, so a model made only of those yields an empty field — which is the
+        honest answer, not a failure.
         
         Splitting the two sides is what keeps signs out of the physics: an author
         writes both halves positively, as the weak form reads, and the single
@@ -4678,12 +4678,12 @@ def external_forces(model: Model, materials: ElementField) -> NodeField:
     r"""
     External nodal forces of `model` — the right side of `Σ f_int = Σ f_ext`.
     
-    The counterpart of `internal_forces(model, state)`. Every sub-model is asked
-    for its terms of the residual on the external side: the given data of its
-    weak form, on the right of the equals sign. A physics whose term is entirely
-    a response to `u` (elasticity, conduction, a bar) has none, so a model made
-    only of those yields an empty field — which is the honest answer, not a
-    failure.
+    The counterpart of `internal_forces(model, state, solution, materials)`.
+    Every sub-model is asked for its terms of the residual on the external side:
+    the given data of its weak form, on the right of the equals sign. A physics
+    whose term is entirely a response to `u` (elasticity, conduction, a bar) has
+    none, so a model made only of those yields an empty field — which is the
+    honest answer, not a failure.
     
     Splitting the two sides is what keeps signs out of the physics: an author
     writes both halves positively, as the weak form reads, and the single
@@ -5966,9 +5966,10 @@ def thermal_strain(temperature: ElementField, materials: ElementField, fespace: 
     `"T"` (e.g. from `interp_to_gauss`); `materials` carries `"alpha"` (supplied
     via `material_field`). Returns the strain tensor in the same layout as
     `deformation`, so `deformation(u, fespace) - thermal_strain(...)` is the
-    mechanical strain. Backbone of uncoupled thermomechanics: assemble the
-    thermal load with `internal_forces(integrate_behavior(model, ε_th,
-    materials))` and recover `σ = D:(ε − ε_th)`.
+    mechanical strain. Backbone of uncoupled thermomechanics: the thermal load
+    is `divergence(integrate_behavior(model, ε_th, materials), "sigma")`,
+    renamed into the dual rows, and the stress is recovered as
+    `σ = D:(ε − ε_th)`.
     
     `measure` is the strain the law reads (`"linear"`, `"green_lagrange"`,
     `"hencky"`): the dilation of stretch `1 + α·ΔT` is given exactly in it —

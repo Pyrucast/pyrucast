@@ -210,12 +210,12 @@ pub fn internal_forces(
 
 /// External nodal forces of `model` — the right side of `Σ f_int = Σ f_ext`.
 ///
-/// The counterpart of `internal_forces(model, state)`. Every sub-model is asked
-/// for its terms of the residual on the external side: the given data of its
-/// weak form, on the right of the equals sign. A physics whose term is entirely
-/// a response to `u` (elasticity, conduction, a bar) has none, so a model made
-/// only of those yields an empty field — which is the honest answer, not a
-/// failure.
+/// The counterpart of `internal_forces(model, state, solution, materials)`.
+/// Every sub-model is asked for its terms of the residual on the external side:
+/// the given data of its weak form, on the right of the equals sign. A physics
+/// whose term is entirely a response to `u` (elasticity, conduction, a bar) has
+/// none, so a model made only of those yields an empty field — which is the
+/// honest answer, not a failure.
 ///
 /// Splitting the two sides is what keeps signs out of the physics: an author
 /// writes both halves positively, as the weak form reads, and the single

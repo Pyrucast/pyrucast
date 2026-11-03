@@ -1957,7 +1957,7 @@ impl Model {
     /// The model's [`AssemblyPattern`] for `kind`, built once and reused. On the
     /// first call `build` runs and its result is cached; later calls (same
     /// model + kind, e.g. a Newton loop re-assembling with new materials) return
-    /// the cached pattern without touching the store — this is what makes
+    /// the cached pattern without walking the blocks again — this is what makes
     /// repeated assembly scale, the sparsity being material-independent. The
     /// cache is cleared by `add_sub` (via `post_push`).
     pub(crate) fn matrix_pattern(

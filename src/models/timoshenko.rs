@@ -33,15 +33,13 @@
 //! formulation owns its interpolation, and says so rather than claiming a
 //! Lagrange one it does not use.
 //!
-//! This replaces an earlier **linear** element with reduced shear integration,
-//! which converged with mesh refinement instead of being exact. The two
-//! theories now line up: Bernoulli integrates a Hermite basis it declares,
-//! Timoshenko owns an exact one it declares owning.
+//! The two beam theories line up: Bernoulli integrates a Hermite basis it
+//! declares, Timoshenko owns an exact one and declares owning it.
 //!
 //! ## Mass
 //!
 //! The consistent mass is the **same element's**, integrated from the same
-//! shape functions — so stiffness and mass finally describe one beam. Only the
+//! shape functions — so stiffness and mass describe one beam. Only the
 //! axial and torsional degrees of freedom keep the linear field's
 //! `(ρL/6)[[2,1],[1,2]]`, which is exact for what they actually interpolate.
 

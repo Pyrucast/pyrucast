@@ -2673,7 +2673,7 @@ pub struct Matrix {
     /// across solves on the same matrix. Derived state: never serialized,
     /// type-erased so `containers` stays decoupled from the solver, and cleared
     /// whenever the matrix changes (`add_sub` → `post_push`). Interior mutability
-    /// so `solve(&Matrix)` can fill it under a shared store read lock.
+    /// so `solve(&Matrix)` can fill it through a shared reference.
     #[serde(skip)]
     factorization: parking_lot::Mutex<Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>>,
 }
@@ -5255,9 +5255,9 @@ impl Matrix {
     }
 
     /// A fresh [`Matrix`] with every block replaced by `f(block.clone())`, each
-    /// re-inserted under a **new store slot**. Never mutates `self` or any of its
+    /// re-inserted under a **new handle**. Never mutates `self` or any of its
     /// blocks in place: `add_sub`/`union`/`filter` share `Handle<SubMatrix>`s
-    /// (same store slot, refcount bump — see [`Aggregate::subset`]), so mutating
+    /// (same handle, refcount bump), so mutating
     /// one would silently reach every other `Matrix` aliasing it. Like
     /// [`filter`](Self::filter), the result is **not assembled**.
     fn map_blocks(&self, f: impl Fn(SubMatrix) -> SubMatrix) -> Matrix {
@@ -5512,8 +5512,8 @@ impl std::ops::Neg for Matrix {
 // scales `b`'s values and copies its blocks (the factor lives in the block).
 
 impl SubMatrix {
-    /// This block alone in a fresh one-block [`Matrix`], copied into a new store
-    /// slot — the operand the mixed block/matrix sums are built from.
+    /// This block alone in a fresh one-block [`Matrix`], copied into a new
+    /// handle — the operand the mixed block/matrix sums are built from.
     fn as_matrix(&self) -> Matrix {
         let mut out = Matrix::empty();
         out.push(Handle::new(self.clone()));
@@ -6337,7 +6337,7 @@ mod tests {
 
         let scaled = &orig * 10.0;
 
-        // A new store slot per block — no aliasing with the source's blocks.
+        // A new handle per block — no aliasing with the source's blocks.
         let orig_h = orig.iter().next().unwrap();
         let scaled_h = scaled.iter().next().unwrap();
         assert!(!orig_h.same_object(scaled_h));

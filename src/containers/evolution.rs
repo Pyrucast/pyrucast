@@ -2182,7 +2182,7 @@ fn element_support_mesh(field: &ElementField) -> Result<crate::containers::mesh:
 }
 
 /// Clone of the `field`'s sub-field on the given POI1 `support` (matched by
-/// store slot). Errors if no zone carries that support.
+/// handle identity). Errors if no zone carries that support.
 fn node_sub_on(field: &NodeField, support: &Handle<SubMesh>) -> Result<SubNodeField> {
     for h in field.iter() {
         let s = h.read();
