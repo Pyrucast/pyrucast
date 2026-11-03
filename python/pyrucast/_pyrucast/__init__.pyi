@@ -1332,7 +1332,9 @@ class Matrix:
         
         `cache` (default `True`) reuses what is stored transparently on the matrix —
         the factorization, the condensation, the active-set state and its last
-        status — cleared automatically when the matrix changes. `verbosity` says
+        status — cleared automatically when the matrix changes. A matrix keeps one
+        of them at a time, and a factorization serves the `method` it was made
+        with only: another `relations` or `method` computes afresh and replaces it. `verbosity` says
         how much the solve reports on stdout: `"silent"` (default), `"brief"` or
         `"detailed"`.
         
@@ -5786,7 +5788,9 @@ def solve(matrix: Matrix, rhs: NodeField, method: builtins.str = 'lu', relations
     
     `cache` (default `True`) reuses what is stored transparently on the matrix —
     the factorization, the condensation, the active-set state and its last
-    status — cleared automatically when the matrix changes. `verbosity` says
+    status — cleared automatically when the matrix changes. A matrix keeps one
+    of them at a time, and a factorization serves the `method` it was made
+    with only: another `relations` or `method` computes afresh and replaces it. `verbosity` says
     how much the solve reports on stdout: `"silent"` (default), `"brief"` or
     `"detailed"`.
     

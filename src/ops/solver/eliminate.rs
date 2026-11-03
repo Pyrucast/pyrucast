@@ -69,7 +69,7 @@ use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use super::lu::{self, factorize_csr, Factored};
+use super::lu::{self, factorize_csr, Factored, SolveMethod};
 use super::relations::{relation_rows, RelationRow};
 use super::unilateral::{ActiveSet, Inequality};
 use super::SolveOptions;
@@ -135,6 +135,16 @@ struct ReducedInequalities {
 }
 
 impl Condensation {
+    /// Whether this condensation is what `method` asks for: its reduced system
+    /// factorized that way. Kept inequalities make it a saddle-point, which
+    /// the active-set loop factorizes by LU whatever is asked.
+    fn answers(&self, method: SolveMethod) -> bool {
+        match &self.reduced {
+            Reduced::Plain(factored) => factored.answers(method),
+            Reduced::Unilateral(_) => true,
+        }
+    }
+
     /// Which factorization the **reduced** system admitted — `"cholesky"` or
     /// `"lu"`. Unlike the saddle-point it came from, `K̂` carries no multiplier
     /// DOFs, so it stands a real chance of being positive definite; kept
@@ -159,7 +169,7 @@ pub(super) fn solve(
 
     // ── Step 1 — obtain the condensation (cached or fresh) ─────────────
     let cond: Arc<Condensation> = match matrix.cached_factorization::<Condensation>() {
-        Some(c) if options.cache => c,
+        Some(c) if options.cache && c.answers(options.method) => c,
         _ => {
             let relations = relation_rows(matrix)?;
             // No relation ⇒ elimination is a no-op; solve the matrix as-is.

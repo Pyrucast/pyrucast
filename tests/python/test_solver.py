@@ -1,6 +1,7 @@
 """Python tests for `pyrucast.solver.solve` — dense LU end-to-end."""
 
 import pyrucast
+import pytest
 
 
 def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
@@ -119,3 +120,30 @@ def test_solver_with_nonzero_neumann():
         expected = 5.0 + 0.5 * x
         got = solution.value(node, "T")
         assert abs(got - expected) < tol, f"node {i}: got {got}, expected {expected}"
+
+
+def test_the_cache_answers_only_the_method_it_was_made_with():
+    """A factorization kept by a solve is reused for the same `method` only:
+    a Cholesky asked after an LU is attempted, not answered by the LU."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    fes = pyrucast.FiniteElementSpace(pyrucast.mesh.line(a, b, 2))
+    conduction = pyrucast.model.heat_conduction(fes)
+    support = pyrucast.model.dirichlet(
+        pyrucast.mesh.poi1_from_nodes([a]), conduction, "T"
+    )
+    model = conduction | support
+    materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
+    k = pyrucast.matrix.stiffness(model, materials)
+    rhs = support.constraint_rhs([(a, 1.0)])
+
+    # Lagrange: the saddle-point admits no Cholesky, even after an LU.
+    assert k.solve(rhs).value(b, "T") == pytest.approx(1.0)
+    with pytest.raises(RuntimeError, match="positive definite"):
+        k.solve(rhs, method="cholesky")
+
+    # Elimination: the reduced system admits one, after an LU as well.
+    assert k.solve(rhs, relations="eliminate").value(b, "T") == pytest.approx(1.0)
+    eliminated = k.solve(rhs, relations="eliminate", method="cholesky")
+    assert eliminated.value(b, "T") == pytest.approx(1.0)

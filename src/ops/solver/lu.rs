@@ -159,6 +159,15 @@ impl Factored {
             Factored::Lu(_) => "lu",
         }
     }
+
+    /// Whether this is the factorization `method` asks for: a cached one is
+    /// reused only then, so asking for a Cholesky after an LU attempts it.
+    pub(crate) fn answers(&self, method: SolveMethod) -> bool {
+        matches!(
+            (self, method),
+            (Factored::Lu(_), SolveMethod::Lu) | (Factored::Cholesky(_), SolveMethod::Cholesky)
+        )
+    }
 }
 
 /// Transpose a square CSR into CSC arrays, by counting sort.
@@ -569,8 +578,8 @@ pub(super) fn solve(
     // ── Step 1 — obtain the factorization (cached or fresh) ────────────
     let fact: Arc<Factorization> = if options.cache {
         match matrix.cached_factorization::<Factorization>() {
-            Some(f) => f,
-            None => {
+            Some(f) if f.factored.answers(options.method) => f,
+            _ => {
                 let f = Arc::new(Factorization::new(matrix, options)?);
                 matrix.store_factorization(f.clone());
                 f
@@ -1125,6 +1134,23 @@ mod tests {
         block.add_entry(b.id(), "q", b.id(), "T", 4.0).unwrap();
         m.add_sub(Handle::new(block)).unwrap();
         assert!(m.cached_factorization::<Factorization>().is_none());
+    }
+
+    /// The cache answers only the method it was made with: a Cholesky asked
+    /// after an LU is attempted — and refuses this unsymmetric matrix —
+    /// instead of being answered by the LU.
+    #[test]
+    fn a_cached_factorization_answers_only_its_own_method() {
+        let (m, rhs, _) = tiny_system();
+        crate::ops::solver::solve(&m, &rhs).unwrap();
+        let cached = m.cached_factorization::<Factorization>().unwrap();
+        assert_eq!(cached.method(), "lu");
+        let cholesky = SolveOptions {
+            method: SolveMethod::Cholesky,
+            ..Default::default()
+        };
+        let err = crate::ops::solver::solve_with_options(&m, &rhs, &cholesky).unwrap_err();
+        assert!(err.to_string().contains("symmetric"), "{err}");
     }
 
     #[test]
