@@ -267,7 +267,7 @@ impl PyMatrix {
         };
         let row = submesh_handle(row_support)?;
         let col = submesh_handle(col_support)?;
-        let sub = SubMatrix::new(row, col, dual_vars, primal_vars, ord, symmetry);
+        let sub = SubMatrix::new(row, col, dual_vars, primal_vars, ord, symmetry)?;
         let mut m = Matrix::empty();
         m.add_sub(Handle::new(sub))?;
         Ok(Self { inner: m })

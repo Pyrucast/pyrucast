@@ -1458,7 +1458,7 @@ pub(crate) fn constraint_block_pair(
         vec![variable.to_string()],
         DofOrdering::NodesThenVars,
         Symmetry::Half(id_c),
-    );
+    )?;
     c.set_row_sense(sense);
     // Cᵀ block: rows = constrained × target_dual, cols = multiplier × MULTIPLIER.
     let mut ct = SubMatrix::new(
@@ -1468,7 +1468,7 @@ pub(crate) fn constraint_block_pair(
         vec![MULTIPLIER.to_string()],
         DofOrdering::NodesThenVars,
         Symmetry::Half(id_ct),
-    );
+    )?;
     // Both blocks are built — hence both `seal`s, the only writers here — so the
     // node lists can now be read in place instead of copied: `add_entry` only
     // ever takes a read guard on the supports.

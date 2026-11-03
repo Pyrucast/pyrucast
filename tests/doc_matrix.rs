@@ -75,7 +75,8 @@ fn ecrire_un_bloc() -> Result<()> {
         vec!["T".into()], // variables primales : les colonnes
         DofOrdering::NodesThenVars,
         Symmetry::Full, // symétrique à lui seul
-    );
+    )
+    .unwrap();
     // K = [[2, -1], [-1, 2]]
     bloc.add_entry(a.id(), "q", a.id(), "T", 2.0)?;
     bloc.add_entry(a.id(), "q", b.id(), "T", -1.0)?;

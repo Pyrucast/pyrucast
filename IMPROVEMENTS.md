@@ -49,18 +49,6 @@ in the volume zone. Only an explicit `check()` reports it.
   `|`, solver outputs reuse the blocks' supports and reads are zero-copy — a
   redesign.
 
-## A matrix block on a POI1 support repeating a node
-
-A block numbers its rows by position in its POI1 support, and finds a node's
-row through `SubMesh::node_index`, which ranks the **distinct** nodes: on a
-support listing a node twice, the two disagree past the repeat.
-`SubNodeField::from_poi1` refuses such a support (inverse map shorter than the
-cells); the matrix constructors only document the requirement, and the test
-`node_index_is_the_flat_position_only_on_a_deduplicated_support`
-(`src/containers/matrix.rs`) pins it. `solve` on such a block now fails when
-it builds its output field. Lead: the same refusal where a block takes its
-support.
-
 ## `lump` returns a matrix without blocks
 
 `ops::matrix::lump` (`src/ops/matrix.rs`) builds the diagonal values and hands

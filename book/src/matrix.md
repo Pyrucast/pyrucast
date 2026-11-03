@@ -68,8 +68,8 @@ s'additionnent. `assemble()` donne ensuite ses valeurs à la matrice.
 ```
 
 Les nœuds d'un support doivent être **distincts**, comme ceux que rend
-`to_poi1` : un nœud répété n'est pas refusé, mais ses valeurs vont à la
-mauvaise ligne. Quand un bloc porte plusieurs noms, `ordering` dit comment ses
+`to_poi1` : un support qui répète un nœud est refusé, comme pour un
+[champ aux nœuds](node-field.md). Quand un bloc porte plusieurs noms, `ordering` dit comment ses
 lignes se suivent : nœud par nœud (`"nodes_then_vars"`, par défaut) ou nom par
 nom (`"vars_then_nodes"`). `symmetry` vaut `"full"` ou `"none"` (par défaut),
 voir [Symétrie](#symétrie).
@@ -249,7 +249,9 @@ table de noms de la matrice (`dof_vars()`). `row_dofs()` rend la forme lisible,
   construction du bloc. Le bloc ne recopie pas leur liste de nœuds : il la lit
   en place et trouve le rang d'un nœud par la table `node_index` du support
   (voir [Maillage](mesh.md#ce-quune-zone-garde-en-cache)). D'où la règle des
-  nœuds distincts : cette table donne le rang parmi les nœuds sans répétition ;
+  nœuds distincts : cette table donne le rang parmi les nœuds sans répétition,
+  et les constructeurs (`new`, `computed`, `from_coo`) refusent un support qui
+  répète un nœud ou qui n'est pas un POI1 ;
 - `dual_vars`, `primal_vars` et `ordering` (`DofOrdering`) : la ligne d'un
   couple (nœud, nom) est `rang_du_nœud * n_noms + rang_du_nom` en
   `NodesThenVars`, `rang_du_nom * n_nœuds + rang_du_nœud` en `VarsThenNodes` ;

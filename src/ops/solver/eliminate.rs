@@ -706,7 +706,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         block.add_entry(b.id(), "q", b.id(), "T", 4.0).unwrap();
         k.add_sub(Handle::new(block)).unwrap();
         assert!(k.cached_factorization::<Condensation>().is_none());
@@ -730,7 +731,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         block.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
         let mut m = Matrix::empty();
         m.add_sub(Handle::new(block)).unwrap();

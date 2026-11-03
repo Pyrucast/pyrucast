@@ -836,7 +836,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         block.add_entry(r0.id(), "q", c0.id(), "T", 1.0).unwrap();
         block.add_entry(r1.id(), "q", c0.id(), "T", 1.0).unwrap();
         // 2 rows × 1 col — rectangular.
@@ -874,7 +875,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         block.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
         let mut m = crate::containers::matrix::Matrix::empty();
         m.add_sub(Handle::new(block)).unwrap();
@@ -914,7 +916,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::Full,
-        );
+        )
+        .unwrap();
         for j in 0..=n {
             for i in 0..=n {
                 let c = at(i, j);
@@ -1117,7 +1120,8 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             Symmetry::None,
-        );
+        )
+        .unwrap();
         block.add_entry(b.id(), "q", b.id(), "T", 4.0).unwrap();
         m.add_sub(Handle::new(block)).unwrap();
         assert!(m.cached_factorization::<Factorization>().is_none());

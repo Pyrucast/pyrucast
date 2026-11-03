@@ -175,7 +175,8 @@ fn spd_system(n: usize) -> (Matrix, NodeField) {
         vec!["T".into()],
         DofOrdering::NodesThenVars,
         Symmetry::Full,
-    );
+    )
+    .unwrap();
     for j in 0..=n {
         for i in 0..=n {
             let c = at(i, j);

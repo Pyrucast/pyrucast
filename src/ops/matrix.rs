@@ -341,7 +341,7 @@ impl Matrix {
     /// # };
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full).unwrap();
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -405,7 +405,7 @@ fn build_contribution(
                 layout.ordering,
                 layout.symmetry,
                 recipe,
-            )]
+            )?]
         }
         // An inter-mesh block: same computed path, but rows and columns on
         // different supports. Never symmetric on its own — the law declares its
@@ -428,7 +428,7 @@ fn build_contribution(
                 layout.ordering,
                 layout.symmetry,
                 recipe,
-            )]
+            )?]
         }
         Contribution::Literal(blocks) => blocks,
     };
@@ -1534,7 +1534,8 @@ mod tests {
             vec!["T".into()],
             crate::containers::matrix::DofOrdering::NodesThenVars,
             Symmetry::Full,
-        );
+        )
+        .unwrap();
         blk.add_entry(a.id(), "q", a.id(), "T", 10.0).unwrap();
         k.add_sub(Handle::new(blk)).unwrap();
 
