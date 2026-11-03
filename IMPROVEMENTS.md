@@ -91,22 +91,6 @@ collectera"), `book/src/aspect-informatique.md` ("`coords.gc()` collecte…"),
 `book/src/memory-model.md` (per-node counter and mark-and-sweep paragraphs),
 and the Rust docs of `src/coords.rs` and `src/atoms/node.rs`.
 
-## Rust comments that describe removed or older things
-
-- The central store, removed in August 2026, still appears in comments:
-  `grep -rnE "global store|store slot|store refcount|store read lock|the store" src`
-  — `aggregate.rs`, `containers/mod.rs`, `containers/mesh.rs`,
-  `containers/matrix.rs`, `containers/node_field.rs`,
-  `containers/evolution.rs`, `containers/model.rs`, `models/mod.rs`,
-  `ops/measure/integral.rs`. Where "store" means the `Coords` (`atoms/node.rs`,
-  `atoms/cell.rs`, `ops/mesh/arrays.rs`, "store identity" in the meshers), it
-  is a wording choice to make separately.
-- `src/models/timoshenko.rs` module doc: "This replaces an earlier linear
-  element…" is history.
-- The `external_forces` doc (`src/py/ops/node_field.rs`) cites
-  `internal_forces(model, state)`; the signature is
-  `internal_forces(model, state, solution, materials)`.
-
 ## Book pages not reviewed yet
 
 Same rules as the reviewed pages: checked against the code, Python first then
@@ -115,6 +99,8 @@ Same rules as the reviewed pages: checked against the code, Python first then
 - `contraintes.md`.
 - `operateurs/assemblage.md`: heading "Règle invariante : un Model = une
   Matrice".
+- `operateurs/comportement.md`: heading `internal_forces(model, state)`; the
+  signature is `internal_forces(model, state, solution, materials)`.
 - `matrix.md`: describes a `DofId { node_id, field_idx }` type that does not
   exist; `factor` and `is_symmetric` are not cited.
 - `evolution.md`.

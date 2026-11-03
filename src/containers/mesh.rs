@@ -91,7 +91,7 @@ pub struct SubMesh {
     sealed: bool,
     /// Lazily-built `NodeId → index` map over the **distinct** nodes of the
     /// connectivity, in first-appearance order. Consumers that need a node
-    /// lookup (node fields, …) read it in place while holding their store
+    /// lookup (node fields, …) read it in place while holding their read
     /// guard on this submesh — no copy — so the O(n) build is paid once and
     /// mutualised across every field on this support. Not serialized — it is
     /// derived from `connectivity` and rebuilt on demand after a reload.
@@ -102,7 +102,7 @@ pub struct SubMesh {
     /// Lazily-built **canonical POI1 companion**: the node cloud of this
     /// submesh's distinct nodes, materialised once and shared. Every consumer
     /// that projects this submesh to its nodes ([`SubMesh::to_poi1`]) gets the
-    /// *same* store slot, so their node fields pair under
+    /// *same* handle, so their node fields pair under
     /// [`same_support`](crate::containers::field::SubField::same_support) — a
     /// stiffness block's support, a `restrict` onto this mesh, and a
     /// `divergence`/`flux` output over it all land on one handle and combine
@@ -823,7 +823,7 @@ impl SubMesh {
     /// [`SubMesh`] handle.
     ///
     /// **Cached, per submesh.** The companion is built at most once per state
-    /// of the connectivity, and every later call returns the *same* store slot,
+    /// of the connectivity, and every later call returns the *same* handle,
     /// so all the node fields that project this submesh to its nodes pair under
     /// [`same_support`](crate::containers::field::SubField::same_support): a
     /// stiffness block's support (built this way in every physics' `new`), a
@@ -1218,7 +1218,7 @@ impl Mesh {
 
     /// Create a mesh wrapping a single `SubMesh`. Config-free at the Mesh
     /// level: the submesh already carries its `Coords` (a Mesh is a
-    /// pure aggregate of submeshes). The submesh is moved into the store.
+    /// pure aggregate of submeshes). The submesh is moved into a new handle.
     ///
     /// ```
     /// # use pyrucast::atoms::ElementType;

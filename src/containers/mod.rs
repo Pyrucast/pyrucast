@@ -9,7 +9,7 @@
 //!
 //! Each module here defines the data structure and the inherent algorithms
 //! of one container. The pattern is uniformly `Sub<Xxx>` (one piece,
-//! stored in the global store) + `Xxx` (an
+//! behind a [`crate::handle::Handle`]) + `Xxx` (an
 //! [`crate::aggregate::Aggregate`] of those pieces) — the aggregate is
 //! *how* a container decomposes.
 //!

@@ -82,8 +82,8 @@ pub fn integral(field: &NodeField, fespace: &FiniteElementSpace, component: &str
         kernel::require_field_basis(sub_h, "shape values")?;
 
         // Gather this subspace's nodal values for `component` once (serial), so
-        // the parallel per-cell kernel does O(1) look-ups and never re-reads the
-        // store.
+        // the parallel per-cell kernel does O(1) look-ups and never goes back to
+        // the field.
         let mut vals: HashMap<NodeId, f64> = HashMap::new();
         for &nid in conn {
             if let std::collections::hash_map::Entry::Vacant(e) = vals.entry(nid) {

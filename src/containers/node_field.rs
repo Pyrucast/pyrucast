@@ -738,7 +738,7 @@ impl IndexMut<(NodeId, &str)> for SubNodeField {
 
 impl Clone for SubNodeField {
     fn clone(&self) -> Self {
-        // Cloning the support Handle bumps the SubMesh's store refcount;
+        // Cloning the support Handle shares the SubMesh (an `Arc` clone);
         // per-node refcounts in the Coords are already covered by
         // the shared SubMesh.
         SubNodeField {
@@ -1479,8 +1479,7 @@ impl NodeField {
                 unique_components.push(name.clone());
             }
         }
-        // POI1 support over the distinct nodes; the submesh and field both land
-        // in the store and cascade-decref their nodes on drop.
+        // POI1 support over the distinct nodes.
         let sm_h = Handle::new(SubMesh::poi1_from_node_ids(coords, &unique_nodes)?);
         let mut sub = SubNodeField::from_poi1(&sm_h, unique_components)?;
         // Resolve component indices once and hoist one read guard on the

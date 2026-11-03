@@ -39,7 +39,7 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use std::any::Any;
 
-/// Typed container of objects held in the global store.
+/// Typed container of shared objects, each behind a [`Handle`].
 ///
 /// All access mechanics (length, indexing, iteration) are derived from the
 /// two required methods [`Aggregate::items`] and [`Aggregate::items_mut`].
@@ -148,7 +148,7 @@ pub trait Aggregate: Default {
     }
 
     /// Union with a single sub-object `h`: a fresh aggregate holding
-    /// `self`'s subs plus `h`, unless `h`'s slot is already present. The
+    /// `self`'s subs plus `h`, unless `h` itself is already present. The
     /// sub-handle is shared (refcount bump), then [`Aggregate::finalize`]
     /// runs. Python: `aggregate | sub`.
     fn union_sub(&self, h: &Handle<Self::Sub>) -> Result<Self>
@@ -165,8 +165,8 @@ pub trait Aggregate: Default {
     }
 
     /// Mirror of [`Aggregate::union_sub`] with the sub-object **first**: a
-    /// fresh aggregate holding `h`, then `self`'s subs, skipping the one whose
-    /// slot is `h`'s. Same sharing and finalization semantics; only the zone
+    /// fresh aggregate holding `h`, then `self`'s subs, skipping `h` itself if
+    /// present. Same sharing and finalization semantics; only the zone
     /// order differs. Python: `sub | aggregate`.
     fn union_sub_first(&self, h: &Handle<Self::Sub>) -> Result<Self>
     where
