@@ -3,19 +3,15 @@
 # Régénérer : python script/doc_lint.py --ratchet-python
 abscissa_type
 abscissas
-col_dofs
 component_count
 component_index
-dense
 div_to_component
 entries
-entry_count
 factor
 field_names
 geometric_matrix
 get_by_node
 is_alive
-is_symmetric
 mass_matrix
 mul_dense
 node_values
@@ -54,7 +50,6 @@ pyrucast.model.plasticity_isotropic
 pyrucast.model.viscoplasticity_chaboche
 pyrucast.model.viscoplasticity_lemaitre_chaboche
 pyrucast.node_field.divergence
-row_dofs
 set_by_node
 stiffness_matrix
 sub_to_component
