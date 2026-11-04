@@ -60,7 +60,7 @@ def test_orthotropic_fick_declares_its_axes():
     model = pyrucast.model.fick(fes, "H2", symmetry="orthotropic")
     required = model[0].material_components()
     # The diffusivities carry the species, the medium's own axes do not.
-    for name in ("D_1_H2", "D_2_H2", "D_3_H2", "V1X", "V1Y"):
+    for name in ("D_H2_1", "D_H2_2", "D_H2_3", "V1X", "V1Y"):
         assert name in required, f"{name} missing from {required}"
     assert "D_H2" not in required
 
@@ -70,7 +70,7 @@ def test_anisotropic_fick_takes_the_full_tensor():
     required = pyrucast.model.fick(fes, "H2", symmetry="anisotropic")[
         0
     ].material_components()
-    for name in ("D_11_H2", "D_12_H2", "D_22_H2", "D_33_H2"):
+    for name in ("D_H2_11", "D_H2_12", "D_H2_22", "D_H2_33"):
         assert name in required, f"{name} missing from {required}"
 
 

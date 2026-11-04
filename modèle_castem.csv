@@ -213,8 +213,8 @@ DARCY;ISOTROPE;Écoulement en milieu poreux, perméabilité isotrope;—;—;—
 DARCY;ORTHOTROPE;Perméabilité orthotrope;—;—;—
 DARCY;ANISOTROPE;Perméabilité anisotrope (tenseur complet);—;—;—
 DIFFUSION;FICK ISOTROPE;Loi de Fick J = −D·grad(C), diffusivité isotrope (modèle par défaut);diffusion;isotropic;model.fick (symmetry=isotropic) — espèce nommée à la construction : primale c_<espèce>, duale j_<espèce>, diffusivité D_<espèce> — stockage poro facultatif — échange d'interface j·n = h(c1 − c2) : model.interface_transfer (cible : les modèles de Fick)
-DIFFUSION;FICK ORTHOTROPE;Loi de Fick à diffusivité orthotrope;diffusion;orthotropic;model.fick (symmetry=orthotropic) — D_1_<espèce>, D_2_<espèce>, D_3_<espèce> + repère V1/V2 (les axes du milieu ne portent pas l'espèce)
-DIFFUSION;FICK ANISOTROPE;Loi de Fick à diffusivité anisotrope;diffusion;anisotropic;model.fick (symmetry=anisotropic) — D_11_<espèce>..D_33_<espèce> + repère V1/V2
+DIFFUSION;FICK ORTHOTROPE;Loi de Fick à diffusivité orthotrope;diffusion;orthotropic;model.fick (symmetry=orthotropic) — D_<espèce>_1, D_<espèce>_2, D_<espèce>_3 + repère V1/V2 (les axes du milieu ne portent pas l'espèce)
+DIFFUSION;FICK ANISOTROPE;Loi de Fick à diffusivité anisotrope;diffusion;anisotropic;model.fick (symmetry=anisotropic) — D_<espèce>_11..D_<espèce>_33 + repère V1/V2
 DIFFUSION;ADVECTION (CONSERVATIVE);Transport de matière par un champ de vitesse;—;—;—
 DIFFUSION;INCO MOT2 (MOT3);Noms libres des inconnues primale et duale;—;—;équivalent implicite : les composantes de champ sont nommées librement
 ELECTROSTATIQUE;ELECTROSTATIQUE;Formulation électrostatique;—;—;—
