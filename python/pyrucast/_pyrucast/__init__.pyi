@@ -4698,7 +4698,7 @@ def fick(fespace: FiniteElementSpace, species: builtins.str, symmetry: builtins.
     
     `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
     `"anisotropic"`, selecting the diffusivity the material field must carry:
-    `D_<species>`, `D_1_<species> …`, or the symmetric `D_11_<species> …` —
+    `D_<species>`, `D_<species>_1 …`, or the symmetric `D_<species>_11 …` —
     the oriented ones plus the material axes `V1X, V1Y, …`. Those axes and
     the optional storage `poro` keep **bare** names: they belong to the
     medium, not to what diffuses through it.

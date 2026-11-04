@@ -253,5 +253,5 @@ fn heat_conduction_integrates_its_conductivity_and_axes_at_every_gauss_point() -
 fn fick_integrates_its_diffusivity_axes_and_storage_at_every_gauss_point() -> Result<()> {
     let (_, fes, _) = quad()?;
     let law = model::fick(&fes, "H2", MaterialSymmetry::Orthotropic)?;
-    check_transport(&law, "c_H2", "j_H2", ("D_1_H2", "D_2_H2", "poro"), &[])
+    check_transport(&law, "c_H2", "j_H2", ("D_H2_1", "D_H2_2", "poro"), &[])
 }

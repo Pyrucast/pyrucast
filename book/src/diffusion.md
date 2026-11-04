@@ -58,7 +58,7 @@ Pour l'espèce `H2` :
 |---|---|
 | primale | `c_H2`, la concentration |
 | duale | `j_H2`, le flux d'espèce nodal |
-| matériau requis | `D_H2` ; ou `D_1_H2`, `D_2_H2`, `D_3_H2` et les axes (`orthotropic`) ; ou `D_11_H2`…`D_33_H2` et les axes (`anisotropic`) |
+| matériau requis | `D_H2` ; ou `D_H2_1`, `D_H2_2`, `D_H2_3` et les axes (`orthotropic`) ; ou `D_H2_11`…`D_H2_33` et les axes (`anisotropic`) |
 | matériau facultatif | `poro`, demandé par le stockage seul |
 | entrée du comportement | `grad_c_H2_x`, `grad_c_H2_y`, `grad_c_H2_z` |
 | sortie du comportement | `j_H2_x`, `j_H2_y`, `j_H2_z` |

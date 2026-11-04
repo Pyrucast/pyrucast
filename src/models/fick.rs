@@ -15,7 +15,7 @@
 //!
 //! ```text
 //! species "H2"      primal  c_H2        dual  j_H2
-//!                   material D_H2  (D_1_H2, D_11_H2, … when oriented)
+//!                   material D_H2  (D_H2_1, D_H2_11, … when oriented)
 //!                   behaviour  grad_c_H2_x → j_H2_x
 //! ```
 //!
@@ -37,9 +37,9 @@
 //!
 //! | symmetry | material components |
 //! |---|---|
-//! | isotropic | `D` |
-//! | orthotropic | `D_1`, `D_2`, `D_3` + the material axes |
-//! | anisotropic | `D_11 … D_33` (symmetric) + the material axes |
+//! | isotropic | `D_<species>` |
+//! | orthotropic | `D_<species>_1`, `D_<species>_2`, `D_<species>_3` + the material axes |
+//! | anisotropic | `D_<species>_11 … D_<species>_33` (symmetric) + the material axes |
 //!
 //! The transient (storage) term `∂c/∂t` is the mass matrix, `∫ poro N_i N_j` —
 //! `poro` being the storage coefficient, the porosity for a species diffusing
@@ -148,15 +148,16 @@ const ANISOTROPIC_3D: &[&str] = &[
 /// The material contract of a symmetry, **with the species** carried by every
 /// diffusivity and by nothing else.
 ///
-/// The species goes last (`D_1_H2`, not `D_H2_1`), so stripping it is one rule
-/// whatever the symmetry. The axes `V1X…V2Z` keep their bare names: they are the
-/// medium's frame, shared by everything that diffuses through it.
+/// The species follows `D` and the direction index goes last (`D_H2_1`,
+/// `D_H2_11`), as in `grad_c_H2_x` and `j_H2_x`. The axes `V1X…V2Z` keep their
+/// bare names: they are the medium's frame, shared by everything that diffuses
+/// through it.
 fn material_contract(symmetry: MaterialSymmetry, space_dim: usize, species: &str) -> Vec<String> {
     static_contract(symmetry, space_dim)
         .iter()
         .map(|name| {
-            if name.starts_with('D') {
-                format!("{name}_{species}")
+            if let Some(index) = name.strip_prefix('D') {
+                format!("D_{species}{index}")
             } else {
                 (*name).to_string()
             }
@@ -399,9 +400,9 @@ impl Domain for Fick {
         self.fespace.clone()
     }
 
-    /// Every diffusivity carries the species and goes last (`D_H2`, `D_1_H2`,
-    /// `D_11_H2`); the material axes `V1X…V2Z` keep their bare names, being the
-    /// medium's frame rather than the species' business.
+    /// Every diffusivity carries the species, before the direction index
+    /// (`D_H2`, `D_H2_1`, `D_H2_11`); the material axes `V1X…V2Z` keep their
+    /// bare names, being the medium's frame rather than the species' business.
     fn material_components(&self) -> Vec<String> {
         material_contract(self.symmetry, self.space_dim, &self.species)
     }
@@ -660,8 +661,8 @@ crate::physics_operator! {
     ///
     /// Every name carries the species: DOFs `c_<species>` / `j_<species>`, the
     /// diffusivity `D_<species>`. `symmetry` selects the diffusivity the
-    /// material field must carry: `D_<species>`, the principal `D_1_<species>…`
-    /// (orthotropic) or the symmetric tensor `D_11_<species>…` (anisotropic),
+    /// material field must carry: `D_<species>`, the principal `D_<species>_1…`
+    /// (orthotropic) or the symmetric tensor `D_<species>_11…` (anisotropic),
     /// the two oriented ones with the material axes. It is supplied at assembly
     /// time.
     ///
@@ -687,5 +688,5 @@ crate::physics_operator! {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn fick(fespace, species: &str, symmetry: MaterialSymmetry = MaterialSymmetry::Isotropic) via SubModel::fick;
-    python: "`model.fick(fespace, species, symmetry=\"isotropic\")` — Fickian diffusion of\none named **species**, spanning every subspace of `fespace`.\n\nEvery name carries the species: DOFs are `c_<species>` (primal) and\n`j_<species>` (dual), the diffusivity is `D_<species>`, the reported flux\n`j_<species>_x…`. Two species therefore share a mesh without colliding —\nand no bare `c` can be mistaken for anything else. Its physics nature is\n`\"diffusion\"`, so `model.filter(\"diffusion\")` isolates it from a thermal\nor mechanical model it is composed with.\n\n`symmetry` is `\"isotropic\"` (the default), `\"orthotropic\"` or\n`\"anisotropic\"`, selecting the diffusivity the material field must carry:\n`D_<species>`, `D_1_<species> …`, or the symmetric `D_11_<species> …` —\nthe oriented ones plus the material axes `V1X, V1Y, …`. Those axes and\nthe optional storage `poro` keep **bare** names: they belong to the\nmedium, not to what diffuses through it."
+    python: "`model.fick(fespace, species, symmetry=\"isotropic\")` — Fickian diffusion of\none named **species**, spanning every subspace of `fespace`.\n\nEvery name carries the species: DOFs are `c_<species>` (primal) and\n`j_<species>` (dual), the diffusivity is `D_<species>`, the reported flux\n`j_<species>_x…`. Two species therefore share a mesh without colliding —\nand no bare `c` can be mistaken for anything else. Its physics nature is\n`\"diffusion\"`, so `model.filter(\"diffusion\")` isolates it from a thermal\nor mechanical model it is composed with.\n\n`symmetry` is `\"isotropic\"` (the default), `\"orthotropic\"` or\n`\"anisotropic\"`, selecting the diffusivity the material field must carry:\n`D_<species>`, `D_<species>_1 …`, or the symmetric `D_<species>_11 …` —\nthe oriented ones plus the material axes `V1X, V1Y, …`. Those axes and\nthe optional storage `poro` keep **bare** names: they belong to the\nmedium, not to what diffuses through it."
 }
