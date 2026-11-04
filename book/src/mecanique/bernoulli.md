@@ -19,7 +19,7 @@ La configuration se lit sur la dimension des `Coords` :
 |---|---|---|
 | 1-D | `w`, `theta` | rien : flexion pure |
 | 2-D | `u_x`, `u_y`, `r_z` | l'effort axial, et la rotation vers les axes globaux : un portique plan |
-| 3-D | `u_x`…`u_z`, `r_x`…`r_z` | l'axial, la torsion et la flexion selon deux axes principaux : un cadre spatial |
+| 3-D | `u_x`, `u_y`, `u_z`, `r_x`, `r_y`, `r_z` | l'axial, la torsion et la flexion selon deux axes principaux : un cadre spatial |
 
 ## Théorie
 
@@ -83,8 +83,8 @@ cisaillement noierait la flexion en virgule flottante, et évite de demander
 
 | | 1-D | 2-D | 3-D |
 |---|---|---|---|
-| primales | `w`, `theta` | `u_x`, `u_y`, `r_z` | `u_x`…`u_z`, `r_x`…`r_z` |
-| duales | `f_w`, `m_theta` | `f_x`, `f_y`, `m_z` | `f_x`…`f_z`, `m_x`…`m_z` |
+| primales | `w`, `theta` | `u_x`, `u_y`, `r_z` | `u_x`, `u_y`, `u_z`, `r_x`, `r_y`, `r_z` |
+| duales | `f_w`, `m_theta` | `f_x`, `f_y`, `m_z` | `f_x`, `f_y`, `f_z`, `m_x`, `m_y`, `m_z` |
 | matériau requis | `E`, `I` | `E`, `A`, `I` | `E`, `A`, `I_y`, `I_z`, `J`, `G` |
 | matériau facultatif | `A`, `rho` | `rho` | `rho` |
 | entrée du comportement | `kappa` | `eps`, `kappa` | `eps`, `kappa_y`, `kappa_z`, `torsion` |

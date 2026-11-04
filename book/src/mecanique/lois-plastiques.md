@@ -8,10 +8,11 @@ von Mises ignore.
 
 | | |
 |---|---|
-| opérateurs | `pyrucast.model.drucker_prager(fespace, kinematics, strain_measure="linear")`, `pyrucast.model.ottosen(…)` |
+| opérateurs | `pyrucast.model.drucker_prager(fespace, kinematics, strain_measure="linear")`, `pyrucast.model.ottosen(fespace, kinematics, strain_measure="linear")` |
 | tag | `mechanical` |
 | type | domaine avec comportement (`label()` : `"Plasticity"`) |
-| éléments | ceux de l'[élasticité](elasticite.md) ; toutes les cinématiques |
+| éléments | 2-D, en plan ou en axisymétrie : `TRI3`, `QUA4`, `TRI6`, `QUA8`, `QUA9` ; 3-D : `TET4`, `PYRA5`, `PENTA6`, `HEX8`, `TET10`, `PENTA15`, `HEX20`, `HEX27` |
+| cinématiques | `plane_stress`, `plane_strain`, `axisymmetric`, `full_3d` |
 
 Elles suivent le cadre de la [plasticité de von Mises](plasticite.md#théorie) :
 partition de la déformation, critère \\(f \le 0\\), écoulement et conditions de
@@ -123,12 +124,25 @@ précise, elle suffit à faire converger Newton.
 
 ## Variables
 
+Selon la cinématique :
+
+| | `plane_stress`, `plane_strain` | `axisymmetric` | `full_3d` |
+|---|---|---|---|
+| primales | `u_x`, `u_y` | `u_x`, `u_y` | `u_x`, `u_y`, `u_z` |
+| duales | `f_x`, `f_y` | `f_x`, `f_y` | `f_x`, `f_y`, `f_z` |
+| entrée du comportement | `eps_xx`, `eps_yy`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` |
+| contrainte | `sigma_xx`, `sigma_yy`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_yz`, `sigma_xz`, `sigma_xy` |
+
+En axisymétrie, `eps_zz` et `sigma_zz` sont les composantes orthoradiales.
+
+La sortie du comportement est la contrainte, suivie de l'état :
+
 | | |
 |---|---|
-| primales, duales | celles de l'[élasticité](elasticite.md#variables) |
 | matériau requis | Drucker-Prager : `E`, `nu`, `friction`, `k`, `psi` ; Ottosen : `E`, `nu`, `a`, `b`, `k_1`, `k_2`, `sigma_c` |
 | matériau facultatif | `rho`, `alpha` ; Drucker-Prager : `beta`, `delta`, `H`, `friction_ult`, `beta_ult`, `k_ult` |
-| entrée, sortie, état | ceux de la [plasticité de von Mises](plasticite.md#variables) |
+| état, écrit après la contrainte | la déformation plastique `eps_p_xx`, `eps_p_yy`, `eps_p_zz`, `eps_p_yz`, `eps_p_xz`, `eps_p_xy` ; la déformation plastique cumulée `p` ; la déformation totale `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` ; et, en `plane_stress` et `plane_strain`, `sigma_zz` |
+| état relu (`prev`) | toute la sortie du pas précédent : la contrainte et l'état |
 
 ## Ce qu'elles produisent
 

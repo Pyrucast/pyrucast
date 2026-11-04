@@ -8,10 +8,11 @@ résultat d'un pas dépend de sa durée.
 
 | | |
 |---|---|
-| opérateurs | `pyrucast.model.creep_norton`, `creep_lemaitre`, `creep_blackburn`, `viscoplasticity_chaboche`, `viscoplasticity_lemaitre_chaboche`, tous `(fespace, kinematics, strain_measure="linear")` |
+| opérateurs | `pyrucast.model.creep_norton(fespace, kinematics, strain_measure="linear")`, `pyrucast.model.creep_lemaitre(fespace, kinematics, strain_measure="linear")`, `pyrucast.model.creep_blackburn(fespace, kinematics, strain_measure="linear")`, `pyrucast.model.viscoplasticity_chaboche(fespace, kinematics, strain_measure="linear")`, `pyrucast.model.viscoplasticity_lemaitre_chaboche(fespace, kinematics, strain_measure="linear")` |
 | tag | `mechanical` |
 | type | domaine avec comportement (`label()` : `"Plasticity"`) |
-| éléments | ceux de l'[élasticité](elasticite.md) ; toutes les cinématiques |
+| éléments | 2-D, en plan ou en axisymétrie : `TRI3`, `QUA4`, `TRI6`, `QUA8`, `QUA9` ; 3-D : `TET4`, `PYRA5`, `PENTA6`, `HEX8`, `TET10`, `PENTA15`, `HEX20`, `HEX27` |
+| cinématiques | `plane_stress`, `plane_strain`, `axisymmetric`, `full_3d` |
 
 `integrate_behavior` et `matrix.tangent` exigent le pas de temps `dt` pour ces
 lois, et lèvent une erreur sans lui : intégrer une loi visqueuse comme si
@@ -101,14 +102,33 @@ fluage tertiaire. \\(D\\) ne décroît jamais et s'arrête à `D_c`.
 
 ## Variables
 
+Selon la cinématique :
+
+| | `plane_stress`, `plane_strain` | `axisymmetric` | `full_3d` |
+|---|---|---|---|
+| primales | `u_x`, `u_y` | `u_x`, `u_y` | `u_x`, `u_y`, `u_z` |
+| duales | `f_x`, `f_y` | `f_x`, `f_y` | `f_x`, `f_y`, `f_z` |
+| entrée du comportement | `eps_xx`, `eps_yy`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` |
+| contrainte | `sigma_xx`, `sigma_yy`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_yz`, `sigma_xz`, `sigma_xy` |
+
+En axisymétrie, `eps_zz` et `sigma_zz` sont les composantes orthoradiales.
+
+La sortie du comportement est la contrainte, suivie d'un état commun aux
+cinq lois, puis de l'état propre à chacune :
+
 | | |
 |---|---|
-| primales, duales | celles de l'[élasticité](elasticite.md#variables) |
-| matériau requis | Norton : `E`, `nu`, `K`, `n` ; Lemaitre : `E`, `nu`, `K`, `N`, `M` ; Blackburn : `E`, `nu`, `A_1`, `alpha_1`, `r_1`, `B_s`, `beta_s` ; Chaboche : `E`, `nu`, `k`, `K`, `n`, `C_1`, `gamma_1`, `b`, `Q` ; Lemaitre-Chaboche : ceux de Chaboche et `S`, `s`, `D_c` |
 | matériau facultatif | `rho`, `alpha` |
-| entrée du comportement | celle de la [plasticité](plasticite.md#variables) |
-| sortie du comportement | celle de la plasticité, plus : `p_prim` (Blackburn) ; `X_xx`…`X_xy` et `R` (Chaboche) ; et `damage` (Lemaitre-Chaboche) |
+| état commun | la déformation plastique `eps_p_xx`, `eps_p_yy`, `eps_p_zz`, `eps_p_yz`, `eps_p_xz`, `eps_p_xy` ; la déformation plastique cumulée `p` ; la déformation totale `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` ; et, en `plane_stress` et `plane_strain`, `sigma_zz` |
 | état relu (`prev`) | toute la sortie du pas précédent |
+
+| loi | matériau requis | état propre, après l'état commun |
+|---|---|---|
+| `creep_norton` | `E`, `nu`, `K`, `n` | aucun |
+| `creep_lemaitre` | `E`, `nu`, `K`, `N`, `M` | aucun |
+| `creep_blackburn` | `E`, `nu`, `A_1`, `alpha_1`, `r_1`, `B_s`, `beta_s` | `p_prim` |
+| `viscoplasticity_chaboche` | `E`, `nu`, `k`, `K`, `n`, `C_1`, `gamma_1`, `b`, `Q` | `X_xx`, `X_yy`, `X_zz`, `X_yz`, `X_xz`, `X_xy`, `R` |
+| `viscoplasticity_lemaitre_chaboche` | `E`, `nu`, `k`, `K`, `n`, `C_1`, `gamma_1`, `b`, `Q`, `S`, `s`, `D_c` | `X_xx`, `X_yy`, `X_zz`, `X_yz`, `X_xz`, `X_xy`, `R`, `damage` |
 
 ## Ce qu'elles produisent
 

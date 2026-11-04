@@ -46,16 +46,22 @@ déplacements : voir [Grandes transformations](grandes-transformations.md#les-ba
 
 ## Variables
 
-En 2-D, en petites déformations :
+Selon la dimension des `Coords` :
+
+| | 1-D | 2-D | 3-D |
+|---|---|---|---|
+| primales | `u_x` | `u_x`, `u_y` | `u_x`, `u_y`, `u_z` |
+| duales | `f_x` | `f_x`, `f_y` | `f_x`, `f_y`, `f_z` |
+| entrée du comportement | `eps_xx` | `eps_xx`, `eps_yy`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` |
+| sortie du comportement | `n` | `n` | `n` |
+
+`n` est l'effort axial \\(E\\,A\\,c^{\mathsf T}\varepsilon\\,c\\), lu le long de la
+barre dans la déformation du point.
 
 | | |
 |---|---|
-| primales | `u_x`, `u_y` (et `u_z` en 3-D) |
-| duales | `f_x`, `f_y` (et `f_z`) |
 | matériau requis | `E`, `A` |
 | matériau facultatif | `rho` |
-| entrée du comportement | la déformation du point : `eps_xx`, `eps_xy`, `eps_yy` |
-| sortie du comportement | `n`, l'effort axial \\(E\\,A\\,c^{\mathsf T}\varepsilon\\,c\\) |
 | état | aucun |
 
 ## Ce qu'elle produit

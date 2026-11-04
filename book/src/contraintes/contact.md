@@ -11,7 +11,7 @@ contre un appui.
 | opérateur | `pyrucast.model.contact(slave, master, target, variables)` |
 | tag | `constraint` et celui de la cible |
 | type | contrainte (`label()` : `"Contact"`) |
-| support | les nœuds esclaves, et les facettes maîtres : segments en 2-D, triangles et quadrangles en 3-D |
+| support | les nœuds esclaves, et les facettes maîtres : `SEG2`, `SEG3` en 2-D ; `TRI3`, `QUA4`, `TRI6`, `QUA8`, `QUA9` en 3-D |
 
 `variables` sont les déplacements de la cible, un par dimension de l'espace,
 dans l'ordre (`["u_x", "u_y"]`). Les deux maillages partagent un même

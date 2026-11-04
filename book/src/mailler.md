@@ -19,7 +19,7 @@ la même chose — un ou plusieurs [contours orientés](operateurs/maillage.md) 
 | `triangulate_surface` | Delaunay contraint + raffinement de Ruppert | `"TRI3"`, `"QUA4"` ; `size` | des `TRI3` — en `QUA4`, des quadrangles et quelques triangles |
 | `pave_surface` | front avançant, en rangées depuis le bord | `"QUA4"`, `"QUA8"`, `"QUA9"` ; `size`, `prefer_quads`, `relax` | des `QUA4`, quelques `TRI3` |
 | `grid_surface` | cœur en grille + bande frontale au bord | `"QUA4"`, `"QUA8"`, `"QUA9"` ; `size`, `band`, `prefer_quads`, `relax` | des `QUA4`, quelques `TRI3` |
-| `grid_surface2` | idem, lignes prises une par nœud du contour | comme `grid_surface` | des `QUA4`, quelques `TRI3` |
+| `grid_surface2` | cœur en grille, une ligne par nœud du contour, + bande frontale au bord | `"QUA4"`, `"QUA8"`, `"QUA9"` ; `size`, `band`, `prefer_quads`, `relax` | des `QUA4`, quelques `TRI3` |
 
 Le premier argument est le contour, le deuxième le type d'élément. Les options :
 

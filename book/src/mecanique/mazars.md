@@ -10,7 +10,8 @@ Un seul scalaire d'endommagement \\(D \in [0, 1)\\) affaiblit la contrainte.
 | opérateur | `pyrucast.model.mazars(fespace, kinematics, strain_measure="linear")` |
 | tag | `mechanical` |
 | type | domaine avec comportement (`label()` : `"Damage"`) |
-| éléments | ceux de l'[élasticité](elasticite.md) ; toutes les cinématiques |
+| éléments | 2-D, en plan ou en axisymétrie : `TRI3`, `QUA4`, `TRI6`, `QUA8`, `QUA9` ; 3-D : `TET4`, `PYRA5`, `PENTA6`, `HEX8`, `TET10`, `PENTA15`, `HEX20`, `HEX27` |
+| cinématiques | `plane_stress`, `plane_strain`, `axisymmetric`, `full_3d` |
 
 ## Théorie
 
@@ -54,13 +55,24 @@ d'itération d'un Newton modifié. La loi n'a pas de tangente.
 
 ## Variables
 
+Selon la cinématique :
+
+| | `plane_stress`, `plane_strain` | `axisymmetric` | `full_3d` |
+|---|---|---|---|
+| primales | `u_x`, `u_y` | `u_x`, `u_y` | `u_x`, `u_y`, `u_z` |
+| duales | `f_x`, `f_y` | `f_x`, `f_y` | `f_x`, `f_y`, `f_z` |
+| entrée du comportement | `eps_xx`, `eps_yy`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` |
+| contrainte | `sigma_xx`, `sigma_yy`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_yz`, `sigma_xz`, `sigma_xy` |
+
+En axisymétrie, `eps_zz` et `sigma_zz` sont les composantes orthoradiales.
+
+La sortie du comportement est la contrainte, suivie de l'état :
+
 | | |
 |---|---|
-| primales, duales | celles de l'[élasticité](elasticite.md#variables) |
 | matériau requis | `E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c` |
 | matériau facultatif | `rho`, `alpha` |
-| entrée du comportement | `eps_xx`, `eps_yy`, `eps_xy` (selon la cinématique) |
-| sortie du comportement | `sigma_xx`, `sigma_yy`, `sigma_xy`, `damage`, `kappa` |
+| état, écrit après la contrainte | `damage`, `kappa` |
 | état relu (`prev`) | `kappa` |
 
 La contrainte ne dépend que de la déformation totale et de \\(\kappa\\) : il

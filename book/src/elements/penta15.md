@@ -19,15 +19,27 @@ triangle et en hauteur. C'est l'extrusion quadratique du [TRI6](tri6.md).
 
 ## Élément de référence
 
-Le prisme du `PENTA6` : triangle \\( (L_1, L_2, L_3) \\) étiré sur
-\\( t = \zeta \in [0, 1] \\). Les sommets 0 à 5 comme le `PENTA6`, puis les
-milieux :
+Le triangle \\( \xi, \eta \ge 0 \\), \\( \xi + \eta \le 1 \\), étiré sur
+\\( t = \zeta \in [0, 1] \\), avec les coordonnées barycentriques
+\\( L_1 = 1-\xi-\eta \\), \\( L_2 = \xi \\), \\( L_3 = \eta \\).
 
-| nœuds | arêtes | position |
-|---|---|---|
-| 6, 7, 8 | \\( (0,1), (1,2), (2,0) \\) | côtés du triangle du bas |
-| 9, 10, 11 | \\( (3,4), (4,5), (5,3) \\) | côtés du triangle du haut |
-| 12, 13, 14 | \\( (0,3), (1,4), (2,5) \\) | arêtes verticales, en \\( t = \tfrac12 \\) |
+| Nœud | \\( (\xi, \eta, \zeta) \\) | rôle |
+|---:|:---:|---|
+| 0 | \\( (0, 0, 0) \\) | sommet du bas |
+| 1 | \\( (1, 0, 0) \\) | sommet du bas |
+| 2 | \\( (0, 1, 0) \\) | sommet du bas |
+| 3 | \\( (0, 0, 1) \\) | sommet du haut |
+| 4 | \\( (1, 0, 1) \\) | sommet du haut |
+| 5 | \\( (0, 1, 1) \\) | sommet du haut |
+| 6 | \\( (\tfrac12, 0, 0) \\) | milieu de \\( (0,1) \\) |
+| 7 | \\( (\tfrac12, \tfrac12, 0) \\) | milieu de \\( (1,2) \\) |
+| 8 | \\( (0, \tfrac12, 0) \\) | milieu de \\( (2,0) \\) |
+| 9 | \\( (\tfrac12, 0, 1) \\) | milieu de \\( (3,4) \\) |
+| 10 | \\( (\tfrac12, \tfrac12, 1) \\) | milieu de \\( (4,5) \\) |
+| 11 | \\( (0, \tfrac12, 1) \\) | milieu de \\( (5,3) \\) |
+| 12 | \\( (0, 0, \tfrac12) \\) | milieu de \\( (0,3) \\) |
+| 13 | \\( (1, 0, \tfrac12) \\) | milieu de \\( (1,4) \\) |
+| 14 | \\( (0, 1, \tfrac12) \\) | milieu de \\( (2,5) \\) |
 
 ## Fonctions de forme
 

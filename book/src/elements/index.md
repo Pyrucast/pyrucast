@@ -93,9 +93,9 @@ Ce que chaque physique pose sur quels éléments :
 
 | physique | éléments | inconnues par nœud |
 |---|---|---|
-| [conduction](../thermique.md), [diffusion](../diffusion.md) | tous, de degré 1 ou 2, en volume ou plongés (un fil, une plaque mince) | `T` ; `c_<espèce>`, une par espèce |
-| [échanges](../echanges.md), [rayonnement](../rayonnement.md) | le bord d'une conduction : segments en 2-D, faces en 3-D | `T` |
-| [élasticité](../mecanique/elasticite.md) et ses lois | 2-D : `TRI3`, `QUA4`, `TRI6`, `QUA8`, `QUA9` ; 3-D : tous les volumes | `u_x`, `u_y` ; et `u_z` en 3-D |
+| [conduction](../thermique.md), [diffusion](../diffusion.md) | `SEG2`, `SEG3` ; `TRI3`, `QUA4`, `TRI6`, `QUA8`, `QUA9` ; `TET4`, `PYRA5`, `PENTA6`, `HEX8`, `TET10`, `PENTA15`, `HEX20`, `HEX27` ; en volume ou plongés (un fil, une plaque mince) | `T` ; `c_<espèce>`, une par espèce |
+| [échanges](../echanges.md), [rayonnement](../rayonnement.md) | le bord d'une conduction : `SEG2`, `SEG3` en 2-D ; `TRI3`, `QUA4`, `TRI6`, `QUA8`, `QUA9` en 3-D | `T` |
+| [élasticité](../mecanique/elasticite.md) et ses lois | 2-D : `TRI3`, `QUA4`, `TRI6`, `QUA8`, `QUA9` ; 3-D : `TET4`, `PYRA5`, `PENTA6`, `HEX8`, `TET10`, `PENTA15`, `HEX20`, `HEX27` | `u_x`, `u_y` ; et `u_z` en 3-D |
 | [barre](../mecanique/truss.md) | `SEG2` | un déplacement par dimension |
 | [poutres](../mecanique/bernoulli.md) | `SEG2` | `w`, `theta` en 1-D ; `u_x`, `u_y`, `r_z` en plan ; six dans l'espace |
 | [coque](../mecanique/coques.md) | `TRI3`, `QUA4`, dans l'espace | `u_x`, `u_y`, `u_z`, `r_x`, `r_y`, `r_z` |

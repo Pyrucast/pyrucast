@@ -45,7 +45,7 @@ Ce que les accesseurs d'un sous-modèle répondent :
 
 | | domaine avec comportement | domaine sans comportement | contrainte |
 |---|---|---|---|
-| `label()` | le nom de la physique : `"HeatConduction"`, `"Elasticity"`… | `"BoundaryTransfer"`, `"InterfaceTransfer"`, `"Flux"` | `"Dirichlet"`, `"Mpc"`, `"Embedded"`, `"Contact"` |
+| `label()` | le nom de la physique : `"HeatConduction"`, `"Radiation"`, `"Fick"`, `"Elasticity"`, `"Plasticity"`, `"Damage"`, `"Truss"`, `"Bernoulli"`, `"Timoshenko"`, `"Shell"` | `"BoundaryTransfer"`, `"InterfaceTransfer"`, `"Flux"` | `"Dirichlet"`, `"Mpc"`, `"Embedded"`, `"Contact"` |
 | `material_components()` | les composantes matériau requises | les composantes requises | `None` |
 | `fespace()` | le sous-espace où elle intègre | le sous-espace où elle intègre (le côté A d'un transfert d'interface) | `None` |
 | `has_behavior` | `True` | `False` | `False` |

@@ -7,10 +7,11 @@ d'élasticité. Deux lois, au critère de von Mises :
 
 | | |
 |---|---|
-| opérateurs | `pyrucast.model.plasticity_perfect(fespace, kinematics, strain_measure="linear")` (sans écrouissage), `pyrucast.model.plasticity_isotropic(…)` (écrouissage isotrope linéaire) |
+| opérateurs | `pyrucast.model.plasticity_perfect(fespace, kinematics, strain_measure="linear")` (sans écrouissage), `pyrucast.model.plasticity_isotropic(fespace, kinematics, strain_measure="linear")` (écrouissage isotrope linéaire) |
 | tag | `mechanical` |
 | type | domaine avec comportement (`label()` : `"Plasticity"`) |
-| éléments | ceux de l'[élasticité](elasticite.md) ; toutes les cinématiques |
+| éléments | 2-D, en plan ou en axisymétrie : `TRI3`, `QUA4`, `TRI6`, `QUA8`, `QUA9` ; 3-D : `TET4`, `PYRA5`, `PENTA6`, `HEX8`, `TET10`, `PENTA15`, `HEX20`, `HEX27` |
+| cinématiques | `plane_stress`, `plane_strain`, `axisymmetric`, `full_3d` |
 
 ## Théorie
 
@@ -81,19 +82,30 @@ opérateur constant, celui d'un Newton modifié. La tangente
 
 ## Variables
 
-En 2-D plan :
+Selon la cinématique :
+
+| | `plane_stress`, `plane_strain` | `axisymmetric` | `full_3d` |
+|---|---|---|---|
+| primales | `u_x`, `u_y` | `u_x`, `u_y` | `u_x`, `u_y`, `u_z` |
+| duales | `f_x`, `f_y` | `f_x`, `f_y` | `f_x`, `f_y`, `f_z` |
+| entrée du comportement | `eps_xx`, `eps_yy`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` |
+| contrainte | `sigma_xx`, `sigma_yy`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_yz`, `sigma_xz`, `sigma_xy` |
+
+En axisymétrie, `eps_zz` et `sigma_zz` sont les composantes orthoradiales.
+
+La sortie du comportement est la contrainte, suivie de l'état :
 
 | | |
 |---|---|
-| primales, duales | celles de l'[élasticité](elasticite.md#variables) |
 | matériau requis | `E`, `nu`, `sigma_y` ; plus `H` pour `plasticity_isotropic` |
 | matériau facultatif | `rho`, `alpha` |
-| entrée du comportement | `eps_xx`, `eps_yy`, `eps_xy` |
-| sortie du comportement | `sigma_xx`, `sigma_yy`, `sigma_xy`, puis l'état : `eps_p_xx`…`eps_p_xy` (toujours six composantes), `p`, la déformation totale `eps_xx`…`eps_xy` (six), et `sigma_zz` |
-| état relu (`prev`) | toute la sortie du pas précédent : la contrainte (avec `sigma_zz`), la déformation plastique, `p` et la déformation totale |
+| état, écrit après la contrainte | la déformation plastique `eps_p_xx`, `eps_p_yy`, `eps_p_zz`, `eps_p_yz`, `eps_p_xz`, `eps_p_xy` ; la déformation plastique cumulée `p` ; la déformation totale `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` ; et, en `plane_stress` et `plane_strain`, `sigma_zz` |
+| état relu (`prev`) | toute la sortie du pas précédent : la contrainte et l'état |
 
-Au premier pas, `prev=None` part d'un état nul. Ensuite, la sortie d'un pas
-se passe telle quelle comme `prev` au pas suivant.
+La déformation plastique et la déformation totale ont toujours six
+composantes, quelle que soit la cinématique. Au premier pas, `prev=None` part
+d'un état nul. Ensuite, la sortie d'un pas se passe telle quelle comme `prev`
+au pas suivant.
 
 ## Ce qu'elle produit
 

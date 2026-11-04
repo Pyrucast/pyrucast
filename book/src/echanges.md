@@ -39,7 +39,7 @@ une fondation élastique.
 | opérateur | `pyrucast.model.boundary_transfer(fespace, target, variables)` |
 | tag | celui de la cible |
 | type | domaine sans comportement (`label()` : `"BoundaryTransfer"`) |
-| éléments | le bord de la cible : segments en 2-D, faces en 3-D |
+| éléments | le bord de la cible : `SEG2`, `SEG3` en 2-D ; `TRI3`, `QUA4`, `TRI6`, `QUA8`, `QUA9` en 3-D |
 
 ### Théorie
 

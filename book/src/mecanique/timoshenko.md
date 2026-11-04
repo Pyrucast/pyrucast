@@ -78,7 +78,8 @@ dépend.
 
 | | 1-D | 2-D | 3-D |
 |---|---|---|---|
-| primales, duales | celles de [Bernoulli](bernoulli.md#variables) | | |
+| primales | `w`, `theta` | `u_x`, `u_y`, `r_z` | `u_x`, `u_y`, `u_z`, `r_x`, `r_y`, `r_z` |
+| duales | `f_w`, `m_theta` | `f_x`, `f_y`, `m_z` | `f_x`, `f_y`, `f_z`, `m_x`, `m_y`, `m_z` |
 | matériau requis | `E`, `I`, `G`, `A_s` | `E`, `A`, `I`, `G`, `A_s` | `E`, `A`, `I_y`, `I_z`, `J`, `G`, `A_sy`, `A_sz` |
 | matériau facultatif | `A`, `rho` | `rho` | `rho` |
 | entrée du comportement | `kappa`, `gamma` | `eps`, `kappa`, `gamma` | `eps`, `kappa_y`, `kappa_z`, `torsion`, `gamma_y`, `gamma_z` |
