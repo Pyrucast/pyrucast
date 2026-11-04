@@ -1,97 +1,94 @@
 # Endommagement de Mazars
 
-Modèle d'**endommagement isotrope** du béton (Mazars, 1986), formulation
-**classique à deux variables**. Loi *sécante* : la contrainte est la contrainte
-élastique (effective) affaiblie par un scalaire d'endommagement `D ∈ [0, 1)`.
-Mêmes éléments et degrés de liberté que l'[élasticité linéaire](elasticite.md)
-(2-D `TRI3` / `QUA4`, 3-D `TET4` / `HEX8`).
+## En bref
 
-## Équations continues résolues
+Le béton qui se fissure : il perd de sa raideur, sans déformation permanente.
+Un seul scalaire d'endommagement \\(D \in [0, 1)\\) affaiblit la contrainte.
 
-- **contrainte** : `σ = (1 − D) · D_el : ε` ;
-- **déformation équivalente** : `ε̃ = √(Σ ⟨ε_I⟩₊²)`, somme sur les parts
-  positives des **déformations principales** ;
-- **historique** : `κ = maxₜ ε̃`, initialisé au seuil `eps_d0` ; l'endommagement
-  ne croît que lorsque `κ` augmente (irréversibilité, pas de guérison).
+| | |
+|---|---|
+| opérateur | `pyrucast.model.mazars(fespace, kinematics, strain_measure="linear")` |
+| tag | `mechanical` |
+| type | domaine avec comportement (`label()` : `"Damage"`) |
+| éléments | ceux de l'[élasticité](elasticite.md) ; toutes les cinématiques |
 
-L'endommagement combine une branche **traction** et une branche
-**compression** :
+## Théorie
+
+La loi est **sécante** : la contrainte est la contrainte élastique affaiblie,
 
 \\[
-D_t = 1 - \frac{\varepsilon_{d0}(1-A_t)}{\kappa} - \frac{A_t}{e^{B_t(\kappa-\varepsilon_{d0})}},
+\sigma = (1 - D)\\,D_\text{el} : \varepsilon .
+\\]
+
+L'endommagement est piloté par la **déformation équivalente**, bâtie sur les
+parts positives des déformations principales,
+
+\\[
+\tilde\varepsilon = \sqrt{\textstyle\sum_I \langle\varepsilon_I\rangle_+^2},
 \qquad
-D = \alpha_t D_t + \alpha_c D_c,
+\kappa = \max\big(\varepsilon_{d0},\ \max_t \tilde\varepsilon\big),
 \\]
 
-(et `D_c` de même avec `A_c, B_c`). Les poids `α_t, α_c` proviennent de la
-**décomposition traction/compression** de la contrainte effective
-`σ̃ = D_el : ε` : on sépare ses contraintes principales en parts positive /
-négative, on en déduit les déformations associées `εᵗ, εᶜ`, puis
-`α_t = Σ ⟨εᵗ_I⟩₊⟨ε_I⟩₊ / ε̃²` (idem `α_c`). Le coefficient de cisaillement
-`β` est fixé à 1.
-
-La décomposition spectrale (déformations principales) utilise `nalgebra`.
-
-## Forme discrétisée
-
-Comme la [plasticité](plasticite.md), Mazars expose deux briques, la boucle de
-Newton restant **pilotée en Python** (voir
-[Comportement](../operateurs/comportement.md)) :
-
-- **rigidité** : la **rigidité élastique** (non endommagée)
-  `K = ∫ Bᵀ D_el B dΩ`, opérateur d'itération ;
-- **comportement** (`COMP`) : la mise à jour `σ`, `D`, `κ` point par point.
-
-La boucle de Newton résout \\( K\\,\delta u = F_{\text{ext}} - F_{\text{int}} \\)
-avec les **forces internes** endommagées
+où \\(\varepsilon_{d0}\\) est le seuil. \\(\kappa\\) ne décroît jamais : le
+matériau ne guérit pas. L'endommagement mêle une branche de traction et une
+branche de compression,
 
 \\[
-F_{\text{int}} = \int_\Omega B^\top \sigma\\, d\Omega, \qquad
-\sigma = (1 - D)\\,D_{\text{el}} : \varepsilon,
+D_t = 1 - \frac{\varepsilon_{d0}(1 - A_t)}{\kappa} - \frac{A_t}{e^{B_t(\kappa - \varepsilon_{d0})}},
+\qquad
+D = \alpha_t\\,D_t + \alpha_c\\,D_c ,
 \\]
 
-où \\( B \\) est la matrice déformation-déplacement de
-l'[élasticité](elasticite.md#forme-discrétisée). La rigidité **sécante**
-(élastique non endommagée) sert d'opérateur d'itération ; la loi étant *sécante*
-et non incrémentale, seule la variable d'historique `κ` porte l'irréversibilité.
+\\(D_c\\) s'écrivant de même avec \\(A_c\\) et \\(B_c\\). Les poids
+\\(\alpha_t\\), \\(\alpha_c\\) viennent du partage de la contrainte effective
+\\(D_\text{el} : \varepsilon\\) en parts positive et négative, sur ses valeurs
+principales.
 
-Le calcul interne est mené en **3-D**. La **déformation plane** impose
-`ε_zz = 0` ; la **contrainte plane** pose `ε_zz = −ν/(1−ν)(ε_xx+ε_yy)` (le
-facteur `(1−D)` se simplifie dans `σ_zz = 0`).
+Le calcul est mené sur le tenseur 3-D : en déformations planes,
+\\(\varepsilon_{zz} = 0\\) ; en contraintes planes,
+\\(\varepsilon_{zz} = -\nu\\,(\varepsilon_{xx} + \varepsilon_{yy})/(1 - \nu)\\) ;
+en axisymétrie, l'orthoradiale est mesurée.
 
-## Variables et matériau
+La raideur est la raideur **élastique non endommagée** : l'opérateur
+d'itération d'un Newton modifié. La loi n'a pas de tangente.
 
-- **primal** : `u_x, u_y(, u_z)` — **dual** : `f_x, f_y(, f_z)`.
-- **matériau** : `E`, `nu`, `eps_d0` (seuil), `A_t, B_t` (traction),
-  `A_c, B_c` (compression).
-- **état de début de pas A** (entrée `prev`) : la variable scalaire d'historique
-  `kappa`. `None` au premier pas — elle est plafonnée à `eps_d0` dans la mise à
-  jour, donc l'absence est correcte. La contrainte effective ne dépend que de la
-  déformation totale `ε(B)` : la mécanique de l'endommagement n'a pas
-  d'incrément, seul `kappa` est historique.
-- **sortie du `COMP`** (= `prev` du pas suivant) : contrainte (`sigma_*`),
-  `damage` (le scalaire `D`), et `kappa` mis à jour.
-- **modèles** : `plane_stress`, `plane_strain`, `axisymmetric` (2-D) et `full_3d`
-  (3-D).
+## Variables
 
-## Axisymétrie
+| | |
+|---|---|
+| primales, duales | celles de l'[élasticité](elasticite.md#variables) |
+| matériau requis | `E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c` |
+| matériau facultatif | `rho`, `alpha` |
+| entrée du comportement | `eps_xx`, `eps_yy`, `eps_xy` (selon la cinématique) |
+| sortie du comportement | `sigma_xx`, `sigma_yy`, `sigma_xy`, `damage`, `kappa` |
+| état relu (`prev`) | `kappa` |
 
-Le modèle `"axisymmetric"` s'applique sur une géométrie de révolution
-([`Coords.axisymmetric()`](../coords.md#repère-de-révolution)) : Voigt à quatre
-composantes `[εrr, εzz, εθθ, γrz]`, nommées `eps_xx, eps_yy, eps_zz, eps_xy`
-avec **`zz` = orthoradial** (convention Cast3M). Le modèle et le repère doivent
-s'accorder dans les deux sens, comme en [élasticité](elasticite.md#axisymétrie).
+La contrainte ne dépend que de la déformation totale et de \\(\kappa\\) : il
+n'y a pas d'incrément. Au premier pas, `prev=None` revient à
+\\(\kappa = \varepsilon_{d0}\\).
 
-La déformation équivalente étant bâtie sur les **déformations principales du
-tenseur 3-D complet**, les modèles 2-D ne diffèrent que par la reconstruction de
-ce tenseur : la déformation plane force `ε_zz = 0`, la contrainte plane la
-déduit, et l'axisymétrie lit l'orthoradiale `ε_θθ = u_r/r` mesurée.
+## Ce qu'elle produit
 
-## Exemple Python
+| | |
+|---|---|
+| raideur | élastique, non endommagée |
+| masse | exige `rho` |
+| géométrique | sous la contrainte `sigma_*` |
+| tangente | aucune : `matrix.tangent` lève une erreur |
+| forces internes | \\(\int B^{\mathsf T}\sigma\\), la contrainte endommagée |
+
+## Exemple
+
+Une maille étirée à deux fois le seuil :
 
 ```python
 {{#include ../../../tests/python/test_doc_mecanique.py:mazars}}
 ```
 
-L'historique `kappa` se réinjecte au pas suivant en **passant `state` comme
-`prev`** — la sortie le porte déjà —, ce qui garantit l'irréversibilité.
+## Côté Rust
+
+`Damage` (`src/models/damage.rs`) porte sa loi en attribut (`DamageLaw`), comme
+`Plasticity` : Mazars, [Damage TC et SiC/SiC](endommagement.md). Mazars vit dans
+`src/models/damage/mazars.rs` ; la décomposition spectrale passe par
+`nalgebra`. `tests/damage_laws.rs` vérifie que Mazars ne rend qu'un
+endommagement scalaire.

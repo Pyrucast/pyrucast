@@ -1,429 +1,158 @@
-# Lois d'écoulement plastique
+# Drucker-Prager et Ottosen
 
-## Introduction
+## En bref
 
-La [plasticité parfaite](plasticite.md) est un cas particulier. Toutes les lois
-élastoplastiques de pyrucast partagent **la même physique** — mêmes degrés de
-liberté, même rigidité élastique comme opérateur d'itération, même montage
-incrémental A → B, même état interne — et ne diffèrent que par leur **surface de
-charge** et leur règle d'écoulement.
+Deux lois plastiques pour les matériaux plus résistants en compression qu'en
+traction : sols, roches, poudres, béton. Leur surface voit la pression, que
+von Mises ignore.
 
-La loi est donc un **attribut** du modèle de plasticité, pas un modèle à part.
-C'est la convention de Cast3M, où `PLASTIQUE PARFAIT`, `PLASTIQUE ISOTROPE`,
-`PLASTIQUE DRUCKER_PRAGER` et `PLASTIQUE OTTOSEN` sont des variantes d'une seule
-formulation.
+| | |
+|---|---|
+| opérateurs | `pyrucast.model.drucker_prager(fespace, kinematics, strain_measure="linear")`, `pyrucast.model.ottosen(…)` |
+| tag | `mechanical` |
+| type | domaine avec comportement (`label()` : `"Plasticity"`) |
+| éléments | ceux de l'[élasticité](elasticite.md) ; toutes les cinématiques |
 
-| loi | surface | ce qu'elle capture | matériau |
-|---|---|---|---|
-| `plasticity_perfect` | `q = σ_y` | métal sans écrouissage | `E, nu, sigma_y` |
-| `plasticity_isotropic` | `q = σ_y + H·p` | métal écrouissable | `+ H` |
-| `drucker_prager` | `α·I₁ + β·q = k` | sols, roches, poudres — sensibilité à la pression, écrouissage borné | `E, nu, friction, k, psi` (+ six facultatifs) |
-| `ottosen` | 4 paramètres, dépendante de l'angle de Lode | béton — traction ≠ compression | `E, nu, a, b, k_1, k_2, sigma_c` |
+Elles suivent le cadre de la [plasticité de von Mises](plasticite.md#théorie) :
+partition de la déformation, critère \\(f \le 0\\), écoulement et conditions de
+Kuhn-Tucker. Elles en diffèrent par la surface \\(f\\), le potentiel \\(g\\)
+de l'écoulement (\\(\dot\varepsilon^p = \dot\lambda\\,\partial g/\partial\sigma\\)),
+et la tangente.
 
-Ce qui est mutualisé dans `src/models/plastic/` : le prédicteur élastique, la
-**boucle sécante des contraintes planes** (qui résout `σ_zz(B) = 0` *autour* de
-n'importe quelle loi, si bien qu'aucune loi ne connaît les contraintes planes),
-le retour par **plan sécant** pour les surfaces sans forme fermée, et la tangente
-cohérente.
+## Théorie
 
-L'état est toujours porté en **3-D complet** (six `eps_p_*` et un `p` cumulé)
-quel que soit le modèle 2-D : chaque retour est ainsi identique en contraintes
-planes, déformations planes, axisymétrie et massif — seules les projections
-d'entrée et de sortie changent.
-
-## Équations continues résolues
-
-Les quatre lois partagent le cadre de l'élastoplasticité en **petites
-déformations**, et n'en particularisent que deux fonctions — la surface `f` et
-le potentiel `g` :
-
-- **partition** : \\( \varepsilon = \varepsilon^e + \varepsilon^p \\) ;
-- **élasticité** : \\( \sigma = D : \varepsilon^e = D : (\varepsilon - \varepsilon^p) \\) ;
-- **domaine élastique** : \\( f(\sigma, \mathcal V) \le 0 \\), où \\( \mathcal V \\)
-  rassemble les variables d'écrouissage ;
-- **règle d'écoulement** : \\( \dot\varepsilon^p = \dot\lambda\\,\dfrac{\partial g}{\partial\sigma} \\),
-  l'écoulement étant dit **associé** si \\( g = f \\) ;
-- **écrouissage** : \\( \dot{\mathcal V} = \dot\lambda\\,h(\sigma, \mathcal V) \\) ;
-- **Kuhn-Tucker** : \\( \dot\lambda \ge 0 \\), \\( f \le 0 \\), \\( \dot\lambda\\,f = 0 \\),
-  et la **consistance** \\( \dot\lambda\\,\dot f = 0 \\) tant que l'on plastifie.
-
-Toutes les surfaces s'écrivent sur les invariants de la contrainte :
+Les surfaces s'écrivent sur les invariants de la contrainte :
 
 \\[
-I_1 = \operatorname{tr}\sigma = 3\sigma_m, \qquad
-s = \sigma - \sigma_m\\,I, \qquad
-J_2 = \tfrac12\\,s\\!:\\!s, \qquad
-J_3 = \det s,
+I_1 = \operatorname{tr}\sigma, \qquad
+J_2 = \tfrac12\\,s : s, \qquad
+J_3 = \det s, \qquad
+q = \sqrt{3J_2}, \qquad
+\cos 3\theta = \frac{3\sqrt3}{2}\\,\frac{J_3}{J_2^{3/2}} ,
 \\]
 
-d'où la contrainte équivalente \\( q = \sqrt{3J_2} \\) et l'**angle de Lode**
-\\( \theta \\), qui repère la direction *dans* le plan déviatorique :
+\\(\theta \in [0, \pi/3]\\) étant l'angle de Lode, la direction de la
+contrainte dans le plan déviatorique. Von Mises ne voit que \\(q\\) ;
+Drucker-Prager ajoute \\(I_1\\), donc la pression ; Ottosen ajoute
+\\(\theta\\).
+
+### Drucker-Prager
+
+Le cône
 
 \\[
-\cos 3\theta = \frac{3\sqrt3}{2}\\,\frac{J_3}{J_2^{3/2}}, \qquad \theta \in [0, \pi/3].
+f(\sigma) = \alpha\\,I_1 + \beta\\,q - k
 \\]
 
-C'est le jeu d'invariants retenu qui classe les quatre lois : von Mises ne voit
-que \\( q \\) ; Drucker-Prager ajoute \\( I_1 \\), donc la pression ;
-Ottosen ajoute en plus \\( \theta \\), donc la direction déviatorique.
+a pour pente \\(\alpha\\) (`friction`), pour cohésion \\(k\\) et pour poids
+déviatorique \\(\beta\\) (`beta`, 1 par défaut). L'écoulement n'est **pas
+associé** : le potentiel a sa propre pente, la dilatance \\(\psi\\) (`psi`),
+et son propre poids déviatorique \\(\delta\\) (`delta`, 1 par défaut),
+\\(g(\sigma) = \psi\\,I_1 + \delta\\,q\\). \\(\psi = \alpha\\) redonne un
+écoulement associé, \\(\psi = 0\\) un écoulement sans variation de volume.
 
-## Forme discrétisée — le problème incrémental
+Sur le flanc du cône, \\(q\\) et \\(I_1\\) sont affines en le multiplicateur,
+et le retour se résout sans itérer. Un retour qui donnerait \\(q_B < 0\\) a
+dépassé l'axe hydrostatique : la contrainte se pose alors au **sommet** du
+cône, \\(s_B = 0\\), \\(\sigma_{m,B} = k/(3\alpha)\\), où la tangente est nulle :
+un corps entièrement à son sommet ne porte plus rien.
 
-Sur un pas A → B, les conditions de Kuhn-Tucker deviennent un problème de
-**projection** : trouver \\( \Delta\lambda \ge 0 \\) tel que
+**Écrouissage.** La cohésion croît avec la déformation plastique cumulée,
+\\(dk = H\\,dp\\) (`H`, 0 par défaut ; négatif, il adoucit), jusqu'à une
+surface **ultime** \\(\alpha_u I_1 + \beta_u q = k_u\\) (`friction_ult`,
+`beta_ult`, `k_ult`, par défaut égales aux valeurs initiales). La surface
+courante interpole les deux :
 
 \\[
-\sigma_B = D : \Big(\varepsilon_B - \varepsilon^p_A - \Delta\lambda\\,
-\frac{\partial g}{\partial\sigma}\Big),
-\qquad f(\sigma_B, \mathcal V_B) = 0 .
+\lambda = \operatorname{clamp}\\!\Big(\frac{H\\,p}{k_u - k}, 0, 1\Big), \qquad
+(\alpha, \beta, k)(p) = (1-\lambda)\\,(\alpha, \beta, k) + \lambda\\,(\alpha_u, \beta_u, k_u),
 \\]
 
-Le **prédicteur élastique** gèle la plasticité sur le pas :
+si bien que \\(k(p) = k + H\\,p\\) tant que la surface ultime n'est pas
+atteinte. La consistance n'est alors plus linéaire : elle est résolue par un
+Newton encadré, dont la solution sans écrouissage est le premier itéré. Sans
+écrouissage, le retour reste fermé.
+
+### Ottosen
+
+Une surface à quatre paramètres, faite pour le béton :
 
 \\[
-\sigma^{\text{tr}} = D : (\varepsilon_B - \varepsilon^p_A).
+f(\sigma) = a\\,\frac{J_2}{\sigma_c^2} + \lambda(\theta)\\,\frac{\sqrt{J_2}}{\sigma_c} + b\\,\frac{I_1}{\sigma_c} - 1,
 \\]
-
-Si \\( f(\sigma^{\text{tr}}, \mathcal V_A) \le 0 \\), le pas est élastique et
-l'état interne ne bouge pas. Sinon il faut **retourner** sur la surface — et
-c'est là, et seulement là, que les lois diffèrent.
-
-## Écrouissage isotrope
-
-La surface se dilate avec la déformation plastique cumulée :
-
-\\[
-f(\sigma, p) = q - \big(\sigma_y + H\\,p\big), \qquad
-\frac{\partial f}{\partial\sigma} = \frac{3}{2}\\,\frac{s}{q}, \qquad
-\dot p = \dot\lambda .
-\\]
-
-La normale est **colinéaire au déviateur** et de trace nulle : le retour est
-*radial* et la plasticité isochore. Le déviateur d'essai n'étant que remis à
-l'échelle, \\( q_B = q^{\text{tr}} - 3\mu\\,\Delta p \\), la consistance devient
-une équation **affine** dont la solution est fermée :
-
-\\[
-q^{\text{tr}} - 3\mu\\,\Delta p = \sigma_y + H\\,(p_A + \Delta p)
-\quad\Longrightarrow\quad
-\Delta p = \frac{q^{\text{tr}} - \sigma_y(p_A)}{3\mu + H},
-\\]
-
-la mise à jour étant alors
-
-\\[
-s_B = s^{\text{tr}}\Big(1 - \frac{3\mu\\,\Delta p}{q^{\text{tr}}}\Big), \qquad
-\varepsilon^p_B = \varepsilon^p_A + \frac{3\\,\Delta p}{2\\,q^{\text{tr}}}\\,s^{\text{tr}},
-\qquad \sigma_m \ \text{inchangé.}
-\\]
-
-`H = 0` redonne exactement la loi parfaite — un seul chemin de code sert les
-deux, ce que vérifie un test.
-
-**Sa tangente cohérente est la seule analytique** du lot, le module
-algorithmique classique évalué au prédicteur :
-
-\\[
-D_{\text{alg}} = K\\,I \otimes I + 2\mu\\,\theta\\,\mathbb I_{\text{dev}} -
-2\mu\\,\bar\theta\\;\hat n \otimes \hat n,
-\\]
-\\[
-\theta = \frac{\sigma_y(p_A + \Delta p)}{q^{\text{tr}}}, \qquad
-\bar\theta = \frac{3\mu}{3\mu + H} - (1 - \theta), \qquad
-\hat n = \frac{s^{\text{tr}}}{\lVert s^{\text{tr}}\rVert}.
-\\]
-
-Le facteur \\( \theta \\) est ce qui distingue le module **algorithmique** du
-module élastoplastique *continu* : il rend compte du pas **fini**, et l'omettre
-coûterait à Newton sa convergence quadratique. À \\( H = 0 \\) les deux
-coefficients coïncident (\\( \bar\theta = \theta \\)) et l'on retrouve la
-tangente parfaite : l'écrouissage coûte un terme, pas une seconde dérivation.
-
-## Drucker-Prager
-
-Sols, roches, bétons et poudres sont **plus résistants en compression qu'en
-traction** : leur seuil dépend de la pression hydrostatique, que von Mises
-ignore. Drucker-Prager est le cône le plus simple qui le capture :
-
-\\[
-f(\sigma) = q + \alpha\\,I_1 - k
-\\]
-
-### Un écoulement non associé
-
-Un écoulement associé sur ce cône ferait dilater le matériau sous cisaillement
-d'exactement ce que son frottement implique — bien trop pour un milieu granulaire
-réel. Le potentiel plastique porte donc **sa propre** pente, la dilatance `ψ` :
-
-\\[
-g(\sigma) = q + \psi\\,I_1, \qquad \psi \le \alpha
-\\]
-
-`ψ = α` redonne l'écoulement associé ; `ψ = 0` donne un écoulement plastique
-isochore à résistance frottante.
-
-### Le retour sur le flanc reste fermé
-
-La normale au potentiel se sépare en une part déviatorique et une part
-sphérique :
-
-\\[
-\frac{\partial g}{\partial\sigma} = \frac{3}{2}\\,\frac{s}{q} + \psi\\,I .
-\\]
-
-L'opérateur élastique envoie la première sur \\( 3\mu \\) dans `q` et la seconde
-sur \\( 9K\psi \\) dans `I₁`, si bien que les deux invariants sont **affines** en
-le multiplicateur :
-
-\\[
-q_B = q^{\text{tr}} - 3\mu\\,\Delta\lambda, \qquad
-I_{1,B} = I_1^{\text{tr}} - 9K\psi\\,\Delta\lambda,
-\\]
-
-et la consistance \\( f(\sigma_B) = 0 \\) se résout, comme en J2, sans itérer :
-
-\\[
-\Delta\lambda = \frac{q^{\text{tr}} + \alpha I_1^{\text{tr}} - k}{3\mu + 9K\alpha\psi},
-\qquad
-\Delta\varepsilon^p = \frac{3\\,\Delta\lambda}{2\\,q^{\text{tr}}}\\,s^{\text{tr}} +
-\psi\\,\Delta\lambda\\,I .
-\\]
-
-Le terme \\( 9K\alpha\psi \\) au dénominateur est **le** couplage
-pression-cisaillement : c'est là que la dilatance rigidifie (ou non) la réponse,
-et il disparaît dès que \\( \psi = 0 \\).
-
-### Écrouissage et surface ultime
-
-La cohésion croît avec la déformation plastique cumulée, \\( dk = H\\,dp \\), le
-module \\( H \\) étant algébrique — un \\( H \\) négatif adoucit. Laissée seule
-cette croissance serait sans borne, aussi une seconde surface, dite **ultime**,
-l'arrête :
-
-\\[
-\text{initiale } \alpha I_1 + \beta q = k,
-\qquad
-\text{ultime } \alpha_u I_1 + \beta_u q = k_u .
-\\]
-
-Les deux sont lues comme les extrémités d'une seule interpolation, que
-l'écrouissage lui-même pilote :
-
-\\[
-\lambda = \mathrm{clamp}\\!\left(\frac{H\\,p}{k_u - k},\\, 0,\\, 1\right),
-\qquad
-\big(\alpha, \beta, k\big)(p) = (1-\lambda)\\,\big(\alpha, \beta, k\big) + \lambda\\,\big(\alpha_u, \beta_u, k_u\big).
-\\]
-
-**C'est une interprétation, et il vaut mieux le dire.** Cast3M donne les deux
-surfaces et \\( dK = H\\,dp \\) sans préciser comment elles se rencontrent. Les
-lire comme une surface qui interpole a deux mérites : \\( k(p) = k + H p \\)
-exactement tant que la limite n'est pas atteinte, donc la loi d'écrouissage
-annoncée est reproduite telle quelle ; et la surface de charge reste **unique**,
-si bien que le retour garde un cône et un sommet au lieu de faire naître un coin
-entre deux.
-
-La contrepartie est que la condition de cohérence cesse d'être linéaire — la
-surface bouge avec le multiplicateur qu'on cherche. Elle est alors résolue par un
-Newton encadré, la solution linéaire servant à la fois de premier itéré et de
-borne. C'est le seul cas où cette loi itère : sans écrouissage, le retour reste
-la forme fermée ci-dessus.
-
-### Les neuf paramètres, et ce qu'ils redonnent
-
-| Cast3M | ici | défaut | rôle |
-|---|---|---|---|
-| `ALFA` | `friction` | requis | pente du cône |
-| `K` | `k` | requis | cohésion |
-| `GAMM` | `psi` | requis | dilatance du potentiel |
-| `BETA` | `beta` | 1 | poids déviatorique du critère |
-| `DELT` | `delta` | 1 | poids déviatorique du potentiel |
-| `H` | `H` | 0 | module d'écrouissage |
-| `ETA` | `friction_ult` | `friction` | pente de la surface ultime |
-| `MU` | `beta_ult` | `beta` | poids déviatorique ultime |
-| `KL` | `k_ult` | `k` | cohésion ultime |
-
-Six sur neuf sont facultatifs, et leurs défauts font du cône simple le cas sans
-configuration : \\( k_u = k \\) ne laisse aucune place à l'écrouissage,
-l'interpolation reste figée sur la surface initiale, et il ne reste que le cône
-parfaitement plastique — trois nombres, comme avant.
-
-Les deux modèles de Cast3M sont alors des préréglages de celui-ci :
-
-- **`PLASTIQUE DRUCKER_PARFAIT`** — `psi = friction` (et `delta = beta`), ce qui
-  rend l'écoulement associé, tous les autres à leur défaut. Cast3M le paramètre
-  par les limites en traction et compression simples, d'où l'on tire
-  \\( \text{friction} = \frac{|LCS| - LTR}{|LCS| + LTR} \\) et
-  \\( k = \frac{2\\,|LCS|\\,LTR}{|LCS| + LTR} \\).
-- **`PLASTIQUE DRUCKER_PRAGER`** — les neuf.
-
-### Le sommet
-
-Un cône a une pointe, en \\( I_1 = k/\alpha \\), \\( s = 0 \\). Le critère qui la
-détecte est celui-là même que donne la formule fermée : si elle rend
-\\( q_B < 0 \\), le retour lisse a *dépassé* l'axe hydrostatique et la solution
-n'est pas admissible. La contrainte s'effondre alors sur la pointe,
-
-\\[
-s_B = 0, \qquad \sigma_{m,B} = \frac{k}{3\alpha},
-\\]
-
-tout ce que le prédicteur avait construit au-delà devenant plastique :
-
-\\[
-\Delta\varepsilon^p = \frac{s^{\text{tr}}}{2\mu} +
-\frac{I_1^{\text{tr}} - k/\alpha}{9K}\\,I,
-\qquad \Delta p = \frac{q^{\text{tr}}}{3\mu}.
-\\]
-
-C'est **le** cas qu'une implémentation naïve rate silencieusement sous forte
-traction. Avec \\( \alpha = 0 \\) le cône est un cylindre, il n'a pas de sommet,
-et cette branche est inatteignable — le retour sur le flanc réussit toujours,
-puisque c'est von Mises.
-
-Au sommet la contrainte est figée, donc **la tangente y est nulle** — et
-délibérément. Renvoyer le module élastique, la solution de facilité, rendrait la
-tangente incohérente avec le retour. Un corps entièrement à son sommet assemble
-donc une tangente singulière : ce n'est pas un artefact, c'est le constat honnête
-qu'un tel matériau ne porte plus rien.
-
-## Ottosen
-
-Le béton casse très différemment en traction et en compression, et sa résistance
-sous une pression donnée dépend de **la direction déviatorique** de la
-contrainte. Ni von Mises (aveugle à la pression) ni Drucker-Prager (aveugle à
-cette direction) ne le capturent. La surface d'Ottosen le fait par une dépendance
-à l'**angle de Lode** :
-
-\\[
-f(\sigma) = a\frac{J_2}{\sigma_c^2} + \lambda(\theta)\frac{\sqrt{J_2}}{\sigma_c}
-          + b\frac{I_1}{\sigma_c} - 1
-\\]
-
-où la fonction de forme déviatorique vaut, selon le signe de \\( \cos 3\theta \\),
 
 \\[
 \lambda(\theta) =
 \begin{cases}
-k_1\\,\cos\\!\Big[\tfrac13\arccos\big(k_2\cos 3\theta\big)\Big]
-& \text{si } \cos 3\theta \ge 0,\\\\
-k_1\\,\cos\\!\Big[\tfrac{\pi}{3} - \tfrac13\arccos\big(-k_2\cos 3\theta\big)\Big]
-& \text{si } \cos 3\theta < 0 .
+k_1 \cos\\!\big[\tfrac13 \arccos(k_2 \cos 3\theta)\big] & \text{si } \cos 3\theta \ge 0,\\\\
+k_1 \cos\\!\big[\tfrac\pi3 - \tfrac13 \arccos(-k_2 \cos 3\theta)\big] & \text{si } \cos 3\theta < 0 .
 \end{cases}
 \\]
 
-La première branche couvre le méridien de **traction**
-(\\( \theta = 0 \\)), la seconde celui de **compression**
-(\\( \theta = \pi/3 \\)) ; `k₁` fixe l'ouverture de la section et `k₂ ∈ [0,1]`
-son écart à un cercle. Le terme en \\( J_2 \\) rend les méridiens **courbes** et
-le terme en \\( I_1 \\) les incline, si bien que la section déviatorique est un
-triangle arrondi qui s'ouvre vers la compression — ce qui est tout l'objet.
+\\(\sigma_c\\) est la résistance en compression simple. Le terme en \\(J_2\\)
+courbe les méridiens, le terme en \\(I_1\\) les incline, et \\(\lambda(\theta)\\)
+fait de la section déviatorique un triangle arrondi qui s'ouvre vers la
+compression.
 
-### Intégrée par plan sécant, avec une normale numérique
+Aucun retour fermé n'existe. Le retour passe par l'algorithme du **plan
+sécant**, qui n'a besoin que de \\(f\\) : partant du prédicteur, on linéarise
+le critère à l'itéré courant, on en tire un multiplicateur, on corrige, jusqu'à
+\\(|f|\\) sous une tolérance. La normale \\(\partial f/\partial\sigma\\) est
+obtenue par différences centrées sur \\(f\\), avec un pas de
+\\(10^{-6}\\,\sigma_c\\).
 
-Il n'existe pas de retour fermé exploitable sur cette surface. Pire, la normale
-`∂f/∂σ` demande de dériver `λ(θ)` à travers `arccos` et `J₃` — une expression
-assez longue pour qu'une erreur de signe y soit invisible en relecture et ne se
-manifeste que par une direction d'écoulement légèrement fausse.
+### La tangente par perturbation
 
-Le retour passe donc par l'algorithme du **plan sécant**, qui n'a besoin que du
-scalaire `f(σ)`. Partant du prédicteur, on linéarise le critère à l'itéré
-courant, on en déduit un multiplicateur, on corrige, et l'on recommence :
-
-\\[
-n^{(i)} = \frac{\partial f}{\partial\sigma}\Big|_{\sigma^{(i)}}, \qquad
-\Delta\lambda^{(i)} = \frac{f(\sigma^{(i)})}{n^{(i)} : D : n^{(i)}},
-\\]
-\\[
-\sigma^{(i+1)} = \sigma^{(i)} - \Delta\lambda^{(i)}\\,D : n^{(i)},
-\qquad
-\varepsilon^{p\\,(i+1)} = \varepsilon^{p\\,(i)} + \Delta\lambda^{(i)}\\,n^{(i)},
-\qquad
-p^{(i+1)} = p^{(i)} + \Delta\lambda^{(i)},
-\\]
-
-jusqu'à \\( |f| \le \varepsilon_{\text{tol}} \\) — `f` étant normalisé par
-\\( \sigma_c \\), la tolérance l'est aussi. Le schéma est **semi-implicite** : la
-normale est ré-évaluée à l'itéré courant plutôt que résolue implicitement, ce
-qui converge robustement sur une surface fortement courbe **sans demander de
-dérivées secondes** — c'est ce qui en fait le bon choix ici.
-
-La normale elle-même vient de **différences centrées** sur `f` :
-
-\\[
-n_i \simeq \frac{f(\sigma + h\\,e_i) - f(\sigma - h\\,e_i)}{2h},
-\qquad h = 10^{-6}\\,\sigma_c .
-\\]
-
-Le critère est ainsi exact et le gradient précis à \\( O(h^2) \\). Échanger un
-gradient analytique invérifiable contre un gradient numérique qui ne peut pas
-être mal dérivé est le bon compromis ici.
-
-## La tangente cohérente, et deux limites assumées
-
-Seule von Mises garde une tangente **analytique**, parce que seule sa forme
-fermée a été confrontée à une différence finie. Toutes les autres l'obtiennent
-**par perturbation** — des différences centrées sur le retour lui-même, une
-colonne par composante de déformation :
+Les deux lois obtiennent leur tangente par **différences centrées** sur le
+retour lui-même, une colonne par composante de déformation :
 
 \\[
 D_{ij} \simeq \frac{\sigma_i(\varepsilon + h\\,e_j) - \sigma_i(\varepsilon - h\\,e_j)}{2h},
-\qquad h = 10^{-6}\\,\lVert \varepsilon \rVert_\infty ,
+\qquad h = 10^{-6}\\,\lVert\varepsilon\rVert_\infty ,
 \\]
 
-soit **douze appels** au retour par point de Gauss. Le pas doit rester bien
-au-dessus du bruit du retour — celui d'Ottosen ou de Gurson converge à une
-tolérance, pas exactement — et bien en dessous de l'échelle de courbure de la
-surface ; `1e-6·‖ε‖` tient confortablement entre les deux. Les colonnes de
-cisaillement sont divisées par deux en sortie, ce qui transforme `∂σ/∂ε_ij` en
-`∂σ/∂γ_ij`, la convention ingénieur du reste du dépôt.
+soit douze retours par point de Gauss. Les colonnes de cisaillement sont
+divisées par deux, pour passer de \\(\partial\sigma/\partial\varepsilon_{ij}\\)
+à \\(\partial\sigma/\partial\gamma_{ij}\\).
 
-> La dérivation analytique de Drucker-Prager, écrite d'abord, était **fausse de
-> 24 %** — plausible, et fausse. Seul l'oracle par différences finies de
-> `tests/plastic_laws.rs` l'a dit. La tangente par perturbation qui l'a
-> remplacée ne peut pas être mal dérivée, coûte douze évaluations d'une mise à
-> jour fermée, et laisse la convergence de Newton quadratique.
+La tangente est **symétrisée** : seul son triangle supérieur est gardé. Celle
+d'un écoulement non associé, comme Drucker-Prager, ne l'est pas ; la
+symétriser coûte à Newton sa convergence quadratique sur cette loi. Celle
+d'Ottosen est doublement numérique (la normale, puis la tangente) : moins
+précise, elle suffit à faire converger Newton.
 
-**La tangente est symétrisée.** `D_alg` est réduit au triangle supérieur puis relu
-en miroir, un format qui ne peut pas porter la tangente réellement **non
-symétrique** d'une loi non associée. Celle de Drucker-Prager est donc symétrisée — le compromis d'ingénierie
-usuel, qui coûte à Newton son taux quadratique sur cette loi et rien d'autre, et
-garde symétriques tous les consommateurs en aval.
+## Variables
 
-**Une tangente doublement numérique n'est précise que jusqu'à un point.** Ottosen
-dérive `f` pour obtenir sa normale, puis la tangente dérive toute cette carte
-itérative ; les deux échelles d'erreur se composent, pour environ 10 % d'écart à
-la dérivée exacte. Newton converge quand même — il lui faut une tangente assez
-bonne pour converger, pas une tangente exacte à la précision machine — et le test
-annonce le chiffre plutôt que de le cacher derrière une tolérance lâche partout.
+| | |
+|---|---|
+| primales, duales | celles de l'[élasticité](elasticite.md#variables) |
+| matériau requis | Drucker-Prager : `E`, `nu`, `friction`, `k`, `psi` ; Ottosen : `E`, `nu`, `a`, `b`, `k_1`, `k_2`, `sigma_c` |
+| matériau facultatif | `rho`, `alpha` ; Drucker-Prager : `beta`, `delta`, `H`, `friction_ult`, `beta_ult`, `k_ult` |
+| entrée, sortie, état | ceux de la [plasticité de von Mises](plasticite.md#variables) |
 
-## Mise en donnée (Rust, testé)
+## Ce qu'elles produisent
 
-```rust,ignore
-{{#include ../../../tests/plastic_laws.rs:example}}
-```
+| | |
+|---|---|
+| raideur | élastique |
+| masse | exige `rho` |
+| géométrique | sous la contrainte `sigma_*` |
+| tangente | par perturbation, symétrisée |
+| forces internes | \\(\int B^{\mathsf T}\sigma\\) |
 
-## Exemple Python
+## Exemple
+
+La tangente de Drucker-Prager, assemblée sur une maille plastifiée :
 
 ```python
 {{#include ../../../tests/python/test_doc_mecanique.py:drucker_prager}}
 ```
 
-La boucle de Newton reste orchestrée en Python, comme pour toute non-linéarité :
-le noyau Rust fournit la mise à jour ponctuelle et `D_alg`, pas la boucle.
+## Côté Rust
 
-## Compléments
-
-**Ce que vaut chaque test.** Un test de plasticité qui n'affirme que « la
-contrainte a baissé » ne prouve rien. Chaque loi est épinglée par sa propriété
-définissante : la consistance `q = σ_y + H·p` pour l'écrouissage, l'atterrissage
-sur le cône et l'effondrement au sommet pour Drucker-Prager, l'atterrissage sur
-la surface à quatre paramètres et l'écart traction/compression pour Ottosen. Et
-**toutes** ont leur tangente confrontée à une différence centrée des forces
-internes.
-
-**Renommages.** `Model.plasticity` est d'abord devenue `plasticity_perfect`,
-pour que les quatre lois se nomment de la même façon ; puis le catalogue entier
-a quitté le type `Model` pour le module des opérateurs (2026-08-25). On écrit
-aujourd'hui `pyrucast.model.plasticity_perfect(fes, model)`. Seuls les noms ont
-changé.
+Les deux lois vivent dans `src/models/plasticity/drucker_prager.rs` et
+`src/models/plasticity/ottosen.rs`, et déclarent leur tangente par
+`TangentSource::Numerical`. `tests/plastic_laws.rs` vérifie que le retour
+atterrit sur la surface, l'effondrement au sommet du cône, l'écart entre
+traction et compression d'Ottosen, et confronte chaque tangente à une
+différence finie des forces internes.

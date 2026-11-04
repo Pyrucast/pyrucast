@@ -275,7 +275,7 @@ Sur un sous-espace [axisymétrique](../coords.md#repère-de-révolution), une
 composante `<préfixe>_zz` est ajoutée. C'est l'entrée **orthoradiale**,
 construite sur \\(H_{\theta\theta} = u_r / r\\), que le gradient méridien ne
 peut pas exprimer : `eps_zz = u_r / r`, `F_zz = 1 + u_r / r`… (cf.
-[Axisymétrie](../mecanique/elasticite.md#axisymétrie)).
+[Axisymétrie](../mecanique/elasticite.md#théorie)).
 
 Une transformation dégénérée (\\(\det F = 0\\)) donne des valeurs non
 finies pour Hencky et Almansi : rien n'est vérifié au point de Gauss.
@@ -311,7 +311,7 @@ révolution se dilatant aussi circonférentiellement), si bien que
 déformation mécanique `ε(u) − ε_th`. Aucun couplage n'est fait ici :
 l'utilisateur compose la charge thermique et la contrainte réelle
 `σ = D:(ε − ε_th)` à partir des briques (`integrate_behavior`,
-`internal_forces`) — cf. l'[exemple thermomécanique](../mecanique/elasticite.md#thermomécanique-non-couplée).
+`internal_forces`) — cf. l'[exemple thermomécanique](../mecanique/elasticite.md#théorie).
 
 `measure` est la mesure que lit la loi : la même dilatation y est donnée
 exactement, `½((1 + αΔT)² − 1)` en Green–Lagrange (`E_*`), `ln(1 + αΔT)` en

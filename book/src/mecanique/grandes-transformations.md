@@ -116,10 +116,8 @@ donne `P = λ E (λ² − 1)/2`. Les deux formes closes sont vérifiées par
 `tests/large_transformations.rs`, avec la dualité énergie–efforts dans chaque
 mesure.
 
-C'est la moitié « contraintes » de `CONF` de Cast3M, entre la configuration de
-référence et la courante. Le reste de `CONF` (transporter des déformations,
-tourner par Jaumann) n'a pas lieu d'être : l'état ne change jamais de
-configuration. La conversion est inversible : de la Cauchy, `"pk2"` rend `S`.
+L'état ne change jamais de configuration : seule la contrainte se convertit,
+et la conversion est inversible, `"pk2"` rendant `S` depuis la Cauchy.
 
 ## Deux configurations
 
@@ -165,16 +163,16 @@ active : évaluée sur la configuration courante, la charge suit la paroi.
 Pour un contour parcouru dans le sens trigonométrique, la normale `(t_y, −t_x)`
 d'une arête sort de la matière : une pression `p` qui pousse sur la paroi
 s'écrit `phi_n = −p`. Sur la plaque étirée, la paroi du bas mesure 2,4 et reçoit
-`p · 2,4` vers le haut. Comme dans Cast3M, la pression n'a pas de raideur de
-chargement : elle n'entre que dans le résidu, recalculée à chaque itéré.
+`p · 2,4` vers le haut. La pression n'a pas de raideur de chargement : elle
+n'entre que dans le résidu, recalculée à chaque itéré.
 
 ## La rigidité géométrique
 
 L'opérateur de Newton se construit sur la configuration courante avec les
 fonctions existantes : la rigidité élastique `stiffness`, et la rigidité
-géométrique `geometric` avec la contrainte de Cauchy. C'est l'opérateur de
-Cast3M en grands déplacements, `K_e(GEOM2) + K_σ`. Deux propriétés le
-justifient, que vérifient les tests de `tests/large_transformations.rs` :
+géométrique `geometric` avec la contrainte de Cauchy, `K_e + K_σ`. Deux
+propriétés le justifient, que vérifient les tests de
+`tests/large_transformations.rs` :
 
 - la rigidité géométrique **spatiale**, `∫Ω ∇N·σ·∇N dv` sur la configuration
   courante, est égale à la **lagrangienne**, `∫Ω₀ ∇₀N·S·∇₀N dV₀` :
@@ -256,14 +254,6 @@ configuration courante, et la capacité, assemblée sur la référence : une
 matrice garde les valeurs de la configuration où elle a été assemblée, et
 [la somme](../operateurs/assemblage.md#la-somme) les additionne telles quelles.
 
-Cast3M résout aussi toute la thermique sur la géométrie courante, avec la
-conductivité donnée. Il range les axes d'une conduction orientée dans le repère
-local de chaque élément (la tangente à la première coordonnée de référence, au
-centre), qu'il recalcule sur la géométrie courante à chaque assemblage : sous
-une rotation rigide, ses axes tournent avec la pièce comme ici ; sous un
-cisaillement, ils suivent cette ligne de l'élément, là où pyrucast suit la
-rotation `R`.
-
 ## Dans le pas à pas
 
 `stepping.step_by_step` lit la mesure sur les lois et suit cette voie de
@@ -304,16 +294,3 @@ déduit comme plus haut, avec le déplacement enregistré. Voir
 - un carré pressé à travers sa propre base se retourne (`J < 0`) : le pas
   échoue en le disant, là où une loi de Green–Lagrange aurait calculé sans
   broncher ; pressé à mi-hauteur, il converge, et `J = 1/2`.
-
-## Correspondance Cast3M
-
-| Cast3M | pyrucast |
-|---|---|
-| `MODE … 'EPSILON' 'LINEAIRE'` / `'QUADRATIQUE'` | `strain_measure="linear"` / `"green_lagrange"` |
-| `LAGRANGIEN TOTAL` (loi en `(S, E)` sur `FOR0`) | la voie de pyrucast, pour toute loi |
-| `CONF` (contraintes) | `stress_measure` |
-| `FORM` avec un déplacement | `coords.displace_from` + `Coords.select` |
-| `KSIG` | `matrix.geometric` |
-| `BARR` en `GRANDS_DEPLACEMENTS` | `model.truss(fes, strain_measure="green_lagrange")` |
-| `PRES` sur la géométrie courante | `model.flux(…, "n")` évalué sur la configuration courante |
-| `RFCO` à chaque reconstruction de K | `model.update_contact`, appelé par le pas à pas |

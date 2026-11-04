@@ -51,7 +51,7 @@ ne peuvent pas diverger.
 
 Côté **mécanique**, l'axisymétrie ajoute la déformation orthoradiale
 \\( \varepsilon_{\theta\theta} = u_r/r \\), qui relève du modèle et non de la
-géométrie : voir [Élasticité linéaire](mecanique/elasticite.md#axisymétrie). La
+géométrie : voir [Élasticité linéaire](mecanique/elasticite.md#théorie). La
 **thermique** n'a rien à changer.
 
 Côté **visualisation**, un tracé axisymétrique montre par défaut la section
