@@ -6,10 +6,11 @@ Trois lois où un matériau perd sa raideur en se dégradant :
 
 | | |
 |---|---|
-| opérateurs | `pyrucast.model.damage_tc(fespace, kinematics, strain_measure="linear")`, `pyrucast.model.damage_sic_sic(…)`, `pyrucast.model.gurson(…)` |
+| opérateurs | `pyrucast.model.damage_tc(fespace, kinematics, strain_measure="linear")`, `pyrucast.model.damage_sic_sic(fespace, kinematics, strain_measure="linear")`, `pyrucast.model.gurson(fespace, kinematics, strain_measure="linear")` |
 | tag | `mechanical` |
 | type | domaine avec comportement (`label()` : `"Damage"` ; `"Plasticity"` pour Gurson) |
-| éléments | ceux de l'[élasticité](elasticite.md) ; toutes les cinématiques |
+| éléments | 2-D, en plan ou en axisymétrie : `TRI3`, `QUA4`, `TRI6`, `QUA8`, `QUA9` ; 3-D : `TET4`, `PYRA5`, `PENTA6`, `HEX8`, `TET10`, `PENTA15`, `HEX20`, `HEX27` |
+| cinématiques | `plane_stress`, `plane_strain`, `axisymmetric`, `full_3d` |
 
 | loi | variables d'endommagement | ce qu'elle décrit |
 |---|---|---|
@@ -103,14 +104,25 @@ perturbation.
 
 ## Variables
 
-| | |
-|---|---|
-| primales, duales | celles de l'[élasticité](elasticite.md#variables) |
-| matériau requis | Damage TC : `E`, `nu`, `f_t`, `f_c`, `A_t`, `A_c` ; SiC/SiC : `E`, `nu`, et pour chaque direction `i` = 1, 2, 3 : `eps_0_i`, `eps_c_i`, `d_max_i`, puis les axes ; Gurson : `E`, `nu`, `sigma_y`, `q_1`, `q_2`, `q_3`, `f_0`, `f_c`, `f_f` |
-| matériau facultatif | `rho`, `alpha` |
-| entrée du comportement | `eps_xx`, `eps_yy`, `eps_xy` (selon la cinématique) |
-| sortie du comportement | Damage TC : `sigma_*`, `damage`, `r_plus`, `r_minus`, `d_plus`, `d_minus` ; SiC/SiC : `sigma_*`, `damage`, `kappa_1`…`kappa_3`, `d_1`…`d_3` ; Gurson : celle de la [plasticité](plasticite.md#variables), plus `porosity` |
-| état relu (`prev`) | Damage TC : `r_plus`, `r_minus`, `d_plus`, `d_minus` ; SiC/SiC : `kappa_i`, `d_i` ; Gurson : toute la sortie du pas précédent |
+Selon la cinématique :
+
+| | `plane_stress`, `plane_strain` | `axisymmetric` | `full_3d` |
+|---|---|---|---|
+| primales | `u_x`, `u_y` | `u_x`, `u_y` | `u_x`, `u_y`, `u_z` |
+| duales | `f_x`, `f_y` | `f_x`, `f_y` | `f_x`, `f_y`, `f_z` |
+| entrée du comportement | `eps_xx`, `eps_yy`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` |
+| contrainte | `sigma_xx`, `sigma_yy`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_yz`, `sigma_xz`, `sigma_xy` |
+
+En axisymétrie, `eps_zz` et `sigma_zz` sont les composantes orthoradiales.
+
+La sortie du comportement est la contrainte, suivie de l'état. Matériau
+facultatif pour les trois lois : `rho`, `alpha`.
+
+| loi | matériau requis | état, écrit après la contrainte | état relu (`prev`) |
+|---|---|---|---|
+| `damage_tc` | `E`, `nu`, `f_t`, `f_c`, `A_t`, `A_c` | `damage`, `r_plus`, `r_minus`, `d_plus`, `d_minus` | `r_plus`, `r_minus`, `d_plus`, `d_minus` |
+| `damage_sic_sic` | `E`, `nu`, `eps_0_1`, `eps_c_1`, `d_max_1`, `eps_0_2`, `eps_c_2`, `d_max_2`, `eps_0_3`, `eps_c_3`, `d_max_3`, et les axes : `V1X`, `V1Y` en plan et en axisymétrie ; `V1X`, `V1Y`, `V1Z`, `V2X`, `V2Y`, `V2Z` en 3-D | `damage`, `kappa_1`, `kappa_2`, `kappa_3`, `d_1`, `d_2`, `d_3` | `kappa_1`, `kappa_2`, `kappa_3`, `d_1`, `d_2`, `d_3` |
+| `gurson` | `E`, `nu`, `sigma_y`, `q_1`, `q_2`, `q_3`, `f_0`, `f_c`, `f_f` | la déformation plastique `eps_p_xx`, `eps_p_yy`, `eps_p_zz`, `eps_p_yz`, `eps_p_xz`, `eps_p_xy` ; la déformation plastique cumulée `p` ; la déformation totale `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` ; et, en `plane_stress` et `plane_strain`, `sigma_zz` ; puis `porosity` | toute la sortie du pas précédent |
 
 ## Ce qu'elles produisent
 

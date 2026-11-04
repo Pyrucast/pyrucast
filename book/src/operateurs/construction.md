@@ -18,7 +18,7 @@ comme Dirichlet).
 | Python | Effet |
 |---|---|
 | `material_field(model, [(nom, valeur), …])` | un `ElementField` **uniforme** : une zone par sous-modèle consommateur de matériau, chaque composante demandée mise à la valeur donnée |
-| `material_field_per_sub_model(model, [[(nom, valeur), …], …])` | idem mais avec une liste de paires **par** sous-modèle (matériaux différents par zone) |
+| `material_field_per_sub_model(model, [[(nom, valeur), …], …])` | un `ElementField` **uniforme par zone** : une liste de paires **par** sous-modèle du modèle, dans l'ordre, une liste vide pour un sous-modèle sans matériau, comme une contrainte (matériaux différents par zone) |
 | `sub_material_field(sub_model, [(nom, valeur), …])` | une **seule** zone (`SubElementField`) pour un sous-modèle donné |
 
 ```python

@@ -10,7 +10,7 @@ l'inconnue, et la chaleur circule des zones chaudes vers les zones froides.
 | opérateur | `pyrucast.model.heat_conduction(fespace, symmetry="isotropic")` |
 | tag | `thermal` |
 | type | domaine avec comportement (`label()` : `"HeatConduction"`) |
-| éléments | toute maille de Lagrange, de degré 1 ou 2, en 1-D, 2-D ou 3-D |
+| éléments | `SEG2`, `SEG3` ; `TRI3`, `QUA4`, `TRI6`, `QUA8`, `QUA9` ; `TET4`, `PYRA5`, `PENTA6`, `HEX8`, `TET10`, `PENTA15`, `HEX20`, `HEX27` ; dans des `Coords` de leur dimension, ou plus grandes (un fil, une plaque mince) |
 
 `symmetry` choisit la forme de la conductivité : `"isotropic"` (un scalaire
 `k`), `"orthotropic"` ou `"anisotropic"` (un tenseur orienté par des axes
@@ -68,7 +68,7 @@ est demandé aussi : le tenseur est construit en 3-D, puis réduit au plan.
 |---|---|
 | primale | `T` |
 | duale | `q`, le flux de chaleur nodal |
-| matériau requis | `k` ; ou `k_1`, `k_2`, `k_3` et les axes (`orthotropic`) ; ou `k_11`, `k_12`, `k_13`, `k_22`, `k_23`, `k_33` et les axes (`anisotropic`) |
+| matériau requis | `k` ; ou `k_1`, `k_2`, `k_3` (`orthotropic`) ; ou `k_11`, `k_12`, `k_13`, `k_22`, `k_23`, `k_33` (`anisotropic`) ; orientés, plus les axes : `V1X`, `V1Y` en 2-D ; `V1X`, `V1Y`, `V1Z`, `V2X`, `V2Y`, `V2Z` en 3-D |
 | matériau facultatif | `rho`, `cp`, demandés par la capacité seule |
 | entrée du comportement | `grad_T_x`, `grad_T_y`, `grad_T_z` : le gradient, un par direction de l'espace |
 | sortie du comportement | `flux_x`, `flux_y`, `flux_z` |

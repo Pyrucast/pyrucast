@@ -73,8 +73,8 @@ convention à retenir.
 | `symmetry` | matériau requis |
 |---|---|
 | `"isotropic"` | `E`, `nu` |
-| `"orthotropic"` | `E_1`, `E_2`, `E_3`, `nu_12`, `nu_13`, `nu_23`, `G_12`, `G_13`, `G_23` et les axes |
-| `"anisotropic"` | `C_11`…`C_66`, le triangle supérieur dans l'ordre `[xx, yy, zz, yz, xz, xy]`, et les axes |
+| `"orthotropic"` | `E_1`, `E_2`, `E_3`, `nu_12`, `nu_13`, `nu_23`, `G_12`, `G_13`, `G_23`, et les axes : `V1X`, `V1Y` en 2-D ; `V1X`, `V1Y`, `V1Z`, `V2X`, `V2Y`, `V2Z` en 3-D |
+| `"anisotropic"` | `C_11`, `C_12`, `C_13`, `C_14`, `C_15`, `C_16`, `C_22`, `C_23`, `C_24`, `C_25`, `C_26`, `C_33`, `C_34`, `C_35`, `C_36`, `C_44`, `C_45`, `C_46`, `C_55`, `C_56`, `C_66` : le triangle supérieur dans l'ordre `[xx, yy, zz, yz, xz, xy]` ; et les axes : `V1X`, `V1Y` en 2-D ; `V1X`, `V1Y`, `V1Z`, `V2X`, `V2Y`, `V2Z` en 3-D |
 
 Les neuf constantes orthotropes sont demandées même en 2-D : le tenseur est
 construit en 3-D avant d'être réduit. Les trois jeux de composantes sont

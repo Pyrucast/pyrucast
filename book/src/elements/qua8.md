@@ -19,12 +19,14 @@ polynôme incomplet : il lui manque le terme \\( \xi^2\eta^2 \\).
 
 ## Élément de référence
 
-Le carré \\( [-1, +1]^2 \\) du `QUA4` : les sommets 0 à 3, puis les milieux 4
-à 7.
+Le carré \\( [-1, +1]^2 \\) : les sommets 0 à 3, puis les milieux 4 à 7.
 
 | Nœud | \\( (\xi, \eta) \\) | rôle |
 |---:|:---:|---|
-| 0 à 3 | \\( (\pm1, \pm1) \\) | sommets, comme le `QUA4` |
+| 0 | \\( (-1, -1) \\) | sommet |
+| 1 | \\( (+1, -1) \\) | sommet |
+| 2 | \\( (+1, +1) \\) | sommet |
+| 3 | \\( (-1, +1) \\) | sommet |
 | 4 | \\( (0, -1) \\) | milieu de \\( (0,1) \\) |
 | 5 | \\( (+1, 0) \\) | milieu de \\( (1,2) \\) |
 | 6 | \\( (0, +1) \\) | milieu de \\( (2,3) \\) |

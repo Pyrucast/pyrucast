@@ -11,7 +11,7 @@ l'inconnue, et l'espèce va des zones riches vers les zones pauvres.
 | opérateur | `pyrucast.model.fick(fespace, species, symmetry="isotropic")` |
 | tag | `diffusion` |
 | type | domaine avec comportement (`label()` : `"Fick"`) |
-| éléments | toute maille de Lagrange, de degré 1 ou 2, en 1-D, 2-D ou 3-D |
+| éléments | `SEG2`, `SEG3` ; `TRI3`, `QUA4`, `TRI6`, `QUA8`, `QUA9` ; `TET4`, `PYRA5`, `PENTA6`, `HEX8`, `TET10`, `PENTA15`, `HEX20`, `HEX27` ; dans des `Coords` de leur dimension, ou plus grandes (un fil, une plaque mince) |
 
 `species` nomme l'espèce : toutes ses grandeurs portent ce nom (`c_H2`,
 `j_H2`, `D_H2`), si bien que deux espèces vivent sur le même maillage sans se
@@ -58,7 +58,7 @@ Pour l'espèce `H2` :
 |---|---|
 | primale | `c_H2`, la concentration |
 | duale | `j_H2`, le flux d'espèce nodal |
-| matériau requis | `D_H2` ; ou `D_H2_1`, `D_H2_2`, `D_H2_3` et les axes (`orthotropic`) ; ou `D_H2_11`…`D_H2_33` et les axes (`anisotropic`) |
+| matériau requis | `D_H2` ; ou `D_H2_1`, `D_H2_2`, `D_H2_3` (`orthotropic`) ; ou `D_H2_11`, `D_H2_12`, `D_H2_13`, `D_H2_22`, `D_H2_23`, `D_H2_33` (`anisotropic`) ; orientés, plus les axes : `V1X`, `V1Y` en 2-D ; `V1X`, `V1Y`, `V1Z`, `V2X`, `V2Y`, `V2Z` en 3-D |
 | matériau facultatif | `poro`, demandé par le stockage seul |
 | entrée du comportement | `grad_c_H2_x`, `grad_c_H2_y`, `grad_c_H2_z` |
 | sortie du comportement | `j_H2_x`, `j_H2_y`, `j_H2_z` |

@@ -73,12 +73,12 @@ alors une réaction, pas une sortie de la loi.
 
 | | `thick` | `kirchhoff` |
 |---|---|---|
-| primales | `u_x`, `u_y`, `u_z`, `r_x`, `r_y`, `r_z` | idem |
-| duales | `f_x`, `f_y`, `f_z`, `m_x`, `m_y`, `m_z` | idem |
+| primales | `u_x`, `u_y`, `u_z`, `r_x`, `r_y`, `r_z` | `u_x`, `u_y`, `u_z`, `r_x`, `r_y`, `r_z` |
+| duales | `f_x`, `f_y`, `f_z`, `m_x`, `m_y`, `m_z` | `f_x`, `f_y`, `f_z`, `m_x`, `m_y`, `m_z` |
 | matériau requis | `E`, `nu`, `h` | `E`, `nu`, `h` |
 | matériau facultatif | `rho`, `k_s` | `rho` |
-| entrée du comportement | `eps_xx`, `eps_yy`, `eps_xy`, `kappa_xx`, `kappa_yy`, `kappa_xy`, `drill`, `gamma_xz`, `gamma_yz` | les sept premières |
-| sortie du comportement | `N_xx`, `N_yy`, `N_xy`, `M_xx`, `M_yy`, `M_xy`, `M_drill`, `Q_xz`, `Q_yz` | les sept premières |
+| entrée du comportement | `eps_xx`, `eps_yy`, `eps_xy`, `kappa_xx`, `kappa_yy`, `kappa_xy`, `drill`, `gamma_xz`, `gamma_yz` | `eps_xx`, `eps_yy`, `eps_xy`, `kappa_xx`, `kappa_yy`, `kappa_xy`, `drill` |
+| sortie du comportement | `N_xx`, `N_yy`, `N_xy`, `M_xx`, `M_yy`, `M_xy`, `M_drill`, `Q_xz`, `Q_yz` | `N_xx`, `N_yy`, `N_xy`, `M_xx`, `M_yy`, `M_xy`, `M_drill` |
 | état | aucun | aucun |
 
 L'entrée vient de `pyrucast.element_field.shell_deformation`, ou de `strain` :

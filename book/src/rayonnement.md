@@ -11,7 +11,7 @@ conduction et partage ses variables : il entre directement dans sa matrice.
 | opérateur | `pyrucast.model.radiation(fespace, target)` |
 | tag | `thermal` et `radiation` |
 | type | domaine avec comportement (`label()` : `"Radiation"`) |
-| éléments | le bord d'une conduction : `SEG2`, `SEG3` en 2-D, faces en 3-D |
+| éléments | le bord d'une conduction : `SEG2`, `SEG3` en 2-D ; `TRI3`, `QUA4`, `TRI6`, `QUA8`, `QUA9` en 3-D |
 
 `fespace` est l'espace du bord, `target` la conduction qu'il refroidit. Une
 cible qui n'assemble pas `T` avec sa duale `q` est refusée : le rayonnement
