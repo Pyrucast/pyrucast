@@ -1,30 +1,44 @@
 # QUA8 — quadrangle sérendipité
 
-Quadrangle à **8 nœuds**, interpolation **Lagrange-2 sérendipité** (arêtes
-seulement, **pas** de nœud central). Parent : [QUA4](qua4.md), plus 4 nœuds de
-milieu d'arête. Variante complète (avec nœud central) : [QUA9](qua9.md).
+## En bref
 
-## Repère de référence
+Le quadrangle à huit nœuds : les sommets et les milieux des côtés, sans nœud
+central. Une inconnue de moins par champ que le [QUA9](qua9.md), pour un
+polynôme incomplet : il lui manque le terme \\( \xi^2\eta^2 \\).
 
-\\( \xi, \eta \in [-1, +1] \\). Sommets 0..3 (comme QUA4), milieux 4..7.
+| | |
+|---|---|
+| nom | `"QUA8"` |
+| nœuds | 8 : les sommets, puis les milieux des côtés |
+| interpolation | `"LAGRANGE2"` : sérendipité |
+| dimension | 2 ; dans des `Coords` 2-D ou 3-D |
+| bord | 4 `SEG3` |
+| quadrature | `"GAUSS"` : 3×3 points, degré 5 par direction ; `"REDUCED"` : 1 point |
+| parent linéaire | [QUA4](qua4.md) |
+| obtenu par | `sweep`, `transfinite`, `pave_surface`, `grid_surface` ; `to_quadratic` d'un `QUA4` ; `skin` d'un `HEX20` ou `PENTA15` |
+
+## Élément de référence
+
+Le carré \\( [-1, +1]^2 \\) du `QUA4` : les sommets 0 à 3, puis les milieux 4
+à 7.
 
 | Nœud | \\( (\xi, \eta) \\) | rôle |
 |---:|:---:|---|
-| 0..3 | \\( (\pm1, \pm1) \\) | sommets (CCW) |
-| 4 | \\( (0, -1) \\) | milieu \\( (0,1) \\) |
-| 5 | \\( (+1, 0) \\) | milieu \\( (1,2) \\) |
-| 6 | \\( (0, +1) \\) | milieu \\( (2,3) \\) |
-| 7 | \\( (-1, 0) \\) | milieu \\( (3,0) \\) |
+| 0 à 3 | \\( (\pm1, \pm1) \\) | sommets, comme le `QUA4` |
+| 4 | \\( (0, -1) \\) | milieu de \\( (0,1) \\) |
+| 5 | \\( (+1, 0) \\) | milieu de \\( (1,2) \\) |
+| 6 | \\( (0, +1) \\) | milieu de \\( (2,3) \\) |
+| 7 | \\( (-1, 0) \\) | milieu de \\( (3,0) \\) |
 
 ## Fonctions de forme
 
-**Sommets** (\\( (\xi_i, \eta_i) \in \\{-1,+1\\}^2 \\)) :
+Aux sommets, de coordonnées \\( (\xi_i, \eta_i) \\) :
 
 \\[
 N_i = \tfrac14\\,(1 + \xi_i\xi)(1 + \eta_i\eta)\\,(\xi_i\xi + \eta_i\eta - 1).
 \\]
 
-**Milieux d'arête** :
+Aux milieux :
 
 \\[
 \begin{aligned}
@@ -33,20 +47,36 @@ N_6 &= \tfrac12(1 - \xi^2)(1 + \eta), & N_7 &= \tfrac12(1 - \xi)(1 - \eta^2).
 \end{aligned}
 \\]
 
+Au centre, les sommets valent \\( -\tfrac14 \\) et les milieux \\( \tfrac12 \\).
+
 ## Dérivées de référence
 
-Obtenues par dérivation directe des expressions ci-dessus (formes analytiques
-recoupées par différences finies dans les tests). Par exemple pour le milieu 4 :
+En dérivant ces expressions. Pour le milieu 4 :
 \\( \partial_\xi N_4 = -\xi(1-\eta) \\), \\( \partial_\eta N_4 = -\tfrac12(1-\xi^2) \\).
 
-## Quadrature (défaut)
+## Degrés de liberté
 
-Produit tensoriel **3×3** de Gauss-Legendre (9 points), exacte au degré
-\\( \le 5 \\) par direction. \\( \sum_g w_g = 4 \\).
+| physique | inconnues par nœud | par maille |
+|---|---|---:|
+| conduction, diffusion | `T` | 8 |
+| élasticité plane ou axisymétrique | `u_x`, `u_y` | 16 |
+| échanges, rayonnement, sur la face d'un volume quadratique | `T` | 8 |
 
-## Notes
+## Quadrature
 
-- Dimensions valides : \\( d_r = 2 \\), \\( d_s \in \\{2, 3\\} \\).
-- Sérendipité : 8 nœuds au lieu de 9 pour QUA9 — une inconnue de moins par
-  élément, mais l'espace polynomial n'est pas le \\( Q2 \\) complet (le monôme
-  \\( \xi^2\eta^2 \\) manque).
+`"GAUSS"` : produit 3×3 de Gauss-Legendre, 9 points, exact au degré 5 par
+direction. Le point 4 est le centre, de poids \\( \tfrac{64}{81} \\) ;
+\\( \sum_g w_g = 4 \\). La masse, de degré 4 par direction, est exacte sur un
+parallélogramme à côtés droits.
+
+`"REDUCED"` : un point au centre, de poids 4.
+
+## Exemple
+
+```python
+{{#include ../../../tests/python/test_doc_elements.py:qua8}}
+```
+
+## Côté Rust
+
+`Qua8` (`src/atoms/element_kind/qua8.rs`) implémente `ElementKind`.

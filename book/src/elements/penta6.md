@@ -1,15 +1,27 @@
-# PENTA6 — prisme (pentaèdre) linéaire
+# PENTA6 — prisme linéaire
 
-Prisme à **6 nœuds**, interpolation **Lagrange-1**. C'est l'**extrusion d'un
-TRI3** le long de \\( \zeta \\) : produit d'un triangle (coordonnées
-barycentriques) par un segment linéaire. Produit par les opérateurs `extrude`
-et `revolve` (TRI3 → PENTA6), ainsi que par `sweep_solid`.
+## En bref
 
-## Repère de référence
+Le prisme à six nœuds, un triangle étiré dans une direction. C'est ce que
+donne un maillage de triangles extrudé, ou tourné autour d'un axe : un
+maillage par couches.
 
-Triangle \\( \xi, \eta \in [0, 1] \\), \\( \xi + \eta \le 1 \\), extrudé sur
-\\( \zeta \in [0, 1] \\). Triangle inférieur (\\( \zeta = 0 \\)) puis triangle
-supérieur (\\( \zeta = 1 \\)), chacun CCW.
+| | |
+|---|---|
+| nom | `"PENTA6"` |
+| nœuds | 6 : le triangle du bas, puis celui du haut |
+| interpolation | `"LAGRANGE1"` : affine dans le triangle, linéaire en hauteur |
+| dimension | 3 ; dans des `Coords` 3-D |
+| bord | 2 `TRI3`, 3 `QUA4` |
+| quadrature | `"GAUSS"` : 3 × 2 = 6 points ; `"REDUCED"` : 1 point |
+| version quadratique | [PENTA15](penta15.md) |
+| obtenu par | `extrude`, `revolve` d'un `TRI3` ; `sweep_solid` ; `pave_volume` |
+
+## Élément de référence
+
+Le triangle \\( \xi, \eta \ge 0 \\), \\( \xi + \eta \le 1 \\), étiré sur
+\\( \zeta \in [0, 1] \\) : le triangle du bas (\\( \zeta = 0 \\)) puis celui du
+haut (\\( \zeta = 1 \\)), chacun dans le sens trigonométrique.
 
 | Nœud | \\( (\xi, \eta, \zeta) \\) | | Nœud | \\( (\xi, \eta, \zeta) \\) |
 |---:|:---:|---|---:|:---:|
@@ -19,42 +31,53 @@ supérieur (\\( \zeta = 1 \\)), chacun CCW.
 
 ## Fonctions de forme
 
-Avec les barycentriques du triangle \\( L_1 = 1-\xi-\eta \\), \\( L_2 = \xi \\),
-\\( L_3 = \eta \\) et le facteur linéaire en \\( \zeta \\) :
+Le produit des coordonnées barycentriques du triangle,
+\\( L_1 = 1-\xi-\eta \\), \\( L_2 = \xi \\), \\( L_3 = \eta \\), et d'une
+fonction linéaire en \\( \zeta \\) :
 
 \\[
-N_j = L_j\\,(1 - \zeta) \quad (j = 0, 1, 2), \qquad
-N_{j+3} = L_{j+1}\\,\zeta \quad (j = 0, 1, 2).
+N_{j-1} = L_j\\,(1 - \zeta), \qquad N_{j+2} = L_j\\,\zeta \qquad (j = 1, 2, 3).
 \\]
-
-(les nœuds 0..2 portent \\( L_1, L_2, L_3 \\) à \\( \zeta=0 \\) ; les nœuds
-3..5, les mêmes à \\( \zeta=1 \\)).
 
 ## Dérivées de référence
 
-Par exemple, pour le nœud 0 (\\( L_1(1-\zeta) \\)) :
+Les dérivées des \\( L_j \\) sont constantes ; celle en \\( \zeta \\) vient du
+facteur de hauteur. Pour le nœud 0 :
 
 \\[
-\nabla_\xi N_0 = \big(-(1-\zeta),\ -(1-\zeta),\ -L_1\big),
+\nabla_\xi N_0 = \big(-(1-\zeta),\ -(1-\zeta),\ -L_1\big).
 \\]
 
-les autres suivant le même schéma (dérivées de \\( L_j \\) constantes,
-\\( \partial_\zeta \\) porté par le facteur \\( \zeta \\)).
+## Degrés de liberté
 
-## Quadrature (défaut)
+| physique | inconnues par nœud | par maille |
+|---|---|---:|
+| conduction, diffusion | `T` | 6 |
+| élasticité 3-D | `u_x`, `u_y`, `u_z` | 18 |
 
-**Produit tensoriel** de la règle TRI3 (3 points, \\( w = 1/6 \\)) par la règle
-de Gauss à 2 points sur \\( \zeta \in [0, 1] \\) (\\( \zeta_g = \tfrac12 \pm \tfrac{1}{2\sqrt3} \\),
-\\( w = \tfrac12 \\)), soit **6 points** :
+## Quadrature
+
+`"GAUSS"` : le produit de la règle du `TRI3` (3 points, poids \\( \tfrac16 \\))
+et de Gauss-Legendre à 2 points sur \\( [0, 1] \\)
+(\\( \zeta_g = \tfrac12 \mp \tfrac{1}{2\sqrt3} \\), poids \\( \tfrac12 \\)),
+soit 6 points.
 
 \\[
 w_g = \tfrac16\cdot\tfrac12 = \tfrac{1}{12}, \qquad \sum_g w_g = \tfrac12.
 \\]
 
-## Notes
+Exacte au degré 2 dans le triangle et 3 en hauteur : la masse et la raideur
+sont exactes sur un prisme dont le triangle du haut est celui du bas déplacé.
 
-- Dimensions valides : \\( d_r = d_s = 3 \\).
-- Exact au degré \\( \le 2 \\) dans le plan du triangle et \\( \le 3 \\) selon
-  \\( \zeta \\).
-- Utile pour mailler par couches (extrusion d'un maillage surfacique TRI3).
-- Version quadratique sérendipité : [PENTA15](penta15.md).
+`"REDUCED"` : un point en \\( (\tfrac13, \tfrac13, \tfrac12) \\), de poids
+\\( \tfrac12 \\).
+
+## Exemple
+
+```python
+{{#include ../../../tests/python/test_doc_elements.py:penta6}}
+```
+
+## Côté Rust
+
+`Penta6` (`src/atoms/element_kind/penta6.rs`) implémente `ElementKind`.

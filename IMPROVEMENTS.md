@@ -148,6 +148,23 @@ one of them is refused; a later step carrying an extra zone, on a support the
 first step does not have, sees it dropped without a word. Decide: refuse it as
 well, or keep it documented (`book/src/evolution.md` says so).
 
+## `truss` accepts any cell type
+
+`Truss::new` (`src/models/truss.rs`) checks the strain measure and the
+axisymmetric frame, never the element type. A `SEG3` or a `TRI3` space is
+accepted, and `matrix.stiffness` assembles a 6 × 6 matrix from it without a
+word (checked in Python on one cell of each). The bar kernels read the first
+two nodes of a cell. Refuse anything but `SEG2` at construction, as
+`bernoulli` and `timoshenko` do.
+
+## The reduced rule is exact for affine functions
+
+`QuadratureRule::Reduced` (`src/atoms/element_kind/quadrature.rs`) says
+"Exact for constants only". Its single point is the reference centroid, so it
+integrates every affine function exactly: measured on all fifteen types by
+integrating `ξ^a η^b ζ^c`. The doc comment needs fixing; the book now says
+"affine".
+
 ## Book pages not reviewed yet
 
 Same rules as the reviewed pages: checked against the code, Python first then
@@ -157,7 +174,6 @@ Same rules as the reviewed pages: checked against the code, Python first then
   Matrice".
 - `operateurs/comportement.md`: heading `internal_forces(model, state)`; the
   signature is `internal_forces(model, state, solution, materials)`.
-- `elements/index.md`: the rest of the page.
 - `sauvegarde.md`: a reloaded field is read through
   `o[...].coords().acquire(id)`; drop `gc()` and "la copie qu'un champ garde
   de la connectivité", which no longer exists.

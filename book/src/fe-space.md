@@ -469,7 +469,7 @@ droite :
 | `TRI3` | 3 | Hammer, milieux d'arête : \\( (\tfrac{1}{2}, 0), (\tfrac{1}{2}, \tfrac{1}{2}), (0, \tfrac{1}{2}) \\), \\( w_g = 1/6 \\) | \\( \deg \le 2 \\) |
 | `QUA4` | 4 | produit 2×2 de Gauss-Legendre : \\( \xi_g = (\pm 1/\sqrt{3}, \pm 1/\sqrt{3}) \\), \\( w_g = 1 \\) | \\( \deg \le 3 \\) par direction |
 | `TET4` | 4 | Hammer : \\( \alpha = \tfrac{5 - \sqrt{5}}{20} \\), \\( \beta = \tfrac{5 + 3\sqrt{5}}{20} \\), points permutés, \\( w_g = 1/24 \\) | \\( \deg \le 2 \\) |
-| `PYRA5` | 8 | produit **conique** : 2×2 Gauss-Legendre sur la section carrée × Gauss-Jacobi 2 points en \\( \zeta \\) (poids \\( (1-\zeta)^2 \\), nœuds \\( \tfrac13 \mp \tfrac{\sqrt{10}}{15} \\)) | \\( \deg \le 2 \\) |
+| `PYRA5` | 8 | produit **conique** : 2×2 Gauss-Legendre sur la section carrée × Gauss-Jacobi 2 points en \\( \zeta \\) (poids \\( (1-\zeta)^2 \\), nœuds \\( \tfrac13 \mp \tfrac{\sqrt{10}}{15} \\)) | \\( \deg \le 3 \\) |
 | `PENTA6` | 6 | produit de la règle `TRI3` (3 points, \\( w = 1/6 \\)) et de Gauss-Legendre 2 points sur \\( \zeta \in [0, 1] \\) (\\( \zeta_g = \tfrac{1}{2} \pm \tfrac{1}{2\sqrt{3}} \\), \\( w = 1/2 \\)) | \\( \deg \le 2 \\) en \\( (\xi, \eta) \\), \\( \le 3 \\) en \\( \zeta \\) |
 | `HEX8` | 8 | produit 2×2×2 de Gauss-Legendre : \\( \xi_g = (\pm 1/\sqrt{3})^3 \\), \\( w_g = 1 \\) | \\( \deg \le 3 \\) par direction |
 | `SEG3` | 3 | Gauss-Legendre 3 points | \\( \deg \le 5 \\) |
@@ -481,8 +481,10 @@ droite :
 | `HEX20` | 27 | produit 3×3×3 | \\( \deg \le 5 \\) par direction |
 | `HEX27` | 27 | produit 3×3×3 | \\( \deg \le 5 \\) par direction |
 
-La règle `"REDUCED"` n'a qu'un point, au centre de l'élément de référence, de
-poids égal à sa mesure : elle n'intègre exactement que les constantes.
+La règle `"REDUCED"` n'a qu'un point, au centre de gravité de l'élément de
+référence, de poids égal à sa mesure : elle intègre exactement les fonctions
+affines. D'où viennent ces règles, et ce que chacune intègre exactement, est
+expliqué avec les [éléments finis](elements/index.md#les-règles-dintégration).
 
 La somme des poids vaut la mesure de l'élément de référence : 2 pour
 `SEG2`/`SEG3`, 1/2 pour `TRI3`/`TRI6`, 4 pour `QUA4`/`QUA8`/`QUA9`, 1/6 pour

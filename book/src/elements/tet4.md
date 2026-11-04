@@ -1,13 +1,28 @@
 # TET4 — tétraèdre linéaire
 
-Tétraèdre à **4 nœuds**, interpolation **Lagrange-1**. Élément 3-D simplicial ;
-interpolation **affine**, gradient et déformation **constants par élément**
-(analogue 3-D du TRI3). C'est l'élément produit par le mailleur de volume.
+## En bref
 
-## Repère de référence
+Le tétraèdre à quatre nœuds, pendant 3-D du [TRI3](tri3.md) : interpolation
+affine, gradient constant dans la maille. Il remplit n'importe quel volume,
+et c'est ce que produisent les mailleurs de volume. Une déformation constante
+par maille le rend raide en flexion : il y faut des mailles fines, ou le
+[TET10](tet10.md).
 
-Simplexe unité \\( \xi, \eta, \zeta \in [0, 1] \\), \\( \xi + \eta + \zeta \le 1 \\).
-Face 0-1-2 orientée CCW vue depuis le nœud 3.
+| | |
+|---|---|
+| nom | `"TET4"` |
+| nœuds | 4, aux sommets |
+| interpolation | `"LAGRANGE1"` : affine |
+| dimension | 3 ; dans des `Coords` 3-D |
+| bord | 4 `TRI3` |
+| quadrature | `"GAUSS"` : 4 points, degré 2 ; `"REDUCED"` : 1 point |
+| version quadratique | [TET10](tet10.md) |
+| obtenu par | `triangulate_volume`, `pave_volume` ; `convert` d'un `HEX8` |
+
+## Élément de référence
+
+Le tétraèdre \\( \xi, \eta, \zeta \ge 0 \\), \\( \xi + \eta + \zeta \le 1 \\).
+La face 0-1-2 tourne dans le sens trigonométrique vue depuis le nœud 3.
 
 | Nœud | \\( (\xi, \eta, \zeta) \\) |
 |---:|:---:|
@@ -18,8 +33,7 @@ Face 0-1-2 orientée CCW vue depuis le nœud 3.
 
 ## Fonctions de forme
 
-Coordonnées barycentriques \\( L_0 = 1-\xi-\eta-\zeta \\), \\( L_1 = \xi \\),
-\\( L_2 = \eta \\), \\( L_3 = \zeta \\) :
+Les coordonnées barycentriques :
 
 \\[
 N_0 = 1 - \xi - \eta - \zeta, \quad N_1 = \xi, \quad N_2 = \eta, \quad N_3 = \zeta.
@@ -27,7 +41,7 @@ N_0 = 1 - \xi - \eta - \zeta, \quad N_1 = \xi, \quad N_2 = \eta, \quad N_3 = \ze
 
 ## Dérivées de référence
 
-**Constantes** sur l'élément :
+Constantes :
 
 \\[
 \nabla_\xi N_0 = (-1,-1,-1), \quad
@@ -36,20 +50,36 @@ N_0 = 1 - \xi - \eta - \zeta, \quad N_1 = \xi, \quad N_2 = \eta, \quad N_3 = \ze
 \nabla_\xi N_3 = (0,0,1).
 \\]
 
-## Quadrature (défaut)
+## Degrés de liberté
 
-Règle de **Hammer** à **4 points** (exacte au degré \\( \le 2 \\)) : avec
+| physique | inconnues par nœud | par maille |
+|---|---|---:|
+| conduction, diffusion | `T` | 4 |
+| élasticité 3-D | `u_x`, `u_y`, `u_z` | 12 |
+
+## Quadrature
+
+`"GAUSS"` : règle de Hammer à 4 points, exacte au degré 2. Avec
 \\( \alpha = \tfrac{5 - \sqrt5}{20} \\) et \\( \beta = \tfrac{5 + 3\sqrt5}{20} \\),
-les points sont les permutations \\( (\beta, \alpha, \alpha) \\) et
-\\( (\alpha, \alpha, \alpha) \\),
+les points sont \\( (\alpha, \alpha, \alpha) \\) et les trois permutations de
+\\( (\beta, \alpha, \alpha) \\) : chacun a la coordonnée barycentrique
+\\( \beta \\) vers un sommet, \\( \alpha \\) vers les trois autres.
 
 \\[
 w_g = \tfrac{1}{24}, \qquad \sum_g w_g = \tfrac{1}{6}.
 \\]
 
-## Notes
+La masse, de degré 2, est exacte ; la raideur, de degré 0, aussi.
 
-- Dimensions valides : \\( d_r = d_s = 3 \\).
-- Élément à déformation constante (CST 3-D) : convergence lente en flexion, mais
-  robuste et facile à mailler (Delaunay / Bowyer–Watson).
-- Version quadratique : [TET10](tet10.md).
+`"REDUCED"` : un point au centre de gravité \\( (\tfrac14, \tfrac14, \tfrac14) \\),
+de poids \\( \tfrac16 \\).
+
+## Exemple
+
+```python
+{{#include ../../../tests/python/test_doc_elements.py:tet4}}
+```
+
+## Côté Rust
+
+`Tet4` (`src/atoms/element_kind/tet4.rs`) implémente `ElementKind`.

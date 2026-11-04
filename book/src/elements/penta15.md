@@ -1,23 +1,41 @@
-# PENTA15 — prisme quadratique sérendipité
+# PENTA15 — prisme sérendipité
 
-Prisme à **15 nœuds**, interpolation **Lagrange-2 sérendipité**. Parent :
-[PENTA6](penta6.md), plus 9 nœuds de milieu d'arête (aucun nœud de face ni de
-volume). Interpolation quadratique dans le triangle **et** selon \\( \zeta \\).
+## En bref
 
-## Repère de référence
+Le prisme à quinze nœuds : les six sommets et les milieux des neuf arêtes,
+sans nœud de face ni de centre. L'interpolation est quadratique dans le
+triangle et en hauteur. C'est l'extrusion quadratique du [TRI6](tri6.md).
 
-Triangle \\( (L_1, L_2, L_3) \\) extrudé sur \\( \zeta \in [0, 1] \\) (noté
-\\( t \\) ci-dessous). Sommets 0..5 (comme PENTA6), puis milieux : bas 6..8
-(\\( (0,1),(1,2),(2,0) \\)), haut 9..11 (\\( (3,4),(4,5),(5,3) \\)), verticaux
-12..14 (\\( (0,3),(1,4),(2,5) \\), à \\( \zeta = \tfrac12 \\)).
+| | |
+|---|---|
+| nom | `"PENTA15"` |
+| nœuds | 15 : les sommets, puis les milieux des arêtes |
+| interpolation | `"LAGRANGE2"` : sérendipité |
+| dimension | 3 ; dans des `Coords` 3-D |
+| bord | 2 `TRI6`, 3 `QUA8` |
+| quadrature | `"GAUSS"` : 6 × 3 = 18 points ; `"REDUCED"` : 1 point |
+| parent linéaire | [PENTA6](penta6.md) |
+| obtenu par | `to_quadratic` d'un `PENTA6` |
+
+## Élément de référence
+
+Le prisme du `PENTA6` : triangle \\( (L_1, L_2, L_3) \\) étiré sur
+\\( t = \zeta \in [0, 1] \\). Les sommets 0 à 5 comme le `PENTA6`, puis les
+milieux :
+
+| nœuds | arêtes | position |
+|---|---|---|
+| 6, 7, 8 | \\( (0,1), (1,2), (2,0) \\) | côtés du triangle du bas |
+| 9, 10, 11 | \\( (3,4), (4,5), (5,3) \\) | côtés du triangle du haut |
+| 12, 13, 14 | \\( (0,3), (1,4), (2,5) \\) | arêtes verticales, en \\( t = \tfrac12 \\) |
 
 ## Fonctions de forme
 
 Avec \\( L_1 = 1-\xi-\eta \\), \\( L_2 = \xi \\), \\( L_3 = \eta \\) et
-\\( t = \zeta \\) :
+\\( t = \zeta \\).
 
-**Sommets** (bas \\( \zeta=0 \\) / haut \\( \zeta=1 \\)) — profil quadratique
-dans le triangle **et** correction sérendipité en \\( t \\) :
+Aux sommets, la fonction du `TRI6` en hauteur, moins une correction qui
+s'annule aux deux faces :
 
 \\[
 \begin{aligned}
@@ -26,14 +44,13 @@ N^{\text{haut}}_i &= L_i(2L_i-1)\\,t - 2 L_i\\,t(1-t).
 \end{aligned}
 \\]
 
-**Milieux d'arête du triangle** (bas puis haut) :
+Aux milieux des côtés du triangle, en bas puis en haut :
 
 \\[
-N = 4 L_a L_b\\,(1-t) \quad(\text{bas}), \qquad
-N = 4 L_a L_b\\,t \quad(\text{haut}).
+N = 4 L_a L_b\\,(1-t), \qquad N = 4 L_a L_b\\,t .
 \\]
 
-**Milieux verticaux** (sur les sommets du triangle, \\( \zeta = \tfrac12 \\)) :
+Aux milieux des arêtes verticales :
 
 \\[
 N = 4 L_i\\,t(1 - t).
@@ -41,18 +58,35 @@ N = 4 L_i\\,t(1 - t).
 
 ## Dérivées de référence
 
-Dérivation directe des expressions ci-dessus (gradients de \\( L_i \\) constants,
-dérivée en \\( t \\) portée par les facteurs \\( (1-t) \\), \\( t \\),
-\\( t(1-t) \\)) ; formes analytiques recoupées par différences finies.
+En dérivant ces expressions : les dérivées des \\( L_i \\) sont constantes, et
+celle en \\( t \\) vient des facteurs \\( (1-t) \\), \\( t \\) et \\( t(1-t) \\).
 
-## Quadrature (défaut)
+## Degrés de liberté
 
-Produit tensoriel de la règle **[TRI6](tri6.md) (6 points)** par Gauss à
-**3 points** sur \\( \zeta \in [0, 1] \\), soit **18 points**.
-\\( \sum_g w_g = \tfrac12 \\).
+| physique | inconnues par nœud | par maille |
+|---|---|---:|
+| conduction, diffusion | `T` | 15 |
+| élasticité 3-D | `u_x`, `u_y`, `u_z` | 45 |
 
-## Notes
+## Quadrature
 
-- Dimensions valides : \\( d_r = d_s = 3 \\).
-- Version complète (avec nœud central) : non fournie — le prisme sérendipité
-  suffit pour l'extrusion de maillages quadratiques.
+`"GAUSS"` : le produit de la règle du [TRI6](tri6.md#quadrature) (6 points) et
+de Gauss-Legendre à 3 points sur \\( [0, 1] \\), soit 18 points, exact au
+degré 4 dans le triangle et 5 en hauteur ; \\( \sum_g w_g = \tfrac12 \\). La
+masse, de degré 4 dans chaque sens, est exacte sur un prisme à arêtes droites
+dont le triangle du haut est celui du bas déplacé.
+
+`"REDUCED"` : un point en \\( (\tfrac13, \tfrac13, \tfrac12) \\), de poids
+\\( \tfrac12 \\).
+
+## Exemple
+
+```python
+{{#include ../../../tests/python/test_doc_elements.py:penta15}}
+```
+
+## Côté Rust
+
+`Penta15` (`src/atoms/element_kind/penta15.rs`) implémente `ElementKind`, avec
+la règle `tri6_gauss` du `TRI6` et `gauss3_1d`, partagées dans
+`src/atoms/element_kind/quadrature.rs`.

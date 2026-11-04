@@ -1,17 +1,30 @@
 # SEG3 — segment quadratique
 
-Segment à **3 nœuds**, interpolation **Lagrange-2** complète. Parent linéaire :
-[SEG2](seg2.md). Un nœud de milieu porte la courbure de l'interpolation.
+## En bref
 
-## Repère de référence
+Le segment à trois nœuds, un au milieu : l'interpolation est parabolique, et le
+segment peut être courbe. C'est le bord d'une surface quadratique.
 
-\\( \xi \in [-1, +1] \\), nœud médian en \\( \xi = 0 \\).
+| | |
+|---|---|
+| nom | `"SEG3"` |
+| nœuds | 3 : les extrémités, puis le milieu |
+| interpolation | `"LAGRANGE2"` : quadratique |
+| dimension | 1 ; dans des `Coords` 1-D, 2-D ou 3-D |
+| bord | ses deux extrémités |
+| quadrature | `"GAUSS"` : 3 points, degré 5 ; `"REDUCED"` : 1 point |
+| parent linéaire | [SEG2](seg2.md) |
+| obtenu par | `line`, `arc`, `circle` avec `element_type="SEG3"` ; `to_quadratic` |
+
+## Élément de référence
+
+\\( \xi \in [-1, +1] \\), le nœud milieu en \\( \xi = 0 \\).
 
 | Nœud | \\( \xi \\) | rôle |
 |---:|:---:|---|
-| 0 | \\( -1 \\) | sommet |
-| 1 | \\( +1 \\) | sommet |
-| 2 | \\( 0 \\) | milieu \\( (0,1) \\) |
+| 0 | \\( -1 \\) | extrémité |
+| 1 | \\( +1 \\) | extrémité |
+| 2 | \\( 0 \\) | milieu de \\( (0,1) \\) |
 
 ## Fonctions de forme
 
@@ -21,6 +34,9 @@ N_1 = \tfrac12\\,\xi(\xi + 1), \qquad
 N_2 = 1 - \xi^2.
 \\]
 
+La géométrie s'interpole de même : un nœud milieu hors de la corde courbe le
+segment en arc de parabole.
+
 ## Dérivées de référence
 
 \\[
@@ -29,18 +45,33 @@ N_2 = 1 - \xi^2.
 \frac{\partial N_2}{\partial \xi} = -2\xi.
 \\]
 
-## Quadrature (défaut)
+## Degrés de liberté
 
-Gauss-Legendre à **3 points**, exacte au degré \\( \le 5 \\) :
+| physique | inconnues par nœud | par maille |
+|---|---|---:|
+| conduction, diffusion | `T` | 3 |
+| échanges, rayonnement, sur le bord d'une surface quadratique | `T` | 3 |
+
+## Quadrature
+
+`"GAUSS"` : Gauss-Legendre à 3 points, exacte au degré 5.
 
 \\[
 \xi_g = \left(-\sqrt{\tfrac35},\ 0,\ +\sqrt{\tfrac35}\right), \qquad
 w_g = \left(\tfrac59,\ \tfrac89,\ \tfrac59\right), \qquad \sum_g w_g = 2.
 \\]
 
-## Notes
+La masse, de degré 4, est exacte sur un segment droit dont le nœud milieu est
+au milieu.
 
-- Dimensions valides : \\( d_r = 1 \\), \\( d_s \in \\{1, 2, 3\\} \\) (arête
-  courbe plongée dans le plan ou l'espace).
-- L'interpolation quadratique suit une géométrie **courbe** exactement (arête
-  parabolique).
+`"REDUCED"` : un point en \\( \xi = 0 \\), de poids 2.
+
+## Exemple
+
+```python
+{{#include ../../../tests/python/test_doc_elements.py:seg3}}
+```
+
+## Côté Rust
+
+`Seg3` (`src/atoms/element_kind/seg3.rs`) implémente `ElementKind`.
