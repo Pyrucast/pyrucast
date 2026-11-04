@@ -1,18 +1,28 @@
 # PYRA5 — pyramide linéaire
 
-Pyramide à **5 nœuds** — base carrée et sommet — interpolation **Lagrange-1**.
+## En bref
 
-C'est l'**élément de raccord** entre hexaèdres et tétraèdres : sa face carrée
+La pyramide à base carrée relie des hexaèdres à des tétraèdres : sa face carrée
 s'appuie sur une face de `HEX8`, ses quatre faces triangulaires sur des faces
-de `TET4`. Une couche d'hexaèdres peut donc être refermée sur un cœur
-tétraédrique sans nœud en T. Sans lui, il n'existe pas de maillage volumique
-conforme mêlant les deux.
+de `TET4`. Une couche d'hexaèdres se referme ainsi sur un cœur de tétraèdres
+sans nœud isolé au milieu d'une face.
 
-## Repère de référence
+| | |
+|---|---|
+| nom | `"PYRA5"` |
+| nœuds | 5 : les quatre coins de la base, le sommet |
+| interpolation | `"LAGRANGE1"` : bilinéaire sur chaque section, rationnelle |
+| dimension | 3 ; dans des `Coords` 3-D |
+| bord | 1 `QUA4`, 4 `TRI3` |
+| quadrature | `"GAUSS"` : 8 points, degré 3 ; `"REDUCED"` : 1 point |
+| version quadratique | aucune : `to_quadratic` refuse une pyramide |
+| obtenu par | `pave_volume` |
+
+## Élément de référence
 
 \\( \zeta \in [0, 1] \\), et \\( \xi, \eta \in [-(1-\zeta),\ +(1-\zeta)] \\) :
-la section carrée **rétrécit** avec \\( \zeta \\) jusqu'à se réduire au sommet.
-Base parcourue CCW vue depuis le sommet, puis le sommet.
+la section carrée rétrécit avec \\( \zeta \\) jusqu'au sommet. La base tourne
+dans le sens trigonométrique vue depuis le sommet.
 
 | Nœud | \\( (\xi, \eta, \zeta) \\) | | Nœud | \\( (\xi, \eta, \zeta) \\) |
 |---:|:---:|---|---:|:---:|
@@ -22,32 +32,31 @@ Base parcourue CCW vue depuis le sommet, puis le sommet.
 
 ## Fonctions de forme
 
-La pyramide est le seul élément courant dont les fonctions de forme ne sont
-**pas polynomiales**, et ce n'est pas un choix : sa base carrée doit s'effondrer
-sur un point unique au sommet, et aucun polynôme ne fait cela tout en restant
-bilinéaire sur la base.
-
-En notant \\( m = 1 - \zeta \\) la demi-largeur de la section, ce sont les
-fonctions bilinéaires dans les coordonnées **mises à l'échelle**
-\\( \xi/m,\ \eta/m \\), pondérées par \\( m \\) :
+Ses fonctions ne sont **pas polynomiales** : la base carrée doit se réduire à
+un point au sommet, et aucun polynôme ne le fait en restant bilinéaire sur la
+base. Avec \\( m = 1 - \zeta \\), la demi-largeur de la section, ce sont les
+fonctions bilinéaires du carré dans les coordonnées \\( \xi/m \\),
+\\( \eta/m \\), multipliées par \\( m \\) :
 
 \\[
 N_i = \frac{m}{4}\left(1 + \xi_i\\,\frac{\xi}{m}\right)\left(1 + \eta_i\\,\frac{\eta}{m}\right)
 \quad (i = 0 \dots 3), \qquad N_4 = \zeta,
 \\]
 
-où \\( (\xi_i, \eta_i) \\) sont les signes du nœud \\( i \\) sur la base.
-Développé :
+où \\( (\xi_i, \eta_i) \\) sont les signes du nœud \\( i \\). Développé,
 
 \\[
 N_i = \frac{1}{4}\left(m + \xi_i\\,\xi + \eta_i\\,\eta + \xi_i\eta_i\\,\frac{\xi\eta}{m}\right).
 \\]
 
-Le terme croisé \\( \xi\eta/m \\) est la **partie rationnelle** — et la raison
-pour laquelle la pyramide réclame une quadrature à elle. Il reste borné sur
-l'élément de référence (\\( |\xi|, |\eta| \le m \\), donc il vaut au plus
-\\( m/4 \\)) mais il est bel et bien singulier **au** sommet, où la limite
-\\( N_4 = 1 \\) est prise directement.
+Le terme \\( \xi\eta/m \\) est la partie rationnelle. Il reste borné dans
+l'élément, \\( |\xi\eta/m| \le m \\), mais n'est pas défini **au** sommet, où
+le code pose directement \\( N_4 = 1 \\) et les autres à 0.
+
+Sur la base, \\( \zeta = 0 \\), les fonctions sont exactement celles d'un
+`QUA4` ; le long d'une arête de la base au sommet, elles sont linéaires. C'est
+ce qui raccorde la pyramide sans trou à un `HEX8` par sa face carrée, et à un
+`TET4` par une face triangulaire.
 
 ## Dérivées de référence
 
@@ -59,56 +68,60 @@ Avec \\( u = \xi/m \\), \\( v = \eta/m \\) :
 \frac{\partial N_i}{\partial \zeta} = \frac{1}{4}\\,(-1 + \xi_i\eta_i\\,u v),
 \\]
 
-et \\( \nabla_\xi N_4 = (0, 0, 1) \\). Les trois sommes sur les cinq nœuds
-s'annulent, comme il se doit — les identités \\( \sum_i \xi_i = \sum_i \eta_i =
-\sum_i \xi_i\eta_i = 0 \\) sur la base carrée y suffisent.
+et \\( \nabla_\xi N_4 = (0, 0, 1) \\).
 
-## Quadrature (défaut)
+## Degrés de liberté
 
-Une pyramide n'est le produit d'aucune paire de simplexes : elle reçoit donc une
-règle **conique**, produit d'une règle de Gauss–Legendre 2 × 2 sur la section
-carrée par une règle de **Gauss–Jacobi** à 2 points en \\( \zeta \\), soit
-**8 points**.
+| physique | inconnues par nœud | par maille |
+|---|---|---:|
+| conduction, diffusion | `T` | 5 |
+| élasticité 3-D | `u_x`, `u_y`, `u_z` | 15 |
 
-C'est le poids de Jacobi qui fait l'affaire. En écrivant un point sous la forme
-\\( \xi = a(1-\zeta) \\), \\( \eta = b(1-\zeta) \\) avec \\( a, b \in [-1, 1] \\),
-le changement de variables fait apparaître
+## Quadrature
 
-\\[
-\mathrm{d}\xi\\,\mathrm{d}\eta = (1-\zeta)^2\\,\mathrm{d}a\\,\mathrm{d}b,
-\\]
-
-soit exactement le rétrécissement de la section vers le sommet. Intégrer la
-direction \\( \zeta \\) contre ce \\( (1-\zeta)^2 \\) est une règle de
-Gauss–Jacobi de paramètre \\( \alpha = 2 \\), dont les deux nœuds sont les
-racines de \\( z^2 - \tfrac23 z + \tfrac1{15} \\) :
+La pyramide n'est le produit d'aucune paire d'éléments plus simples. Sa règle
+`"GAUSS"` est **conique** : on écrit un point \\( \xi = a(1-\zeta) \\),
+\\( \eta = b(1-\zeta) \\), avec \\( a, b \in [-1, 1] \\), et le changement de
+variables donne
 
 \\[
-\zeta_g = \frac13 \mp \frac{\sqrt{10}}{15}
-\quad\Longrightarrow\quad
-\zeta_g \simeq 0{,}12251 \ \text{et}\ 0{,}54415,
+d\xi\\,d\eta = (1-\zeta)^2\\,da\\,db ,
 \\]
 
-et les poids se déduisent des deux premiers moments de \\( (1-z)^2 \\) sur
-\\( [0,1] \\) (\\( \sum w = 1/3 \\), \\( \sum w z = 1/12 \\)) :
+le rétrécissement de la section. La règle croise Gauss-Legendre 2×2 sur
+\\( (a, b) \\) et, en \\( \zeta \\), une règle de **Gauss-Jacobi** à 2 points,
+faite pour intégrer contre ce poids \\( (1-\zeta)^2 \\). Ses deux points sont
+les racines de \\( z^2 - \tfrac23 z + \tfrac1{15} \\),
 
 \\[
-w_g \simeq 0{,}23255 \ \text{et}\ 0{,}10079.
+\zeta_g = \frac13 \mp \frac{\sqrt{10}}{15} \simeq 0{,}12251 \ \text{et}\ 0{,}54415,
 \\]
 
-La somme des poids vaut alors \\( 2 \times 2 \times \tfrac13 = \tfrac43 \\), le
-volume de la pyramide de référence.
+et ses poids, \\( 0{,}23255 \\) et \\( 0{,}10079 \\), se déduisent des deux
+premiers moments de \\( (1-z)^2 \\) sur \\( [0,1] \\) :
+\\( \sum w = 1/3 \\), \\( \sum w z = 1/12 \\). Soit 8 points, et une somme des
+poids \\( 2 \times 2 \times \tfrac13 = \tfrac43 \\), le volume de la pyramide
+de référence.
 
-## Notes
+Exprimées en \\( (a, b, \zeta) \\), les fonctions de forme redeviennent des
+polynômes : la règle intègre exactement les monômes jusqu'au degré 3, et la
+masse et la raideur de toute pyramide dont la base est un parallélogramme.
+Sur une base quelconque, la raideur n'est plus exacte, comme sur un `QUA4` ou
+un `HEX8` déformé.
 
-- Dimensions valides : \\( d_r = d_s = 3 \\).
-- **Conformité.** Sur \\( \zeta = 0 \\) les fonctions se réduisent *exactement*
-  à celles d'un `QUA4`, et le long d'une arête base → sommet elles sont
-  *linéaires*. C'est ce qui garantit la continuité avec un `HEX8` par la face
-  carrée et avec un `TET4` par une face triangulaire.
-- La partie rationnelle rend l'intégration inexacte pour un élément quelconque,
-  contrairement aux autres types linéaires ; la règle à 8 points est le choix
-  usuel. Elle reste exacte sur le volume d'une pyramide droite ou oblique, ce
-  que vérifie le test `pyra5_jacobian_volume`.
-- Lu et écrit par `read_gmsh` (type 7) et par l'export VTK (`VTK_PYRAMID`, 14).
-- Pas de version quadratique (`PYRA13`/`PYRA14`) pour l'instant.
+`"REDUCED"` : un point au centre de gravité \\( (0, 0, \tfrac14) \\), au quart
+de la hauteur, de poids \\( \tfrac43 \\).
+
+## Exemple
+
+```python
+{{#include ../../../tests/python/test_doc_elements.py:pyra5}}
+```
+
+## Côté Rust
+
+`Pyra5` (`src/atoms/element_kind/pyra5.rs`) implémente `ElementKind`. Au
+sommet, `shape_into` et `dshape_into` rendent des valeurs fixées au lieu de
+diviser par \\( m \\). `pyra5_jacobian_volume`, dans
+`src/containers/finite_element_space/`, vérifie le volume d'une pyramide à
+base rectangulaire et à sommet décentré.

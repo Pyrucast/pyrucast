@@ -72,8 +72,8 @@ Rien d'autre. En particulier :
   `REFERENCE`.
 
 Reste à écrire la doc : une fiche `book/src/elements/<nom>.md`, une entrée
-dans `SUMMARY.md`, une ligne dans les deux tableaux de
-[`elements/index.md`](../elements/index.md), et une ligne dans la table de
+dans `SUMMARY.md`, une ligne dans le catalogue
+d'[`elements/index.md`](../elements/index.md), et une ligne dans la table de
 correspondance gmsh d'[`operateurs/maillage.md`](../operateurs/maillage.md).
 
 ## Ce que le trait demande, et pourquoi

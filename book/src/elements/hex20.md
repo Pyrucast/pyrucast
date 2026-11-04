@@ -1,50 +1,76 @@
 # HEX20 — hexaèdre sérendipité
 
-Hexaèdre à **20 nœuds**, interpolation **Lagrange-2 sérendipité** (arêtes
-seulement, ni face ni centre). Parent : [HEX8](hex8.md), plus 12 nœuds de milieu
-d'arête. Variante complète : [HEX27](hex27.md).
+## En bref
 
-## Repère de référence
+L'hexaèdre à vingt nœuds : les huit sommets et les milieux des douze arêtes,
+sans nœud de face ni de centre. Sept nœuds de moins que le [HEX27](hex27.md),
+pour un polynôme incomplet, sans les termes comme \\( \xi^2\eta^2\zeta^2 \\).
 
-\\( \xi, \eta, \zeta \in [-1, +1] \\). Sommets 0..7 (comme HEX8) ; milieux
-8..19 : bas \\( (0,1),(1,2),(2,3),(3,0) \\), haut \\( (4,5),(5,6),(6,7),(7,4) \\),
-verticaux \\( (0,4),(1,5),(2,6),(3,7) \\). Chaque nœud de milieu a **exactement
-une coordonnée de référence nulle**.
+| | |
+|---|---|
+| nom | `"HEX20"` |
+| nœuds | 20 : les sommets, puis les milieux des arêtes |
+| interpolation | `"LAGRANGE2"` : sérendipité |
+| dimension | 3 ; dans des `Coords` 3-D |
+| bord | 6 `QUA8` |
+| quadrature | `"GAUSS"` : 3×3×3 points, degré 5 par direction ; `"REDUCED"` : 1 point |
+| parent linéaire | [HEX8](hex8.md) |
+| obtenu par | `to_quadratic` d'un `HEX8` |
+
+## Élément de référence
+
+Le cube \\( [-1, +1]^3 \\) du `HEX8`. Les sommets 0 à 7, puis les milieux 8 à
+19, sur les arêtes du bas \\( (0,1),(1,2),(2,3),(3,0) \\), du haut
+\\( (4,5),(5,6),(6,7),(7,4) \\), puis verticales
+\\( (0,4),(1,5),(2,6),(3,7) \\). Un milieu a exactement une coordonnée nulle.
 
 ## Fonctions de forme
 
-Pour un nœud de coordonnées de référence \\( (p, q, r) \\) :
+Pour un nœud de coordonnées \\( (p, q, r) \\).
 
-**Sommets** (\\( p, q, r = \pm1 \\)) — noter le facteur \\( -2 \\) :
+Aux sommets (\\( p, q, r = \pm1 \\)), noter le \\( -2 \\) :
 
 \\[
 N_i = \tfrac18\\,(1 + p\xi)(1 + q\eta)(1 + r\zeta)\\,(p\xi + q\eta + r\zeta - 2).
 \\]
 
-**Milieux d'arête**, selon la direction de l'arête (celle où la coordonnée est
-nulle) :
+Aux milieux, selon la coordonnée nulle :
 
 \\[
 \begin{aligned}
-p = 0:&\quad N = \tfrac14(1 - \xi^2)(1 + q\eta)(1 + r\zeta), \\\\
-q = 0:&\quad N = \tfrac14(1 + p\xi)(1 - \eta^2)(1 + r\zeta), \\\\
-r = 0:&\quad N = \tfrac14(1 + p\xi)(1 + q\eta)(1 - \zeta^2).
+p = 0 :&\quad N = \tfrac14(1 - \xi^2)(1 + q\eta)(1 + r\zeta), \\\\
+q = 0 :&\quad N = \tfrac14(1 + p\xi)(1 - \eta^2)(1 + r\zeta), \\\\
+r = 0 :&\quad N = \tfrac14(1 + p\xi)(1 + q\eta)(1 - \zeta^2).
 \end{aligned}
 \\]
 
+Au centre, les sommets valent \\( -\tfrac14 \\) et les milieux \\( \tfrac14 \\).
+
 ## Dérivées de référence
 
-Dérivation directe des expressions ci-dessus (recoupée par différences finies
-dans les tests).
+En dérivant ces expressions.
 
-## Quadrature (défaut)
+## Degrés de liberté
 
-Produit tensoriel **3×3×3** de Gauss-Legendre (27 points), exacte au degré
-\\( \le 5 \\) par direction. \\( \sum_g w_g = 8 \\).
+| physique | inconnues par nœud | par maille |
+|---|---|---:|
+| conduction, diffusion | `T` | 20 |
+| élasticité 3-D | `u_x`, `u_y`, `u_z` | 60 |
 
-## Notes
+## Quadrature
 
-- Dimensions valides : \\( d_r = d_s = 3 \\).
-- 20 nœuds au lieu de 27 : moins d'inconnues que HEX27, sans les monômes
-  d'ordre le plus élevé (\\( \xi^2\eta^2\zeta^2 \\) etc.). Bon compromis
-  précision/coût, très utilisé en mécanique 3-D.
+`"GAUSS"` : produit 3×3×3 de Gauss-Legendre, 27 points, exact au degré 5 par
+direction ; le point 13 est le centre ; \\( \sum_g w_g = 8 \\). La masse, de
+degré 4 par direction, est exacte sur un parallélépipède à arêtes droites.
+
+`"REDUCED"` : un point au centre, de poids 8.
+
+## Exemple
+
+```python
+{{#include ../../../tests/python/test_doc_elements.py:hex20}}
+```
+
+## Côté Rust
+
+`Hex20` (`src/atoms/element_kind/hex20.rs`) implémente `ElementKind`.

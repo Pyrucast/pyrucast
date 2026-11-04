@@ -1,13 +1,26 @@
 # TRI3 — triangle linéaire
 
-Triangle à **3 nœuds**, interpolation **Lagrange-1**. L'élément 2-D le plus
-simple ; interpolation **affine**, donc gradient et déformation **constants par
-élément**. Peut être plongé dans une `Coords` 3-D (surface).
+## En bref
 
-## Repère de référence
+Le triangle à trois nœuds, l'élément 2-D le plus simple : son interpolation
+est affine, et un gradient y est constant. Plongé dans l'espace, il décrit une
+surface : une coque, la peau d'un volume.
 
-Simplexe unité \\( \xi, \eta \in [0, 1] \\), \\( \xi + \eta \le 1 \\), parcouru
-**CCW**.
+| | |
+|---|---|
+| nom | `"TRI3"` |
+| nœuds | 3, aux sommets |
+| interpolation | `"LAGRANGE1"` : affine |
+| dimension | 2 ; dans des `Coords` 2-D ou 3-D |
+| bord | 3 `SEG2` |
+| quadrature | `"GAUSS"` : 3 points, degré 2 ; `"REDUCED"` : 1 point |
+| version quadratique | [TRI6](tri6.md) |
+| obtenu par | `triangulate_surface`, `sweep`, `transfinite` ; `convert` d'un `QUA4` ; `skin` d'un `TET4`, `PYRA5` ou `PENTA6` |
+
+## Élément de référence
+
+Le triangle \\( \xi, \eta \ge 0 \\), \\( \xi + \eta \le 1 \\), parcouru dans le
+sens trigonométrique.
 
 | Nœud | \\( (\xi, \eta) \\) |
 |---:|:---:|
@@ -17,8 +30,7 @@ Simplexe unité \\( \xi, \eta \in [0, 1] \\), \\( \xi + \eta \le 1 \\), parcouru
 
 ## Fonctions de forme
 
-Ce sont les **coordonnées barycentriques** \\( L_0 = 1-\xi-\eta \\),
-\\( L_1 = \xi \\), \\( L_2 = \eta \\) :
+Les **coordonnées barycentriques** du point :
 
 \\[
 N_0 = 1 - \xi - \eta, \qquad N_1 = \xi, \qquad N_2 = \eta.
@@ -26,7 +38,7 @@ N_0 = 1 - \xi - \eta, \qquad N_1 = \xi, \qquad N_2 = \eta.
 
 ## Dérivées de référence
 
-**Constantes** sur l'élément :
+Constantes :
 
 \\[
 \nabla_\xi N_0 = (-1, -1), \qquad
@@ -34,21 +46,40 @@ N_0 = 1 - \xi - \eta, \qquad N_1 = \xi, \qquad N_2 = \eta.
 \nabla_\xi N_2 = (0, 1).
 \\]
 
-## Quadrature (défaut)
+Le jacobien est donc constant sur la maille, comme le gradient d'un champ et
+la déformation d'un solide.
 
-Règle de **Hammer mid-edge** à **3 points**, exacte au degré \\( \le 2 \\) :
+## Degrés de liberté
+
+| physique | inconnues par nœud | par maille |
+|---|---|---:|
+| conduction, diffusion | `T` | 3 |
+| élasticité plane ou axisymétrique | `u_x`, `u_y` | 6 |
+| coque, dans l'espace | `u_x`, `u_y`, `u_z`, `r_x`, `r_y`, `r_z` | 18 |
+| échanges, rayonnement, sur la face d'un volume | `T` | 3 |
+
+## Quadrature
+
+`"GAUSS"` : règle de Hammer à 3 points, aux milieux des côtés, exacte au
+degré 2.
 
 \\[
 \xi_g \in \left\\{ \left(\tfrac12, 0\right), \left(\tfrac12, \tfrac12\right), \left(0, \tfrac12\right) \right\\}, \qquad
 w_g = \tfrac{1}{6}, \qquad \sum_g w_g = \tfrac12.
 \\]
 
-## Notes
+Un point suffirait à la raideur, de degré 0 ; la masse
+\\( \int N_i N_j \\), de degré 2, en demande trois.
 
-- Dimensions valides : \\( d_r = 2 \\), \\( d_s \in \\{2, 3\\} \\) (triangle plan
-  ou plongé dans l'espace — c'est ce que produit `triangulate_surface` sur un contour
-  3-D).
-- Gradient constant : un seul point de Gauss suffirait pour un champ affine,
-  mais la règle à 3 points intègre exactement la masse (\\( \int N_i N_j \\), de
-  degré 2).
-- Version quadratique : [TRI6](tri6.md).
+`"REDUCED"` : un point au centre de gravité \\( (\tfrac13, \tfrac13) \\), de
+poids \\( \tfrac12 \\).
+
+## Exemple
+
+```python
+{{#include ../../../tests/python/test_doc_elements.py:tri3}}
+```
+
+## Côté Rust
+
+`Tri3` (`src/atoms/element_kind/tri3.rs`) implémente `ElementKind`.

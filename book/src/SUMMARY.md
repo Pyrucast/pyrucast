@@ -44,7 +44,7 @@
     - [Contact (nœud-surface)](contraintes/contact.md)
 
 - [Éléments finis supportés]()
-  - [Catalogue](elements/index.md)
+  - [Vue d'ensemble](elements/index.md)
   - [SEG2 — segment linéaire](elements/seg2.md)
   - [TRI3 — triangle linéaire](elements/tri3.md)
   - [QUA4 — quadrangle bilinéaire](elements/qua4.md)
@@ -59,7 +59,7 @@
   - [TET10 — tétraèdre quadratique](elements/tet10.md)
   - [PENTA15 — prisme sérendipité](elements/penta15.md)
   - [HEX20 — hexaèdre sérendipité](elements/hex20.md)
-  - [HEX27 — hexaèdre tri-quadratique](elements/hex27.md)
+  - [HEX27 — hexaèdre triquadratique](elements/hex27.md)
 
 - [Détail des opérateurs]()
   - [Vue d'ensemble](operateurs.md)

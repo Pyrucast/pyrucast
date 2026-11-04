@@ -25,8 +25,8 @@ aux tests.
 (`pyrucast.Mesh(coords)`, sans type, un maillage sans zone). `mesh.unit()`
 atteint cette zone, et `zone.add_cell([n0, n1, n2])` y pose une maille et rend
 son indice. Les nœuds se donnent dans l'**ordre local** de l'élément, celui
-que décrit sa fiche (section « Repère de référence » des
-[éléments finis supportés](elements/index.md)) ; un nombre de nœuds qui ne
+que décrit sa [fiche](elements/index.md), section « Élément de
+référence » ; un nombre de nœuds qui ne
 correspond pas au type est refusé, comme un nœud d'un autre `Coords`.
 Plusieurs types se composent par l'union `|`.
 

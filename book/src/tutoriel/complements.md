@@ -58,8 +58,8 @@ Aucun de ces quatre n'est mis en œuvre dans les scripts de ce tutoriel.
 
 ## Éléments finis supportés
 
-Catalogue complet : [Éléments finis supportés](../elements/index.md) — 14
-types, de `POI1` à `HEX27`, y compris les versions quadratiques
+Catalogue complet : [Éléments finis supportés](../elements/index.md) — 15
+types, de `SEG2` à `HEX27`, y compris les versions quadratiques
 (`pyrucast.mesh.to_quadratic`, l'équivalent Cast3M `CHAN 'TRI6' ...`).
 
 ## Échanges avec les outils extérieurs
