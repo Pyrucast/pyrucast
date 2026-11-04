@@ -1,209 +1,258 @@
 # Évolution (Evolution/SubEvolution)
 
-Une **évolution** associe une série de **valeurs** à une **variable** (souvent
-le temps, mais pas nécessairement) et **interpole linéairement** entre les
-échantillons tabulés. C'est l'analogue de l'`EVOLUTIO` de Cast3M, généralisé :
-l'abscisse n'est pas forcément le temps, elle peut compter **plusieurs
-variables** (le `NUAGE` de Cast3M), et la valeur peut être un **champ** entier,
-pas seulement un réel.
+Une **évolution** associe des **valeurs** à des **abscisses** et **interpole
+linéairement** entre elles. L'abscisse est souvent le temps, mais pas
+forcément : une température, une déformation, ou plusieurs variables à la fois.
+La valeur est un nombre, un [champ aux nœuds](node-field.md) ou un
+[champ aux points de Gauss](element-field.md).
 
-Mathématiquement, une courbe est une **application tabulée**
-`f : ℝᵐ → ℝⁿ`, linéaire par morceaux : `m` est le nombre de variables de
-l'abscisse (1 pour une courbe, davantage pour une table), `n` vaut 1 pour une
-valeur réelle et le nombre de valeurs du champ pour un champ. L'appliquer à un
-argument de `ℝ^(m·c)` — `c` points portant chacun ses `m` variables — donne un
-résultat de `ℝ^(c·n)`. Les deux usages courants en sont des cas particuliers :
-l'interpolation en temps (`m = 1`, `c = 1`, on obtient un champ) et la loi
-matériau appliquée à un champ (`n = 1`, on obtient un champ, exactement comme
-`cos` appliqué à un champ).
+C'est un [agrégat](aggregate.md) :
 
-Elle suit la même grammaire d'agrégat que tous les conteneurs de pyrucast (cf.
-[Agrégat](aggregate.md)) :
+- une **`SubEvolution`** est une courbe : la liste de ses abscisses et la liste
+  des valeurs en regard. L'interpoler en `x` rend **une** valeur ;
+- une **`Evolution`** réunit des `SubEvolution`, **une par zone**, comme un
+  `NodeField` réunit ses zones. L'interpoler interpole chaque courbe et
+  regroupe les résultats : un `NodeField` ou un `ElementField` pour des
+  champs, une **liste de flottants** pour des nombres.
 
-- **`SubEvolution`** — **une courbe tabulée** : une liste d'abscisses (triées,
-  strictement croissantes ; des **tuples** pour une table, triés dans l'ordre
-  lexicographique) et la liste des valeurs en regard. Une valeur est un
-  **scalaire**, un **`SubNodeField`** ([champ aux nœuds](node-field.md)) ou un
-  **`SubElementField`** ([champ aux points de Gauss](element-field.md)) — toutes
-  du même type, et pour les champs sur le **même support**. Son interpolation en
-  `x` rend **une valeur**.
-- **`Evolution`** — l'**agrégat** : une liste de `SubEvolution`, **une par
-  zone**, exactement comme un `NodeField` agrège des `SubNodeField`. Son
-  interpolation en `x` interpole chaque courbe, puis **regroupe** les
-  sous-champs résultants en un `NodeField` / `ElementField`. Pour des scalaires,
-  elle rend une **liste de flottants** (il n'existe pas d'agrégat de flottant).
+## Une courbe
 
-```text
-   Evolution (agrégat)
-   ├── SubEvolution zone 0 ── abscisses [t₀, t₁, …] × valeurs [v₀, v₁, …]
-   ├── SubEvolution zone 1 ── …
-   └── …
+`SubEvolution(échantillons)` prend une liste de couples `(abscisse, valeur)`.
+Les échantillons sont triés à la construction ; deux à la même abscisse sont
+refusés. Entre deux échantillons `x₀ ≤ x ≤ x₁`, la valeur est
+`v₀ + (v₁ − v₀)·(x − x₀)/(x₁ − x₀)` ; sur un échantillon, c'est sa valeur.
+
+```python
+{{#include ../../tests/python/test_doc_evolution.py:courbe}}
 ```
 
-## Interpolation linéaire
+## Hors plage
 
-Entre deux échantillons encadrants `x_lo ≤ x ≤ x_hi`, le résultat est le mélange
-`v_lo·(1−t) + v_hi·t` avec `t = (x − x_lo) / (x_hi − x_lo)`. Pour les champs, le
-mélange **réutilise l'arithmétique de champs** (`map_all` + `merge_components`
-précédé de `check_same_components`, cf.
-[Champ](field.md)) : aucune logique numérique n'est dupliquée, et la
-compatibilité des supports/composantes des deux champs encadrants est vérifiée à
-ce moment-là. Une abscisse tombant exactement sur un échantillon rend la valeur
-telle quelle.
+Une abscisse en dehors de la plage tabulée suit la **politique hors plage** de
+l'évolution :
 
-## Tables à plusieurs variables (`NUAGE`)
+| Politique | Hors plage |
+|---|---|
+| `"error"` (par défaut) | lève une erreur |
+| `"clamp"` | rend la valeur de l'extrémité la plus proche |
+| `"extrapolate"` | prolonge le premier ou le dernier segment |
 
-Une abscisse peut être un **tuple** : `((T, φ), valeur)`. La table se lit
-**hiérarchiquement** — c'est la forme `FLOTTANT-EVOLUTION` du `NUAGE` de
-Cast3M, mais saisie à plat, sans composer d'évolutions à la main :
+La politique se donne à la construction (`out_of_range="clamp"`), se lit par
+`out_of_range`, et s'impose pour un seul appel :
+`interpolate(x, out_of_range="clamp")`.
 
-1. les échantillons sont **groupés** par leur première variable (valeurs
-   égales), puis chaque groupe par la deuxième, et ainsi de suite ; chaque
-   groupe le plus profond est une courbe ;
-2. en un point `(T, φ)`, on cherche les deux groupes de la première variable
-   qui encadrent `T` ; chacun est lu de la même façon le long de `φ` ; puis on
-   interpole linéairement entre les deux résultats.
+```python
+{{#include ../../tests/python/test_doc_evolution.py:hors_plage}}
+```
 
-Pour deux variables, avec `Tₐ ≤ T ≤ T_b` les groupes encadrants et `f_a`, `f_b`
-leurs courbes en `φ` :
+## Des champs comme valeurs
+
+`Evolution([(t₀, champ₀), (t₁, champ₁), …])` prend un champ entier par
+abscisse, un `NodeField` ou un `ElementField`. Elle en fait une courbe par
+zone : les zones sont celles du premier champ, et chaque champ suivant doit
+porter une zone sur chacun de ces supports ; une zone qu'il aurait en plus est
+ignorée. Toutes les valeurs d'une courbe ont le même support et les mêmes
+composantes.
+
+L'évolution **copie** les valeurs des champs ; le support, lui, est partagé.
+Modifier un champ ensuite ne change pas l'évolution, et le champ interpolé est
+posé sur le même support que les champs d'origine : il se combine avec eux
+zone à zone.
+
+`shared_abscissas()` rend les abscisses, communes à toutes les zones, et
+`frames()` les champs tabulés, un par abscisse.
+
+```python
+{{#include ../../tests/python/test_doc_evolution.py:champ}}
+```
+
+## Une abscisse à plusieurs variables
+
+Une abscisse peut être un **tuple** de deux à quatre nombres : la courbe
+devient une **table**. Chaque échantillon est alors `((T, φ), valeur)`, et
+`interpolate((T, φ))` rend la valeur en ce point.
+
+```python
+{{#include ../../tests/python/test_doc_evolution.py:table}}
+```
+
+La table se lit **variable après variable**. Les échantillons sont rangés par
+leur première variable : ici, un groupe à 20 °C (φ = 0 et 1), un autre à
+500 °C (φ = 0, 0,5 et 1). Chaque groupe est une courbe le long de la variable
+suivante. En `(300, 0,4)` :
+
+```text
+   φ
+   1  ● 450                               ● 320
+      │                                   │
+ 0,5  │                                   ● 260
+ 0,4  ◆ 360 ─────────────── ★ ─────────── ◆ 248
+      │                   294,7           │
+   0  ● 300                               ● 200
+      └────────────────────┬──────────────┴───── T
+      20                  300            500
+
+  ●  échantillons de la table
+  ◆  étape 1 : chaque groupe est lu le long de φ, en φ = 0,4
+  ★  étape 2 : les deux résultats sont pesés le long de T, en T = 300
+```
+
+1. On cherche les deux groupes qui encadrent `T = 300` : 20 °C et 500 °C.
+2. Chacun est interpolé le long de φ en `0,4` : entre 300 et 450 à 20 °C, ce
+   qui donne 360 ; entre 200 et 260 à 500 °C (φ de 0 à 0,5), ce qui donne 248.
+3. On interpole entre ces deux résultats le long de T :
+   `t = (300 − 20)/(500 − 20) ≈ 0,583`, et `360 + 0,583 × (248 − 360) ≈ 294,7`.
+
+Pour deux variables, avec `T_a ≤ T ≤ T_b` les groupes encadrants et `f_a`,
+`f_b` leurs courbes en φ :
 
 \\[
 f(T, \varphi) = (1-t)\\, f_a(\varphi) + t\\, f_b(\varphi),
 \qquad t = \frac{T - T_a}{T_b - T_a}.
 \\]
 
-Conséquences :
+Avec trois ou quatre variables, chaque groupe se lit de la même façon le long
+de la variable suivante. Ce que cela donne :
 
-- les groupes **n'ont pas à partager leurs abscisses** : une table irrégulière,
-  telle que viennent les données matériau (trois valeurs de `φ` mesurées à
-  500 °C, deux à 20 °C), est acceptée ;
-- sur une **grille complète**, on retrouve exactement l'interpolation
-  **multilinéaire** ; une fonction linéaire en chaque variable séparément
-  (`a + bT + cφ + dTφ`) est reproduite exactement, grille complète ou non ;
+- les groupes **n'ont pas à partager leurs abscisses** : la table ci-dessus
+  mesure deux valeurs de φ à 20 °C et trois à 500 °C ;
+- sur une **grille complète**, le résultat est l'interpolation
+  **multilinéaire** (bilinéaire pour deux variables). Une fonction linéaire en
+  chaque variable séparément, comme `a + bT + cφ + dTφ`, est retrouvée
+  exactement, grille complète ou non ;
 - un groupe où la variable suivante ne prend **qu'une valeur** est **constant**
-  le long d'elle : une propriété mesurée en une seule valeur de `φ` à une
-  température donnée ne dépend pas de `φ` à cette température ;
-- la **première variable est le niveau extérieur** : sur une table irrégulière,
-  l'ordre des variables change le résultat — c'est le prix de l'irrégularité
-  (une triangulation du nuage le lèverait, au prix d'une triangulation en
-  dimension `m` et d'un écart à l'interpolation bilinéaire sur grille) ;
-- hors de la plage d'un niveau, la politique hors plage s'applique à ce niveau
-  (voir plus bas) ; au plus quatre variables.
+  le long d'elle : une propriété mesurée pour une seule valeur de φ à une
+  température donnée ne dépend pas de φ à cette température ;
+- l'**ordre des variables** compte : la première range les groupes, et c'est
+  le long d'elle que se fait le dernier mélange. Sur une table dont les groupes
+  ne partagent pas leurs abscisses, échanger l'ordre des variables change le
+  résultat ;
+- hors de la plage d'une variable, la politique hors plage s'applique à cette
+  variable, dans le groupe où elle est lue.
 
-```python
-{{#include ../../tests/python/test_doc_sauvegarde_evolution.py:table}}
-```
+`abscissas()` rend les abscisses triées : des nombres pour une courbe, des
+tuples pour une table, rangés par première variable puis par la suivante.
 
 ## Types d'abscisse et d'ordonnée
 
-Une évolution peut porter le **type physique** de ses axes :
+Une courbe peut porter le **nom** de ce que mesurent ses axes :
 
-- **`abscissa_type`** — le type de l'abscisse (p. ex. `"T"`, `"time"`), un
-  **tuple de noms** pour une table (`("T", "phi")`), un par variable. Valable
-  pour toutes les évolutions. Il sert à **étiqueter** les tracés (axe X d'une
-  courbe, slider d'un champ) et, lorsqu'on interpole un **champ**, à **choisir
-  les composantes** du champ à lire (voir ci-dessous). Chaque courbe d'un
-  agrégat garde le sien.
-- **`ordinate_type`** — le type de la valeur, pour les évolutions **scalaires
-  uniquement** (p. ex. `"young"`). Il étiquette l'axe Y et **nomme la
-  composante** produite quand on interpole un champ. Le donner sur une évolution
-  de champs est une erreur (un champ a déjà ses propres composantes).
+- `abscissa_type`, le nom de l'abscisse (`"T"`, `"t"`), un tuple de noms pour
+  une table (`("T", "phi")`), un par variable ;
+- `ordinate_type`, le nom de la valeur (`"E"`), pour une courbe de nombres
+  seulement : un champ a déjà ses composantes, et le donner à une évolution de
+  champs est une erreur.
 
-```python
-{{#include ../../tests/python/test_doc_sauvegarde_evolution.py:subevolution}}
-```
-
-## Interpoler un champ (courbe de transfert)
-
-Une évolution **scalaire** s'utilise comme une **fonction** appliquée à un
-champ, à la manière de `cos` : au lieu d'un scalaire, on lui passe un **champ**
-et elle rend un **autre champ** de même support, où **chaque nœud / point de
-Gauss** est l'évaluation de la courbe en ses propres variables.
-
-- Les composantes lues dans le champ d'entrée sont celles **nommées comme
-  l'`abscissa_type`** (une par variable pour une table) — la **correspondance de
-  type** est vérifiée : si le champ n'a pas de composante de ce nom, c'est une
-  erreur.
-- Chaque courbe écrit **une composante**, nommée d'après son `ordinate_type`
-  (à défaut `"value"`) ; deux courbes qui écriraient la même sont refusées.
-- La politique hors-plage s'applique valeur par valeur, comme pour un scalaire.
+Ils se donnent à la construction et se lisent par `abscissa_type()` et
+`ordinate_type()` ; ceux d'une `Evolution` sont ceux de sa première courbe.
+Ils étiquettent les tracés et relient une courbe à un champ (section
+suivante).
 
 ```python
-{{#include ../../tests/python/test_doc_sauvegarde_evolution.py:loi_materiau}}
+{{#include ../../tests/python/test_doc_evolution.py:types}}
 ```
 
-Côté `Evolution` (agrégat), **toutes les courbes** sont appliquées : `k`
-courbes donnent un champ à `k` composantes, chacune lisant ses propres
-variables. C'est ainsi qu'on évalue des **lois matériau à l'état** — l'analogue
-du `VARI 'NUAG'` de Cast3M : `E(T)` et `σ_y(T, φ)` appliquées en un appel aux
-points de Gauss, puis réunies au matériau constant. Il n'y a pas d'opérateur
-« matériau » dédié : c'est une interpolation générique.
+## Appliquer une courbe à un champ
+
+Une courbe de nombres s'applique à un **champ** comme `cos` : `interpolate`
+reçoit un champ au lieu d'une abscisse, et rend un champ sur le même support,
+dont chaque nœud ou point de Gauss est la courbe évaluée en ses propres
+valeurs.
+
+- La courbe lit les composantes **nommées comme son `abscissa_type`**, une par
+  variable. Sans `abscissa_type`, ou si le champ n'a pas ces composantes,
+  c'est une erreur.
+- Elle écrit **une** composante, nommée d'après son `ordinate_type`, ou
+  `"value"` à défaut.
+- La politique hors plage s'applique point par point.
 
 ```python
-{{#include ../../tests/python/test_doc_sauvegarde_evolution.py:lois_etat}}
+{{#include ../../tests/python/test_doc_evolution.py:transfert}}
 ```
 
-## Politique hors plage
+Une `Evolution` applique **toutes ses courbes** : `k` courbes donnent un champ
+à `k` composantes, chacune lisant ses propres variables. Deux courbes qui
+écriraient la même composante sont refusées. C'est ainsi qu'on calcule des
+propriétés matériau qui dépendent de l'état, par exemple `E(T)` et `σ_y(T, φ)`
+aux points de Gauss en un seul appel, avant de les réunir au besoin aux
+propriétés constantes ; il n'y a pas d'opérateur matériau à part.
 
-Chaque évolution **porte** une politique appliquée quand l'abscisse demandée
-sort de l'intervalle tabulé `[x_min, x_max]` :
+```python
+{{#include ../../tests/python/test_doc_evolution.py:lois}}
+```
 
-| Politique | Effet hors plage |
-|---|---|
-| `"error"` (défaut) | lève une erreur |
-| `"clamp"` | renvoie la valeur de l'extrémité la plus proche (pas d'extrapolation) |
-| `"extrapolate"` | prolonge linéairement avec le segment extrême |
+## Composer des courbes
 
-La politique stockée peut être **surchargée à l'appel** :
-`evol.interpolate(x, out_of_range="clamp")`.
+`|` réunit des `SubEvolution` en une `Evolution`, une courbe par zone. Toutes
+portent le même genre de valeur : des nombres, ou des champs aux nœuds, ou des
+champs aux points de Gauss. `evolution[i]` rend la courbe `i`.
 
-## Construction
+Une `Evolution` interpolée applique **sa** politique hors plage à toutes ses
+courbes. Celle que rendent `|` et une tranche `evolution[i:j]` est `"error"` ;
+chaque courbe garde la sienne, qui sert quand on l'interpole seule.
 
-Deux voies, le constructeur haut niveau n'étant que du sucre au-dessus du
-primitif bas niveau (motif `model.heat_conduction(fes)` / `SubModel` + `|`) :
+```python
+{{#include ../../tests/python/test_doc_evolution.py:composer}}
+```
 
-- **temps-major (haut niveau)** — `Evolution([(t0, champ0), (t1, champ1), …])`
-  avec un `NodeField` / `ElementField` / flottant **complet** par pas (l'abscisse
-  pouvant être un tuple pour une table) ; les
-  champs entiers sont **transposés** en une courbe par zone (zones appariées
-  entre pas par leur support, identique d'un pas à l'autre) ;
-- **zone-major (bas niveau)** — construire chaque `SubEvolution` depuis sa liste
-  `(abscisse, sous-champ)`, puis agréger avec `|`.
+## Tracer
 
-L'union `|` et le slicing **réinitialisent** la politique hors-plage de
-l'agrégat à `"error"`.
+`plot()` dessine une évolution de nombres en courbe, une ligne par zone, et
+une évolution de champs en champ sur le maillage, avec un curseur pour choisir
+l'abscisse dans la fenêtre interactive (voir
+[Visualisation](visualization.md#tracé-dune-évolution)). Sans `x_label` ni
+`y_label`, les axes et le curseur prennent l'`abscissa_type` et
+l'`ordinate_type`. Une table ne se dessine pas en courbe.
 
-## API Rust
+```python
+{{#include ../../tests/python/test_doc_evolution.py:trace}}
+```
+
+## Sauvegarde
+
+Une évolution se [sauvegarde](sauvegarde.md) comme tout objet, avec sa
+politique hors plage et ses types. Les champs qu'elle tabule gardent leur
+support, partagé avec les autres objets du même fichier.
+
+## Côté Rust
+
+`SubEvolution` porte :
+
+- `abscissas`, un `Vec<f64>` plat : `dims` nombres par échantillon, les
+  échantillons triés dans l'ordre de leurs tuples (première variable, puis
+  deuxième…) ;
+- `dims`, le nombre de variables, de 1 à `MAX_ABSCISSAS` (4) ;
+- `values`, un `Vec<SubValue>`, une valeur par échantillon. `SubValue` vaut
+  `Scalar(f64)`, `Node(SubNodeField)` ou `Element(SubElementField)` : les
+  champs sont rangés dans la courbe, et leur support est un `Handle` partagé ;
+- `out_of_range` (`OutOfRange`), `abscissa_type` (`Vec<String>`) et
+  `ordinate_type` (`Option<String>`).
+
+`SubEvolution::new` prend des échantillons dont l'abscisse implémente
+`Abscissa` : un `f64`, un `[f64; N]` ou un `Vec<f64>`.
+
+`Evolution` est l'agrégat de `Handle<SubEvolution>`, plus sa politique hors
+plage. `check_push` refuse une courbe dont les valeurs ne sont pas du même
+genre que celles des autres. `Evolution::interpolate_at` rend un
+`Interpolated` : `Scalars(Vec<f64>)`, `Node(NodeField)` ou
+`Element(ElementField)`. `from_scalars`, `from_node_fields` et
+`from_element_fields` sont les constructeurs que Python appelle.
+
+**Interpolation.** Une interrogation pèse au plus deux échantillons par
+variable, donc au plus 16. `gather` les trouve par recherche dichotomique,
+variable après variable, et range leurs poids dans un tableau de taille fixe,
+sur la pile : les poids ne demandent aucune allocation. Pour des champs, la
+somme pondérée reprend l'arithmétique des champs (`map_all`, puis
+`merge_components` après `check_same_components`).
+
+**Appliquer à un champ.** `SubEvolution::interpolate_field` et
+`Evolution::interpolate_node_field` / `interpolate_element_field` résolvent
+une fois, avant de parcourir le champ, quelles composantes chaque courbe lit
+et quelle politique elle applique. Les lignes du champ sont ensuite traitées
+en parallèle, sans allocation ; chaque ligne du résultat est écrite une fois,
+depuis sa propre ligne d'entrée, si bien que le résultat ne dépend pas du
+nombre de fils.
 
 ```rust,ignore
 {{#include ../../tests/doc_conteneurs.rs:evolution}}
 ```
-
-## API Python
-
-```python
-{{#include ../../tests/python/test_doc_sauvegarde_evolution.py:interpolate}}
-```
-
-## Tracé
-
-`evolution.plot(...)` visualise l'évolution : **courbe X-Y** pour des scalaires, **champ + slider** de
-valeur tabulée pour des champs. Voir [Visualisation › Tracé d'une évolution](visualization.md#tracé-dune-évolution).
-
-À défaut de `x_label` / `y_label` explicites, les étiquettes reprennent
-l'`abscissa_type` (axe X d'une courbe, **slider** d'un champ) et l'`ordinate_type`
-(axe Y d'une courbe).
-
-```python
-{{#include ../../tests/python/test_doc_sauvegarde_evolution.py:plot}}
-```
-
-## Place dans le modèle
-
-`SubValue` est un enum de stockage **inline** (scalaire / `SubNodeField` /
-`SubElementField`), comme `SubModel` l'est pour les physiques. `SubEvolution`
-s'adresse par un `Handle<SubEvolution>` et sérialise ses valeurs en ligne
-via le [trait `Portable`](memory-model.md) ; les courbes sont donc portables
-comme tout autre objet. L'homogénéité du type de valeur est garantie
-à la construction (au sein d'une courbe) et par `check_push` (entre zones d'un
-même agrégat).
