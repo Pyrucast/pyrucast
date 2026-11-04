@@ -111,6 +111,34 @@ way: `book/src/sauvegarde.md` (a reloaded `Coords` alone "qu'un `gc()`
 collectera"), `book/src/aspect-informatique.md` ("`coords.gc()` collecte…"),
 and the Rust docs of `src/coords.rs` and `src/atoms/node.rs`.
 
+## Improve the multi-variable interpolation of evolutions
+
+A table of several variables (`SubEvolution` with tuple abscissas,
+`src/containers/evolution.rs`, `gather`) is read variable after variable: the
+samples are grouped by the first variable, each group is a curve along the
+next one, and the groups bracketing the query are blended. Consequences, all
+described in `book/src/evolution.md`:
+
+- on a table whose groups do not share their abscissas, swapping the order of
+  the variables changes the result;
+- a group where the next variable takes a single value is constant along it;
+- out of range, the policy applies per variable, inside the group being read.
+
+On a full grid the result is the multilinear interpolation, independent of the
+order. Lead: an interpolation of the scattered samples that does not depend on
+the order of the variables (a simplex-based one, for instance), weighed
+against what it changes on a full grid and its cost at every Gauss point.
+
+## The out-of-range policy has two owners
+
+Each `SubEvolution` carries a policy, and so does the `Evolution` holding it.
+`Evolution::interpolate_at`, `interpolate_node_field` and
+`interpolate_element_field` apply the **aggregate's** policy to every curve,
+so a curve's own policy only counts when that curve is interpolated alone.
+`|` and slicing give the aggregate `"error"`, whatever its curves carry:
+`SubEvolution(..., out_of_range="clamp") | other` then raises out of range.
+Decide which object owns the policy, and what `|` and slicing do with it.
+
 ## `Evolution(steps)` ignores a zone a later step adds
 
 `Evolution::from_node_fields` / `from_element_fields`
