@@ -140,7 +140,9 @@ materials = pyrucast.element_field.material_field(
 u = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(n), ["u_x", "u_y"])
 nsteps = 2
 # ANCHOR: pas_a_pas
-state = None  # VAR0 = prev; None at the first step
+state = pyrucast.element_field.initial_state(
+    model, materials
+)  # VAR0 = prev : l'état de repos au premier pas
 for step in range(1, nsteps + 1):
     # the step's load → Newton loop on u
     eps = pyrucast.element_field.deformation(u, fes)  # ε(B)
@@ -165,7 +167,10 @@ solution = pyrucast.NodeField(
 # ANCHOR: beam_deformation
 # Solution (w, theta) already obtained from the solver.
 eps = pyrucast.element_field.beam_deformation(solution, fes, materials)  # (κ, γ)
-forces = pyrucast.element_field.integrate_behavior(model, eps, materials)
+repos = pyrucast.element_field.initial_state(
+    model, materials
+)  # l'état de départ de la loi
+forces = pyrucast.element_field.integrate_behavior(model, eps, materials, repos)
 # forces porte le moment M = E·I·κ et l'effort tranchant V = G·A_s·γ.
 # ANCHOR_END: beam_deformation
 assert len(forces) == 1
@@ -188,7 +193,10 @@ solution = pyrucast.NodeField(
 # ANCHOR: shell_deformation
 # Solution (six DOFs per node) already obtained from the solver.
 eps = pyrucast.element_field.shell_deformation(solution, fes, "thick")
-forces = pyrucast.element_field.integrate_behavior(model, eps, materials)
+repos = pyrucast.element_field.initial_state(
+    model, materials
+)  # l'état de départ de la loi
+forces = pyrucast.element_field.integrate_behavior(model, eps, materials, repos)
 # forces carries the membrane resultants N, the bending ones M, the
 # vrillage M_drill, et — en `thick` — l'effort tranchant Q.
 # ANCHOR_END: shell_deformation
@@ -205,7 +213,12 @@ f_ext = pyrucast.NodeField(support, ["f_x", "f_y"])
 # ANCHOR: forces_internes
 # Solution already obtained from the solver.
 eps = pyrucast.element_field.deformation(solution, fes)  # ε = B·u
-sig = pyrucast.element_field.integrate_behavior(model, eps, materials)  # COMP : σ
+repos = pyrucast.element_field.initial_state(
+    model, materials
+)  # l'état de départ de la loi
+sig = pyrucast.element_field.integrate_behavior(
+    model, eps, materials, repos
+)  # COMP : σ
 f_int = pyrucast.node_field.internal_forces(model, sig, solution, materials)
 # L'autre côté du bilan. L'élasticité seule n'a aucun terme donné : le champ
 # comes back empty, and everything external comes from the hand-built loading.

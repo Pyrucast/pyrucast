@@ -124,11 +124,11 @@ def main():
     u = pyrucast.NodeField(
         mesh, ["u_x", "u_y"]
     )  # accumulated displacement, zero at first
-    # The state at rest: `None` at the first step, where A is the reference
-    # configuration. The operator materialises it itself, with **every** component
-    # the law reads back afterwards — σ(A), ε(A), the internal state — where a
+    # The state at A of the first step: the rest state, where A is the reference
+    # configuration. `initial_state` builds it with **every** component the law
+    # reads back afterwards — σ(A), ε(A), the internal state — where a
     # hand-written list forgets some.
-    state = None
+    state = pyrucast.element_field.initial_state(model, materials)
 
     # ── Loop over the load steps ────────────────────────────────────────────
     # Modified Newton (operator = elastic K): linear convergence, hence slow on
@@ -159,7 +159,7 @@ def main():
             # ε(u) → behaviour input (ε | VAR0) → σ, VAR1 (COMP).
             strain = pyrucast.element_field.deformation(u, fes)
             out = pyrucast.element_field.integrate_behavior(
-                model, strain, materials, prev=state
+                model, strain, materials, state
             )
             # Internal forces F_int = ∫ Bᵀ σ dΩ (BSIG).
             f_int = pyrucast.node_field.internal_forces(model, out, u, materials)

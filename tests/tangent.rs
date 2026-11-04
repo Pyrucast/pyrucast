@@ -15,7 +15,7 @@ use pyrucast::handle::Handle;
 use pyrucast::models::plasticity::law::PlasticLaw;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
-use pyrucast::ops::element_field::behavior::integrate;
+use pyrucast::ops::element_field::behavior::{initial_state, integrate};
 use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::element_field::{deformation, StrainMeasure};
 use pyrucast::ops::matrix::tangent;
@@ -49,7 +49,13 @@ fn internal_force_vec(
 ) -> Result<Vec<f64>> {
     let u = build_u(nodes, dim, disp)?;
     let strain = deformation(&u, fes, StrainMeasure::Linear)?;
-    let state = integrate(model, &strain, None, materials, None)?;
+    let state = integrate(
+        model,
+        &strain,
+        &initial_state(model, materials)?,
+        materials,
+        None,
+    )?;
     let f = internal_forces(model, &state, &u, materials)?;
     let mut out = vec![0.0; nodes.len() * dim];
     for (i, n) in nodes.iter().enumerate() {
@@ -73,7 +79,13 @@ fn check_tangent_fd(
 
     // The analytical tangent, evaluated at the converged state of `base`.
     let strain = deformation(&build_u(nodes, dim, base)?, fes, StrainMeasure::Linear)?;
-    let kt = tangent(model, &materials, &strain, None, None)?;
+    let kt = tangent(
+        model,
+        &materials,
+        &strain,
+        &initial_state(model, &materials)?,
+        None,
+    )?;
 
     let ndof = nodes.len() * dim;
     let h = 1e-8;
@@ -227,7 +239,13 @@ fn elastic_regime_tangent_equals_stiffness() -> Result<()> {
     let base: Vec<f64> = plastic_disp_2d().iter().map(|d| d * 1e-4).collect();
     let strain = deformation(&build_u(&n, 2, &base)?, &fes, StrainMeasure::Linear)?;
 
-    let kt = tangent(&model, &materials, &strain, None, None)?;
+    let kt = tangent(
+        &model,
+        &materials,
+        &strain,
+        &initial_state(&model, &materials)?,
+        None,
+    )?;
     let k = stiffness(&model, &materials)?;
     let tol = 1e-9;
     for i in 0..4 {
@@ -261,7 +279,13 @@ fn a_linear_physics_tangent_is_its_stiffness() -> Result<()> {
     let k = 3.0;
     let materials = material_field(&conduction, &[("k", k)])?;
 
-    let kt = tangent(&conduction, &materials, &ElementField::empty(), None, None)?;
+    let kt = tangent(
+        &conduction,
+        &materials,
+        &ElementField::empty(),
+        &initial_state(&conduction, &materials)?,
+        None,
+    )?;
     for (j, coef) in [4.0, -1.0, -2.0, -1.0].iter().enumerate() {
         let t = kt.get(n[0].id(), "q", n[j].id(), "T").unwrap();
         assert!((t - k * coef / 6.0).abs() < 1e-12, "q0 T{j}: {t}");
@@ -293,7 +317,13 @@ fn constraints_enter_the_tangent() -> Result<()> {
     )?)?;
     let materials = material_field(&constrained, &[("k", 1.0)])?;
 
-    let kt = tangent(&constrained, &materials, &ElementField::empty(), None, None)?;
+    let kt = tangent(
+        &constrained,
+        &materials,
+        &ElementField::empty(),
+        &initial_state(&constrained, &materials)?,
+        None,
+    )?;
     let k = stiffness(&constrained, &materials)?;
     // Four temperatures plus the multiplier: the constraint row is there.
     assert_eq!(kt.n_rows()?, 5);
@@ -327,7 +357,14 @@ fn a_nonlinear_physics_without_tangent_errors() -> Result<()> {
     )?;
     let strain = deformation(&build_u(&n, 2, &[0.0; 8])?, &fes, StrainMeasure::Linear)?;
 
-    let err = tangent(&damage, &materials, &strain, None, None).unwrap_err();
+    let err = tangent(
+        &damage,
+        &materials,
+        &strain,
+        &initial_state(&damage, &materials).unwrap(),
+        None,
+    )
+    .unwrap_err();
     assert!(
         err.to_string().contains("no consistent tangent"),
         "unexpected message: {err}"

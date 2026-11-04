@@ -525,16 +525,20 @@ sont unilatérales.
   opérateur géométrique (`gradient`, `deformation`, `beam_deformation`) ;
 - `prev` — l'**état convergé au début du pas** A : le flux/contrainte σ(A), les
   variables internes `VAR(A)`, et pour les lois incrémentales la cinématique
-  ε(A). Vaut `None` au premier pas (configuration de référence) ;
-- `material` — les données matériau de la zone, `Some(_)` ssi la physique déclare
-  un `material_fespace` ;
-- `dt` — l'incrément de temps, `None` pour une loi indépendante du temps (une loi
-  visqueuse erronera s'il manque).
+  ε(A). Il existe toujours : au premier pas, c'est l'état de repos que fabrique
+  `initial_state` (zéro partout, sauf ce que la loi fait partir d'une constante
+  du matériau) ;
+- `material` — les données matériau du point, vides pour une physique qui n'en
+  déclare pas ;
+- `dt` — l'incrément de temps, `0.0` pour une loi indépendante du temps ; une
+  loi qui en a besoin le reçoit toujours, `integrate_behavior` refusant
+  l'intégration sinon.
 
 Le noyau écrit dans `out` les composantes déclarées par
 `behavior_output_components()` : l'état matériau en B — σ(B), `VAR(B)`, et
-éventuellement `D_alg` pour une physique qui alimente la tangente cohérente. La
-sortie devient le `prev` du pas suivant.
+l'éventuelle ε(B) recopiée. La sortie devient le `prev` du pas suivant. La
+tangente cohérente n'y est pas : `tangent_point` l'évalue au point, à la
+demande de `matrix.tangent`.
 
 ### Une composante matériau facultative
 

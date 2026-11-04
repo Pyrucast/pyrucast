@@ -60,7 +60,12 @@ def test_a_viscous_law_refuses_to_integrate_without_dt():
     materials = pyrucast.element_field.material_field(model, NORTON)
     strain = _strain(c, nodes, fes, 2e-3)
     with pytest.raises(RuntimeError, match="rate-dependent"):
-        pyrucast.element_field.integrate_behavior(model, strain, materials)
+        pyrucast.element_field.integrate_behavior(
+            model,
+            strain,
+            materials,
+            pyrucast.element_field.initial_state(model, materials),
+        )
 
 
 def test_holding_a_strain_relaxes_the_stress():
@@ -72,7 +77,11 @@ def test_holding_a_strain_relaxes_the_stress():
     previous = float("inf")
     for dt in (1e-4, 1e-3, 1e-2, 1e-1):
         state = pyrucast.element_field.integrate_behavior(
-            model, strain, materials, dt=dt
+            model,
+            strain,
+            materials,
+            pyrucast.element_field.initial_state(model, materials),
+            dt=dt,
         )
         q = _von_mises(state[0])
         assert q < previous, f"dt={dt}: {q} is not below {previous}"
@@ -121,7 +130,11 @@ def test_chaboche_carries_a_back_stress_in_its_state():
         ],
     )
     state = pyrucast.element_field.integrate_behavior(
-        model, _strain(c, nodes, fes, 3e-3), materials, dt=1e-2
+        model,
+        _strain(c, nodes, fes, 3e-3),
+        materials,
+        pyrucast.element_field.initial_state(model, materials),
+        dt=1e-2,
     )
     components = state[0].components()
     for name in ("X_xx", "X_yy", "X_xy", "R"):
@@ -151,7 +164,13 @@ def test_lemaitre_chaboche_adds_damage():
         ],
     )
     strain = _strain(c, nodes, fes, 4e-3)
-    state = pyrucast.element_field.integrate_behavior(model, strain, materials, dt=1e-2)
+    state = pyrucast.element_field.integrate_behavior(
+        model,
+        strain,
+        materials,
+        pyrucast.element_field.initial_state(model, materials),
+        dt=1e-2,
+    )
     assert "damage" in state[0].components()
     first = state[0].value(0, 0, "damage")
     assert first > 0.0
@@ -181,7 +200,11 @@ def _creep_step(model, material):
     model = model(fes, "full_3d")
     materials = pyrucast.element_field.material_field(model, material)
     state = pyrucast.element_field.integrate_behavior(
-        model, _strain(c, nodes, fes, EXX), materials, dt=DT
+        model,
+        _strain(c, nodes, fes, EXX),
+        materials,
+        pyrucast.element_field.initial_state(model, materials),
+        dt=DT,
     )
     q = _von_mises(state[0])
     dp = state[0].value(0, 0, "p")

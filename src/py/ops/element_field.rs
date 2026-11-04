@@ -391,8 +391,9 @@ pub fn material_field_per_sub_model(
 ///
 /// `deformation` is the **end-of-step** behaviour input ε(B) (from
 /// `gradient(field, fespace)` or `deformation(u, fespace)`); `prev` is the
-/// **converged output of the previous step** (the state at A — stress,
-/// internal variables and start-of-step strain), or `None` on the first step;
+/// **state at A** — the converged output of the previous step (stress,
+/// internal variables and start-of-step strain), or
+/// `element_field.initial_state(model, materials)` on the first step;
 /// `materials` supplies the per-zone material data; `dt` is the time increment
 /// (`None` if the law is rate-independent). Returns the material-state field at
 /// B (dual flux/stress + updated internal variables) of every behaviour-bearing
@@ -403,22 +404,39 @@ pub fn material_field_per_sub_model(
 #[py_op(method_on = PyModel)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (model, deformation, materials, prev=None, dt=None))]
+#[pyo3(signature = (model, deformation, materials, prev, dt=None))]
 pub fn integrate_behavior(
     model: PyRef<PyModel>,
     deformation: PyRef<PyElementField>,
     materials: PyRef<PyElementField>,
-    prev: Option<PyRef<PyElementField>>,
+    prev: PyRef<PyElementField>,
     dt: Option<f64>,
 ) -> PyResult<PyElementField> {
-    let prev_inner = prev.as_ref().map(|p| &p.inner);
     let ef = crate::ops::element_field::behavior::integrate(
         &model.inner,
         &deformation.inner,
-        prev_inner,
+        &prev.inner,
         &materials.inner,
         dt,
     )?;
+    Ok(PyElementField { inner: ef })
+}
+
+/// The **rest state** of `model` — the `prev` of a first step, for
+/// `integrate_behavior` and `matrix.tangent`.
+///
+/// One zone per sub-model carrying a law, with the components that law
+/// writes. Nearly every law rests at zero; a law whose internal variable starts
+/// from a material constant seeds it from `materials` (Gurson's porosity from
+/// `f_0`). Constraint sub-models, which have no law, are skipped.
+#[py_op(method_on = PyModel)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn initial_state(
+    model: PyRef<PyModel>,
+    materials: PyRef<PyElementField>,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::element_field::behavior::initial_state(&model.inner, &materials.inner)?;
     Ok(PyElementField { inner: ef })
 }
 

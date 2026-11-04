@@ -259,7 +259,7 @@ mod tests {
     use crate::coords::Coords;
     use crate::models::symmetry::MaterialSymmetry;
     use crate::models::tensor::Kinematics;
-    use crate::ops::element_field::behavior::integrate;
+    use crate::ops::element_field::behavior::{initial_state, integrate};
     use crate::ops::element_field::material_field;
     use crate::ops::element_field::{deformation, StrainMeasure};
 
@@ -308,7 +308,14 @@ mod tests {
         }
         let u = NodeField::from_sub(u);
         let strain = deformation(&u, &fes, StrainMeasure::Linear).unwrap();
-        let stress = integrate(&model, &strain, None, &materials, None).unwrap();
+        let stress = integrate(
+            &model,
+            &strain,
+            &initial_state(&model, &materials).unwrap(),
+            &materials,
+            None,
+        )
+        .unwrap();
         let f_int = internal_forces(&model, &stress, &u, &materials).unwrap();
         let ku = (&crate::ops::matrix::stiffness(&model, &materials).unwrap() * &u).unwrap();
 
@@ -359,7 +366,14 @@ mod tests {
 
         // f_int = ∫ Bᵀ σ  vs  K·u.
         let strain = deformation(&u, &fes, StrainMeasure::Linear).unwrap();
-        let stress = integrate(&model, &strain, None, &materials, None).unwrap();
+        let stress = integrate(
+            &model,
+            &strain,
+            &initial_state(&model, &materials).unwrap(),
+            &materials,
+            None,
+        )
+        .unwrap();
         let f_int = internal_forces(&model, &stress, &u, &materials).unwrap();
 
         let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
@@ -415,7 +429,14 @@ mod tests {
         let u = NodeField::from_sub(u);
 
         let strain = deformation(&u, &fes, StrainMeasure::Linear).unwrap();
-        let stress = integrate(&model, &strain, None, &materials, None).unwrap();
+        let stress = integrate(
+            &model,
+            &strain,
+            &initial_state(&model, &materials).unwrap(),
+            &materials,
+            None,
+        )
+        .unwrap();
 
         let via_model = internal_forces(&model, &stress, &u, &materials).unwrap();
         let via_divergence = crate::ops::node_field::divergence(&stress, "sigma").unwrap();
@@ -467,7 +488,14 @@ mod tests {
         let u = NodeField::from_sub(u);
 
         let strain = deformation(&u, &fes, StrainMeasure::Linear).unwrap();
-        let stress = integrate(&model, &strain, None, &materials, None).unwrap();
+        let stress = integrate(
+            &model,
+            &strain,
+            &initial_state(&model, &materials).unwrap(),
+            &materials,
+            None,
+        )
+        .unwrap();
         let f_int = internal_forces(&model, &stress, &u, &materials).unwrap();
 
         let n = e * area * eps; // axial force

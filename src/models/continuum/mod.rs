@@ -835,7 +835,8 @@ impl Continuum {
     /// // End to end: the tangent of a linear law **is** its stiffness, and it
     /// // reaches it by the common path — without any field of moduli having
     /// // been materialised to carry it there.
-    /// let kt = matrix::tangent(&modele, &materiaux, &eps, None, None)?;
+    /// # let repos = element_field::behavior::initial_state(&modele, &materiaux)?;
+    /// let kt = matrix::tangent(&modele, &materiaux, &eps, &repos, None)?;
     /// let k = matrix::stiffness(&modele, &materiaux)?;
     /// assert_eq!(kt.to_dmatrix()?, k.to_dmatrix()?);
     /// # Ok::<(), pyrucast::PyrucastError>(())

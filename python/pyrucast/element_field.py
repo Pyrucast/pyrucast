@@ -4,7 +4,7 @@
 Kinematics (gradient, strain and its structural variants, interpolation to the
 Gauss points, thermal expansion), the model's own strain operator ``strain``,
 the elastic operator both ways, the conversion between stress measures,
-material data, and the integration of the constitutive law.
+material data, the integration of the constitutive law and its rest state.
 """
 
 from ._pyrucast import (
@@ -14,6 +14,7 @@ from ._pyrucast import (
     elastic_strain,
     elastic_stress,
     gradient,
+    initial_state,
     integrate_behavior,
     interp_to_gauss,
     material_field,
@@ -40,6 +41,7 @@ __all__ = [
     "elastic_strain",
     "elastic_stress",
     "gradient",
+    "initial_state",
     "integrate_behavior",
     "interp_to_gauss",
     "mask",

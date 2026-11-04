@@ -27,7 +27,8 @@ use pyrucast::models::damage::law::DamageLaw;
 use pyrucast::models::plasticity::law::PlasticLaw;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::{
-    behavior::integrate, deformation, material_field, StrainMeasure,
+    behavior::{initial_state, integrate},
+    deformation, material_field, StrainMeasure,
 };
 use pyrucast::ops::model;
 use pyrucast::Result;
@@ -47,7 +48,7 @@ const TC: &[(&str, f64)] = &[
 fn a_closed_crack_carries_load_again() -> Result<()> {
     let cube = Cube::damage(DamageLaw::DamageTc, TC)?;
     // Stretch far enough to damage in tension…
-    let damaged = cube.step(&uniaxial(1.5e-3), None)?;
+    let damaged = cube.step(&uniaxial(1.5e-3), &cube.rest()?)?;
     let d_plus = damaged.var("d_plus")?;
     let d_minus = damaged.var("d_minus")?;
     assert!(d_plus > 0.1, "tension must damage (d⁺ = {d_plus})");
@@ -59,8 +60,8 @@ fn a_closed_crack_carries_load_again() -> Result<()> {
     );
 
     // Now close the crack. The compressive stiffness is the undamaged one.
-    let closed = cube.step(&uniaxial(-1e-4), Some(&damaged.field))?;
-    let intact = cube.step(&uniaxial(-1e-4), None)?;
+    let closed = cube.step(&uniaxial(-1e-4), &damaged.field)?;
+    let intact = cube.step(&uniaxial(-1e-4), &cube.rest()?)?;
     assert!(
         (closed.sigma[0] - intact.sigma[0]).abs() < 1e-9 * intact.sigma[0].abs(),
         "a closed crack must carry the full compressive stress: {} vs {}",
@@ -78,7 +79,7 @@ fn a_closed_crack_carries_load_again() -> Result<()> {
 fn crushing_leaves_the_tensile_damage_untouched() -> Result<()> {
     let cube = Cube::damage(DamageLaw::DamageTc, TC)?;
     // Confined compression, so the compressive driver is large.
-    let crushed = cube.step(&hydrostatic(-3e-3), None)?;
+    let crushed = cube.step(&hydrostatic(-3e-3), &cube.rest()?)?;
     let d_minus = crushed.var("d_minus")?;
     let d_plus = crushed.var("d_plus")?;
     assert!(d_minus > 0.0, "compression must damage (d⁻ = {d_minus})");
@@ -106,7 +107,7 @@ fn mazars_reports_a_single_scalar() -> Result<()> {
             ("B_c", 1_900.0),
         ],
     )?;
-    let damaged = cube.step(&uniaxial(1.5e-3), None)?;
+    let damaged = cube.step(&uniaxial(1.5e-3), &cube.rest()?)?;
     assert!(damaged.var("damage")? > 0.1, "tension must damage");
     // One history variable, not two: that is the whole difference.
     assert!(damaged.var("kappa")? > 0.0);
@@ -120,7 +121,7 @@ fn mazars_reports_a_single_scalar() -> Result<()> {
 #[test]
 fn sic_sic_damages_only_the_stretched_direction() -> Result<()> {
     let cube = Cube::damage(DamageLaw::SicSic, SIC)?;
-    let stretched = cube.step(&uniaxial(2e-3), None)?;
+    let stretched = cube.step(&uniaxial(2e-3), &cube.rest()?)?;
     let (d1, d2, d3) = (
         stretched.var("d_1")?,
         stretched.var("d_2")?,
@@ -140,7 +141,7 @@ fn sic_sic_damages_only_the_stretched_direction() -> Result<()> {
 fn sic_sic_damage_saturates_at_its_ceiling() -> Result<()> {
     let cube = Cube::damage(DamageLaw::SicSic, SIC)?;
     // Far past the characteristic strain, so the exponential has saturated.
-    let d1 = cube.step(&uniaxial(0.5), None)?.var("d_1")?;
+    let d1 = cube.step(&uniaxial(0.5), &cube.rest()?)?.var("d_1")?;
     assert!(
         (d1 - 0.6).abs() < 1e-6,
         "the damage must saturate at d_max_1 = 0.6 (got {d1})"
@@ -186,10 +187,14 @@ const GURSON: &[(&str, f64)] = &[
 #[test]
 fn gurson_porosity_grows_under_triaxial_tension() -> Result<()> {
     let cube = Cube::plastic(PlasticLaw::Gurson, GURSON)?;
+    let rest = cube.rest()?;
     let mut prev = None;
     let mut porosities = Vec::new();
     for _ in 0..5 {
-        let step = cube.step(&hydrostatic(5e-3), prev.as_ref().map(|s: &Step| &s.field))?;
+        let step = cube.step(
+            &hydrostatic(5e-3),
+            prev.as_ref().map_or(&rest, |s: &Step| &s.field),
+        )?;
         porosities.push(step.var("porosity")?);
         prev = Some(step);
     }
@@ -216,12 +221,10 @@ fn a_porous_metal_yields_before_a_dense_one() -> Result<()> {
         .map(|&(k, v)| if k == "f_0" { (k, 0.05) } else { (k, v) })
         .collect();
     let strain = hydrostatic(4e-3);
-    let q_dense = von_mises(
-        &Cube::plastic(PlasticLaw::Gurson, &dense)?
-            .step(&strain, None)?
-            .sigma,
-    );
-    let s_porous = Cube::plastic(PlasticLaw::Gurson, &porous)?.step(&strain, None)?;
+    let dense_cube = Cube::plastic(PlasticLaw::Gurson, &dense)?;
+    let q_dense = von_mises(&dense_cube.step(&strain, &dense_cube.rest()?)?.sigma);
+    let porous_cube = Cube::plastic(PlasticLaw::Gurson, &porous)?;
+    let s_porous = porous_cube.step(&strain, &porous_cube.rest()?)?;
     // Under pure hydrostatic tension a dense (von Mises) material stays elastic —
     // there is no deviator to yield on — while a porous one flows and sheds
     // pressure. The mean stress is where that shows.
@@ -322,7 +325,12 @@ impl Cube {
         })
     }
 
-    fn step(&self, disp: &[f64], prev: Option<&ElementField>) -> Result<Step> {
+    /// The laws' rest state: the state at A of a first step.
+    fn rest(&self) -> Result<ElementField> {
+        initial_state(&self.model, &self.materials)
+    }
+
+    fn step(&self, disp: &[f64], prev: &ElementField) -> Result<Step> {
         let support = Handle::new(SubMesh::poi1_from_nodes(&self.nodes)?);
         let comps: Vec<String> = (0..3).map(|a| format!("u_{}", AXES[a])).collect();
         let mut u = SubNodeField::from_poi1(&support, comps)?;

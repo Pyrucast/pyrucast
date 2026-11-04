@@ -878,7 +878,7 @@ mod tests {
         let pl = unit_hex();
         let (e, nu, sy) = (210_000.0, 0.3, 250.0);
         let mat = material(&pl, e, nu, sy);
-        // First load past yield (prev = None ⇒ reference config A).
+        // First load past yield, from the rest state (reference config A).
         let st1 = pl
             .integrate_behavior(&uniaxial(&pl, 5e-3), &rest(&pl, &mat), &mat, 0.0)
             .unwrap();

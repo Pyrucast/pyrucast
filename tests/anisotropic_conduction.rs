@@ -251,8 +251,13 @@ fn uniform_flux(
     let temperature =
         pyrucast::ops::node_field::restrict_like(solution, &NodeField::from_sub(zero))?;
     let gradient = pyrucast::ops::element_field::gradient(&temperature, fes)?;
-    let flux =
-        pyrucast::ops::element_field::behavior::integrate(model, &gradient, None, materials, None)?;
+    let flux = pyrucast::ops::element_field::behavior::integrate(
+        model,
+        &gradient,
+        &pyrucast::ops::element_field::behavior::initial_state(model, materials)?,
+        materials,
+        None,
+    )?;
     let sub = flux.get(0)?;
     let sub = sub.read();
     Ok((sub.value(0, 0, "flux_x")?, sub.value(0, 0, "flux_y")?))

@@ -48,7 +48,7 @@ déplacements, `behaviour` contient la contrainte qu'écrit la loi (`S_*` ou
 | `material_laws` | lois scalaires de l'état, `E(T)`, `σ_y(T, φ)`… ([Évolution](evolution.md)) | `VARI` |
 | `loads` | charges nodales et valeurs imposées, champ ou `Evolution` | `CHARGEMENT` |
 | `temperature` | température imposée, sans modèle thermique | `CHARGEMENT 'T'` |
-| `initial` | `displacement`, `behaviour`, `temperature`, `velocity`, `acceleration` | indice 0 des tables |
+| `initial` | `displacement`, `behaviour`, `temperature`, `velocity`, `acceleration` ; ce qui manque part du repos : déplacement et mouvement nuls, l'état de repos des lois (`element_field.initial_state`), température uniforme `t_ref` | indice 0 des tables |
 | `t_ref` | température sans dilatation | `TEMPERATURE_REFERENCE` |
 | `hooks` | procédures utilisateur, par nom (`HOOKS`) | `REEV_MEC`, `PERSO1`, `AUTOPILO`… |
 

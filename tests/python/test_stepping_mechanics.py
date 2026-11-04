@@ -149,7 +149,8 @@ def test_a_clamped_bar_carries_the_thermal_stress_of_a_prescribed_temperature():
     for record, heated in zip(data["results"], (0.0, 100.0, 200.0), strict=True):
         sigma = record["behaviour"]
         if heated == 0.0:
-            assert sigma is None
+            # The first record carries the laws' rest state: no stress yet.
+            assert sigma.abs().max("sigma_xx") == 0.0
             continue
         assert sigma.max("sigma_xx") == pytest.approx(-E * ALPHA * heated, rel=1e-9)
         assert sigma.min("sigma_xx") == pytest.approx(-E * ALPHA * heated, rel=1e-9)

@@ -61,7 +61,12 @@ u = pyrucast.matrix.stiffness(modele, materiaux).solve(force)  # valeurs imposé
 print(u.value(b, "u_x"))  # 1.0 = F·L/(E·A)
 
 deformation = pyrucast.element_field.strain(modele, u, materiaux)
-effort = pyrucast.element_field.integrate_behavior(modele, deformation, materiaux)
+repos = pyrucast.element_field.initial_state(
+    modele, materiaux
+)  # l'état de départ de la loi
+effort = pyrucast.element_field.integrate_behavior(
+    modele, deformation, materiaux, repos
+)
 print(effort.components(), effort[0].value(0, 0, "n"))  # ['n'] 1000.0
 # ANCHOR_END: barre
 
@@ -93,7 +98,8 @@ print(round(u.value(haut_droit, "u_x"), 12))  # 0.0005 = S/E
 print(round(u.value(haut_droit, "u_y"), 12))  # -0.00015 = −ν·S/E
 
 eps = pyrucast.element_field.strain(modele, u, materiaux)
-sigma = pyrucast.element_field.integrate_behavior(modele, eps, materiaux)
+repos = pyrucast.element_field.initial_state(modele, materiaux)
+sigma = pyrucast.element_field.integrate_behavior(modele, eps, materiaux, repos)
 print(sigma.components())  # ['sigma_xx', 'sigma_yy', 'sigma_xy']
 print(round(sigma[0].value(0, 0, "sigma_xx"), 9))  # 100.0
 # ANCHOR_END: elasticite
@@ -166,9 +172,10 @@ materiaux = pyrucast.element_field.material_field(
 )
 
 eps = pyrucast.element_field.strain(modele, u, materiaux)
-etat = pyrucast.element_field.integrate_behavior(
-    modele, eps, materiaux
-)  # prev=None : premier pas
+repos = pyrucast.element_field.initial_state(
+    modele, materiaux
+)  # premier pas : l'état de repos
+etat = pyrucast.element_field.integrate_behavior(modele, eps, materiaux, repos)
 s = {nom: etat[0].value(0, 0, nom) for nom in ("sigma_xx", "sigma_yy", "sigma_xy")}
 q = math.sqrt(
     s["sigma_xx"] ** 2
@@ -197,8 +204,9 @@ modele = pyrucast.model.plasticity_isotropic(fes, "plane_stress")
 materiaux = pyrucast.element_field.material_field(
     modele, [("E", 210e3), ("nu", 0.3), ("sigma_y", 250.0), ("H", 1000.0)]
 )
+eps = pyrucast.element_field.strain(modele, u, materiaux)
 etat = pyrucast.element_field.integrate_behavior(
-    modele, pyrucast.element_field.strain(modele, u, materiaux), materiaux
+    modele, eps, materiaux, pyrucast.element_field.initial_state(modele, materiaux)
 )
 s = {nom: etat[0].value(0, 0, nom) for nom in ("sigma_xx", "sigma_yy", "sigma_xy")}
 q = math.sqrt(
@@ -220,8 +228,11 @@ materiaux = pyrucast.element_field.material_field(
     modele, [("E", 20e3), ("nu", 0.2), ("friction", 0.3), ("k", 10.0), ("psi", 0.1)]
 )
 eps = pyrucast.element_field.strain(modele, u, materiaux)
-etat = pyrucast.element_field.integrate_behavior(modele, eps, materiaux)
-Kt = pyrucast.matrix.tangent(modele, materiaux, eps)  # par perturbation, symétrisée
+repos = pyrucast.element_field.initial_state(modele, materiaux)
+etat = pyrucast.element_field.integrate_behavior(modele, eps, materiaux, repos)
+Kt = pyrucast.matrix.tangent(
+    modele, materiaux, eps, repos
+)  # par perturbation, symétrisée
 print(Kt.symmetric)  # True
 # ANCHOR_END: drucker_prager
 
@@ -236,16 +247,15 @@ materiaux = pyrucast.element_field.material_field(
     modele, [("E", 150e3), ("nu", 0.3), ("K", 400.0), ("n", 5.0)]
 )
 eps = pyrucast.element_field.strain(modele, u, materiaux)  # déformation maintenue
+repos = pyrucast.element_field.initial_state(modele, materiaux)
 try:
-    pyrucast.element_field.integrate_behavior(modele, eps, materiaux)
+    pyrucast.element_field.integrate_behavior(modele, eps, materiaux, repos)
 except RuntimeError as erreur:
     print(erreur)  # Plasticity: this law is rate-dependent and needs a time increment…
 
-etat = pyrucast.element_field.integrate_behavior(modele, eps, materiaux, dt=1.0)
+etat = pyrucast.element_field.integrate_behavior(modele, eps, materiaux, repos, dt=1.0)
 sigma_1 = etat[0].value(0, 0, "sigma_xx")
-etat = pyrucast.element_field.integrate_behavior(
-    modele, eps, materiaux, prev=etat, dt=1.0
-)
+etat = pyrucast.element_field.integrate_behavior(modele, eps, materiaux, etat, dt=1.0)
 print(etat[0].value(0, 0, "sigma_xx") < sigma_1)  # True : la contrainte se relaxe
 # ANCHOR_END: fluage
 
@@ -268,8 +278,9 @@ materiaux = pyrucast.element_field.material_field(
         ("B_c", 1900.0),
     ],
 )
+eps = pyrucast.element_field.strain(modele, u, materiaux)
 etat = pyrucast.element_field.integrate_behavior(
-    modele, pyrucast.element_field.strain(modele, u, materiaux), materiaux
+    modele, eps, materiaux, pyrucast.element_field.initial_state(modele, materiaux)
 )
 print(
     round(etat[0].value(0, 0, "kappa"), 6)
@@ -288,8 +299,9 @@ materiaux = pyrucast.element_field.material_field(
     modele,
     [("E", 30e3), ("nu", 0.2), ("f_t", 3.0), ("f_c", 30.0), ("A_t", 0.9), ("A_c", 0.5)],
 )
+eps = pyrucast.element_field.strain(modele, u, materiaux)
 etat = pyrucast.element_field.integrate_behavior(
-    modele, pyrucast.element_field.strain(modele, u, materiaux), materiaux
+    modele, eps, materiaux, pyrucast.element_field.initial_state(modele, materiaux)
 )
 print(
     etat[0].value(0, 0, "d_plus") > 0, etat[0].value(0, 0, "d_minus")

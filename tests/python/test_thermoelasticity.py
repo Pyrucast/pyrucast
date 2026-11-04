@@ -62,7 +62,9 @@ def _thermal_load(model, materials, eps_th, fes):
     stress, so it goes through the model-free operator rather than the one that
     forms `Σ f_int` from a solution.
     """
-    sig_th = pyrucast.element_field.integrate_behavior(model, eps_th, materials)
+    sig_th = pyrucast.element_field.integrate_behavior(
+        model, eps_th, materials, pyrucast.element_field.initial_state(model, materials)
+    )
     # The tensor's divergence, renamed into dual rows: the operator is
     # geometric, this is where we say these are forces.
     return (
@@ -111,7 +113,10 @@ def test_fully_constrained_bar_thermal_stress():
 
     # Real stress σ = D:(ε(u) − ε_th).
     sigma = pyrucast.element_field.integrate_behavior(
-        model, pyrucast.element_field.deformation(u, fes) - eps_th, materials
+        model,
+        pyrucast.element_field.deformation(u, fes) - eps_th,
+        materials,
+        pyrucast.element_field.initial_state(model, materials),
     )
     expected = -E * ALPHA * DT
     for zone in range(len(sigma)):
@@ -154,7 +159,10 @@ def test_free_bar_expands_without_stress():
 
     # Free expansion ⇒ (near) zero stress.
     sigma = pyrucast.element_field.integrate_behavior(
-        model, pyrucast.element_field.deformation(u, fes) - eps_th, materials
+        model,
+        pyrucast.element_field.deformation(u, fes) - eps_th,
+        materials,
+        pyrucast.element_field.initial_state(model, materials),
     )
     for zone in range(len(sigma)):
         sub = sigma[zone]

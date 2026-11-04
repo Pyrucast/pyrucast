@@ -233,7 +233,8 @@ par la sortie.
 | `sub_material_field(sub: &SubModel, components_and_values: &[(&str, f64)]) -> SubElementField` | `sub_material_field(sub_model, components_and_values) -> SubElementField` |
 | `material_field(model: &Model, components_and_values: &[(&str, f64)]) -> ElementField` | `material_field(model, components_and_values) -> ElementField` |
 | `material_field_per_sub_model(model: &Model, per_sub_model: &[&[(&str, f64)]]) -> ElementField` | `material_field_per_sub_model(model, components_and_values_per_sub_model) -> ElementField` |
-| `behavior::integrate(model, deformation, prev, materials, dt) -> ElementField` | `integrate_behavior(model, deformation, materials, prev=None, dt=None) -> ElementField` (`COMP`) |
+| `behavior::initial_state(model: &Model, materials: &ElementField) -> ElementField` | `initial_state(model, materials) -> ElementField` (l'état de repos, `prev` du premier pas) |
+| `behavior::integrate(model, deformation, prev: &ElementField, materials, dt: Option<f64>) -> ElementField` | `integrate_behavior(model, deformation, materials, prev, dt=None) -> ElementField` (`COMP`) |
 
 ### `ops::measure` — réductions à un nombre
 
@@ -325,7 +326,7 @@ correspondantes sont enregistrées, avec leur raison, dans
 | `mass(model: &Model, materials: &ElementField) -> Matrix` | `mass(model, materials) -> Matrix` |
 | `lump(m: &Matrix) -> Matrix` | `lump(matrix) -> Matrix` |
 | `geometric(model: &Model, materials: &ElementField, stress: &ElementField) -> Matrix` | `geometric(model, materials, stress) -> Matrix` |
-| `tangent(model, materials, deformation, prev: Option<&ElementField>, dt: Option<f64>) -> Matrix` | `tangent(model, materials, deformation, prev=None, dt=None) -> Matrix` |
+| `tangent(model, materials, deformation, prev: &ElementField, dt: Option<f64>) -> Matrix` | `tangent(model, materials, deformation, prev, dt=None) -> Matrix` |
 
 Les cinq reposent sur `assemble_kind(model, materials, kind: MatrixKind, inputs)`,
 le moteur commun des assembleurs, qui n'a pas de binding Python.

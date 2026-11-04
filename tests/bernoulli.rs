@@ -337,8 +337,9 @@ fn a_bernoulli_beam_recovers_its_section_forces() -> Result<()> {
     let u = solve(&pyrucast::ops::matrix::stiffness(&model, &materials)?, &rhs)?;
 
     let strains = pyrucast::ops::element_field::beam_deformation(&u, &fes, &materials)?;
+    let rest = pyrucast::ops::element_field::behavior::initial_state(&model, &materials)?;
     let forces = pyrucast::ops::element_field::behavior::integrate(
-        &model, &strains, None, &materials, None,
+        &model, &strains, &rest, &materials, None,
     )?;
     let f = forces.get(0)?.read();
     assert_eq!(f.components(), &["M".to_string()]);

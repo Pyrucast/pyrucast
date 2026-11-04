@@ -77,6 +77,7 @@ __all__ = [
     "grid_surface2",
     "gurson",
     "heat_conduction",
+    "initial_state",
     "integral",
     "integrate_behavior",
     "interface_transfer",
@@ -2302,14 +2303,15 @@ class Model:
         `model.len()`. An empty inner list **skips** the matching
         sub-model (typical for Dirichlet).
         """
-    def integrate_behavior(self, deformation: ElementField, materials: ElementField, prev: typing.Optional[ElementField] = None, dt: typing.Optional[builtins.float] = None) -> ElementField:
+    def integrate_behavior(self, deformation: ElementField, materials: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> ElementField:
         r"""
         Integrate the constitutive law of `model` (Cast3m `COMP`), stepping A → B.
         
         `deformation` is the **end-of-step** behaviour input ε(B) (from
         `gradient(field, fespace)` or `deformation(u, fespace)`); `prev` is the
-        **converged output of the previous step** (the state at A — stress,
-        internal variables and start-of-step strain), or `None` on the first step;
+        **state at A** — the converged output of the previous step (stress,
+        internal variables and start-of-step strain), or
+        `element_field.initial_state(model, materials)` on the first step;
         `materials` supplies the per-zone material data; `dt` is the time increment
         (`None` if the law is rate-independent). Returns the material-state field at
         B (dual flux/stress + updated internal variables) of every behaviour-bearing
@@ -2317,6 +2319,16 @@ class Model:
         
         For a linear law the result is consistent with the assembled stiffness
         (`∫ Bᵀ·flux = K·u`); a non-linear law is the exact response.
+        """
+    def initial_state(self, materials: ElementField) -> ElementField:
+        r"""
+        The **rest state** of `model` — the `prev` of a first step, for
+        `integrate_behavior` and `matrix.tangent`.
+        
+        One zone per sub-model carrying a law, with the components that law
+        writes. Nearly every law rests at zero; a law whose internal variable starts
+        from a material constant seeds it from `materials` (Gurson's porosity from
+        `f_0`). Constraint sub-models, which have no law, are skipped.
         """
     def stiffness_matrix(self, materials: ElementField) -> Matrix:
         r"""
@@ -2340,12 +2352,13 @@ class Model:
         `KSIG`), from the current stress field `stress` (Voigt-named `sigma_*`).
         `materials` resolves each mechanical zone, exactly like [`stiffness`].
         """
-    def tangent_matrix(self, materials: ElementField, deformation: ElementField, prev: typing.Optional[ElementField] = None, dt: typing.Optional[builtins.float] = None) -> Matrix:
+    def tangent_matrix(self, materials: ElementField, deformation: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> Matrix:
         r"""
         Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`
         (Cast3M `KTAN`). `D_alg` is evaluated **at the Gauss point**, from the same
         inputs `integrate_behavior` takes — no field of moduli is materialised, since
-        this assembler would be its only reader. `prev=None` means the rest state.
+        this assembler would be its only reader. `prev` is the state at A:
+        `element_field.initial_state(model, materials)` on a first step.
         """
     def update_contact(self, displacement: NodeField) -> Model:
         r"""
@@ -4904,6 +4917,17 @@ def heat_conduction(fespace: FiniteElementSpace, symmetry: builtins.str = 'isotr
     axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z` in 3-D.
     """
 
+def initial_state(model: Model, materials: ElementField) -> ElementField:
+    r"""
+    The **rest state** of `model` — the `prev` of a first step, for
+    `integrate_behavior` and `matrix.tangent`.
+    
+    One zone per sub-model carrying a law, with the components that law
+    writes. Nearly every law rests at zero; a law whose internal variable starts
+    from a material constant seeds it from `materials` (Gurson's porosity from
+    `f_0`). Constraint sub-models, which have no law, are skipped.
+    """
+
 def integral(field: typing.Any, component: builtins.str, fespace: typing.Optional[FiniteElementSpace] = None) -> builtins.float:
     r"""
     Integral `∫_Ω f dΩ` of a field over its support, using the finite-element
@@ -4919,14 +4943,15 @@ def integral(field: typing.Any, component: builtins.str, fespace: typing.Optiona
     sum instead: `field.sum(component)`.
     """
 
-def integrate_behavior(model: Model, deformation: ElementField, materials: ElementField, prev: typing.Optional[ElementField] = None, dt: typing.Optional[builtins.float] = None) -> ElementField:
+def integrate_behavior(model: Model, deformation: ElementField, materials: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> ElementField:
     r"""
     Integrate the constitutive law of `model` (Cast3m `COMP`), stepping A → B.
     
     `deformation` is the **end-of-step** behaviour input ε(B) (from
     `gradient(field, fespace)` or `deformation(u, fespace)`); `prev` is the
-    **converged output of the previous step** (the state at A — stress,
-    internal variables and start-of-step strain), or `None` on the first step;
+    **state at A** — the converged output of the previous step (stress,
+    internal variables and start-of-step strain), or
+    `element_field.initial_state(model, materials)` on the first step;
     `materials` supplies the per-zone material data; `dt` is the time increment
     (`None` if the law is rate-independent). Returns the material-state field at
     B (dual flux/stress + updated internal variables) of every behaviour-bearing
@@ -5936,12 +5961,13 @@ def tan(field: typing.Any) -> typing.Any:
     Element-wise tangent of a field (radians).
     """
 
-def tangent(model: Model, materials: ElementField, deformation: ElementField, prev: typing.Optional[ElementField] = None, dt: typing.Optional[builtins.float] = None) -> Matrix:
+def tangent(model: Model, materials: ElementField, deformation: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> Matrix:
     r"""
     Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`
     (Cast3M `KTAN`). `D_alg` is evaluated **at the Gauss point**, from the same
     inputs `integrate_behavior` takes — no field of moduli is materialised, since
-    this assembler would be its only reader. `prev=None` means the rest state.
+    this assembler would be its only reader. `prev` is the state at A:
+    `element_field.initial_state(model, materials)` on a first step.
     """
 
 def tanh(field: typing.Any) -> typing.Any:

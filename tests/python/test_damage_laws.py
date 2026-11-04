@@ -48,7 +48,10 @@ def test_damage_tc_keeps_two_independent_histories():
     model = pyrucast.model.damage_tc(fes, "full_3d")
     materials = pyrucast.element_field.material_field(model, TC)
     state = pyrucast.element_field.integrate_behavior(
-        model, _strain(c, nodes, fes, [1.5e-3, 0.0, 0.0]), materials
+        model,
+        _strain(c, nodes, fes, [1.5e-3, 0.0, 0.0]),
+        materials,
+        pyrucast.element_field.initial_state(model, materials),
     )
     comps = state[0].components()
     for name in ("d_plus", "d_minus", "r_plus", "r_minus"):
@@ -84,11 +87,41 @@ def test_sic_sic_damages_by_direction():
         ],
     )
     state = pyrucast.element_field.integrate_behavior(
-        model, _strain(c, nodes, fes, [2e-3, 0.0, 0.0]), materials
+        model,
+        _strain(c, nodes, fes, [2e-3, 0.0, 0.0]),
+        materials,
+        pyrucast.element_field.initial_state(model, materials),
     )
     assert state[0].value(0, 0, "d_1") > 0.05
     assert state[0].value(0, 0, "d_2") < 1e-12
     assert state[0].value(0, 0, "d_3") < 1e-12
+
+
+def test_gurson_rests_at_its_initial_porosity():
+    """The rest state seeds the porosity from `f_0` — the one law whose rest is
+    not zero — and the tangent reads it as its state at A."""
+    c, nodes, fes = _cube()
+    model = pyrucast.model.gurson(fes, "full_3d")
+    materials = pyrucast.element_field.material_field(
+        model,
+        [
+            ("E", 200_000.0),
+            ("nu", 0.3),
+            ("sigma_y", 400.0),
+            ("q_1", 1.5),
+            ("q_2", 1.0),
+            ("q_3", 2.25),
+            ("f_0", 0.001),
+            ("f_c", 0.15),
+            ("f_f", 0.25),
+        ],
+    )
+    rest = pyrucast.element_field.initial_state(model, materials)
+    assert rest.min("porosity") == rest.max("porosity") == 0.001
+    assert rest.abs().max("sigma_xx") == 0.0
+    strain = _strain(c, nodes, fes, [0.0, 0.0, 0.0])
+    tangent = pyrucast.matrix.tangent(model, materials, strain, rest)
+    assert tangent.n_rows == tangent.n_cols == 24
 
 
 def test_gurson_exposes_and_grows_its_porosity():
@@ -110,7 +143,9 @@ def test_gurson_exposes_and_grows_its_porosity():
     )
     # Triaxial tension: voids open where the pressure pulls them apart.
     strain = _strain(c, nodes, fes, [5e-3, 5e-3, 5e-3])
-    state = pyrucast.element_field.integrate_behavior(model, strain, materials)
+    state = pyrucast.element_field.integrate_behavior(
+        model, strain, materials, pyrucast.element_field.initial_state(model, materials)
+    )
     assert "porosity" in state[0].components()
     first = state[0].value(0, 0, "porosity")
     assert first > 0.001, "the porosity must start from f_0 and grow"

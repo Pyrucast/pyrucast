@@ -289,7 +289,8 @@ solution = _champ_nodal(
 # B: each law gets its own input from one solution — a strain for the solid,
 # a temperature gradient for conduction.
 eps = couple.strain(solution, materiaux)
-etat = couple.integrate_behavior(eps, materiaux)  # the laws
+repos = couple.initial_state(materiaux)  # l'état de départ des deux lois
+etat = couple.integrate_behavior(eps, materiaux, repos)  # the laws
 f_int = couple.internal_forces(etat, solution, materiaux)  # Bᵀ: back to the nodes
 # ANCHOR_END: strain_modele
 assert [z.components() for z in eps] == [

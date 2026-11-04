@@ -90,7 +90,9 @@ def _solve_thermal(model, materials, fes, c, grid):
     eps_th = pyrucast.element_field.thermal_strain(
         _uniform_temperature(c, grid, fes, T_REF + DT), materials, fes, T_REF
     )
-    sig_th = pyrucast.element_field.integrate_behavior(model, eps_th, materials)
+    sig_th = pyrucast.element_field.integrate_behavior(
+        model, eps_th, materials, pyrucast.element_field.initial_state(model, materials)
+    )
     # A **load**, not a residual: the divergence of the prescribed tensor, hence
     # the geometric operator. They are then renamed into dual rows — that is
     # where, and only where, these numbers become forces.
@@ -102,7 +104,10 @@ def _solve_thermal(model, materials, fes, c, grid):
     solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), f_th)
     u = _displacement(solution, c, grid)
     sigma = pyrucast.element_field.integrate_behavior(
-        model, pyrucast.element_field.deformation(u, fes) - eps_th, materials
+        model,
+        pyrucast.element_field.deformation(u, fes) - eps_th,
+        materials,
+        pyrucast.element_field.initial_state(model, materials),
     )
     return u, sigma
 

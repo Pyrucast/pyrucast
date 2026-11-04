@@ -136,7 +136,13 @@ fn check_beam(
     let u = primal_of(&solution, nodes, &model.primal_vars())?;
     // The whole solution, multipliers included: each law reads its own unknowns.
     let eps = strain(model, &solution, &materials)?;
-    let state = behavior::integrate(model, &eps, None, &materials, None)?;
+    let state = behavior::integrate(
+        model,
+        &eps,
+        &behavior::initial_state(model, &materials)?,
+        &materials,
+        None,
+    )?;
     let f_int = internal_forces(model, &state, &u, &materials)?;
     let k = pyrucast::ops::matrix::stiffness(model, &materials)?;
     let gap = residual_gap(&k, &f_int, &u, nodes)?;
@@ -302,7 +308,13 @@ fn truss_internal_forces_still_match_k_times_u() -> Result<()> {
     let u = NodeField::from_sub(imposed);
 
     let eps = strain(&model, &u, &materials)?;
-    let state = behavior::integrate(&model, &eps, None, &materials, None)?;
+    let state = behavior::integrate(
+        &model,
+        &eps,
+        &behavior::initial_state(&model, &materials)?,
+        &materials,
+        None,
+    )?;
     let f_int = internal_forces(&model, &state, &u, &materials)?;
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let gap = residual_gap(&k, &f_int, &u, &nodes)?;
@@ -364,7 +376,13 @@ fn check_shell(
     let u = imposed(&model, &nodes)?;
 
     let eps = strain(&model, &u, &materials)?;
-    let state = behavior::integrate(&model, &eps, None, &materials, None)?;
+    let state = behavior::integrate(
+        &model,
+        &eps,
+        &behavior::initial_state(&model, &materials)?,
+        &materials,
+        None,
+    )?;
     let f_int = internal_forces(&model, &state, &u, &materials)?;
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let gap = residual_gap(&k, &f_int, &u, &nodes)?;

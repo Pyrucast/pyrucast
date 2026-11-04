@@ -49,7 +49,9 @@ def test_integrate_behavior_returns_weak_form_flux():
     k = 2.0
     model, fes, materials, t = _heat_setup(k=k)
     grad = pyrucast.element_field.gradient(t, fes)
-    state = pyrucast.element_field.integrate_behavior(model, grad, materials)
+    state = pyrucast.element_field.integrate_behavior(
+        model, grad, materials, pyrucast.element_field.initial_state(model, materials)
+    )
     assert len(state) == 1
     sub = state[0]
     assert sub.components() == ["flux_x"]
@@ -74,16 +76,35 @@ def test_has_behavior_true_for_hc_false_for_dirichlet():
 
 
 def test_integrate_behavior_missing_material_errors():
-    model, fes, _materials, t = _heat_setup()
+    model, fes, materials, t = _heat_setup()
     grad = pyrucast.element_field.gradient(t, fes)
+    rest = pyrucast.element_field.initial_state(model, materials)
     # Material field on the right subspace but lacking the "k" component.
     bad = pyrucast.ElementField(fes, ["unused"])
-    try:
-        pyrucast.element_field.integrate_behavior(model, grad, bad)
-    except RuntimeError:
-        pass
-    else:
-        raise AssertionError("expected RuntimeError when material lacks 'k'")
+    for call in (
+        lambda: pyrucast.element_field.integrate_behavior(model, grad, bad, rest),
+        lambda: pyrucast.element_field.initial_state(model, bad),
+    ):
+        try:
+            call()
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("expected RuntimeError when material lacks 'k'")
+
+
+def test_initial_state_is_each_law_at_rest():
+    """One zone per law, carrying every component the law writes, all at
+    zero; a constraint, which has no law, gets none."""
+    model, fes, materials, _t = _heat_setup()
+    left = pyrucast.mesh.poi1_from_nodes([fes.mesh().node(0, 0, 0)])
+    constrained = model | pyrucast.model.dirichlet(left, model, "T")
+    rest = pyrucast.element_field.initial_state(constrained, materials)
+    assert len(rest) == 1
+    assert rest[0].components() == ["flux_x"]
+    assert rest.abs().max("flux_x") == 0.0
+    # The method form gives the same zones.
+    assert len(constrained.initial_state(materials)) == 1
 
 
 def test_deformation_linearized_strain_2d():

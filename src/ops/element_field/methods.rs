@@ -55,11 +55,16 @@ impl Model {
     pub fn integrate_behavior(
         &self,
         deformation: &ElementField,
-        prev: Option<&ElementField>,
+        prev: &ElementField,
         materials: &ElementField,
         dt: Option<f64>,
     ) -> Result<ElementField> {
         crate::ops::element_field::behavior::integrate(self, deformation, prev, materials, dt)
+    }
+
+    /// See [`element_field::behavior::initial_state`](fn@crate::ops::element_field::behavior::initial_state).
+    pub fn initial_state(&self, materials: &ElementField) -> Result<ElementField> {
+        crate::ops::element_field::behavior::initial_state(self, materials)
     }
 }
 

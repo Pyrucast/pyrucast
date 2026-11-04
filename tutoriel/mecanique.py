@@ -136,7 +136,8 @@ def main() -> None:
         pc.node_field.restrict(temperature, plaque), fes
     )
     eps_th = pc.element_field.thermal_strain(t_gauss, materiaux, fes, T_REF)
-    sig_th = pc.element_field.integrate_behavior(modele, eps_th, materiaux)
+    repos = pc.element_field.initial_state(modele, materiaux)  # état de départ
+    sig_th = pc.element_field.integrate_behavior(modele, eps_th, materiaux, repos)
     f_th = (
         pc.node_field.divergence(sig_th, "sigma")
         .rename_component("div_sigma_x", "f_x")
@@ -152,7 +153,7 @@ def main() -> None:
     # are kept before computing a strain.
     u2_propre = pc.node_field.restrict_like(u2, pc.NodeField(plaque, ["u_x", "u_y"]))
     contraintes = pc.element_field.integrate_behavior(
-        modele, pc.element_field.deformation(u2_propre, fes) - eps_th, materiaux
+        modele, pc.element_field.deformation(u2_propre, fes) - eps_th, materiaux, repos
     )
     print(f"   σ_xx max ≈ {contraintes.max('sigma_xx'):.3e} Pa")
 

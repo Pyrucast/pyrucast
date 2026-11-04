@@ -532,7 +532,9 @@ def test_a_taut_string_carries_a_weight_through_its_geometric_stiffness(geometri
     stretch[0].set_value(left, "u_x", -delta)
     stretch[0].set_value(right, "u_x", delta)
     own = pc.element_field.material_field(string, [("E", young), ("A", area)])
-    tension = string.integrate_behavior(string.strain(stretch, own), own)
+    tension = string.integrate_behavior(
+        string.strain(stretch, own), own, string.initial_state(own)
+    )
     pulled = _on(at_left, "imposed", -delta) | _on(at_right, "imposed", delta)
     hung = pc.NodeField(pc.mesh.poi1_from_nodes([middle]), ["f_y"])
     hung[0].set_value(middle, "f_y", -weight)

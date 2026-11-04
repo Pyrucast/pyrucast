@@ -400,7 +400,14 @@ fn main() {
         let strain = &strain;
         move || {
             black_box(
-                element_field::behavior::integrate(model, strain, None, materials, None).unwrap(),
+                element_field::behavior::integrate(
+                    model,
+                    strain,
+                    &element_field::behavior::initial_state(model, materials).unwrap(),
+                    materials,
+                    None,
+                )
+                .unwrap(),
             );
         }
     };

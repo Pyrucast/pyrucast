@@ -49,8 +49,13 @@ fn the_radiated_flux_matches_stefan_boltzmann() -> Result<()> {
     // Gauss points, integrate the law, and scatter back to the nodes.
     let temperature = uniform_temperature(&fixture, T_WALL)?;
     let at_gauss = element_field::interp_to_gauss(&temperature, &fixture.boundary_fes)?;
-    let state =
-        element_field::behavior::integrate(&fixture.radiation, &at_gauss, None, &materials, None)?;
+    let state = element_field::behavior::integrate(
+        &fixture.radiation,
+        &at_gauss,
+        &element_field::behavior::initial_state(&fixture.radiation, &materials)?,
+        &materials,
+        None,
+    )?;
     let reaction = pyrucast::ops::node_field::internal_forces(
         &fixture.radiation,
         &state,
@@ -81,13 +86,14 @@ fn the_radiated_flux_matches_stefan_boltzmann() -> Result<()> {
 fn the_tangent_is_the_derivative_of_the_residual() -> Result<()> {
     let (fixture, materials) = radiating_square()?;
 
+    let rest = element_field::behavior::initial_state(&fixture.radiation, &materials)?;
     let residual = |t: f64| -> Result<Vec<f64>> {
         let temperature = uniform_temperature(&fixture, t)?;
         let at_gauss = element_field::interp_to_gauss(&temperature, &fixture.boundary_fes)?;
         let state = element_field::behavior::integrate(
             &fixture.radiation,
             &at_gauss,
-            None,
+            &rest,
             &materials,
             None,
         )?;
@@ -109,7 +115,13 @@ fn the_tangent_is_the_derivative_of_the_residual() -> Result<()> {
     let t0 = T_WALL;
     let temperature = uniform_temperature(&fixture, t0)?;
     let at_gauss = element_field::interp_to_gauss(&temperature, &fixture.boundary_fes)?;
-    let kt = pyrucast::ops::matrix::tangent(&fixture.radiation, &materials, &at_gauss, None, None)?;
+    let kt = pyrucast::ops::matrix::tangent(
+        &fixture.radiation,
+        &materials,
+        &at_gauss,
+        &pyrucast::ops::element_field::behavior::initial_state(&fixture.radiation, &materials)?,
+        None,
+    )?;
     let dense = kt.to_dmatrix()?;
     let n = kt.row_dofs()?.len();
     let analytic: Vec<f64> = (0..n).map(|i| dense.row(i).sum()).collect();
@@ -169,8 +181,13 @@ fn no_flux_at_equilibrium() -> Result<()> {
     let (fixture, materials) = radiating_square()?;
     let temperature = uniform_temperature(&fixture, T_INF)?;
     let at_gauss = element_field::interp_to_gauss(&temperature, &fixture.boundary_fes)?;
-    let state =
-        element_field::behavior::integrate(&fixture.radiation, &at_gauss, None, &materials, None)?;
+    let state = element_field::behavior::integrate(
+        &fixture.radiation,
+        &at_gauss,
+        &element_field::behavior::initial_state(&fixture.radiation, &materials)?,
+        &materials,
+        None,
+    )?;
     let sub = state.get(0)?.read();
     for g in 0..sub.gauss_count() {
         assert!(sub.value(0, g, "flux")?.abs() < 1e-20);
@@ -178,7 +195,13 @@ fn no_flux_at_equilibrium() -> Result<()> {
     // …but the tangent is not zero: the law stays stiff at that point. It does
     // no longer comes out of the behaviour — it is asked for, which is the whole
     // séparation.
-    let kt = pyrucast::ops::matrix::tangent(&fixture.radiation, &materials, &at_gauss, None, None)?;
+    let kt = pyrucast::ops::matrix::tangent(
+        &fixture.radiation,
+        &materials,
+        &at_gauss,
+        &pyrucast::ops::element_field::behavior::initial_state(&fixture.radiation, &materials)?,
+        None,
+    )?;
     let dense = kt.to_dmatrix()?;
     assert!(dense.iter().any(|v| v.abs() > 0.0));
     Ok(())
