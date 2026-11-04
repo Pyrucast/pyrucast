@@ -1,208 +1,176 @@
 # Détails des physiques
 
-Chaque **physique** est une variante de [`SubModel`](model.md) : elle déclare
-ses variables (primales / duales), son matériau, et sait assembler sa rigidité
-`K` (et, le cas échéant, intégrer son comportement `COMP`). Le `Model`
-orchestre, mais ne porte aucune logique physique — voir
-[Modèle physique](model.md) pour la mécanique générique (DOFs, assemblage,
-chargements, solveur).
+Une **physique** est un sous-modèle (`SubModel`) que construit un opérateur de
+`pyrucast.model`. L'opérateur reçoit son support, un
+[espace éléments finis](fe-space.md) ou les maillages que relie une contrainte,
+et rend un [modèle](model.md) qui le couvre en entier : un sous-modèle par
+zone. Les physiques se composent par `|` : une conduction et la contrainte qui
+fige sa température sur un bord forment un seul modèle.
 
-Chaque page suit le **même plan standard**, dans cet ordre :
+Cette page dit ce qu'ont en commun toutes les physiques : leur **tag**, leur
+**type**, leurs **variables**, et ce que chacune sait produire. Chaque page
+qui suit décrit une physique selon le même plan (voir
+[le plan des pages](#le-plan-des-pages)).
 
-1. **Introduction** — nature du modèle, éléments et degrés de liberté.
-2. **Équations continues résolues** — forme forte (et faible) du problème.
-3. **Forme discrétisée** — opérateurs discrets (`B`, `N`) et expressions des
-   matrices élémentaires (`K`, masse/capacité, tangente…).
-4. **Variables et matériau** — noms primal/dual, composantes matériau,
-   comportement (`COMP`) et, le cas échéant, état interne.
-5. **Mise en donnée (Rust, testé)** — exemple Rust exécuté via `{{#include}}`.
-6. **Exemple Python** — l'équivalent haut niveau.
-7. **Compléments** (facultatif) — extensions propres au modèle (masse &
-   rigidité géométrique, thermomécanique, convection, régime transitoire…).
+## Les tags
 
-Certaines physiques omettent une rubrique sans objet (p. ex. pas d'exemple Rust
-dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
+Chaque sous-modèle porte un ou plusieurs **tags**, qui disent à quelle
+physique il appartient. `sub.physics()` les donne, et un modèle se
+restreint à un tag (voir [Modèle](model.md#nature-physique-et-filtrage)).
+Les pages sont rangées par tag :
 
-- [Conduction thermique](thermique.md) — `-∇·(k∇T) = 0`, l'exemple canonique,
-  la [conduction orientée](thermique.md#conduction-orthotrope-et-anisotrope)
-  (tenseur `K`) et la
-  [convection de surface](thermique.md#convection-de-surface-robin--film)
-  (Robin / film, `q·n = h(T − T_ext)`), plus le
-  [rayonnement à l'infini](thermique.md#rayonnement-à-linfini-stefan-boltzmann)
-  (`q·n = σε(T⁴ − T_∞⁴)`, non linéaire, à tangente cohérente).
-- [Diffusion (loi de Fick)](diffusion.md) — `∇·(D∇c) = 0`, concentration
-  `c_<espèce>` et flux de matière `j_<espèce>`, l'espèce étant nommée à la
-  construction ; même opérateur que la conduction, nature distincte. Avec
-  le [transfert d'interface](diffusion.md#transfert-à-travers-une-interface)
-  `j·n = h(c₁ − c₂)`, qui laisse le champ sauter entre deux corps.
-- [Échanges (frontière et interface)](echanges.md) — la loi `h(a − b)`, partagée
-  par l'échange avec une ambiante et le transfert entre deux maillages : une
-  seule loi, dont la seule différence est que l'autre côté soit une donnée ou une
-  inconnue. Générique en composantes, donc aussi bien un film thermique qu'une
-  fondation élastique.
-- [Mécanique](mecanique.md) — barre, élasticité linéaire, poutres et
-  portiques :
-  - [Barre / treillis](mecanique/truss.md)
-  - [Élasticité linéaire](mecanique/elasticite.md)
-  - [Élasticité orthotrope et anisotrope](mecanique/orthotropie.md)
-  - [Plasticité parfaite (von Mises)](mecanique/plasticite.md)
-  - [Lois d'écoulement plastique](mecanique/lois-plastiques.md) — écrouissage
-    isotrope, Drucker-Prager, Ottosen
-  - [Fluage et viscoplasticité](mecanique/fluage.md) — Norton, Lemaitre,
-    Blackburn, Chaboche et sa variante endommageable
-  - [Endommagement de Mazars](mecanique/mazars.md)
-  - [Lois d'endommagement](mecanique/endommagement.md) — Damage TC, SiC/SiC
-    orthotrope, plasticité poreuse de Gurson
-  - [Poutre d'Euler-Bernoulli](mecanique/bernoulli.md) — 1-D, plan, spatial ;
-    exacte aux nœuds
-  - [Poutre de Timoshenko](mecanique/timoshenko.md)
-  - [Portique 2D](mecanique/timoshenko.md)
-  - [Cadre 3D](mecanique/timoshenko.md)
-  - [Coques](mecanique/coques.md) — Reissner-Mindlin ou Kirchhoff discret, six
-    DDL par nœud
-- [Contraintes](contraintes.md) — conditions limites imposées par
-  multiplicateurs de Lagrange :
-  - [Dirichlet](contraintes/dirichlet.md)
-  - [Multi-points (MPC)](contraintes/mpc.md)
-  - [Baignage (embedded)](contraintes/embedded.md)
-  - [Contact (nœud-surface)](contraintes/contact.md)
-
-Ce regroupement est la **nature physique** (`Physics`) que chaque variante
-déclare : `Thermal` (conduction), `Radiation` (rayonnement, en plus de
-`Thermal`), `Diffusion` (Fick), `Mechanical` (barre →
-cadre 3D) et `Constraint` (les contraintes de Lagrange, qui portent en plus la
-nature de ce qu'elles figent). On sélectionne les sous-modèles d'une nature avec
-`model.filter(Physics::Mechanical)`, on en retire une avec
-`exclude(Physics::Constraint)` (et les blocs d'une matrice de même avec
-`k.filter(...)` / `k.exclude(...)`) — voir
-[Nature physique et filtrage](model.md#nature-physique-et-filtrage).
-
-## Ce que chacune sait produire
-
-La liste ci-dessus dit *où lire* chaque physique. Les tableaux qui suivent
-disent **ce qu'elle sait produire** : les genres de matrice qu'elle déclare
-([`MatrixKind`](ajouter-une-physique.md#un-genre-de-matrice--un-layout--un-noyau)),
-la voie par laquelle elle obtient sa tangente, la nature de son intégration de
-comportement, et la particularité de calcul qui la distingue.
-
-Ils se lisent **en colonnes**. Une case remplie dit que la physique déclare ce
-terme et que l'assembleur l'appelle ; un tiret dit qu'elle n'y contribue rien —
-et **ce n'est pas un manque**. `matrix.mass(...)` sur un modèle contenant un
-échange de bord voit simplement qu'il n'a pas de masse.
-
-Les **tags** donnés sous chaque nom sont les chaînes exactes que prennent les
-opérateurs (`from_name`) : c'est ce qu'on écrit, pas une paraphrase.
-
-### Thermique — primale `T`, duale `q`, `filter("thermal")`
-
-| Physique | `tangent` | `geometric` | `mass` | Comportement (`COMP`) | Particularité de calcul |
-|---|---|---|---|---|---|
-| [`heat_conduction`](thermique.md)<br>`isotropic` `orthotropic` `anisotropic` | — | — | capacité `ρ·cp` | flux `K·∇T` | Symétrie matériau **iso / ortho / aniso**. Le matériau est lu **en chaque point de Gauss** — conductivité, constantes orientées et axes matériau, capacité `ρ·cp` — donc variable à l'intérieur d'une maille. |
-| [`boundary_transfer`](echanges.md)<br>composantes libres | — | — | — | `h·a` | **Aveugle à l'orientation** du maillage de bord : la normale est déjà consommée en écrivant `q·n = h(T − T_ext)`, et la mesure d'intégration est une magnitude. |
-| [`radiation`](thermique.md#rayonnement-à-linfini-stefan-boltzmann) | **analytique**<br>`4σεT³` | — | — | `σε(T⁴ − T_∞⁴)` | Non linéaire. La rigidité est le film **linéarisé autour de `T_∞`**, donc constante : c'est l'opérateur dont part Newton. La tangente porte la vraie non-linéarité. Seule physique à déclarer **deux natures**, `[Thermal, Radiation]`. |
-
-### Diffusion — primale `c_<espèce>`, duale `j_<espèce>`, `filter("diffusion")`
-
-| Physique | `tangent` | `geometric` | `mass` | Comportement (`COMP`) | Particularité de calcul |
-|---|---|---|---|---|---|
-| [`fick`](diffusion.md)<br>`isotropic` `orthotropic` `anisotropic` | — | — | stockage `poro` | flux `D·∇c` | Même opérateur que la conduction, **nature distincte** : partager un laplacien n'est pas partager une physique, et un problème couplé doit pouvoir sélectionner l'une sans l'autre. **L'espèce est nommée à la construction** et portée par chaque nom (`c_H2`, `j_H2`, `D_H2`), ce qui laisse deux espèces partager un maillage — mais pas par ce qui appartient au milieu (`poro`, les axes `V1X…`). |
-| [`interface_transfer`](echanges.md)<br>composantes libres | — | — | — | `h·(c₁ − c₂)` | **Quatre blocs** — deux diagonaux, deux `Coupling` dont les lignes vivent sur un maillage et les colonnes sur l'autre. Leur scatter est **séquentiel** : le coloriage qui rend le scatter parallèle sûr repose sur une seule connectivité. Conformité vérifiée jusqu'au nœud. |
-
-### Mécanique — milieux continus, primales `u`, duales `f`, `filter("mechanical")`
-
-| Physique | `tangent` | `geometric` | `mass` | Comportement (`COMP`) | Particularité de calcul |
-|---|---|---|---|---|---|
-| [`elasticity`](mecanique/elasticite.md)<br>`plane_stress` `plane_strain` `axisymmetric` `full_3d` · `isotropic` `orthotropic` `anisotropic` | **analytique**<br>c'est `K` | oui | oui | `σ = D·ε` | Loi linéaire, donc **la tangente *est* la rigidité**. Symétrie matériau iso/ortho/aniso : le repère d'orthotropie passe par des vecteurs du champ matériau, et la rotation du tenseur se fait à l'**ordre 4** plutôt que par une matrice de Bond. |
-| [`plasticity`](mecanique/lois-plastiques.md) — 10 lois<br>`perfect` `isotropic` `drucker_prager` `ottosen` `gurson` `creep_norton` `creep_blackburn` `creep_lemaitre` `viscoplastic_chaboche` `viscoplastic_lemaitre_chaboche` | **analytique** ×2<br>**perturbation** ×8 | oui | oui | `σ`, `ε_p`, `p`<br>+ variables de la loi | La loi d'écoulement est un **attribut**. Tangente analytique pour les deux lois von Mises, **par perturbation** pour les huit autres — et toujours **symétrisée**. Les cinq lois visqueuses (Norton, Blackburn, Lemaitre, Chaboche…) **erronent sans `dt`** plutôt que d'intégrer comme si le temps n'existait pas. |
-| [`damage`](mecanique/endommagement.md) — 3 lois<br>`mazars` `damage_tc` `sic_sic` | *aucune* | oui | oui | `σ`, `damage`<br>+ histoire de la loi | **Pas de tangente**, délibérément : l'opérateur d'itération reste la rigidité **non endommagée**. Damage TC porte deux histoires indépendantes — c'est ce qui laisse une fissure refermée reprendre toute sa charge, ce qu'un scalaire ne peut pas. |
-
-### Mécanique — structurel, efforts de section, `filter("mechanical")`
-
-| Physique | `tangent` | `geometric` | `mass` | Comportement (`COMP`) | Particularité de calcul |
-|---|---|---|---|---|---|
-| [`truss`](mecanique/truss.md) | — | oui `N/L·P` | oui `ρA` | `N = E·A·ε` | Forme fermée **globale** : la direction vient des coordonnées, sans matrice de repère. Marche en 1-D, 2-D et 3-D sans changement. |
-| [`bernoulli`](mecanique/bernoulli.md)<br>`aucun tag` | — | oui¹ | oui | `M`<br>`N, M`<br>`N, M_y, M_z, T` | Seule physique bâtie sur une interpolation **C¹** : elle exige un espace `HERMITE3`, dont la base cubique la rend **exacte aux nœuds** — un élément par barre suffit. La configuration (1-D, plan, spatial) se **déduit** de la dimension du maillage. Ne demande **ni `G` ni `A_s`** : réclamer une constante qu'une théorie n'utilise pas, c'est inviter la mauvaise. |
-| [`timoshenko`](mecanique/timoshenko.md)<br>`aucun tag` | — | oui¹ | oui | `M, V`<br>`N, M, V`<br>`N, M_y, M_z, T, V_y, V_z`<br>+ `phi` | **Une** physique pour les trois configurations, lues sur la dimension du maillage — elle remplace `frame` et `frame3d`. Élément **exact** (forme fermée en `Φ = 12EI/G·A_s·L²`), donc espace `MODEL_EMBEDDED` : la base dépend du matériau, aucun espace ne peut la tabuler. Seule physique à porter dans son état une grandeur qui n'est pas un effort : `Φ` lui-même, parce que son `B` en dépend et que le noyau de forces internes reçoit l'état, non le matériau. ¹ sauf en flexion pure, qui n'a pas d'effort axial. |
-| [`shell`](mecanique/coques.md)<br>`thick`, `kirchhoff` | — | — | — | `N_xx…N_xy`<br>`M_xx…M_xy`<br>`M_drill`<br>`Q_xz, Q_yz` (`thick` seul) | **Six DDL** par nœud, les mêmes que la poutre en configuration spatiale, donc coque et portique partagent des nœuds sans adaptateur. Le vrillage est lié à la rotation de membrane, pas pénalisé : une pénalité diagonale s'opposerait à une rotation rigide, qui ne coûte rien. Il travaille, donc il a un effort conjugué (`M_drill`) : un résidu qui l'omettrait serait faux du terme même qui désingularise l'élément. `thick` (Reissner-Mindlin) est **multi-quadrature** — membrane et flexion au Gauss complet, cisaillement transverse en intégration réduite, ce qui empêche le blocage. `kirchhoff` (DKT/DKQ) n'a aucun cisaillement : `γ = 0` est imposé aux sommets et le long de chaque arête, la limite mince est donc exacte par construction et il ne reste rien à bloquer — mais aussi aucun `Q` de comportement, l'effort tranchant d'une plaque mince étant une réaction. |
-
-### Contraintes — multiplicateurs de Lagrange, `filter("constraint")`
-
-| Physique | `tangent` | `geometric` | `mass` | Comportement (`COMP`) | Particularité de calcul |
-|---|---|---|---|---|---|
-| [`flux`](operateurs/assemblage.md) | — | — | — | — | La seule physique dont le terme entier siège à **droite** du signe égal : sa dérivée est nulle, elle ne contribue à aucune matrice. Premier domaine **sans comportement** — elle intègre sur un espace EF et y lit sa densité `phi_<dual>`, sans loi à évaluer. Elle n'a pas de primale non plus : elle écrit dans la ligne duale d'une autre physique. |
-| [`dirichlet`](contraintes/dirichlet.md) · [`mpc`](contraintes/mpc.md) · [`embedded`](contraintes/embedded.md) · [`contact`](contraintes/contact.md) | — | — | — | — | Aucun layout, rien d'intégré sur une maille : elles redéfinissent directement `contributions()` et rendent leurs blocs **C / Cᵀ** en `Literal`. L'assembleur reste sans le moindre cas particulier « Dirichlet ». |
-
-### « Par perturbation » veut dire différences centrées
-
-Pour les huit lois qui n'ont pas de tangente en forme fermée, `D_alg` est obtenu
-en **perturbant la déformation** et en relançant le retour, composante par
-composante :
-
-\\[
-D_{ij} \simeq \frac{\sigma_i(\varepsilon + h\\,e_j) - \sigma_i(\varepsilon - h\\,e_j)}{2h},
-\qquad h = 10^{-6}\\,\lVert \varepsilon \rVert_\infty .
-\\]
-
-Six composantes de Voigt, deux évaluations chacune : **douze appels** au retour
-par point de Gauss. Le pas doit rester bien au-dessus du bruit du retour (celui
-d'Ottosen ou de Gurson converge à une tolérance, pas exactement) et bien en
-dessous de l'échelle de courbure de la surface ; `1e-6·‖ε‖` tient
-confortablement entre les deux. Les colonnes de cisaillement sont divisées par
-deux en sortie, ce qui transforme `∂σ/∂ε_ij` en `∂σ/∂γ_ij` — la convention
-ingénieur du reste du dépôt.
-
-| voie | lois |
+| tag | physiques |
 |---|---|
-| **analytique** | `perfect`, `isotropic` (le module algorithmique J2) |
-| **par perturbation** | `drucker_prager`, `ottosen`, `gurson`, les trois fluages, les deux Chaboche |
+| `thermal` | conduction ; rayonnement, qui porte aussi `radiation` |
+| `diffusion` | diffusion de Fick |
+| `mechanical` | élasticité, plasticité, endommagement, barre, poutres, coques |
+| `constraint` | Dirichlet, multi-points, baignage, contact |
 
-Le partage n'est pas une question de difficulté mais de **vérifiabilité** : seule
-la forme fermée de von Mises a été confrontée à une différence finie et validée.
-La dérivation analytique de Drucker-Prager, écrite d'abord, était fausse de 24 %
-— plausible, et fausse ; seul l'oracle numérique l'a dit. Une tangente obtenue
-par perturbation ne peut pas être mal dérivée, coûte douze évaluations d'une mise
-à jour bon marché, et laisse Newton converger. C'est un bon échange.
+Les échanges et le flux imposé n'ont pas de tag propre : ils prennent celui de
+la physique qu'ils visent, `thermal` sur une conduction, `mechanical` sur une
+élasticité. Une contrainte porte `constraint` **et** le tag de la physique dont
+elle fige les inconnues.
 
-Le rayonnement, lui, a bien une tangente **analytique** (`4σεT³ ∫NᵢNⱼ`) : sa
-non-linéarité est une puissance scalaire d'une seule variable, pas une carte de
-projection.
+## Les types de modèle
 
-### Trois choses que ces tableaux ne disent pas
+Une physique est de l'un de trois types, selon ce qu'elle sait faire :
 
-**Les forces internes ne suivent pas toujours `Bᵀσ`.** Le défaut est le noyau de
-la mécanique des milieux continus, `f_i = ∫ ∂N_i/∂x · σ`. Une physique dont la
-duale n'est pas un vecteur déplacement le redéfinit : la thermique et la
-diffusion appliquent `Bᵀ` à un flux scalaire, tandis que la convection, le
-rayonnement et le transfert d'interface pondèrent par `N` et non par `Bᵀ` —
-leur intégrande est une densité surfacique, pas une grandeur conjuguée d'un
-gradient.
+| type | ce qu'il fait | physiques |
+|---|---|---|
+| **domaine avec comportement** | intègre sur un sous-espace éléments finis, lit un matériau, et porte une **loi** : de ce que la solution produit (gradient, déformation, courbures), elle calcule un flux, une contrainte ou des efforts, plus un éventuel état | conduction, rayonnement, Fick, élasticité, plasticité, endommagement, barre, poutres, coques |
+| **domaine sans comportement** | intègre sur un sous-espace et lit un matériau, sans loi | échange de bord, transfert d'interface, flux imposé |
+| **contrainte** | impose des relations linéaires entre inconnues par des multiplicateurs de Lagrange ; aucun sous-espace, aucun matériau | Dirichlet, multi-points, baignage, contact |
 
-Les **structurels** le redéfinissent aussi, pour une autre raison : leur `B`
-existe, mais ce n'est pas le gradient symétrique. Barre, poutres et coques
-intègrent chacun le transposé du leur — `truss::internal_force_element`,
-`beam::internal_force_into`, `shell::b_into` — et c'est le **même** `B` que
-leur rigidité, ce que mesure `tests/internal_forces.rs` : la loi structurelle
-étant linéaire, `∫ Bᵀσ` vaut `K·u` **exactement**, à l'arrondi près.
+Ce que les accesseurs d'un sous-modèle répondent :
 
-Deux d'entre eux ont fallu payer un prix pour cela. Une poutre de Timoshenko
-porte `Φ` dans son état, son interpolation en dépendant. Une coque a gagné un
-effort conjugué, `M_drill` : le vrillage travaillait dans `K` sans figurer
-nulle part ailleurs.
+| | domaine avec comportement | domaine sans comportement | contrainte |
+|---|---|---|---|
+| `label()` | le nom de la physique : `"HeatConduction"`, `"Elasticity"`… | `"BoundaryTransfer"`, `"InterfaceTransfer"`, `"Flux"` | `"Dirichlet"`, `"Mpc"`, `"Embedded"`, `"Contact"` |
+| `material_components()` | les composantes matériau requises | les composantes requises | `None` |
+| `fespace()` | le sous-espace où elle intègre | le sous-espace où elle intègre (le côté A d'un transfert d'interface) | `None` |
+| `has_behavior` | `True` | `False` | `False` |
+| `multiplier_mesh()` | vide | vide | les nœuds multiplicateurs, un par relation |
 
-**La tangente est symétrisée.** `D_alg` est réduit au triangle supérieur puis
-relu en miroir, un format qui ne peut structurellement pas porter une matrice non
-symétrique. Or un
-écoulement **non associé** — Drucker-Prager, dont la dilatance diffère du
-frottement — en a une. Elle est donc symétrisée, ce qui coûte à Newton son taux
-quadratique sur cette loi, et rien d'autre. Voir
-[Lois d'écoulement plastique](mecanique/lois-plastiques.md#la-tangente-cohérente-et-deux-limites-assumées).
+Seul un domaine avec comportement se prête aux opérateurs de comportement de
+`pyrucast.element_field` : `strain`, `integrate_behavior`, et la tangente
+`pyrucast.matrix.tangent` (voir [Comportement](operateurs/comportement.md)).
 
-**État absent ≠ état nul.** Au-delà de `ε_p` et `p`, une loi déclare l'état
-qu'elle veut par `internal_names()` : la déformation primaire de Blackburn, la
-contrainte de rappel de Chaboche (un tenseur complet), la porosité de Gurson, les
-deux histoires de Damage TC. Le premier pas passe un vecteur **vide** — et non
-un vecteur de zéros — pour qu'une loi démarrant d'une constante matériau puisse
-faire la différence. Sans cela, un métal poreux démarrerait dense et ne
-s'endommagerait jamais.
+## Les variables
 
-Pour **ajouter** une physique, voir [Ajouter une physique](ajouter-une-physique.md).
+Chaque physique nomme ses variables :
+
+- les **primales** (`primal_vars()`) sont les inconnues, les **colonnes** de
+  la matrice : `T`, `u_x`… ;
+- les **duales** (`dual_vars()`) sont les **lignes**, où se lit le second
+  membre : `q`, `f_x`… La duale d'une primale est ce qui travaille avec elle :
+  un flux de chaleur avec une température, une force avec un déplacement ;
+- le **matériau** est un [champ aux points de Gauss](element-field.md) qui
+  porte les composantes **requises** (`material_components()`) et, au
+  besoin, des composantes **facultatives** ;
+- l'**entrée du comportement** est ce que `strain(modele, solution, materiaux)`
+  calcule depuis la solution : un gradient, une déformation, des courbures ;
+- la **sortie du comportement** est ce que rend
+  `integrate_behavior(modele, entrée, materiaux, prev, dt)` : le flux, la
+  contrainte ou les efforts, puis l'**état** que la loi relira au pas suivant
+  (`prev`) ;
+- les **forces internes** (`pyrucast.node_field.internal_forces`) sont ce
+  que la sortie exerce sur les duales : `∫ Bᵀσ`, où `B` est l'opérateur qui
+  produit l'entrée depuis la solution. Chaque page dit comment sa physique les
+  calcule.
+
+Une contrainte n'a qu'une primale, `lambda` (le multiplicateur), et une
+duale, `imposed` (la ligne de la relation, où s'écrit la valeur imposée).
+
+## Ce que chaque physique produit
+
+Les tableaux disent, pour chaque physique, les matrices qu'elle apporte et
+comment s'obtient sa tangente. Un tiret dit qu'elle n'y contribue rien : une
+masse assemblée sur un modèle qui contient un échange ignore simplement
+l'échange.
+
+La **tangente** est ce que rend `pyrucast.matrix.tangent`. « = raideur » dit
+que la physique répond à une demande de tangente par sa raideur ;
+« analytique » qu'elle a une formule ; « perturbation » qu'elle la calcule par
+différences finies sur sa loi ; « aucune » qu'elle refuse la demande.
+
+### `thermal`
+
+| physique | type | raideur | masse | géométrique | tangente |
+|---|---|---|---|---|---|
+| [`heat_conduction`](thermique.md) | avec comportement | conduction | capacité `ρ·cp` | — | = raideur |
+| [`radiation`](rayonnement.md) | avec comportement | film linéarisé | — | — | analytique |
+
+### `diffusion`
+
+| physique | type | raideur | masse | géométrique | tangente |
+|---|---|---|---|---|---|
+| [`fick`](diffusion.md) | avec comportement | diffusion | stockage `poro` | — | = raideur |
+
+### Le tag de la cible
+
+| physique | type | raideur | masse | géométrique | tangente |
+|---|---|---|---|---|---|
+| [`boundary_transfer`](echanges.md#échange-de-bord) | sans comportement | film | — | — | = raideur |
+| [`interface_transfer`](echanges.md#transfert-dinterface) | sans comportement | quatre blocs | — | — | = raideur |
+| [`flux`](echanges.md#flux-imposé) | sans comportement | — | — | — | — |
+
+### `mechanical`
+
+| physique | type | raideur | masse | géométrique | tangente |
+|---|---|---|---|---|---|
+| [`elasticity`](mecanique/elasticite.md) | avec comportement | oui | oui | oui | analytique |
+| [`plasticity_perfect`, `plasticity_isotropic`](mecanique/plasticite.md) | avec comportement | élastique | oui | oui | analytique |
+| [`drucker_prager`, `ottosen`](mecanique/lois-plastiques.md), [`gurson`](mecanique/endommagement.md) | avec comportement | élastique | oui | oui | perturbation |
+| [`creep_norton`, `creep_blackburn`, `creep_lemaitre`, `viscoplasticity_chaboche`, `viscoplasticity_lemaitre_chaboche`](mecanique/fluage.md) | avec comportement | élastique | oui | oui | perturbation |
+| [`mazars`](mecanique/mazars.md), [`damage_tc`, `damage_sic_sic`](mecanique/endommagement.md) | avec comportement | non endommagée | oui | oui | aucune |
+| [`truss`](mecanique/truss.md) | avec comportement | oui | oui | oui | = raideur |
+| [`bernoulli`](mecanique/bernoulli.md), [`timoshenko`](mecanique/timoshenko.md) | avec comportement | oui | oui | oui, sauf en 1-D | = raideur |
+| [`shell`](mecanique/coques.md) | avec comportement | oui | — | — | = raideur |
+
+### `constraint`
+
+| physique | type | raideur | masse | géométrique | tangente |
+|---|---|---|---|---|---|
+| [`dirichlet`](contraintes/dirichlet.md), [`mpc`](contraintes/mpc.md), [`embedded`](contraintes/embedded.md), [`contact`](contraintes/contact.md) | contrainte | blocs `C` et `Cᵀ` | — | — | = raideur |
+
+## Le plan des pages
+
+Chaque physique est décrite dans cet ordre :
+
+1. **En bref** : ce qu'elle modélise, son opérateur Python, son tag, son
+   type, et les éléments qu'elle accepte ;
+2. **Théorie** : les équations, de la forme locale à la matrice élémentaire ;
+3. **Variables** : primales, duales, matériau, entrée et sortie du
+   comportement, état ;
+4. **Ce qu'elle produit** : matrices, tangente, forces internes et externes ;
+5. **Exemple** en Python ;
+6. **Côté Rust**.
+
+Une page qui regroupe plusieurs lois d'une même physique (les lois
+plastiques, de fluage, d'endommagement) donne l'en-bref et les variables
+communes une fois, puis la théorie et le matériau loi par loi.
+
+## Côté Rust
+
+Une physique est un `struct` de `src/models/` qui implémente le trait
+`SubModelKind` : ses variables (`primal_vars`, `dual_vars`), ses tags
+(`physics`), son nom (`label`), et ses capacités, qu'elle expose par trois
+méthodes :
+
+- `as_domain()` rend `Some(&dyn Domain)` pour un domaine : le sous-espace où
+  lire le matériau (`material_fespace`), les composantes requises et
+  facultatives, les matrices élémentaires ;
+- `as_behavior()` rend `Some(&dyn Behavior)` pour un domaine qui porte une
+  loi : son entrée (`deformation_reads`, produite par `strain_operator`), sa
+  sortie (`behavior_output_components`), l'état qu'elle relit (`state_reads`),
+  sa tangente au point (`tangent_point`, `tangent_source`), et `requires_dt`
+  pour une loi qui dépend du pas de temps ;
+- `as_constraint()` rend `Some(&dyn Constraint)` pour une contrainte : ses
+  nœuds multiplicateurs et ses relations.
+
+Le code générique (assembleur, comportement, sauvegarde) ne passe que par ce
+trait : `SubModel::as_kind` est le seul `match` sur les physiques. Les
+matrices qu'une physique apporte se déclarent par `matrix_layout(kind)`, une
+par genre (`MatrixKind` : raideur, masse, géométrique, tangente) ; une
+contrainte ou un transfert d'interface rend ses blocs par `contributions`.
+Pour en écrire une, voir [Ajouter une physique](ajouter-une-physique.md).

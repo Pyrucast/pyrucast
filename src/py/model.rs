@@ -35,13 +35,13 @@ impl PySubModel {
     }
 
     /// `sub.fespace()` — the `SubFiniteElementSpace` this sub-model integrates
-    /// its behaviour on, or `None` for a constraint sub-model (Dirichlet, MPC…,
-    /// which integrate nothing). The per-sub-model counterpart of
-    /// `Model.fespace()`.
+    /// on, its law included when it has one; side A for an interface
+    /// transfer. `None` for a constraint sub-model (Dirichlet, MPC…, which
+    /// integrate nothing).
     fn fespace(&self) -> Option<PySubFiniteElementSpace> {
         self.handle
             .read()
-            .behavior_fespace()
+            .material_fespace()
             .map(|handle| PySubFiniteElementSpace { handle })
     }
 
@@ -85,8 +85,9 @@ impl PySubModel {
     }
 
     /// Whether this sub-model carries a constitutive behaviour that can be
-    /// integrated with `deformation` / `integrate_behavior` (`True` for
-    /// volumetric physics, `False` for constraints like Dirichlet).
+    /// integrated with `strain` / `integrate_behavior`: `True` for the
+    /// physics with a law, `False` for constraints like Dirichlet and for the
+    /// exchanges and the flux, which integrate on a subspace without a law.
     #[getter]
     fn has_behavior(&self) -> bool {
         self.handle.read().has_behavior()

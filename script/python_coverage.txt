@@ -40,7 +40,6 @@ pyrucast.model.creep_lemaitre
 pyrucast.model.damage_sic_sic
 pyrucast.model.gurson
 pyrucast.model.ottosen
-pyrucast.model.plasticity_isotropic
 pyrucast.model.viscoplasticity_chaboche
 pyrucast.model.viscoplasticity_lemaitre_chaboche
 pyrucast.node_field.divergence

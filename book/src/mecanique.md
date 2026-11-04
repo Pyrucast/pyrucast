@@ -1,37 +1,60 @@
 # Mécanique
 
-Les physiques mécaniques, chacune décrite sur sa page : **équations résolues**,
-exemple de **mise en donnée Rust testé**, et **exemple Python**.
+Les physiques de tag `mechanical`. Leurs inconnues sont les déplacements
+`u_x`, `u_y`, `u_z` (et les rotations `r_x`, `r_y`, `r_z` des poutres et des
+coques), leurs duales les forces nodales `f_x`, `f_y`, `f_z` (et les moments
+`m_x`, `m_y`, `m_z`).
 
-Comme pour la [thermique](thermique.md), ce sont des variantes de
-[`SubModel`](model.md) : chacune déclare ses variables, son matériau, et
-assemble sa rigidité `K` (et, le cas échéant, son comportement `COMP`).
+**Milieux continus**, une même cinématique (`B`, la déformation tirée du
+déplacement) et une loi qui change :
 
-Convention de nommage : **primal** = déplacements `u_x, u_y, u_z` (les
-inconnues) ; **dual** = forces nodales `f_x, f_y, f_z` (second membre /
-réactions).
+- [Élasticité linéaire](mecanique/elasticite.md) — `elasticity`, et sa
+  [symétrie matériau orthotrope ou anisotrope](mecanique/orthotropie.md) ;
+- [Plasticité de von Mises](mecanique/plasticite.md) — `plasticity_perfect`,
+  `plasticity_isotropic` ;
+- [Drucker-Prager et Ottosen](mecanique/lois-plastiques.md) — des surfaces qui
+  voient la pression ;
+- [Fluage et viscoplasticité](mecanique/fluage.md) — Norton, Blackburn,
+  Lemaitre, Chaboche, Lemaitre-Chaboche ;
+- [Endommagement de Mazars](mecanique/mazars.md) ;
+- [Autres lois d'endommagement](mecanique/endommagement.md) — Damage TC,
+  SiC/SiC, Gurson ;
+- [Grandes transformations](mecanique/grandes-transformations.md) — les mesures
+  de déformation `green_lagrange` et `hencky`.
 
-- [Barre / treillis](mecanique/truss.md) — élément à effort axial (1-D/2-D/3-D).
-- [Élasticité linéaire](mecanique/elasticite.md) — continuum 2-D (CP/DP) et 3-D.
-- [Élasticité orthotrope et anisotrope](mecanique/orthotropie.md) — la symétrie
-  matériau, repère donné par vecteurs.
-- [Plasticité parfaite (von Mises)](mecanique/plasticite.md) — J2 sans
-  écrouissage, retour radial (état interne `εᵖ`, `p`).
-- [Lois d'écoulement plastique](mecanique/lois-plastiques.md) — la loi comme
-  attribut : écrouissage isotrope, Drucker-Prager, Ottosen.
-- [Fluage et viscoplasticité](mecanique/fluage.md) — les lois dépendantes du
-  temps, qui exigent `dt`.
-- [Endommagement de Mazars](mecanique/mazars.md) — endommagement isotrope du
-  béton, deux variables (état interne `κ`).
-- [Lois d'endommagement](mecanique/endommagement.md) — la loi comme attribut :
-  Damage TC, SiC/SiC orthotrope, Gurson.
-- [Poutre d'Euler-Bernoulli](mecanique/bernoulli.md) — sans cisaillement
-  transverse, interpolation d'Hermite (1-D / plan / spatial).
-- [Poutre de Timoshenko](mecanique/timoshenko.md) — flexion + cisaillement,
-  intégration réduite (anti-verrouillage).
-- [Portique 2D](mecanique/timoshenko.md) — poutre orientée (axial + flexion +
-  cisaillement), transformation local→global.
-- [Coques](mecanique/coques.md) — surface à six DDL par nœud, Reissner-Mindlin
-  à cisaillement sous-intégré ou Kirchhoff discret (DKT/DKQ) sans cisaillement.
-- [Cadre 3D](mecanique/timoshenko.md) — space frame 6 DOF/nœud (axial + torsion +
-  flexion 2 plans), orientation automatique.
+**Éléments de structure**, dont les efforts sont intégrés sur la section :
+
+- [Barre](mecanique/truss.md) — `truss`, l'effort axial seul ;
+- [Poutre d'Euler-Bernoulli](mecanique/bernoulli.md) — `bernoulli` ;
+- [Poutre de Timoshenko](mecanique/timoshenko.md) — `timoshenko`, le
+  cisaillement en plus ;
+- [Coques](mecanique/coques.md) — `shell`, six inconnues par nœud.
+
+## Ce que partagent les milieux continus
+
+Une loi de milieu continu se déclare par
+`pyrucast.model.<loi>(fespace, kinematics, …, strain_measure="linear")`.
+
+`kinematics` est l'hypothèse cinématique :
+
+| `kinematics` | espace | composantes de la déformation et de la contrainte |
+|---|---|---|
+| `"plane_stress"` | 2-D, \\(\sigma_{zz} = 0\\) | `xx`, `yy`, `xy` |
+| `"plane_strain"` | 2-D, \\(\varepsilon_{zz} = 0\\) | `xx`, `yy`, `xy` |
+| `"axisymmetric"` | 2-D, plan méridien d'un solide de révolution | `xx`, `yy`, `zz`, `xy`, où `zz` est l'orthoradiale \\(\theta\theta\\) |
+| `"full_3d"` | 3-D | `xx`, `yy`, `zz`, `yz`, `xz`, `xy` |
+
+L'axisymétrie demande des `Coords` de révolution
+(voir [Coordonnées](coords.md#repère-de-révolution)), et réciproquement : un
+modèle plan est refusé sur une géométrie de révolution. La déformation suit la
+convention de l'ingénieur : le glissement \\(\gamma_{xy} = 2\varepsilon_{xy}\\)
+est rangé dans `eps_xy`.
+
+Les lois plastiques et de fluage intègrent leur état en 3-D, quelle que soit
+la cinématique, et rendent en plus de la contrainte la déformation totale et,
+pour les modèles plans, `sigma_zz`. La sortie d'un pas de toute loi non
+linéaire est complète : elle sert telle quelle de `prev` au pas suivant.
+
+Le matériau accepte deux composantes facultatives : `rho` (la masse) et
+`alpha` (la dilatation thermique, lue par
+`pyrucast.element_field.thermal_strain`).

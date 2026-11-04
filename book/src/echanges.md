@@ -1,242 +1,268 @@
-# Échanges (frontière et interface)
+# Échanges et flux imposé
 
-## Introduction
+Trois physiques sans comportement, qui s'appliquent à une autre physique, leur
+**cible**, et en prennent les variables et le tag :
 
-Deux physiques, une seule loi. Un échange fait traverser un flux
-proportionnellement à un **écart** :
+- l'**échange de bord**, entre un bord et un milieu extérieur connu ;
+- le **transfert d'interface**, entre deux maillages qui se font face ;
+- le **flux imposé**, une densité donnée sur un bord ou un volume.
+
+Les deux échanges suivent la même loi : un flux proportionnel à un écart,
 
 \\[
-q\cdot n = h\\,\big(a - b\big)
+q\cdot n = h\\,(a - b).
 \\]
 
-et toute la différence entre les deux tient à **de quel côté du signe égal vit
-le milieu d'en face** :
+Pour l'échange de bord, \\(b\\) est une **donnée**, la valeur ambiante ; pour
+le transfert d'interface, c'est une **inconnue**, le champ de l'autre
+maillage. Les deux partagent leur noyau, `transfer::exchange_matrix`.
 
-| modèle | l'autre côté est… | où il va |
-|---|---|---|
-| [`boundary_transfer`](#échange-avec-une-ambiante) | une **donnée** (une valeur ambiante, `a_ext_<primale>`) | au second membre, \\( h\\,a_\text{ext}\int N\\,d\Gamma \\), rendu par `external_forces` |
-| [`interface_transfer`](#échange-entre-deux-maillages) | une **inconnue** (le champ de l'autre maillage) | dans la matrice, en bloc de couplage |
+**Ce qui est échangé est donné par l'appelant.** On passe la liste des
+variables échangées (`["T"]`, `["c_H2"]`, `["u_x", "u_y"]`). Chacune doit être
+une inconnue de la cible, qui lui donne sa duale, la ligne où le flux est
+écrit. Le coefficient \\(h\\) est un par variable, nommé d'après elle : `h_T`,
+`h_c_H2`, `h_u_x`. L'échange prend le tag de la cible : `thermal` sur une
+conduction, `diffusion` sur une diffusion, `mechanical` sur une élasticité.
+Un nom inconnu de la cible, ou des variables de deux tags dans un même
+échange, sont refusés à la construction.
 
-Le bloc hors-diagonale *est* le second membre rendu implicite. C'est pourquoi les
-deux partagent leur noyau (`src/models/transfer.rs`) au lieu d'en porter chacun
-une copie : **le terme de frontière est le terme d'interface avec les deux côtés
-sur la même maille.**
+## Échange de bord
 
-## Ce qui est transféré appartient à l'appelant
+### En bref
 
-Aucun des deux ne sait ce qu'il transporte. On lui donne la liste des variables
-échangées — la forme que prennent déjà [`embedded`](contraintes/embedded.md) et
-[`contact`](contraintes/contact.md), les deux autres lois qui lient des
-maillages —, chacune appariée à la duale que lui donne la cible, et tout le reste
-en découle :
+Un échange entre un bord et un milieu extérieur : la convection avec un fluide
+(loi de Newton), le transfert de masse en surface, ou, sur les déplacements,
+une fondation élastique.
 
-| transféré | duale (lue dans la cible) | matériau | entrée du comportement | sortie |
-|---|---|---|---|---|
-| `"T"` | `q` | `h_T` | `T` / `jump_T` | `flux_T` |
-| `"c_H2"` | `j_H2` | `h_c_H2` | `c_H2` / `jump_c_H2` | `flux_c_H2` |
-| `"u_x"` | `f_x` | `h_u_x` | `u_x` / `jump_u_x` | `flux_u_x` |
+| | |
+|---|---|
+| opérateur | `pyrucast.model.boundary_transfer(fespace, target, variables)` |
+| tag | celui de la cible |
+| type | domaine sans comportement (`label()` : `"BoundaryTransfer"`) |
+| éléments | le bord de la cible : segments en 2-D, faces en 3-D |
 
-**Un coefficient par grandeur transférée, nommé d'après elle.** C'est ce qui
-permet une raideur par direction, et ce qu'un `h` unique ne pouvait pas exprimer.
+### Théorie
 
-Nommer les DDL de la physique de volume est aussi ce qui fait que le terme s'y
-**couple directement** : un `boundary_transfer` sur `["T"]` entre dans la
-raideur d'un [`heat_conduction`](thermique.md) sans adaptateur, parce que la
-matrice est indexée par le couple *(nœud, nom de champ)*.
+Sur le bord \\(\Gamma\\), le flux sortant vaut \\(h\\,(a - a_\text{ext})\\).
+Dans la forme faible, il donne une matrice de film et un second membre :
 
-## La cible donne la duale et la nature
+\\[
+K_{ij} = \int_\Gamma h\\,N_i\\,N_j\\,d\Gamma ,
+\qquad
+f_i = \int_\Gamma h\\,a_\text{ext}\\,N_i\\,d\Gamma .
+\\]
 
-Des noms de variables libres ne disent ni dans quelle ligne la réaction atterrit,
-ni quelle **nature physique** porte l'échange (`"thermal"`, `"diffusion"`,
-`"mechanical"`) — c'est pourtant elle que `model.filter(...)` sélectionne. Le
-modèle dont l'échange nomme les DDL, lui, connaît les deux. Les deux lois se
-construisent donc **contre** ce modèle, passé en argument `target` après le
-support, exactement comme une [charge répartie](operateurs/assemblage.md) ou une
-[contrainte](contraintes/dirichlet.md) :
+Aucune normale n'entre dans le calcul : elle est déjà dans \\(q\cdot n\\), et
+il ne reste sous l'intégrale qu'un scalaire et la mesure du bord, qui ne
+dépend pas de l'orientation des mailles. Le film rend la matrice définie : un
+problème avec un flux imposé et un échange, sans aucune température imposée,
+a une solution unique.
 
-```text
-conduction = model.heat_conduction(volume)
-film       = model.boundary_transfer(peau, conduction, ["T"])      # thermique
-corps      = model.fick(gauche, "H2") | model.fick(droite, "H2")
-joint      = model.interface_transfer(face_g, face_d, corps, ["c_H2"])  # diffusion
+### Variables
+
+Pour la variable `T` d'une conduction :
+
+| | |
+|---|---|
+| primale | `T`, celle de la cible |
+| duale | `q`, celle que la cible associe à `T` |
+| matériau requis | `h_T`, `a_ext_T` (la valeur ambiante) |
+| comportement | aucun ; les forces internes lisent `T` interpolée aux points de Gauss |
+
+### Ce qu'il produit
+
+| | |
+|---|---|
+| raideur | le film, \\(\int h\\,N_i\\,N_j\\) |
+| masse, géométrique | — |
+| tangente | = raideur |
+| forces internes | \\(\int h\\,a\\,N_i\\) |
+| forces externes | \\(\int h\\,a_\text{ext}\\,N_i\\), rendues par `pyrucast.node_field.external_forces` |
+
+### Exemple
+
+Un carré de conductivité 2, avec une source de 10 sur le bord gauche (un
+[flux imposé](#flux-imposé)) et un film `h = 5` vers 20 sur le bord droit. Tout
+ce qui entre ressort par le film, d'où
+\\(T = T_\text{ext} + Q/h\\) à droite et \\(T_\text{ext} + Q/h + Q/k\\) à
+gauche :
+
+```python
+{{#include ../../tests/python/test_doc_echanges.py:echange_bord}}
 ```
 
-Chaque variable doit être une **inconnue** de la cible, qui l'apparie à sa duale
-(`Model.dual_of`) : la duale n'est pas à retaper, comme pour les
-[contraintes](contraintes/dirichlet.md). La vérification se fait une fois, à la
-construction, et refuse deux erreurs :
+Le même échange sur les déplacements est une fondation élastique : un ressort
+réparti par direction.
 
-| erreur | ce qu'elle bâtissait |
+```python
+{{#include ../../tests/python/test_doc_echanges.py:fondation}}
+```
+
+## Transfert d'interface
+
+### En bref
+
+Un échange entre deux maillages qui se font face sans partager leurs nœuds :
+une résistance de contact, un revêtement, un joint, une membrane. Le champ
+**saute** à la traversée, et le flux qui passe est proportionnel au saut.
+
+| | |
 |---|---|
-| un nom mal tapé, ou une cible qui ne déclare pas cette variable | un échange couplé à rien : une matrice sur des lignes qu'aucune physique ne résout |
-| des variables de deux natures dans un seul échange | un terme que `filter` rangerait d'un seul côté |
+| opérateur | `pyrucast.model.interface_transfer(side_a, side_b, target, variables, tol=1e-9)` |
+| tag | celui de la cible |
+| type | domaine sans comportement (`label()` : `"InterfaceTransfer"`) |
+| éléments | deux bords **conformes** |
 
-Une primale appariée à la duale d'une autre (`("u_x", "f_y")`, un film qui écrit
-dans la mauvaise équation) ne peut plus s'écrire.
+`side_a` et `side_b` sont les espaces des deux faces. Elles doivent être
+conformes : même type de maille, même nombre de mailles, la maille `i` face à
+la maille `i`, et leur nœud local `k` à moins de `tol` l'un de l'autre. C'est
+vérifié à la construction, et une interface non conforme est refusée. Un
+sous-modèle est créé par paire de zones des deux côtés, prises dans l'ordre.
 
-Pour deux natures, on construit deux échanges. Le [rayonnement](thermique.md#rayonnement-à-linfini-stefan-boltzmann)
-reçoit lui aussi sa cible — il écrit dans la ligne `q` d'une conduction —, mais
-ses natures restent les siennes, `[Thermal, Radiation]` : la cible n'y sert qu'à
-prouver que la ligne est assemblée.
+### Théorie
 
-## Forme discrétisée
-
-### Échange avec une ambiante
-
-La forme faible du terme de bord se scinde en deux ingrédients, dont le
-sous-modèle ne porte que le premier :
+La forme faible du terme d'interface est
 
 \\[
-\underbrace{K_{ij} = h \int_\Gamma N_i\\,N_j\\,d\Gamma}\_{\text{matrice de film (raideur)}}
-\qquad
-\underbrace{f_i = h\\,a_\text{ext} \int_\Gamma N_i\\,d\Gamma}\_{\text{charge (second membre)}}
+\int_\Gamma h\\,(a_1 - a_2)\\,(\delta a_1 - \delta a_2)\\,d\Gamma ,
 \\]
 
-La part ambiante est un **chargement**, et le sous-modèle le porte : `a_ext` est
-une composante matériau **exigée**, à côté de son coefficient, et le terme se
-récupère par [`external_forces`](operateurs/comportement.md). Elle a longtemps
-été bâtie à la main avec l'opérateur `flux`, ce qui laissait l'oublier — et un
-ambiant oublié ne se voit pas : il se lit comme un ambiant nul, donc comme une
-paroi qui échange avec le zéro absolu. Le terme de film rend par ailleurs la
-matrice **définie** : un problème purement Neumann + échange est bien posé
-**sans Dirichlet**.
-
-**Aucune normale à choisir.** Elle est déjà consommée en passant de
-\\( q\cdot n \\) à \\( h(a - a_\text{ext}) \\) ; ce qui reste sous l'intégrale
-est un scalaire fois la mesure \\( d\Gamma = \sqrt{\det(J^\top J)} \\), une
-magnitude **indépendante de l'orientation** du maillage de bord — contrairement à
-une pression ou à un flux signé.
-
-### Échange entre deux maillages
-
-**Ni l'une ni l'autre n'a de loi de comportement.** Le `h·a` d'un bord et le
-`h·(a₁−a₂)` d'une interface sont le coefficient de leur propre opérateur
-appliqué en un point, pas un comportement : le même `h` a déjà bâti `∫h NᵀN`.
-Elles ont longtemps dû s'en inventer une, parce que `Domain` en exigeait une ;
-depuis que la loi est une capacité à part, elles n'en déclarent plus.
-
-Côté résidu, l'intégrale d'une différence est la différence des intégrales :
-l'interface rend `∫h(a₁−a₂)N` sur A et son opposé sur B, chacune dispersée sur
-son **propre** espace. Ce qui est couplé, c'est la matrice — lignes sur A,
-colonnes sur B — pas le vecteur, qui ne produit qu'un nombre par nœud. La
-**conformité** exigée des deux côtés sert à savoir *où* lire `a₂` : maille pour
-maille, les deux interpolations s'alignent indice pour indice et le saut est une
-soustraction. Sans elle il faudrait localiser les points de Gauss de l'un dans
-l'autre — ce qui n'est plus la même méthode, mais un mortar.
-
-
-Quand l'autre côté est une inconnue, la forme faible devient
-
-\\[
-\int_\Gamma h\\,(a_1 - a_2)\\,(\delta a_1 - \delta a_2)\\; d\Gamma,
-\\]
-
-qui se développe en une structure \\( 2\times2 \\) sur les DDL des deux côtés :
+qui donne quatre blocs sur les inconnues des deux côtés :
 
 \\[
 \begin{bmatrix} +K & -K \\\\ -K & +K \end{bmatrix},
 \qquad
-K_{ij} = h \int_\Gamma N_i\\,N_j\\; d\Gamma .
+K_{ij} = \int_\Gamma h\\,N_i\\,N_j\\,d\Gamma .
 \\]
 
-Les deux blocs **diagonaux** sont exactement deux termes de frontière, un par
-côté. Les deux autres ont leurs **lignes sur un maillage et leurs colonnes sur
-l'autre** : c'est le genre de contribution `Coupling`, dont ce modèle est le seul
-utilisateur (voir
-[Ajouter une physique](ajouter-une-physique.md#un-bloc-inter-maillages--coupling)).
+Les deux blocs diagonaux sont deux films, un par côté. Les deux autres ont
+leurs lignes sur un maillage et leurs colonnes sur l'autre ; chacun seul n'est
+pas symétrique, leur paire l'est. Les variables échangées ne se couplent pas
+entre elles : la chaleur qui traverse un joint ne pousse pas l'hydrogène.
 
-Les quatre sortent d'une **seule** fonction, `transfer::exchange_matrix` : les
-diagonaux avec la même maille des deux côtés et le signe `+`, les croisés avec la
-maille en vis-à-vis et le signe `−`. Le signe est donc porté par le noyau et non
-par un facteur qu'il faudrait faire circuler dans l'assembleur. Chaque bloc de
-couplage pris seul est **non symétrique** ; leur réunion l'est — exactement comme
-la paire C / Cᵀ de [Dirichlet](contraintes/dirichlet.md).
+C'est la version par pénalité de ce qu'un [multi-points](contraintes/mpc.md)
+impose exactement : quand \\(h\\) grandit, le saut tend vers zéro. Si \\(h\\)
+est une donnée physique (une résistance de contact mesurée), c'est un
+transfert ; s'il n'est là que pour lier deux surfaces, c'est une contrainte.
 
-Les grandeurs transférées **ne se couplent pas entre elles** : la chaleur qui
-traverse un joint n'y pousse pas l'hydrogène. Seule la diagonale en indice de
-variable est écrite, donc le coût reste linéaire en nombre de composantes.
+| | `mpc` | `interface_transfer` |
+|---|---|---|
+| inconnues | ajoute `lambda` | aucune |
+| matrice | point-selle | définie positive |
+| quand \\(h\\) grandit | — | la matrice se conditionne mal |
 
-### Conformité
+### Variables
 
-Les deux côtés doivent être **conformes** : même type d'élément, même nombre de
-mailles, maille `i` face à maille `i`, et nœud local `k` face au nœud local `k`.
-C'est vérifié géométriquement à la construction — les nœuds appariés doivent être
-colocalisés — et **signalé** plutôt qu'approché. Une interface non conforme est un
-problème de maillage ; la rattraper par une projection silencieuse fabriquerait
-des flux faux sans le dire.
+Pour la variable `T` :
 
-Les deux maillages sont donc géométriquement confondus mais **numérotés
-séparément** : c'est cette duplication des nœuds qui laisse le champ sauter, là
-où un nœud partagé l'interdirait.
+| | |
+|---|---|
+| primale | `T`, des deux côtés |
+| duale | `q`, des deux côtés |
+| matériau requis | `h_T` |
+| comportement | aucun ; les forces internes lisent le saut `jump_T` aux points de Gauss |
 
-## Mise en donnée (Rust, testé)
+### Ce qu'il produit
+
+| | |
+|---|---|
+| raideur | les quatre blocs |
+| masse, géométrique | — |
+| tangente | = raideur |
+| forces internes | \\(\int h\\,(a_1 - a_2)\\,N_i\\) sur le côté A, son opposé sur le côté B |
+| forces externes | aucune |
+
+### Exemple
+
+Deux carrés côte à côte, un joint `h = 4` entre eux, un flux de 1 entrant à
+gauche et `T = 0` à droite. Le saut à la traversée vaut \\(Q/h\\) :
+
+```python
+{{#include ../../tests/python/test_doc_echanges.py:interface}}
+```
+
+## Flux imposé
+
+### En bref
+
+Une densité donnée, intégrée en forces nodales : une source de chaleur sur un
+bord ou dans un volume, une traction, une pression. Elle ne dépend pas de la
+solution, et n'entre dans aucune matrice.
+
+| | |
+|---|---|
+| opérateur | `pyrucast.model.flux(fespace, target, dual)` |
+| tag | celui de la cible |
+| type | domaine sans comportement (`label()` : `"Flux"`) |
+| éléments | toute maille, en volume ou sur un bord |
+
+`dual` est la ligne de la cible où la densité est écrite : `"q"` pour une
+source de chaleur, `"f_x"` pour une traction en x. `"n"` désigne une
+**pression** : la densité agit selon la normale de la maille et s'écrit dans
+toutes les lignes de déplacement (`f_x`, `f_y`, `f_z`). La normale est celle de
+la configuration active : sur une configuration déformée, la pression suit la
+paroi.
+
+### Théorie
+
+\\[
+f_i = \int \varphi\\,N_i\\,d\Gamma ,
+\qquad
+f_{i,a} = \int \varphi\\,n_a\\,N_i\\,d\Gamma \\;\text{pour une pression.}
+\\]
+
+### Variables
+
+| | |
+|---|---|
+| primale | aucune |
+| duale | `dual`, prise dans la cible |
+| matériau requis | `phi_<dual>` : `phi_q`, `phi_f_x`, `phi_n` |
+| comportement | aucun |
+
+La densité est une composante du champ matériau : uniforme, ou variable d'un
+point de Gauss à l'autre.
+
+### Ce qu'il produit
+
+| | |
+|---|---|
+| raideur, masse, géométrique, tangente | — |
+| forces internes | aucune |
+| forces externes | \\(\int \varphi\\,N_i\\), rendues par `pyrucast.node_field.external_forces` |
+
+### Exemple
+
+La source de l'[échange de bord](#exemple) ci-dessus est un flux imposé :
+`model.flux(gauche, conduction, "q")` et la composante `phi_q` du matériau.
+
+## Côté Rust
+
+`BoundaryTransfer` (`src/models/boundary_transfer.rs`) et `InterfaceTransfer`
+(`src/models/interface_transfer.rs`) s'appuient sur `src/models/transfer.rs`,
+qui porte leur noyau commun, `exchange_matrix`, la vérification des variables
+contre la cible et le choix du tag (`owner_physics`). Ils implémentent
+`Domain` sans `Behavior`. Ce qu'ils lisent pour leurs forces internes est la
+primale interpolée aux points de Gauss (`residual_input`), et non un état.
+
+Le transfert d'interface rend ses quatre blocs par `contributions` : deux
+blocs ordinaires et deux blocs de couplage (`Contribution::Coupling`), dont les
+lignes et les colonnes vivent sur deux sous-espaces différents.
+
+`Flux` (`src/models/flux.rs`) ne contribue à aucune matrice ; il déclare
+seulement son terme de forces externes (`external_force_contribution`).
+
+Le test de la fondation élastique compare le déplacement d'une barre poussée
+sur un ressort réparti à \\(u = q / (E/L + h)\\), sur quatre décades de
+raideur :
 
 ```rust,ignore
 {{#include ../../tests/transfer.rs:foundation}}
 ```
 
-## Exemple Python
+Le test du transfert d'interface vérifie le profil de part et d'autre et le
+saut \\(q/h\\) :
 
-```python
-{{#include ../../tests/python/test_doc_ops_physiques.py:echanges}}
+```rust,ignore
+{{#include ../../tests/interface_transfer.rs:example}}
 ```
-
-## Compléments
-
-### Ce que la généralisation apporte
-
-Rien dans la loi n'est thermique ni diffusif, donc deux modèles sortent sans une
-ligne de mécanique :
-
-- une **fondation élastique de Winkler** — un échange de frontière sur les
-  déplacements. Une barre poussée sur sa face libre, cette face reposant sur un
-  ressort réparti, c'est la barre et le ressort en parallèle sous la traction
-  appliquée : \\( u = q / (E/L + h) \\), ce que le test vérifie à `1e-9` sur
-  quatre décades de raideur ;
-- un **joint collé de raideur finie** — le même sur une interface.
-
-### Échange ou contrainte ?
-
-Un `interface_transfer` est la **régularisation par pénalité** de ce qu'un
-[MPC](contraintes/mpc.md) impose exactement :
-
-```text
-mpc(cible, [(maillage₁, T, +1), (maillage₂, T, −1)]) = 0  ⟺  T₁ = T₂, exactement
-interface_transfer(maillage₁, maillage₂), h → ∞      ⟶  T₁ = T₂, à 1/h près
-```
-
-| | `mpc` | `interface_transfer` |
-|---|---|---|
-| `h` | n'existe pas — un multiplicateur n'est pas un matériau | une **constante physique** |
-| inconnues | ajoute `lambda` | aucune |
-| système | point-selle, indéfini | reste défini positif |
-| conditionnement | insensible | se dégrade quand `h` monte |
-
-Le critère de choix tient en une phrase : **si `h` vient d'une mesure, c'est de la
-physique ; s'il a été choisi « assez grand », il fallait une contrainte.** Un
-joint imparfait, une résistance thermique de contact, une couche adhésive ont un
-`h` mesurable ; « lier deux surfaces » n'en a pas.
-
-### Ce que ça vaut comme vérification
-
-Le film thermique est confronté à une solution analytique — une dalle chauffée
-d'un côté, refroidie de l'autre, dont tout le flux ressort par convection (voir
-[Conduction thermique](thermique.md#convection-de-surface-robin--film)).
-
-L'interface l'est au **saut** : deux carrés côte à côte, un flux `q` injecté d'un
-côté, la concentration imposée de l'autre, et un saut `q/h` à la traversée (voir
-[Diffusion](diffusion.md#transfert-à-travers-une-interface)). C'est ce saut qui
-distingue une interface d'un nœud partagé, et il est porté entièrement par les
-blocs hors-diagonale ; quand `h → ∞` il s'efface et l'on retrouve le corps
-continu.
-
-S'y ajoute la structure : la raideur assemblée reste **symétrique** alors
-qu'aucun bloc de couplage ne l'est, ce qui est la vérification que les quatre
-blocs atterrissent où ils doivent.
-
-### Ce qui n'est pas couvert
-
-Pas d'échange entre maillages **non coïncidents** : la liaison exacte a sa
-version non conforme avec [`embedded`](contraintes/embedded.md) et ses poids
-d'interpolation, l'échange fini n'en a pas. Le mécanisme existe, il n'a
-simplement jamais été branché là.

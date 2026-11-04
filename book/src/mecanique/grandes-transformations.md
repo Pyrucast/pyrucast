@@ -3,7 +3,7 @@
 Une loi de petites déformations — Hooke, von Mises, Mazars — lit `ε` et rend
 `σ`. Quand les rotations ou les déformations deviennent grandes, elle doit lire
 une **mesure** de déformation qui ne voie que ce qui déforme vraiment la
-matière. pyrucast suit la voie de MFront : le **lagrangien total**. La loi lit
+matière. pyrucast suit la voie du **lagrangien total** : la loi lit
 une mesure lagrangienne totale, rend sa contrainte duale, et tout son état reste
 sur la configuration de référence. Rien n'est transporté d'une configuration à
 l'autre.
@@ -27,8 +27,7 @@ Green–Lagrange ne lit pas des `eps_*` qui contiendraient `E`, elle lit `E_*`.
 Une loi de petites déformations relie une déformation à sa duale sans dire
 laquelle : la lire sur une autre mesure donne un **autre matériau**. Hooke sur
 `E` est Saint-Venant–Kirchhoff ; Hooke sur `H` est l'élasticité de Hencky ; J2
-sur `H` est le cadre de Miehe, Apel et Lambrecht. MFront fait ce choix dans la
-loi (`@StrainMeasure`), code_aster à la mise en données (`DEFORMATION`).
+sur `H` est le cadre de Miehe, Apel et Lambrecht.
 
 Le paramètre existe pour `elasticity`, pour les dix lois de plasticité et pour
 les trois lois d'endommagement. Deux combinaisons sont refusées : une mesure qui
@@ -116,10 +115,8 @@ donne `P = λ E (λ² − 1)/2`. Les deux formes closes sont vérifiées par
 `tests/large_transformations.rs`, avec la dualité énergie–efforts dans chaque
 mesure.
 
-C'est la moitié « contraintes » de `CONF` de Cast3M, entre la configuration de
-référence et la courante. Le reste de `CONF` (transporter des déformations,
-tourner par Jaumann) n'a pas lieu d'être : l'état ne change jamais de
-configuration. La conversion est inversible : de la Cauchy, `"pk2"` rend `S`.
+L'état ne change jamais de configuration : seule la contrainte se convertit,
+et la conversion est inversible, `"pk2"` rendant `S` depuis la Cauchy.
 
 ## Deux configurations
 
@@ -128,7 +125,7 @@ son état, ses forces internes. Ce qui agit sur la **forme
 actuelle** se calcule sur une configuration courante `x = X + u` : l'opérateur
 de Newton, la pression qui suit la paroi, la thermique de la pièce
 déformée. Le contact, lui, se réapparie sur `X + u` sans changer de
-configuration : [`update_contact`](../contraintes/contact.md#grands-glissements--mettre-le-contact-à-jour)
+configuration : [`update_contact`](../contraintes/contact.md#théorie)
 lit `u` et range un jeu rapporté à la référence. Le `Coords` les porte
 toutes les deux ; on passe de l'une à l'autre en changeant d'indice, sans
 recopier le maillage. [`in_config`](../coords.md#plusieurs-configurations) rend
@@ -154,7 +151,7 @@ soustraire nœud par nœud.
 ## La pression suiveuse
 
 Une pression pousse sur la paroi **où elle est**. Le mode normal de
-[`flux`](../operateurs/assemblage.md) — la ligne `"n"`, une densité `phi_n`
+[`flux`](../echanges.md#flux-imposé) — la ligne `"n"`, une densité `phi_n`
 portée par la normale de la maille — lit la normale de la configuration
 active : évaluée sur la configuration courante, la charge suit la paroi.
 
@@ -165,16 +162,16 @@ active : évaluée sur la configuration courante, la charge suit la paroi.
 Pour un contour parcouru dans le sens trigonométrique, la normale `(t_y, −t_x)`
 d'une arête sort de la matière : une pression `p` qui pousse sur la paroi
 s'écrit `phi_n = −p`. Sur la plaque étirée, la paroi du bas mesure 2,4 et reçoit
-`p · 2,4` vers le haut. Comme dans Cast3M, la pression n'a pas de raideur de
-chargement : elle n'entre que dans le résidu, recalculée à chaque itéré.
+`p · 2,4` vers le haut. La pression n'a pas de raideur de chargement : elle
+n'entre que dans le résidu, recalculée à chaque itéré.
 
 ## La rigidité géométrique
 
 L'opérateur de Newton se construit sur la configuration courante avec les
 fonctions existantes : la rigidité élastique `stiffness`, et la rigidité
-géométrique `geometric` avec la contrainte de Cauchy. C'est l'opérateur de
-Cast3M en grands déplacements, `K_e(GEOM2) + K_σ`. Deux propriétés le
-justifient, que vérifient les tests de `tests/large_transformations.rs` :
+géométrique `geometric` avec la contrainte de Cauchy, `K_e + K_σ`. Deux
+propriétés le justifient, que vérifient les tests de
+`tests/large_transformations.rs` :
 
 - la rigidité géométrique **spatiale**, `∫Ω ∇N·σ·∇N dv` sur la configuration
   courante, est égale à la **lagrangienne**, `∫Ω₀ ∇₀N·S·∇₀N dV₀` :
@@ -234,8 +231,8 @@ elle, l'opérateur du pas à pas est singulier.
 La conductivité donnée au matériau est celle de la matière **telle qu'elle
 est** : déformer la pièce ne change pas ses valeurs. La thermique se calcule
 donc sur la pièce déformée, avec la conductivité donnée — conduction, échanges
-(convection, rayonnement, flux imposés) — et la loi écrit le flux réel,
-`q = −k ∇T`. Une barre **étirée** à `λ` est plus longue : à écart de
+(convection, rayonnement, flux imposés) — et la loi écrit le flux sur la
+pièce déformée, et non un flux rapporté à la référence. Une barre **étirée** à `λ` est plus longue : à écart de
 température donné, la chaleur qui la traverse est `k ΔT A / (λ L₀)`.
 
 Une conduction **orientée** porte ses axes dans le matériau (`V1*`, `V2*`),
@@ -255,14 +252,6 @@ L'opérateur réunit la conduction et les échanges, assemblés sur la
 configuration courante, et la capacité, assemblée sur la référence : une
 matrice garde les valeurs de la configuration où elle a été assemblée, et
 [la somme](../operateurs/assemblage.md#la-somme) les additionne telles quelles.
-
-Cast3M résout aussi toute la thermique sur la géométrie courante, avec la
-conductivité donnée. Il range les axes d'une conduction orientée dans le repère
-local de chaque élément (la tangente à la première coordonnée de référence, au
-centre), qu'il recalcule sur la géométrie courante à chaque assemblage : sous
-une rotation rigide, ses axes tournent avec la pièce comme ici ; sous un
-cisaillement, ils suivent cette ligne de l'élément, là où pyrucast suit la
-rotation `R`.
 
 ## Dans le pas à pas
 
@@ -304,16 +293,3 @@ déduit comme plus haut, avec le déplacement enregistré. Voir
 - un carré pressé à travers sa propre base se retourne (`J < 0`) : le pas
   échoue en le disant, là où une loi de Green–Lagrange aurait calculé sans
   broncher ; pressé à mi-hauteur, il converge, et `J = 1/2`.
-
-## Correspondance Cast3M
-
-| Cast3M | pyrucast |
-|---|---|
-| `MODE … 'EPSILON' 'LINEAIRE'` / `'QUADRATIQUE'` | `strain_measure="linear"` / `"green_lagrange"` |
-| `LAGRANGIEN TOTAL` (loi en `(S, E)` sur `FOR0`) | la voie de pyrucast, pour toute loi |
-| `CONF` (contraintes) | `stress_measure` |
-| `FORM` avec un déplacement | `coords.displace_from` + `Coords.select` |
-| `KSIG` | `matrix.geometric` |
-| `BARR` en `GRANDS_DEPLACEMENTS` | `model.truss(fes, strain_measure="green_lagrange")` |
-| `PRES` sur la géométrie courante | `model.flux(…, "n")` évalué sur la configuration courante |
-| `RFCO` à chaque reconstruction de K | `model.update_contact`, appelé par le pas à pas |

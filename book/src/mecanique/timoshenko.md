@@ -1,107 +1,117 @@
 # Poutre de Timoshenko
 
-Poutre **déformable en cisaillement** : élément `SEG2`, dans la configuration
-que lui donne la dimension du maillage. C'est **une seule physique** — elle
-remplace les anciens `Model.frame` (portique plan) et `Model.frame3d` (cadre
-spatial), qui en étaient les cas 2-D et 3-D.
+## En bref
 
-| `Coords` | DDL par nœud | matériau | efforts de section |
-|---|---|---|---|
-| 1-D | `w`, `theta` | `E, I, G, A_s` | `M, V` |
-| 2-D | `u_x, u_y, r_z` | `+ A` | `N, M, V` |
-| 3-D | six | `E, A, I_y, I_z, J, G, A_sy, A_sz` | `N, M_y, M_z, T, V_y, V_z` |
+Une poutre **déformable en cisaillement** : la section reste plane mais pas
+normale à l'axe déformé. Pour une poutre trapue, la flèche due au
+cisaillement s'ajoute à celle de la flexion.
 
-Il n'y a rien à choisir : tout ce qui distingue les trois — nombre et noms des
-DDL, jeu matériau, efforts rendus, présence d'un terme axial, d'une torsion,
-d'une rotation vers les axes globaux — découle de la dimension. On relit les
-noms obtenus par `model.primal_vars()`.
+| | |
+|---|---|
+| opérateur | `pyrucast.model.timoshenko(fespace)` |
+| tag | `mechanical` |
+| type | domaine avec comportement (`label()` : `"Timoshenko"`) |
+| éléments | `SEG2`, sur un espace `FiniteElementSpace(maillage, interpolation="MODEL_EMBEDDED")` |
 
-## Équations continues résolues
+Comme pour [Euler-Bernoulli](bernoulli.md), la configuration se lit sur la
+dimension des `Coords` : flexion pure en 1-D, portique plan en 2-D, cadre
+spatial en 3-D.
 
-La section reste plane mais **non normale** à l'axe déformé : la rotation `θ`
-est un champ indépendant, et la distorsion `γ = w' − θ` une déformation à part
-entière. C'est toute la différence avec
-[Euler-Bernoulli](bernoulli.md), où `θ = w'` et où `γ` n'existe pas.
+## Théorie
 
-- **cinématique** : courbure \\( \kappa = \theta\' \\), distorsion \\( \gamma = w\' - \theta \\) ;
-- **efforts** : \\( M = EI\\,\theta\' \\), \\( V = G A_s (w\' - \theta) \\) ;
-- **équilibre** : \\( V\' + q = 0 \\), \\( M\' - V = 0 \\).
+La rotation \\(\theta\\) est un champ indépendant de la pente, et la distorsion
+\\(\gamma = w\' - \theta\\) une déformation à part entière :
 
-Ces **deux** équations sont du second ordre, là où Bernoulli en a une seule du
-quatrième. C'est la contrepartie de l'hypothèse cinématique : libérer `θ` de
-`w'` abaisse l'ordre de l'équation, et abaisse avec lui l'exigence de continuité
-— le C⁰ suffit là où Bernoulli réclame du C¹.
+\\[
+\kappa = \theta\', \qquad \gamma = w\' - \theta, \qquad
+M = E I\\,\kappa, \qquad V = G A_s\\,\gamma, \qquad
+V\' + q = 0, \qquad M\' - V = 0 ,
+\\]
 
-## Forme discrétisée — l'élément exact
+\\(A_s\\) étant l'aire de cisaillement. Deux équations du second ordre : une
+interpolation \\(C^0\\) suffit.
 
-L'élément assemblé est la **solution exacte** de ces deux équations sur une
-travée libre d'efforts répartis. Ses fonctions de forme sont cubiques en `w` et
-quadratiques en `θ`, et elles portent le matériau par
+L'élément est la **solution exacte** de ces équations sur une travée sans
+charge répartie : il est exact aux nœuds, et un élément par barre suffit. Ses
+fonctions de forme, cubiques en \\(w\\) et quadratiques en \\(\theta\\),
+dépendent du matériau par
 
 \\[
 \Phi = \frac{12\\,E I}{G A_s L^2},
 \\]
 
-le rapport des souplesses de flexion et de cisaillement. La flexion s'écrit
-alors en forme fermée :
+le rapport des souplesses de flexion et de cisaillement. La raideur de flexion
+est
 
 \\[
-K_b = \frac{EI}{L^3(1+\Phi)}
+K_b = \frac{E I}{L^3(1+\Phi)}
 \begin{bmatrix}
- 12 & 6L & -12 & 6L \\\\
- 6L & (4+\Phi)L^2 & -6L & (2-\Phi)L^2 \\\\
+12 & 6L & -12 & 6L \\\\
+6L & (4+\Phi)L^2 & -6L & (2-\Phi)L^2 \\\\
 -12 & -6L & 12 & -6L \\\\
- 6L & (2-\Phi)L^2 & -6L & (4+\Phi)L^2
-\end{bmatrix}.
+6L & (2-\Phi)L^2 & -6L & (4+\Phi)L^2
+\end{bmatrix},
 \\]
 
-L'élément est **exact aux nœuds** pour des charges d'extrémité : un élément par
-barre suffit. On lit directement sur cette matrice que la raideur en flèche est
-la combinaison **en série** des deux souplesses,
+où la raideur en flèche est la mise en série des deux souplesses,
+\\(1/(L^3/12 E I + L/G A_s)\\). \\(\Phi = 0\\) redonne Euler-Bernoulli terme à
+terme.
 
-\\[
-K_{ww} = \frac{12EI}{L^3(1+\Phi)}
-       = \frac{1}{\dfrac{L^3}{12EI} + \dfrac{L}{G A_s}},
-\\]
+Parce que la base dépend du matériau, aucun espace ne peut la tabuler :
+l'espace déclare
+[`MODEL_EMBEDDED`](../fe-space.md#pas-de-base-du-tout--model_embedded), une
+interpolation que la physique porte elle-même.
 
-— on fléchit le tronçon *et* on le cisaille, les deux cèdent l'un après
-l'autre. Et \\( \Phi = 0 \\) redonne terme pour terme la matrice
-d'Euler-Bernoulli : « Bernoulli est la limite sans cisaillement » est une
-propriété vérifiée par un test, pas une phrase.
+La masse est intégrée des mêmes fonctions de forme :
+\\(\int \rho A\\,N_w^{\mathsf T} N_w + \int \rho I\\,N_\theta^{\mathsf T} N_\theta\\),
+le second terme étant l'inertie de rotation de la section ; l'axial et la
+torsion gardent la masse linéaire \\((\rho L/6)\\,[[2, 1], [1, 2]]\\). À
+\\(\Phi = 0\\), elle redonne la table classique
+\\(\rho A L/420\cdot[156, 22L, 54, -13L, \dots]\\).
 
-### L'espace EF ne porte aucune base
+Aux points de Gauss, la courbure varie linéairement et le cisaillement est
+constant sur une travée sans charge, comme l'imposent \\(M\' = V\\) et
+\\(V\' = 0\\). Les reconstruire demande le matériau, puisque \\(\Phi\\) en
+dépend.
 
-Ces fonctions de forme dépendent du **matériau** par \\( \Phi \\). Aucun espace
-éléments finis ne peut donc les tabuler — il tabule par type d'élément, pas par
-maille. L'espace déclare en conséquence
-[`MODEL_EMBEDDED`](../fe-space.md#pas-de-base-du-tout--model_embedded) : la
-formulation possède son interpolation, et le dit.
+## Variables
+
+| | 1-D | 2-D | 3-D |
+|---|---|---|---|
+| primales, duales | celles de [Bernoulli](bernoulli.md#variables) | | |
+| matériau requis | `E`, `I`, `G`, `A_s` | `E`, `A`, `I`, `G`, `A_s` | `E`, `A`, `I_y`, `I_z`, `J`, `G`, `A_sy`, `A_sz` |
+| matériau facultatif | `A`, `rho` | `rho` | `rho` |
+| entrée du comportement | `kappa`, `gamma` | `eps`, `kappa`, `gamma` | `eps`, `kappa_y`, `kappa_z`, `torsion`, `gamma_y`, `gamma_z` |
+| sortie du comportement | `M`, `V`, `phi` | `N`, `M`, `V`, `phi` | `N`, `M_y`, `M_z`, `T`, `V_y`, `V_z`, `phi_y`, `phi_z` |
+| état | aucun | aucun | aucun |
+
+La sortie porte \\(\Phi\\) (`phi`) à côté des efforts : le noyau des forces
+internes reçoit l'état, pas le matériau, et son \\(B\\) dépend de \\(\Phi\\).
+
+## Ce qu'elle produit
+
+| | |
+|---|---|
+| raideur | l'élément exact |
+| masse | exige `rho` (et `A` en 1-D) |
+| géométrique | sous l'effort `N` ; aucune en 1-D |
+| tangente | = raideur |
+| forces internes | le transposé du même \\(B\\) : \\(\int B^{\mathsf T}\sigma = K\\,u\\) exactement |
+
+## Exemple
+
+La console de la page [Euler-Bernoulli](bernoulli.md#exemple), avec une aire
+de cisaillement : la flèche gagne \\(F\\,L/(G A_s)\\).
 
 ```python
 {{#include ../../../tests/python/test_doc_mecanique.py:timoshenko}}
 ```
 
-> **Ce que remplace cet élément.** La version précédente était **linéaire**, à
-> cisaillement sous-intégré : elle convergeait au raffinement au lieu d'être
-> exacte, et déclarait une interpolation de Lagrange qu'elle utilisait
-> réellement. Le portique 2-D était dans ce cas, le cadre 3-D employait déjà la
-> forme exacte — deux modèles frères, deux théories discrètes. Ils n'en font
-> plus qu'une.
+## Côté Rust
 
-## Variables et matériau
-
-Voir le tableau d'ouverture. `rho` est **facultatif**, exigé par la seule
-matrice de masse ; en configuration 1-D l'aire pleine `A` l'est aussi, la
-rigidité n'utilisant que l'aire de cisaillement.
-
-Le comportement (`COMP`) rend les efforts de section par une loi **linéaire**,
-à partir des déformations généralisées produites par
-[`beam_deformation`](../operateurs/champs.md), un opérateur pour les trois configurations.
-
-## Mise en donnée (Rust, testé)
-
-Console encastrée, charge transverse `P` au bout libre ; solution analytique
-`w = P·L³/(3EI) + P·L/(G·A_s)` — les deux souplesses, en série.
+`Timoshenko` (`src/models/timoshenko.rs`) partage avec Bernoulli le \\(B\\) de
+`src/models/beam.rs`. Le test compare une console à
+\\(P L^3/(3 E I) + P L/(G A_s)\\) :
 
 ```rust,ignore
 {{#include ../../../tests/timoshenko.rs:example}}
@@ -113,79 +123,8 @@ Le portique plan, où l'axial et la flexion se découplent :
 {{#include ../../../tests/frame.rs:example}}
 ```
 
-Et le cadre spatial, avec sa torsion :
+Le cadre spatial, avec sa torsion :
 
 ```rust,ignore
 {{#include ../../../tests/frame3d.rs:example}}
 ```
-
-## Exemple Python
-
-```python
-{{#include ../../../examples/timoshenko.py}}
-```
-
-## Compléments
-
-**Masse.** La masse cohérente est celle du **même** élément, intégrée des mêmes
-fonctions de forme que sa rigidité :
-
-\\[
-M = \int_0^L \rho A\\, N_w^\top N_w\\, dx +
-\int_0^L \rho I\\, N_\theta^\top N_\theta\\, dx,
-\\]
-
-le second terme étant l'**inertie de rotation** de la section. Rigidité et masse
-décrivent enfin une seule poutre. Seuls l'axial et la torsion gardent la forme
-du champ linéaire `(ρL/6)[[2,1],[1,2]]`, exacte pour ce qu'ils interpolent
-réellement.
-
-Elle est **intégrée**, et non recopiée de la table publiée de polynômes en `Φ`.
-Cette table est juste, mais un coefficient mal retranscrit sur vingt donnerait
-une matrice plausible, symétrique et définie positive — décrivant une autre
-poutre. C'est le mode de défaillance qui avait coûté une tangente fausse plus
-tôt dans ce projet. Une intégration ne se retranscrit pas : les fonctions de
-forme sont celles de la rigidité, et quatre points de Gauss rendent la
-quadrature exacte (l'intégrande est de degré 6).
-
-Ce qui l'épingle : à `Φ = 0` elle redonne la table classique
-`ρAL/420 · [156, 22L, 54, −13L ; …]`, douze nombres que personne ne conteste ;
-une translation rigide porte exactement `ρAL` quel que soit `Φ` ; et le
-couplage flèche-rotation, absent de la masse linéaire, est bien là.
-
-**Rigidité géométrique.** Elle demande un effort axial pour raidir la barre : la
-configuration 1-D, en flexion pure, n'en déclare donc aucune.
-
-**Reconstruction des efforts.** `beam_deformation` évalue les déformations
-**à chaque point de Gauss**, depuis les fonctions de forme de l'élément — les
-mêmes que sa rigidité et sa masse. Ce qu'elle rend dit alors la physique :
-
-- la **courbure varie linéairement**, donc le moment aussi, ce qu'impose
-  `M' = V` ;
-- le **cisaillement est constant**, ce qu'impose `V' = 0` sur une travée non
-  chargée.
-
-L'élément linéaire ne pouvait rendre ni l'un ni l'autre : sa courbure était
-constante et son cisaillement oscillait, d'où une moyenne pour tout.
-
-L'opérateur **exige le matériau**, et c'est la signature honnête : `Φ` en
-dépend, donc la distribution de courbure aussi. On ne reconstitue pas la
-courbure d'une poutre sans connaître sa raideur de cisaillement.
-
-**Le résidu, et pourquoi `Φ` est dans l'état.** Les forces internes intègrent le
-transposé du **même** `B` (`models::beam::b_into`), si bien que `∫ Bᵀσ` vaut
-`K·u` exactement — la loi de section étant linéaire. Mais le noyau qui les
-calcule reçoit la géométrie et l'état, jamais le matériau : le `B` d'un
-continuum est le gradient symétrique et ignore tout module, ce seam n'a donc
-jamais eu à en porter un. Le comportement rend par conséquent `Φ` (`phi`, ou
-`phi_y` et `phi_z` en spatial) à côté des efforts de section. C'est la seule
-grandeur non conjuguée que ce dépôt garde en état, et elle le mérite : le résidu
-la relit à **chaque** itération de Newton.
-
-Le repère local, lui, est déduit automatiquement de la géométrie (référence
-globale Z, ou Y pour une barre verticale), ce qui convient aux sections
-symétriques.
-
-**Le repère de rotation.** Le portique plan nommait sa rotation `rz` quand tout
-le reste du dépôt écrivait `r_z`. La fusion l'a fait sortir immédiatement — une
-matrice non carrée au solveur — et c'est `r_z` qui l'emporte.

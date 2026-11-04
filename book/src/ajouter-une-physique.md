@@ -479,7 +479,7 @@ qui rend le scatter parallèle sûr repose sur *une* connectivité ; avec deux, 
 prouve plus rien. Une interface porte un maillage de bord — c'est sans effet
 mesurable, et cela évite d'inventer un coloriage à deux côtés pour un gain nul.
 
-Voir [`interface_transfer`](diffusion.md#transfert-à-travers-une-interface), son
+Voir [`interface_transfer`](echanges.md#transfert-dinterface), son
 premier utilisateur.
 
 Le champ `fespaces` du `MatrixLayout` est un **`Vec`** : un seul espace EF

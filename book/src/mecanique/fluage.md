@@ -1,237 +1,147 @@
 # Fluage et viscoplasticité
 
-## Introduction
+## En bref
 
-Une loi **indépendante du temps** plastifie *instantanément* dès que la
-contrainte atteint sa surface. Une loi visqueuse, non : la contrainte peut rester
-**hors** de la surface, et l'écoulement qui l'y ramène prend du temps. C'est la
-sur-contrainte qui pilote la vitesse,
+Des lois où l'écoulement prend du temps : la contrainte peut sortir du domaine
+élastique, et c'est l'écart qui fixe la vitesse à laquelle elle y revient. Le
+résultat d'un pas dépend de sa durée.
+
+| | |
+|---|---|
+| opérateurs | `pyrucast.model.creep_norton`, `creep_lemaitre`, `creep_blackburn`, `viscoplasticity_chaboche`, `viscoplasticity_lemaitre_chaboche`, tous `(fespace, kinematics, strain_measure="linear")` |
+| tag | `mechanical` |
+| type | domaine avec comportement (`label()` : `"Plasticity"`) |
+| éléments | ceux de l'[élasticité](elasticite.md) ; toutes les cinématiques |
+
+`integrate_behavior` et `matrix.tangent` exigent le pas de temps `dt` pour ces
+lois, et lèvent une erreur sans lui : intégrer une loi visqueuse comme si
+elle était instantanée donnerait un nombre plausible et faux.
+
+| loi | vitesse | ce qu'elle décrit |
+|---|---|---|
+| `creep_norton` | \\(\dot p = (q/K)^n\\) | fluage secondaire, stationnaire |
+| `creep_lemaitre` | \\(\dot p = (q/K)^N\\,p^{-M}\\) | fluage primaire, par écrouissage en déformation |
+| `creep_blackburn` | primaire saturant et secondaire, en `sinh` | les deux stades |
+| `viscoplasticity_chaboche` | \\(\dot p = \langle (J(\sigma - X) - R - k)/K\rangle^n\\) | viscoplasticité cyclique |
+| `viscoplasticity_lemaitre_chaboche` | la même, sur \\(\sigma/(1-D)\\) | et endommagement ductile |
+
+## Théorie
+
+Le cadre est celui de la [plasticité](plasticite.md#théorie), sans les
+conditions de Kuhn-Tucker : la vitesse d'écoulement n'est plus l'inconnue d'une
+condition de consistance, elle est **donnée** par une loi,
 
 \\[
-\dot{p} = g(\sigma, p, \ldots)
+\dot\varepsilon^{vp} = \dot p\\,\frac32\\,\frac{s}{q}, \qquad \dot p = g(q, p, \dots).
 \\]
 
-et le pas est intégré implicitement, si bien que le résultat **dépend de `dt`**.
+L'écoulement est déviatorique, sans variation de volume, et radial.
 
-C'est pourquoi ces lois **erronnent** en l'absence d'incrément de temps. Intégrer
-une loi de fluage comme si elle était instantanée produirait un nombre plausible
-et faux ; refuser est la seule réponse honnête. L'argument existe depuis toujours
-dans la signature du comportement (`dt: Option<f64>`) — ce sont les premières
-lois à s'en servir.
-
-Comme les lois plastiques, ce sont des **attributs** du même modèle : mêmes
-degrés de liberté, même montage incrémental, même état interne étendu au besoin.
-
-| loi | vitesse | ce qu'elle décrit | matériau |
-|---|---|---|---|
-| `creep_norton` | `ṗ = (q/K)^n` | fluage secondaire (stationnaire) | `E, nu, K, n` |
-| `creep_lemaitre` | `ṗ = (q/K)^N · p^(−M)` | fluage primaire, par écrouissage en déformation | `E, nu, K, N, M` |
-| `creep_blackburn` | primaire saturant + secondaire | les deux stades, dépendance en `sinh` | `E, nu, A_1, alpha_1, r_1, B_s, beta_s` |
-| `viscoplasticity_chaboche` | `ṗ = ⟨(J(σ−X) − R − k)/K⟩^n` | viscoplasticité cyclique | `+ k, K, n, C_1, gamma_1, b, Q` |
-| `viscoplasticity_lemaitre_chaboche` | la même, sur `σ/(1−D)` | + endommagement ductile | `+ S, s, D_c` |
-
-## Équations continues résolues
-
-Le cadre est celui de la [plasticité](lois-plastiques.md#équations-continues-résolues),
-**moins** les conditions de Kuhn-Tucker : la partition
-\\( \varepsilon = \varepsilon^e + \varepsilon^{vp} \\) et l'élasticité
-\\( \sigma = D : (\varepsilon - \varepsilon^{vp}) \\) sont les mêmes, mais le
-multiplicateur n'est plus une inconnue de consistance — il est **donné** par une
-loi de vitesse :
+**Un solveur pour toutes.** Le pas est intégré par Euler implicite : la
+vitesse est évaluée en fin de pas. La direction étant celle du prédicteur, le
+déviateur ne fait que se contracter, \\(q(\Delta p) = q^{tr} - 3\mu\\,\Delta p\\),
+et le pas se ramène à une équation scalaire,
 
 \\[
-\dot\varepsilon^{vp} = \dot p\\,\frac{3}{2}\\,\frac{s}{q},
-\qquad
-\dot p = g(q, p, \mathcal V),
-\qquad
-q = \sqrt{3J_2}.
+R(\Delta p) = \Delta p - \Delta t\\,g\big(q(\Delta p), p_A + \Delta p, \dots\big) = 0 ,
 \\]
 
-L'écoulement reste **déviatorique** — donc isochore — et **radial**, la direction
-étant celle de von Mises. Il n'y a plus de surface à atteindre : la contrainte
-peut rester *hors* du domaine, et c'est l'écart qui pilote la vitesse à laquelle
-elle y revient. Sans le facteur \\( dt \\) que porte cette équation, la loi n'a
-tout simplement pas de sens.
+dont la racine est unique dans \\([0, q^{tr}/3\mu]\\). Les lois de vitesse étant
+raides, elle est cherchée par un Newton encadré, doublé d'une dichotomie.
 
-## Un seul solveur pour toutes
+**Norton.** \\(\dot p = (q/K)^n\\), sans seuil : toute contrainte flue. \\(K\\)
+est la contrainte de référence, \\(n\\) la sensibilité.
 
-Le pas est intégré par la **θ-méthode avec θ = 1** (Euler implicite) : la vitesse
-est évaluée à la **fin** du pas. La direction d'écoulement étant fixée par le
-prédicteur, le déviateur ne fait que se contracter,
+**Lemaitre.** \\(\dot p = (q/K)^N\\,p^{-M}\\), \\(M > 0\\) : la déformation
+accumulée ralentit l'écoulement ; à contrainte constante,
+\\(p(t) \propto t^{1/(1+M)}\\). \\(p\\) a un plancher minuscule, pour que
+\\(p^{-M}\\) reste fini au premier pas.
 
-\\[
-q(\Delta p) = q^{\text{tr}} - 3\mu\\,\Delta p,
-\\]
-
-et tout le pas se ramène à une équation **scalaire** en le multiplicateur :
+**Blackburn.** La déformation primaire est une variable à part, `p_prim` :
 
 \\[
-R(\Delta p) = \Delta p - \Delta t\\;g\big(q(\Delta p),\\; p_A + \Delta p,\\;\ldots\big) = 0 .
-\\]
-
-`R` est croissante (la vitesse décroît quand la contrainte se relaxe), donc la
-racine est unique dans \\( [0,\\; q^{\text{tr}}/3\mu] \\) — la borne supérieure
-étant le multiplicateur qui relaxerait *tout* le déviateur.
-
-Le solveur fait un Newton dessus, **encadré et doublé d'une dichotomie**. Ce
-n'est pas de la prudence gratuite : les fonctions de vitesse sont raides (`q^n`
-avec `n` jusqu'à 20 varie de plusieurs décades à l'intérieur d'un pas), et un
-Newton nu y diverge aussi volontiers qu'il converge — soit vers un multiplicateur
-négatif, soit vers l'infini. Une dichotomie ne peut faire ni l'un ni l'autre.
-
-## Les trois lois de fluage
-
-**Norton** (ou Norton-Odqvist) est le cheval de bataille du fluage stationnaire :
-
-\\[
-\dot p = \left(\frac{q}{K}\right)^{n}.
-\\]
-
-Il n'y a **aucun seuil** : toute contrainte flue, même lentement, et c'est ce qui
-distingue le fluage de la plasticité. `K` est la contrainte de référence, `n` la
-sensibilité — couramment 3 à 10 pour un métal, ce qui fait varier la vitesse de
-plusieurs décades à l'intérieur d'un pas.
-
-**Lemaitre** ajoute un stade primaire par **écrouissage en déformation** :
-
-\\[
-\dot p = \left(\frac{q}{K}\right)^{N} p^{-M}, \qquad M > 0 .
-\\]
-
-La déformation accumulée ralentit elle-même l'écoulement : à contrainte
-constante, l'intégration donne \\( p(t) \propto t^{1/(1+M)} \\), la courbe
-concave caractéristique du fluage primaire. Aucune dépendance explicite au temps
-n'apparaît, et c'est précisément ce qui rend la loi utilisable sous charge
-variable — une forme à écrouissage *temporel* y serait fausse. (`p` est
-plancherné à une valeur minuscule pour que \\( p^{-M} \\) reste fini au premier
-pas.)
-
-**Blackburn** décrit les deux stades, avec le primaire suivi comme sa **propre**
-variable :
-
-\\[
-\dot p_{\text{prim}} = r\\,\big(\varepsilon_\infty(q) - p_{\text{prim}}\big),
+\dot p_\text{prim} = r\\,\big(\varepsilon_\infty(q) - p_\text{prim}\big),
 \qquad \varepsilon_\infty(q) = A\\,\sinh(\alpha q),
-\\]
-\\[
-\dot p = \dot p_{\text{prim}} + B\\,\sinh(\beta q).
+\qquad \dot p = \dot p_\text{prim} + B\\,\sinh(\beta q) .
 \\]
 
-Le primaire approche **exponentiellement** son asymptote \\( \varepsilon_\infty \\)
-puis s'éteint (\\( r \\) est la vitesse de saturation) ; le secondaire persiste
-indéfiniment. La dépendance en `sinh` est ce qui permet à un seul jeu de
-paramètres de couvrir plusieurs décades de contrainte, là où une loi puissance
-échoue : \\( \sinh \\) est linéaire à faible contrainte et exponentiel à forte.
-Implicitement, l'équation du primaire s'inverse en un pas,
+Le primaire tend vers son asymptote à la vitesse \\(r\\) puis s'éteint ; le
+secondaire persiste. En Euler implicite, le primaire s'inverse en un pas,
+\\(p^B_\text{prim} = (p^A_\text{prim} + \Delta t\\,r\\,A\\,\sinh(\alpha q))/(1 + \Delta t\\,r)\\).
+
+**Chaboche.** Une surface translatée par une contrainte de rappel \\(X\\) et
+agrandie par un écrouissage isotrope \\(R\\) :
 
 \\[
-p_{\text{prim}}^{B} =
-\frac{p_{\text{prim}}^{A} + \Delta t\\,r\\,A\\,\sinh(\alpha q)}{1 + \Delta t\\,r}.
+f = J(\sigma - X) - R - k, \qquad \dot p = \Big\langle \frac fK \Big\rangle^n, \qquad
+\dot X = \tfrac23 C\\,\dot\varepsilon^{vp} - \gamma\\,X\\,\dot p, \qquad
+\dot R = b\\,(Q - R)\\,\dot p ,
 \\]
 
-> La déformation primaire est suivie comme sa **propre** variable interne
-> (`p_prim`), et non déduite du total. Ce n'est qu'à cette condition que la loi
-> s'intègre correctement sous charge variable — toute la raison de préférer une
-> forme en déformation à une forme en temps.
+où \\(\langle\cdot\rangle\\) est la partie positive : sous la surface, le
+comportement est élastique. \\(X\\) produit l'effet Bauschinger et sature à
+\\(C/\gamma\\) ; \\(R\\) sature à \\(Q\\). La direction est gelée au
+prédicteur, et les deux variables sont implicites en \\(\Delta p\\) :
+\\(X_B = (X_A + \tfrac23 C\\,\Delta p\\,\hat n)/(1 + \gamma\\,\Delta p)\\),
+\\(R_B = (R_A + b\\,Q\\,\Delta p)/(1 + b\\,\Delta p)\\).
 
-## Chaboche, et sa variante endommageable
+**Lemaitre-Chaboche** remplace la contrainte par la contrainte effective
+\\(\tilde\sigma = \sigma/(1 - D)\\), et fait croître l'endommagement avec
+l'écoulement :
 
 \\[
-f = J(\sigma - X) - R - k, \qquad \dot{p} = \left\langle \frac{f}{K} \right\rangle^n
-\\]
-\\[
-\dot{X} = \tfrac{2}{3}C\\,\dot{\varepsilon}_{vp} - \gamma X \dot{p},
-\qquad \dot{R} = b(Q - R)\dot{p}
+\dot D = \Big(\frac YS\Big)^s \dot p, \qquad Y = \frac{\tilde\sigma_\text{eq}^2}{2E} .
 \\]
 
-La contrainte de rappel `X` est ce qui rend la loi utilisable en **cyclique** :
-elle translate la surface de charge, si bien que la replastification en sens
-inverse survient tôt — l'effet Bauschinger, qu'aucune loi isotrope ne peut
-produire. `γ` est ce qui fait **saturer** la translation au lieu de la laisser
-croître sans borne (`X → C/γ`).
+Un matériau endommagé flue plus vite, ce qui l'endommage davantage : c'est le
+fluage tertiaire. \\(D\\) ne décroît jamais et s'arrête à `D_c`.
 
-Les trois premières lois n'en portent pas, et c'est délibéré : un fluage décrit
-un régime **monotone**, où l'effet que modélise une contrainte de rappel ne se
-manifeste pas. Les deux dernières en portent, et cela leur coûte sept variables
-internes de plus.
+**La tangente** est obtenue par perturbation et symétrisée, comme celle de
+[Drucker-Prager](lois-plastiques.md#la-tangente-par-perturbation).
 
-Les crochets \\( \langle\cdot\rangle \\) sont la partie positive : sous la
-surface, la vitesse est nulle et le comportement redevient élastique. C'est la
-seule des cinq lois à porter un **seuil** `k` — un fluage n'en a pas.
+## Variables
 
-**La variante endommageable** (Lemaitre-Chaboche) remplace partout la contrainte
-par la contrainte **effective**, au sens de la contrainte portée par la section
-restante :
+| | |
+|---|---|
+| primales, duales | celles de l'[élasticité](elasticite.md#variables) |
+| matériau requis | Norton : `E`, `nu`, `K`, `n` ; Lemaitre : `E`, `nu`, `K`, `N`, `M` ; Blackburn : `E`, `nu`, `A_1`, `alpha_1`, `r_1`, `B_s`, `beta_s` ; Chaboche : `E`, `nu`, `k`, `K`, `n`, `C_1`, `gamma_1`, `b`, `Q` ; Lemaitre-Chaboche : ceux de Chaboche et `S`, `s`, `D_c` |
+| matériau facultatif | `rho`, `alpha` |
+| entrée du comportement | celle de la [plasticité](plasticite.md#variables) |
+| sortie du comportement | celle de la plasticité, plus : `p_prim` (Blackburn) ; `X_xx`…`X_xy` et `R` (Chaboche) ; et `damage` (Lemaitre-Chaboche) |
+| état relu (`prev`) | toute la sortie du pas précédent |
 
-\\[
-\tilde\sigma = \frac{\sigma}{1 - D},
-\qquad
-\dot D = \left(\frac{Y}{S}\right)^{s}\dot p,
-\qquad
-Y = \frac{\tilde\sigma_{\text{eq}}^{2}}{2E},
-\\]
+## Ce qu'elles produisent
 
-où \\( Y \\) est le **taux de restitution d'énergie élastique**, la force
-thermodynamique conjuguée de `D` — sa forme complète porte un facteur de
-triaxialité, pris ici à sa valeur déviatorique, simplification usuelle pour un
-trajet proportionnel. Un matériau endommagé flue plus vite, ce qui l'endommage
-davantage : c'est ce couplage qui produit le fluage **tertiaire** et, à `D_c`, la
-rupture. `D` ne décroît jamais et est écrêté à `D_c`.
+| | |
+|---|---|
+| raideur | élastique |
+| masse | exige `rho` |
+| géométrique | sous la contrainte `sigma_*` |
+| tangente | par perturbation, symétrisée ; exige `dt` |
+| forces internes | \\(\int B^{\mathsf T}\sigma\\) |
 
-### L'intégration
+## Exemple
 
-La direction d'écoulement est **gelée au prédicteur**, ce qui rend le pas radial
-dans l'espace décalé et le ramène à la même équation scalaire que les fluages.
-Les deux variables d'écrouissage sont alors implicites en `Δp` :
+Une déformation maintenue sous Norton : sans `dt`, l'intégration est refusée ;
+avec, la contrainte se relaxe d'un pas à l'autre.
 
-\\[
-X_B = \frac{X_A + \tfrac23 C\\,\Delta p\\,\hat n}{1 + \gamma\\,\Delta p},
-\qquad
-R_B = \frac{R_A + b\\,Q\\,\Delta p}{1 + b\\,\Delta p},
-\\]
+```python
+{{#include ../../../tests/python/test_doc_mecanique.py:fluage}}
+```
 
-où \\( \hat n = \tfrac32 (s - X)/J \\) est la direction gelée. Les deux sont
-l'inversion **exacte** des lois d'évolution discrétisées en Euler implicite, et
-l'on y voit apparaître directement les asymptotes :
-\\( J(X) \to C/\gamma \\) et \\( R \to Q \\) quand \\( \Delta p \to \infty \\).
+Les paramètres sont des composantes du matériau. Une dépendance à la
+température se calcule par une [évolution](../evolution.md#appliquer-une-courbe-à-un-champ)
+appliquée au champ de température.
 
-Un traitement pleinement implicite ré-évaluerait la direction, au prix d'un
-Newton tensoriel ; le geler est le schéma semi-implicite usuel, d'erreur du
-second ordre en le pas.
+## Côté Rust
 
-> `J(σ̃ − X)` en fin de pas est calculé **sur les tenseurs**, non réduit à une
-> formule scalaire. La réduction est faisable mais délicate — la contrainte de
-> rappel en début de pas n'est pas parallèle à la direction d'écoulement — et
-> une erreur y serait invisible. Construire le tenseur ne peut pas l'être.
-
-## Mise en donnée (Rust, testé)
+Les cinq lois vivent dans `src/models/plasticity/viscous.rs`, et déclarent
+`requires_dt`. Le test vérifie que Norton suit sa loi de vitesse sur un pas
+court, qu'une déformation maintenue se relaxe d'autant plus que le pas est
+long, que le primaire de Blackburn sature, que la contrainte de rappel de
+Chaboche plafonne sous \\(C/\gamma\\), que l'endommagement ne dépasse pas
+\\(D_c\\), et que toutes refusent d'intégrer sans `dt`.
 
 ```rust,ignore
 {{#include ../../../tests/viscous_laws.rs:example}}
 ```
-
-## Exemple Python
-
-```python
-{{#include ../../../tests/python/test_doc_mecanique.py:creep_norton}}
-```
-
-## Compléments
-
-**Ce que valent les tests.** Une loi visqueuse ne se contrôle pas sur une valeur
-de contrainte : elle se contrôle **sur le temps**. D'où des tests qui vérifient
-que Norton suit sa loi de vitesse en forme fermée sur un pas court, qu'une
-déformation maintenue **relaxe** d'autant plus que le pas est long, que le taux
-de Lemaitre **décroît** avec la déformation accumulée, que le primaire de
-Blackburn **sature**, que la contrainte de rappel de Chaboche s'établit puis
-plafonne sous `C/γ`, et que l'endommagement croît sans jamais guérir ni dépasser
-`D_c`. Et que toutes **refusent** d'intégrer sans `dt`.
-
-**Tangente.** Aucune de ces lois n'a de tangente analytique : toutes l'obtiennent
-**par perturbation**, comme décrit au chapitre
-[Lois d'écoulement plastique](lois-plastiques.md#la-tangente-cohérente-et-deux-limites-assumées).
-
-**Ce qui n'est pas couvert.** Une seule contrainte de rappel (la version de base
-de Chaboche ; deux en doubleraient l'état), et pas de dépendance à la
-température — les paramètres sont des composantes matériau, donc ils peuvent
-varier dans l'espace, mais ils ne sont pas fonction du champ thermique.

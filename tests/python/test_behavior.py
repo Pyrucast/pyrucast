@@ -111,3 +111,18 @@ def test_deformation_linearized_strain_2d():
         assert abs(sub.value(0, g, "eps_xx") - 2.0) < 1e-10
         assert abs(sub.value(0, g, "eps_yy") - 3.0) < 1e-10
         assert abs(sub.value(0, g, "eps_xy") - 0.3) < 1e-10
+
+
+def test_a_domain_without_a_law_has_a_subspace_but_no_behavior():
+    """A flux integrates on its subspace and evaluates no law: `fespace()`
+    gives that subspace, `has_behavior` is False."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    fes = pyrucast.FiniteElementSpace(pyrucast.mesh.line(a, b, 1))
+    conduction = pyrucast.model.heat_conduction(fes)
+    flux = pyrucast.model.flux(fes, conduction, "q")
+    assert conduction[0].has_behavior is True
+    assert flux[0].has_behavior is False
+    assert flux[0].fespace() is not None
+    assert str(flux[0].fespace()) == str(conduction[0].fespace())
