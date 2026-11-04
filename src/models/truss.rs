@@ -21,6 +21,7 @@
 //! `P = S_n F t₀` that [`stress_measure`](fn@crate::ops::element_field::stress_measure)
 //! makes of it, and the geometric stiffness the true force `n = λ S_n`.
 
+use crate::atoms::ElementType;
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::ABSENT_COMPONENT;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
@@ -120,6 +121,8 @@ impl Truss {
     /// nodes.
     ///
     /// Errors:
+    /// - any element but `SEG2`: the bar kernels read the two end nodes of a
+    ///   straight segment;
     /// - an axisymmetric geometry: a segment in a meridian plane sweeps a cone
     ///   of revolution, not a bar;
     /// - Hencky: along the reference direction, `t₀·½ ln C·t₀` is the stretch
@@ -180,10 +183,20 @@ impl Truss {
                 )))
             }
         }
-        let (submesh, space_dim, axisymmetric) = {
+        let (submesh, space_dim, axisymmetric, et) = {
             let s = fespace.read();
-            (s.submesh(), s.space_dim(), s.is_axisymmetric())
+            (
+                s.submesh(),
+                s.space_dim(),
+                s.is_axisymmetric(),
+                s.element_type(),
+            )
         };
+        if et != ElementType::SEG2 {
+            return Err(PyrucastError::Message(format!(
+                "Truss: a bar needs SEG2 elements, got {et}"
+            )));
+        }
         // A segment in a meridian plane sweeps a cone of revolution, not a bar:
         // the kernel's `E·A/L` has no meaning there.
         if axisymmetric {
@@ -694,7 +707,7 @@ mod tests {
         Handle::new(b.initial_state(&mat.read()).unwrap())
     }
     use crate::aggregate::Aggregate;
-    use crate::atoms::{ElementType, Node, NodeId};
+    use crate::atoms::{Interpolation, Node, NodeId};
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
@@ -721,6 +734,38 @@ mod tests {
         m.set_uniform("E", e).unwrap();
         m.set_uniform("A", area).unwrap();
         Handle::new(m)
+    }
+
+    /// Only a `SEG2` is a bar: a quadratic segment or a triangle is refused,
+    /// rather than assembled from its first two nodes.
+    #[test]
+    fn refuses_anything_but_seg2() {
+        for (et, interpolation, points) in [
+            (
+                ElementType::SEG3,
+                Interpolation::Lagrange2,
+                &[[0.0, 0.0], [2.0, 0.0], [1.0, 0.0]][..],
+            ),
+            (
+                ElementType::TRI3,
+                Interpolation::Lagrange1,
+                &[[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]][..],
+            ),
+        ] {
+            let coords = Handle::new(Coords::new(2).unwrap());
+            let ids: Vec<NodeId> = points
+                .iter()
+                .map(|p| Node::create_in(coords.clone(), p).unwrap().id())
+                .collect();
+            let mut mesh = Mesh::from_submesh(SubMesh::new(coords, et));
+            mesh.add_cell(&ids).unwrap();
+            let fes = FiniteElementSpace::new(&mesh, interpolation).unwrap();
+            let err = Truss::new(fes.get(0).unwrap(), StrainMeasure::Linear)
+                .err()
+                .expect("a bar on anything but SEG2 must be refused")
+                .to_string();
+            assert!(err.contains("needs SEG2"), "{et}: {err}");
+        }
     }
 
     #[test]

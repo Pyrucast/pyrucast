@@ -35,7 +35,8 @@ pub enum QuadratureRule {
     /// Standard Gauss rule, picked per element type.
     Gauss,
     /// **Reduced** integration: a single point at the element centroid (weight
-    /// = the reference measure). Exact for constants only; it carries one value
+    /// = the reference measure). Exact for affine functions, since the
+    /// centroid is the mean point of the reference element; it carries one value
     /// per cell (the target of `cell_integral`, the cell layout of the array
     /// exchange) and the transverse shear of a thick shell, against shear
     /// locking.
@@ -205,6 +206,27 @@ mod tests {
                 s,
                 expected
             );
+        }
+    }
+
+    /// The reduced rule integrates every affine function exactly: its moments
+    /// `Σ w·ξ_k` match those of the Gauss rule, which is exact well beyond
+    /// degree 1 on every type.
+    #[test]
+    fn reduced_is_exact_for_affine_functions() {
+        for et in all_fe_types() {
+            let d = et.topological_dim();
+            let (gx, gw) = QuadratureRule::Gauss.points(et).unwrap();
+            let (rx, rw) = QuadratureRule::Reduced.points(et).unwrap();
+            assert_eq!(rw.len(), 1, "{et}: one reduced point");
+            for k in 0..d {
+                let gauss: f64 = gw.iter().enumerate().map(|(g, w)| w * gx[g * d + k]).sum();
+                let reduced = rw[0] * rx[k];
+                assert!(
+                    (gauss - reduced).abs() < 1e-12,
+                    "{et}: ∫ξ_{k} = {gauss} by Gauss, {reduced} by the reduced rule"
+                );
+            }
         }
     }
 
