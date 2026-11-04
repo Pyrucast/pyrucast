@@ -1,343 +1,140 @@
 # Conduction thermique
 
-Cette page décrit la physique de **conduction thermique** (`HeatConduction`) et
-la convection de surface associée. Elle suit le plan standard des physiques puis
-la déroule sur un exemple complet — une ligne chauffée par une source à une
-extrémité et maintenue à température fixe à l'autre — comparé à la **solution
-analytique**.
+## En bref
 
-Pour la mécanique générique du `Model` (orchestration, DOFs, assemblage), voir
-[Modèle physique](model.md). Ici on se concentre sur le cas thermique.
+La conduction de la chaleur dans un solide : la température `T` est
+l'inconnue, et la chaleur circule des zones chaudes vers les zones froides.
 
-## Équations continues résolues
+| | |
+|---|---|
+| opérateur | `pyrucast.model.heat_conduction(fespace, symmetry="isotropic")` |
+| tag | `thermal` |
+| type | domaine avec comportement (`label()` : `"HeatConduction"`) |
+| éléments | toute maille de Lagrange, de degré 1 ou 2, en 1-D, 2-D ou 3-D |
 
-En **régime stationnaire**, la forme forte est
+`symmetry` choisit la forme de la conductivité : `"isotropic"` (un scalaire
+`k`), `"orthotropic"` ou `"anisotropic"` (un tenseur orienté par des axes
+matériau).
 
-\\[
--\nabla\cdot\big(k\\,\nabla T\big) = 0,
-\\]
+## Théorie
 
-et en **régime transitoire**, l'équation de la chaleur porte un terme de
-stockage :
-
-\\[
-\rho\\,c_p\\,\frac{\partial T}{\partial t} - \nabla\cdot(k\\,\nabla T) = Q.
-\\]
-
-La forme variationnelle de Galerkine (multiplication par une température
-virtuelle, intégration par parties) fait apparaître la **rigidité** (conduction)
-et, en transitoire, la **capacité** (stockage) — leurs formes discrètes
-ci-dessous.
-
-## Forme discrétisée
-
-La conductivité donne, cellule par cellule, la matrice de **rigidité** :
+En régime transitoire, l'équation de la chaleur s'écrit
 
 \\[
-K_{ij} = \int_K k(x)\\,\nabla N_i\cdot\nabla N_j\\,dx
-\quad\approx\quad \sum_g k(\xi_g)\\,(\nabla N_i\cdot\nabla N_j)\big|\_g\\,|J|\_g\\,w_g
+\rho\\,c_p\\,\frac{\partial T}{\partial t} - \nabla\cdot(\mathbf K\\,\nabla T) = Q,
 \\]
 
-(implémentée dans `src/models/heat_conduction.rs`). En notant
-\\( B = [\nabla N_1, \dots, \nabla N_n] \\) la matrice des gradients de forme
-(taille \\( d\times n \\)), on a aussi \\( K = \int_\Omega k\\, B^\top B\\, d\Omega \\).
-Le bloc local est écrit aux positions `row = (NodeId_i, "q")`,
-`col = (NodeId_j, "T")`. Pour un SEG2 de longueur \\(L\\) et \\(k\\) uniforme on
-retrouve la matrice analytique \\((k/L)\\,[[1,-1],[-1,1]]\\).
-
-En transitoire, le terme de stockage discrétise en une **matrice de capacité**
-(l'analogue thermique de la matrice de masse, Cast3M `CAPA`) :
+avec \\(\mathbf K\\) le tenseur de conductivité, \\(\rho\\,c_p\\) la capacité
+volumique et \\(Q\\) une source. En régime permanent, le premier terme
+disparaît. Multipliée par une température virtuelle \\(v\\) et intégrée par
+parties, elle devient
 
 \\[
-C_{ij} = \int_\Omega \rho\\,c_p\\,N_i\\,N_j\\,d\Omega
-\\;\approx\\; \sum_g \rho\\,c_p\\,N_i(\xi_g)\\,N_j(\xi_g)\\,|J|\_g\\,w_g,
+\int_\Omega \nabla v\cdot\mathbf K\\,\nabla T\\,d\Omega +
+\int_\Omega v\\,\rho\\,c_p\\,\dot T\\,d\Omega =
+\int_\Omega v\\,Q\\,d\Omega + \int_\Gamma v\\,\bar q\\,d\Gamma ,
 \\]
 
-assemblée par [`assemble.mass`](operateurs/assemblage.md) (matériau `rho`, `cp`)
-et concentrable en diagonale par [`lump`](operateurs/assemblage.md). Le système
-semi-discret est \\( C\\,\dot T + K\\,T = F \\) ; l'intégration en temps
-(θ-schéma, Euler implicite `(C/\Delta t + K)`) se pilote dans la couche Python.
+où \\(\bar q\\) est le flux qui entre par le bord. Un bord sans condition est
+**isolé** : rien n'y entre.
 
-## Variables et matériau
-
-| | nom | rôle |
-|---|---|---|
-| **primale** (colonnes, inconnue) | `"T"` | température |
-| **duale** (lignes, second membre) | `"q"` | flux de chaleur |
-| **matériau** | `"k"` | conductivité (au point de Gauss) ; `rho`, `cp` **facultatifs** (capacité) |
-
-La conductivité peut être **orientée** — voir
-[Conduction orthotrope et anisotrope](#conduction-orthotrope-et-anisotrope) plus
-bas ; `"k"` est alors remplacée par les constantes de la symétrie choisie.
-
-## Mise en donnée (Rust, testé)
-
-Le pipeline est toujours le même :
-
-1. **`Coords`** — l'espace des nœuds (dimension géométrique).
-2. **`Mesh`** — les éléments (ici des `SEG2` alignés sur \\([0,1]\\)).
-3. **`FiniteElementSpace`** — l'interpolation (`lagrange1`).
-4. **Matériau** — un `ElementField` portant la composante `"k"`, fabriqué
-   commodément par `element_field::material_field(&model, &[("k", …)])` (les
-   sous-modèles sans matériau, comme `Dirichlet`, sont ignorés).
-5. **`Model`** — `model::heat_conduction(&fes, MaterialSymmetry::Isotropic)`,
-   composé par `|` (union) avec les conditions limites.
-6. **Conditions limites :**
-   - **Dirichlet** (`T` imposée) : un sous-modèle `model::dirichlet` qui impose
-     la valeur via multiplicateurs de Lagrange. L'utilisateur fournit le
-     maillage des nœuds imposés ; la contrainte crée elle-même ses
-     nœuds-multiplicateurs, un par relation. La valeur imposée \\(u_d\\)
-     s'écrit dans le chargement au slot **`imposed`** du nœud-multiplicateur
-     (cf. [Dirichlet](contraintes/dirichlet.md)).
-   - **Neumann / source** : une charge **ponctuelle** est une valeur du
-     **chargement** sur la composante duale **`"q"`** au nœud concerné ; un
-     **flux réparti** sur un bord (ou un volume) se transforme en charges
-     nodales cohérentes par l'opérateur [`flux`](#exemple--un-carré) (analogue
-     de `FLUX`/`PRES` de Cast3M).
-7. **Assemblage + résolution** — `matrix::stiffness` puis le solveur
-   `solver::solve` (LU creuse directe, voir [Modèle physique](model.md)).
-
-### Exemple : ligne chauffée
-
-**Problème.** Sur \\([0,1]\\), une source de chaleur (flux de Neumann \\(Q\\)) est
-appliquée en \\(x=0\\), et la température est imposée à \\(T=20\\) en \\(x=1\\).
-
-**Solution analytique.** Sans génération volumique, \\(T\'\'=0\\) : le profil est
-linéaire. En notant \\(Q\\) le flux injecté et \\(k\\) la conductivité,
+Avec \\(T \approx \sum_j N_j\\,T_j\\), chaque maille donne une matrice de
+**conduction** et une matrice de **capacité** :
 
 \\[
-u(x) = 20 + \frac{Q}{k}\\,(1 - x).
+K_{ij} = \int_e \nabla N_i^{\mathsf T}\\,\mathbf K\\,\nabla N_j\\,d\Omega ,
+\qquad
+C_{ij} = \int_e \rho\\,c_p\\,N_i\\,N_j\\,d\Omega ,
 \\]
 
-De plus, le **multiplicateur de Lagrange** au nœud imposé (la *réaction* qui
-maintient \\(T=20\\)) vaut exactement \\(Q\\) : tout le flux injecté en \\(x=0\\)
-ressort en \\(x=1\\) — un bilan d'énergie discret.
+intégrées aux points de Gauss, où le matériau est lu : la conductivité et la
+capacité peuvent varier à l'intérieur d'une maille. Le système semi-discret
+est \\(C\\,\dot T + K\\,T = F\\) ; un pas d'Euler implicite résout
+\\((C/\Delta t + K)\\,T_{n+1} = F + (C/\Delta t)\\,T_n\\).
 
-**Code.** L'exemple ci-dessous est le test d'intégration
-`tests/thermal_line.rs` : il est compilé **et exécuté à chaque `cargo test`**,
-donc garanti à jour avec l'API.
+**Conductivité orientée.** Un matériau fibré ou feuilleté conduit mieux dans
+certaines directions. Le tenseur \\(\mathbf K\\) est alors construit dans les
+**axes matériau**, diagonal (`orthotropic`, conductivités principales `k_1`,
+`k_2`, `k_3`) ou complet (`anisotropic`, `k_11`…`k_33`), puis tourné dans les
+axes globaux. Les axes sont des vecteurs du champ matériau : `V1X`, `V1Y` en
+2-D, le second axe étant la normale dans le plan ; `V1X…V1Z` et `V2X…V2Z` en
+3-D, le troisième étant `V1 × V2`. Ils sont normés en interne et peuvent
+varier d'une maille à l'autre. En 2-D, `k_3` (la direction normale au plan)
+est demandé aussi : le tenseur est construit en 3-D, puis réduit au plan.
+
+## Variables
+
+| | |
+|---|---|
+| primale | `T` |
+| duale | `q`, le flux de chaleur nodal |
+| matériau requis | `k` ; ou `k_1`, `k_2`, `k_3` et les axes (`orthotropic`) ; ou `k_11`, `k_12`, `k_13`, `k_22`, `k_23`, `k_33` et les axes (`anisotropic`) |
+| matériau facultatif | `rho`, `cp`, demandés par la capacité seule |
+| entrée du comportement | `grad_T_x`, `grad_T_y`, `grad_T_z` : le gradient, un par direction de l'espace |
+| sortie du comportement | `flux_x`, `flux_y`, `flux_z` |
+| état | aucun |
+
+La sortie est `𝐊·∇T`, le flux de la forme faible. Le flux de Fourier, celui
+qui va du chaud vers le froid, est son opposé : `−𝐊·∇T`.
+
+## Ce qu'elle produit
+
+| | |
+|---|---|
+| raideur | \\(K\\), la conduction |
+| masse | \\(C\\), la capacité ; exige `rho` et `cp` |
+| géométrique | — |
+| tangente | = raideur : la loi est linéaire |
+| forces internes | \\(q_i = \int \nabla N_i\cdot\text{flux}\\), soit \\(K\\,T\\) |
+| forces externes | aucune ; une source ou un flux de bord se donne par un chargement, ou par [`flux`](echanges.md#flux-imposé) |
+
+## Exemple
+
+Une barre de conductivité 2, chauffée par un flux de 10 à gauche, à 20 à
+droite. Le profil est linéaire, \\(T(x) = 20 + Q\\,(1 - x)/k\\) :
+
+```python
+{{#include ../../tests/python/test_doc_thermique.py:conduction}}
+```
+
+Le gradient et le flux aux points de Gauss, et les forces internes, qui
+rendent la source :
+
+```python
+{{#include ../../tests/python/test_doc_thermique.py:comportement}}
+```
+
+Un pas de temps, depuis une barre à 20 partout :
+
+```python
+{{#include ../../tests/python/test_doc_thermique.py:transitoire}}
+```
+
+Une conductivité orthotrope, d'axe principal `(0,6 ; 0,8)` :
+
+```python
+{{#include ../../tests/python/test_doc_thermique.py:orthotrope}}
+```
+
+## Côté Rust
+
+`HeatConduction` (`src/models/heat_conduction.rs`) garde son sous-espace et sa
+`MaterialSymmetry`. Les matrices élémentaires sont des fonctions pures,
+`element_stiffness` et `element_capacity`, qui lisent le matériau ligne par
+ligne aux points de Gauss par les indices résolus une fois par zone
+(`ElementLayout`). Le tenseur orienté est construit par
+`src/models/symmetry.rs`, le même code que pour la diffusion et l'élasticité.
+
+Le même problème que l'exemple, en Rust :
 
 ```rust,ignore
 {{#include ../../tests/thermal_line.rs:example}}
 ```
 
-## Exemple Python
-
-La **version Python** équivalente et documentée est dans le dépôt :
-`examples/thermal_line_1d.py` (lancer avec `python examples/thermal_line_1d.py`
-après `maturin develop`). Les compléments 2-D ci-dessous ont eux aussi leur
-variante Python (`thermal_square_2d.py`, `thermal_convection_2d.py`).
-
-## Compléments
-
-### Exemple : un carré
-
-La généralisation 2-D du cas précédent : un **carré** \\([0,1]^2\\) (grille
-structurée de `QUA4`), chauffé par une source répartie sur le bord **gauche**
-(\\(x=0\\)) et maintenu à \\(T=20\\) sur le bord **droit** (\\(x=1\\)). Les bords
-haut et bas ne portent **aucune condition** : c'est la condition naturelle
-(flux nul, bord *isolé*).
-
-Comme les bords latéraux sont isolés, le champ ne dépend pas de \\(y\\) : le
-carré **redonne le profil de la ligne**,
-
-\\[
-u(x) = 20 + \frac{Q}{k}\\,(1 - x),
-\\]
-
-et la **réaction totale** (somme des multiplicateurs sur le bord imposé) vaut le
-flux injecté \\(Q\\).
-
-**Mise en donnée d'un flux réparti.** Une source répartie se transforme en
-**charges nodales cohérentes** \\(f_i = \int_\Gamma \varphi\\,N_i\\,d\Gamma\\) par
-l'opérateur `flux` — l'analogue de `FLUX`/`PRES` de Cast3M. On lui donne le bord
-(ici un maillage `SEG2`, intégré comme une **ligne** : la mesure vient du
-Jacobien *manifold*) et la densité de flux (une constante, ou un champ par
-éléments) ; il renvoie un `NodeField` sur la composante duale `"q"`, prêt à
-composer (`|`) avec le reste du chargement. Sous le capot, pour un flux uniforme
-sur des éléments linéaires, un nœud intérieur du bord reçoit \\(Q\\,h\\) et un
-coin \\(Q\\,h/2\\) (somme \\(Q\\)) — mais on n'a plus à le calculer à la main.
-
-```rust,ignore
-{{#include ../../tests/thermal_square.rs:square}}
-```
-
-> Version Python : `examples/thermal_square_2d.py` (lancer avec
-> `python examples/thermal_square_2d.py` après `maturin develop`).
-
-### Conduction orthotrope et anisotrope
-
-Un matériau feuilleté, fibré ou laminé ne conduit pas la chaleur de la même façon
-dans toutes les directions. La conductivité devient alors un **tenseur** `K`, et
-la rigidité
-
-\\[
-K_{ij} = \int_\Omega \nabla N_i^{\mathsf T}\\, \mathbf{K}\\, \nabla N_j \\, d\Omega
-\\]
-
-dont le cas isotrope `K = k·I` redonne le produit scalaire habituel.
-
-C'est le **même axe de symétrie matériau** qu'en mécanique (chapitre
-[Élasticité orthotrope](mecanique/orthotropie.md)), avec un tenseur d'ordre 2 au
-lieu de 4 :
-
-| symétrie | composantes matériau |
-|---|---|
-| `isotropic` (défaut) | `k` |
-| `orthotropic` | `k_1`, `k_2`, `k_3` + le repère matériau |
-| `anisotropic` | `k_11`, `k_12`, `k_13`, `k_22`, `k_23`, `k_33` + le repère |
-
-Le repère est donné par des **vecteurs** — `V1X, V1Y` en 2-D, `V1X…V1Z,
-V2X…V2Z` en 3-D — comme `MATE 'DIRECTION' V1 V2` de Cast3M. Ils sont
-orthonormalisés en interne.
-
-```python
-{{#include ../../tests/python/test_doc_ops_physiques.py:orthotrope}}
-```
-
-Le matériau est lu **en chaque point de Gauss** — la conductivité isotrope, les
-constantes orientées et les axes matériau, comme la capacité `ρ·cp` — donc
-variable à l'intérieur d'une maille, comme les modules mécaniques : la matrice
-intègre ce que la loi lit.
-
-L'exemple Rust est un **test de patch**, qui est ce qu'appelle une conductivité
-orientée : un champ de température linéaire est harmonique pour *n'importe quel*
-tenseur constant, donc l'imposer au bord doit le reproduire à l'intérieur quelle
-que soit `K`. Le test ne s'arrête pas là — il relit le **flux** produit et le
-compare à `K·∇T` calculé à la main, ce qui est le seul moyen de prendre la
-rotation en défaut :
+Le test de la conduction orientée impose un champ linéaire au bord, qui doit
+être reproduit à l'intérieur pour tout tenseur constant, puis relit le flux et
+le compare à `𝐊·∇T` calculé à la main :
 
 ```rust,ignore
 {{#include ../../tests/anisotropic_conduction.rs:example}}
 ```
-
-Avec `∇T = (1, 0)`, le flux est la première colonne de `K` :
-`K_xx = k₁cos²θ + k₂sin²θ` et `K_yx = (k₁ − k₂)·cosθ·sinθ`. Le terme
-extra-diagonal n'est non nul que si le matériau est à la fois anisotrope **et**
-désaligné — précisément le cas qu'une rotation fausse manquerait.
-
-### Rayonnement à l'infini (Stefan-Boltzmann)
-
-Une surface qui échange avec un environnement lointain à \\(T_\infty\\) rayonne
-
-\\[
-q\cdot n = \sigma\\,\varepsilon\\,\big(T^4 - T_\infty^4\big)
-\\]
-
-où \\(\sigma\\) est la constante de Stefan-Boltzmann et \\(\varepsilon\\)
-l'émissivité. Primale `"T"`, duale `"q"` — les **mêmes** degrés de liberté que la
-conduction, donc un bord rayonnant se couple directement dans sa rigidité, comme
-la convection. Et comme elle, il n'a besoin d'**aucune normale** : la direction
-est déjà consommée en écrivant `q·n`, il ne reste sous l'intégrale qu'un scalaire
-et la mesure de surface.
-
-#### Ce qui change par rapport à la convection : c'est non linéaire
-
-La loi de Newton est linéaire en `T`, si bien que la convection ne contribue
-qu'une matrice de film constante. `T⁴` ne l'est pas, d'où **trois** termes :
-
-| terme | expression | rôle |
-|---|---|---|
-| rigidité | `4σεT_∞³ ∫ NᵢNⱼ dΓ` | le film radiatif **linéarisé**, un opérateur constant — le `h_r` classique |
-| force interne | `∫ Nᵢ σε(T⁴ − T_∞⁴) dΓ` | le résidu, exact |
-| tangente | `4σεT³ ∫ NᵢNⱼ dΓ` | la tangente cohérente à la température courante |
-
-Linéariser la rigidité autour de \\(T_\infty\\) plutôt qu'autour de l'état
-courant est ce qui la laisse être une matrice **constante** : c'est l'opérateur
-dont on part pour une boucle de Newton, et à lui seul une itération de Picard
-tout à fait utilisable. La **tangente** porte la vraie non-linéarité : elle évalue `4σεT³` à la
-température courante, au point de Gauss, quand on la demande — comme le `D_alg`
-plastique, et pour la même raison : personne d'autre ne la lirait.
-
-#### Deux natures
-
-Le rayonnement déclare `[Thermal, Radiation]`. Un bord rayonnant fait partie du
-problème thermique — `filter("thermal")` doit le rendre — tandis que
-`filter("radiation")` isole le terme non linéaire à part, pour l'assembler ou
-l'inspecter seul. C'est le premier usage du caractère **ensembliste** de
-`physics()`.
-
-#### Unités
-
-`sigma` vaut par défaut la constante SI, et `T` est alors une température
-**absolue** (Kelvin) : une puissance quatrième n'a aucune invariance permettant
-de translater une origine. Dans un autre système d'unités, fournir `sigma` comme
-composante matériau.
-
-```python
-{{#include ../../tests/python/test_doc_ops_physiques.py:radiation}}
-```
-
-#### Ce que ça vaut comme vérification
-
-Deux choses se contrôlent sans acrobatie analytique : le flux rayonné doit valoir
-exactement `σε(T⁴ − T_∞⁴)` fois l'aire, et la **tangente doit être la dérivée du
-résidu**. Une loi en `T⁴` est précisément là où une tangente incohérente se cache
-— Newton ramperait au lieu de converger quadratiquement — d'où sa comparaison à
-une différence finie :
-
-```rust,ignore
-{{#include ../../tests/radiation.rs:example}}
-```
-
-### Convection de surface (Robin / film)
-
-Le modèle `BoundaryTransfer` (`src/models/boundary_transfer.rs`) ajoute un **échange
-convectif** avec un fluide à température ambiante \\(T_\text{ext}\\) sur un
-bord : la loi de Newton du refroidissement
-
-\\[
-q\cdot n = h\\,\big(T - T_\text{ext}\big)
-\\]
-
-où \\(h\\) est le **coefficient d'échange** (film). Injectée dans le terme de
-bord de la forme faible de la conduction, elle se scinde en deux ingrédients :
-
-\\[
-\underbrace{K_{ij} = h \int_\Gamma N_i\\,N_j\\,d\Gamma}\_{\text{matrice de film (raideur)}}
-\qquad
-\underbrace{f_i = h\\,T_\text{ext} \int_\Gamma N_i\\,d\Gamma}\_{\text{charge (second membre)}}
-\\]
-
-On le construit **contre** la conduction qu'il refroidit, en lui passant les
-couples de variables à échanger — ceux de la conduction, ce qui fait que le terme
-**se couple directement** dans sa raideur. La conduction, elle, lui donne sa
-nature thermique, et refuse un couple qu'elle n'assemble pas :
-
-```python
-{{#include ../../tests/python/test_doc_ops_physiques.py:boundary_transfer}}
-```
-
-| | nom | rôle |
-|---|---|---|
-| **primale** | `"T"` | température (partagée avec `HeatConduction`) |
-| **duale** | `"q"` | flux de chaleur (partagé) |
-| **matériau** | `"h_T"` | coefficient d'échange (film), nommé d'après la grandeur |
-| **matériau** | `"a_ext_T"` | température ambiante du fluide, **exigée** — l'omettre échouerait à l'assemblage plutôt que de valoir zéro en silence |
-
-> Ce modèle n'a rien de thermique : la même loi décrit un transfert de masse en
-> surface ou une fondation élastique, selon les composantes qu'on lui donne, et
-> il partage son noyau avec le transfert d'interface. Voir
-> **[Échanges](echanges.md)** pour la loi commune, la structure en quatre blocs
-> et le choix entre un échange et une contrainte.
-
-**Mise en donnée.** Le modèle fournit la matrice de film ; la part externe
-\\(h\\,T_\text{ext}\\) est un **chargement**, bâti avec le **même** opérateur
-[`flux`](#exemple--un-carré) que la source (densité \\(h\\,T_\text{ext}\\)). Le
-terme de film rend la matrice **définie** : un problème purement Neumann +
-convection est bien posé **sans Dirichlet**.
-
-**Exemple.** Une dalle \\([0,1]^2\\) chauffée par un flux \\(Q\\) sur le bord
-gauche et refroidie par convection sur le bord droit (haut/bas isolés). Tout le
-flux ressort par convection, d'où le profil linéaire
-
-\\[
-T(x) = T_\text{ext} + \frac{Q}{h} + \frac{Q}{k}\\,(1 - x).
-\\]
-
-```rust,ignore
-{{#include ../../tests/thermal_convection.rs:convection}}
-```
-
-> Version Python : `examples/thermal_convection_2d.py` (lancer avec
-> `python examples/thermal_convection_2d.py` après `maturin develop`).

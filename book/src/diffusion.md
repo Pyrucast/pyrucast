@@ -1,182 +1,115 @@
 # Diffusion (loi de Fick)
 
-## Introduction
+## En bref
 
-La diffusion d'une espèce dans un milieu — humidité dans un béton, hydrogène
-dans un acier, chlorures dans un enrobage — obéit à la **loi de Fick**, dont
-l'opérateur est celui de la [conduction thermique](thermique.md).
-
-C'est pourtant une **physique distincte**, et pyrucast la traite comme telle. La
-variable primale est la concentration `c`, la duale le flux de matière `j`, et sa
-nature déclarée est `Physics::Diffusion`. Partager un opérateur n'est pas
-partager une physique : dans un problème couplé thermo-diffusif, on doit pouvoir
-écrire `model.filter("diffusion")` et n'obtenir que la partie diffusive, sans
-traîner la thermique avec.
-
-Le modèle vit sur n'importe quel espace EF volumique (2-D ou 3-D, linéaire ou
-quadratique), avec un degré de liberté scalaire par nœud.
-
-## Équations continues résolues
-
-La première loi de Fick relie le flux au gradient de concentration :
-
-\\[
-\mathbf j = -\\,\mathsf D\\,\nabla c
-\\]
-
-et la conservation de l'espèce, en régime transitoire avec un coefficient de
-stockage \\( \varphi \\) (la porosité, pour une espèce diffusant dans un solide
-poreux) :
-
-\\[
-\varphi\\,\frac{\partial c}{\partial t} + \nabla\\!\cdot\mathbf j = 0
-\qquad\Longleftrightarrow\qquad
-\varphi\\,\frac{\partial c}{\partial t} - \nabla\\!\cdot(\mathsf D\\,\nabla c) = 0 .
-\\]
-
-En stationnaire c'est l'équation de Laplace pondérée par \\( \mathsf D \\). C'est
-**la même équation** que la conduction thermique, à un changement de noms près
-(\\( c \leftrightarrow T \\), \\( \mathsf D \leftrightarrow k \\),
-\\( \varphi \leftrightarrow \rho c_p \\)) — d'où un modèle qui partage la
-totalité du noyau de [conduction thermique](thermique.md), et n'en diffère que
-par ses variables et sa nature physique.
-
-La forme faible, après intégration par parties, s'écrit : trouver `c` tel que
-pour tout `δc` admissible,
-
-\\[
-\int_\Omega \varphi\\,\delta c\\,\dot c\\; d\Omega +
-\int_\Omega \nabla \delta c \cdot \mathsf D\\,\nabla c\\; d\Omega
-= -\int_{\partial\Omega} \delta c\\;\mathbf j\\!\cdot\\!\mathbf n\\; d\Gamma .
-\\]
-
-## Forme discrétisée
-
-\\[
-K_{ij} = \int_\Omega \nabla N_i^\top\\,\mathsf D\\;\nabla N_j\\; d\Omega
-\quad \text{(rigidité de diffusion — Cast3M \texttt{COND})},
-\\]
-\\[
-C_{ij} = \int_\Omega \varphi\\,N_i\\,N_j\\; d\Omega
-\quad \text{(stockage — Cast3M \texttt{CAPA})}.
-\\]
-
-`D` est un **tenseur**, dont le cas isotrope `D = D·I` redonne le produit
-scalaire habituel `∇N_i · ∇N_j`. Les trois symétries matériau décrites au
-chapitre [Élasticité orthotrope](mecanique/orthotropie.md) s'appliquent
-identiquement, avec un tenseur d'ordre 2 au lieu de 4 :
-
-| symétrie | composantes matériau |
-|---|---|
-| `isotropic` | `D` |
-| `orthotropic` | `D_1`, `D_2`, `D_3` + le repère matériau |
-| `anisotropic` | `D_11`, `D_12`, `D_13`, `D_22`, `D_23`, `D_33` (symétrique) + le repère |
-
-Le repère est donné par les vecteurs `V1X, V1Y` (2-D) ou `V1X…V1Z, V2X…V2Z`
-(3-D), exactement comme en mécanique.
-
-## Variables et matériau
+La diffusion d'une espèce dans un milieu : de l'humidité dans un béton, de
+l'hydrogène dans un acier, des chlorures dans un enrobage. La concentration est
+l'inconnue, et l'espèce va des zones riches vers les zones pauvres.
 
 | | |
 |---|---|
-| primale | `c` (concentration, colonnes) |
-| duale | `j` (flux de matière, lignes) |
-| matériau requis | la diffusivité, selon la symétrie |
-| matériau optionnel | `poro` — le coefficient de stockage, exigé par la seule matrice de masse |
-| nature | `Physics::Diffusion` |
+| opérateur | `pyrucast.model.fick(fespace, species, symmetry="isotropic")` |
+| tag | `diffusion` |
+| type | domaine avec comportement (`label()` : `"Fick"`) |
+| éléments | toute maille de Lagrange, de degré 1 ou 2, en 1-D, 2-D ou 3-D |
 
-Le comportement (`COMP`) rend le flux **sous forme faible** `D·∇c`, en
-composantes `j_x, j_y(, j_z)`. Comme en thermique, c'est l'**opposé** du flux
-physique de Fick : ce choix garantit `∫ Bᵀ·j = K·c`, donc l'accord entre le
-comportement et la rigidité dans le cas linéaire. Les composantes sont nommées
-d'après la variable duale (`j_*`) et non `flux_*`, afin qu'un modèle portant à la
-fois conduction et diffusion garde deux champs de flux non ambigus.
+`species` nomme l'espèce : toutes ses grandeurs portent ce nom (`c_H2`,
+`j_H2`, `D_H2`), si bien que deux espèces vivent sur le même maillage sans se
+confondre. Ce qui appartient au milieu ne porte pas le nom de l'espèce : le
+coefficient de stockage `poro` et les axes matériau. `symmetry` choisit la
+forme de la diffusivité, comme pour la [conduction](thermique.md#théorie).
 
-L'entrée du comportement est le gradient `grad_c_x, …`, tel que le produit
-l'opérateur [`gradient`](operateurs/geometrie.md) sur un champ dont la composante
-est `c`.
+L'équation est celle de la conduction, mais la physique est distincte : son tag
+est `diffusion`, et non `thermal`, pour qu'un problème qui couple les deux
+puisse prendre l'une sans l'autre.
 
-## Mise en donnée (Rust, testé)
+## Théorie
+
+La première loi de Fick relie le flux de l'espèce au gradient de concentration,
+et la conservation de l'espèce donne, avec un coefficient de stockage
+\\(\varphi\\) (la porosité pour une espèce qui diffuse dans un solide
+poreux) :
+
+\\[
+\mathbf j = -\mathsf D\\,\nabla c ,
+\qquad
+\varphi\\,\frac{\partial c}{\partial t} - \nabla\cdot(\mathsf D\\,\nabla c) = 0 .
+\\]
+
+C'est l'équation de la chaleur avec \\(c\\) pour \\(T\\), \\(\mathsf D\\) pour
+\\(\mathbf K\\) et \\(\varphi\\) pour \\(\rho\\,c_p\\). Sa forme faible et sa
+discrétisation sont les mêmes :
+
+\\[
+K_{ij} = \int_e \nabla N_i^{\mathsf T}\\,\mathsf D\\,\nabla N_j\\,d\Omega ,
+\qquad
+C_{ij} = \int_e \varphi\\,N_i\\,N_j\\,d\Omega .
+\\]
+
+La diffusivité \\(\mathsf D\\) est un scalaire (`isotropic`) ou un tenseur
+orienté par les axes matériau (`orthotropic`, `anisotropic`), construit comme
+la conductivité.
+
+## Variables
+
+Pour l'espèce `H2` :
+
+| | |
+|---|---|
+| primale | `c_H2`, la concentration |
+| duale | `j_H2`, le flux d'espèce nodal |
+| matériau requis | `D_H2` ; ou `D_1_H2`, `D_2_H2`, `D_3_H2` et les axes (`orthotropic`) ; ou `D_11_H2`…`D_33_H2` et les axes (`anisotropic`) |
+| matériau facultatif | `poro`, demandé par le stockage seul |
+| entrée du comportement | `grad_c_H2_x`, `grad_c_H2_y`, `grad_c_H2_z` |
+| sortie du comportement | `j_H2_x`, `j_H2_y`, `j_H2_z` |
+| état | aucun |
+
+La sortie est `𝖣·∇c`, le flux de la forme faible ; le flux de Fick est son
+opposé. Elle est nommée d'après la duale de l'espèce, si bien qu'un modèle qui
+porte une conduction et plusieurs espèces garde des flux distincts.
+
+## Ce qu'elle produit
+
+| | |
+|---|---|
+| raideur | \\(K\\), la diffusion |
+| masse | \\(C\\), le stockage ; exige `poro` |
+| géométrique | — |
+| tangente | = raideur : la loi est linéaire |
+| forces internes | \\(\int \nabla N_i\cdot\mathbf j\\), soit \\(K\\,c\\) |
+| forces externes | aucune ; un flux entrant se donne par un chargement, ou par [`flux`](echanges.md#flux-imposé) |
+
+## Exemple
+
+Une barre de diffusivité 0,5 et de longueur 2, où un flux d'hydrogène de 1
+entre à gauche, la concentration étant nulle à droite. Le multiplicateur de
+l'appui est le flux qui sort, égal au flux qui entre :
+
+```python
+{{#include ../../tests/python/test_doc_diffusion.py:fick}}
+```
+
+Deux espèces et une conduction sur le même maillage forment un système à trois
+blocs indépendants :
+
+```python
+{{#include ../../tests/python/test_doc_diffusion.py:especes}}
+```
+
+Une diffusivité qui dépend de la température se calcule par une
+[évolution](evolution.md#appliquer-une-courbe-à-un-champ) appliquée au champ de
+température, avant chaque assemblage. Un transfert d'espèce à travers une
+interface entre deux corps est un [transfert d'interface](echanges.md#transfert-dinterface).
+
+## Côté Rust
+
+`Fick` (`src/models/fick.rs`) garde son sous-espace, sa `MaterialSymmetry` et
+le nom de l'espèce. Ses noyaux, `element_stiffness` et `element_storage`, ont
+la forme de ceux de la conduction et partagent avec eux la construction du
+tenseur orienté (`symmetry::transport_tensor_from`). Les noms se construisent
+depuis l'espèce : `fick::primal_var("H2")` rend `c_H2`, `fick::dual_var` rend
+`j_H2`.
 
 ```rust,ignore
 {{#include ../../tests/fick.rs:example}}
 ```
-
-## Exemple Python
-
-```python
-{{#include ../../examples/diffusion_1d.py}}
-```
-
-## Compléments
-
-### Coexister avec la thermique
-
-Les deux physiques peuvent vivre sur le **même maillage** sans se gêner :
-
-```python
-{{#include ../../tests/python/test_doc_ops_physiques.py:fick}}
-```
-
-Un seul champ matériau porte les deux jeux de coefficients. L'assembleur résout
-la zone de chaque physique par les **composantes qu'elle exige** (`D` ici, `k`
-là) — il n'y a rien à consolider à la main. Et parce que les deux natures sont
-distinctes, `filter` les sépare de nouveau après coup, aussi bien sur le modèle
-que sur la matrice assemblée.
-
-Les degrés de liberté restent séparés (`c` d'un côté, `T` de l'autre) : le
-système est bloc-diagonal. Un vrai **couplage** — une diffusivité fonction de la
-température, ou une thermodiffusion — se pilote depuis Python, en réassemblant la
-partie diffusive à chaque pas avec un champ matériau recalculé.
-
-### Transfert à travers une interface
-
-Deux corps qui se touchent ne partagent pas forcément leurs nœuds. Un contact
-imparfait, un revêtement, un joint, une membrane laissent le champ **sauter** à
-la traversée, tandis qu'un flux la franchit proportionnellement à ce saut :
-
-\\[
-j\cdot n = h\\,\big(c_1 - c_2\big)
-\\]
-
-`h_c_H2` est le coefficient de transfert (son inverse est la résistance de
-contact) : un par grandeur transférée, nommé d'après elle.
-
-> Ce modèle n'a rien de diffusif non plus : on lui passe `[("T", "q")]` et une
-> conduction pour cible pour une résistance de contact, les couples de
-> déplacement et une élasticité pour un joint collé de raideur finie — la nature
-> vient de la cible. La loi commune, sa structure en **quatre
-> blocs** dont deux hors-diagonale, l'exigence de **conformité** des deux côtés
-> et le critère qui départage un échange d'une contrainte MPC sont dans
-> **[Échanges](echanges.md)**.
-
-```python
-{{#include ../../tests/python/test_doc_ops_physiques.py:interface_transfer}}
-```
-
-#### Ce que ça vaut comme vérification
-
-Deux carrés côte à côte, un flux `q` injecté d'un côté, la concentration imposée
-de l'autre : le profil est linéaire par morceaux avec une chute `q/D` dans chaque
-carré et un **saut `q/h`** à l'interface. C'est ce saut qui distingue une
-interface d'un nœud partagé, et il est porté entièrement par les blocs
-hors-diagonale. Quand `h → ∞`, le saut s'efface et l'on retrouve le corps
-continu.
-
-```rust,ignore
-{{#include ../../tests/interface_transfer.rs:example}}
-```
-
-### Régime transitoire
-
-La matrice de stockage s'assemble avec `matrix.mass(...)`, qui exige alors la
-composante `poro`. L'intégration en temps est orchestrée en Python, comme pour la
-thermique transitoire — le noyau Rust fournit `K` et `C`, pas la boucle.
-
-### Bilan de matière
-
-Comme en thermique, le multiplicateur de Lagrange d'une concentration imposée
-**est** le flux d'espèce qui traverse la frontière. C'est la vérification la plus
-directe d'un calcul de diffusion, et c'est ce que contrôle le test d'intégration
-ci-dessus : la réaction au bord imposé égale exactement le flux injecté à l'autre
-bout.

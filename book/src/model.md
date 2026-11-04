@@ -80,16 +80,16 @@ modèle en le recomposant.
 Le tableau donne, pour chaque déclaration, les variables qu'elle apporte au
 modèle. Les équations, le matériau et les exemples sont dans la page de chaque
 physique ; ce que chacune sait assembler est résumé dans
-[Détails des physiques](physiques.md#ce-que-chacune-sait-produire).
+[Détails des physiques](physiques.md#ce-que-chaque-physique-produit).
 
 | Déclaration (`pyrucast.model.…`) | Inconnues | Duales | Page |
 |---|---|---|---|
 | `heat_conduction(fes, symétrie)` | `T` | `q` | [Thermique](thermique.md) |
-| `radiation(fes, cible)` | `T` | `q` | [Rayonnement](thermique.md#rayonnement-à-linfini-stefan-boltzmann) |
+| `radiation(fes, cible)` | `T` | `q` | [Rayonnement](rayonnement.md) |
 | `fick(fes, espèce, symétrie)` | `c_<espèce>` | `j_<espèce>` | [Diffusion](diffusion.md) |
 | `boundary_transfer(fes, cible, variables)` | les `variables` | celles de la cible | [Échanges](echanges.md) |
 | `interface_transfer(côté_a, côté_b, cible, variables, tol)` | les `variables` | celles de la cible | [Échanges](echanges.md) |
-| `flux(fes, cible, duale)` | aucune | `duale` ; `"n"`, une pression, écrit dans `f_x`, `f_y`(, `f_z`) | [Chargement réparti](operateurs/assemblage.md) |
+| `flux(fes, cible, duale)` | aucune | `duale` ; `"n"`, une pression, écrit dans `f_x`, `f_y`(, `f_z`) | [Flux imposé](echanges.md#flux-imposé) |
 | `elasticity(fes, cinématique, symétrie, mesure)` | `u_x, u_y`(, `u_z`) | `f_x, f_y`(, `f_z`) | [Élasticité](mecanique/elasticite.md), [orthotropie](mecanique/orthotropie.md) |
 | `plasticity_perfect`, `plasticity_isotropic`, `drucker_prager`, `ottosen`, `gurson`, `creep_norton`, `creep_blackburn`, `creep_lemaitre`, `viscoplasticity_chaboche`, `viscoplasticity_lemaitre_chaboche` `(fes, cinématique, mesure)` | `u_x, u_y`(, `u_z`) | `f_x, f_y`(, `f_z`) | [Plasticité](mecanique/plasticite.md), [lois d'écoulement](mecanique/lois-plastiques.md), [fluage](mecanique/fluage.md) |
 | `mazars`, `damage_tc`, `damage_sic_sic` `(fes, cinématique, mesure)` | `u_x, u_y`(, `u_z`) | `f_x, f_y`(, `f_z`) | [Mazars](mecanique/mazars.md), [lois d'endommagement](mecanique/endommagement.md) |
