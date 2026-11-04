@@ -1714,8 +1714,9 @@ impl SubModel {
 
     /// Whether this sub-model carries a constitutive behaviour that can be
     /// integrated via `integrate_behavior` from a
-    /// deformation field. `true` for volumetric physics, `false` for
-    /// constraints (`Dirichlet`).
+    /// deformation field. `true` for the physics with a law, `false` for
+    /// constraints (`Dirichlet`) and for the domains without one (exchanges,
+    /// flux), which integrate on a subspace but evaluate no law.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -1746,7 +1747,7 @@ impl SubModel {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn has_behavior(&self) -> bool {
-        self.as_kind().as_domain().is_some()
+        self.as_kind().as_behavior().is_some()
     }
 
     /// FE subspace this sub-model integrates its behaviour on, or `None`

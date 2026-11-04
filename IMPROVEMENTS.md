@@ -148,16 +148,6 @@ one of them is refused; a later step carrying an extra zone, on a support the
 first step does not have, sees it dropped without a word. Decide: refuse it as
 well, or keep it documented (`book/src/evolution.md` says so).
 
-## `has_behavior` and `fespace()` on a domain without a law
-
-`SubModel::has_behavior` (`src/containers/model.rs`) returns
-`as_domain().is_some()`: a boundary exchange, an interface transfer or a flux
-answers `True`, though none has a law (`as_behavior()` is `None`). And
-`SubModel.fespace()` in Python returns `behavior_fespace()`, so `None` for
-those same physics, though they integrate on a subspace. `book/src/physiques.md`
-describes both as they are. Decide: `has_behavior` reading `as_behavior`, and
-`fespace()` returning the domain's subspace.
-
 ## Book pages not reviewed yet
 
 Same rules as the reviewed pages: checked against the code, Python first then
