@@ -113,8 +113,10 @@ struct Component {
 /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
 /// // One **unilateral** relation per slave node, paired at construction with
 /// // its nearest master facet.
-/// # let cible = pyrucast::ops::model::truss(
+/// # let cible = pyrucast::ops::model::elasticity(
 /// #     &FiniteElementSpace::lagrange1(&maillage)?,
+/// #     pyrucast::models::tensor::Kinematics::PlaneStress,
+/// #     pyrucast::models::symmetry::MaterialSymmetry::Isotropic,
 /// #     pyrucast::ops::element_field::StrainMeasure::Linear)?;
 /// let c = Contact::new(&slave, &master, &cible,
 ///     vec!["u_x".into(), "u_y".into()])?;
@@ -188,8 +190,10 @@ impl Contact {
     /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
     /// // One **unilateral** relation per slave node, paired at construction with
     /// // its nearest master facet.
-    /// # let cible = pyrucast::ops::model::truss(
+    /// # let cible = pyrucast::ops::model::elasticity(
     /// #     &FiniteElementSpace::lagrange1(&maillage)?,
+    /// #     pyrucast::models::tensor::Kinematics::PlaneStress,
+    /// #     pyrucast::models::symmetry::MaterialSymmetry::Isotropic,
     /// #     pyrucast::ops::element_field::StrainMeasure::Linear)?;
     /// let c = Contact::new(&slave, &master, &cible,
     ///     vec!["u_x".into(), "u_y".into()])?;
@@ -371,8 +375,10 @@ impl Contact {
     /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
     /// // One **unilateral** relation per slave node, paired at construction with
     /// // its nearest master facet.
-    /// # let cible = pyrucast::ops::model::truss(
+    /// # let cible = pyrucast::ops::model::elasticity(
     /// #     &FiniteElementSpace::lagrange1(&maillage)?,
+    /// #     pyrucast::models::tensor::Kinematics::PlaneStress,
+    /// #     pyrucast::models::symmetry::MaterialSymmetry::Isotropic,
     /// #     pyrucast::ops::element_field::StrainMeasure::Linear)?;
     /// let c = Contact::new(&slave, &master, &cible,
     ///     vec!["u_x".into(), "u_y".into()])?;

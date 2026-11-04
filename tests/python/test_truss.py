@@ -50,3 +50,21 @@ def test_truss_model_vars():
     model = pyrucast.model.truss(fes)
     assert model.primal_vars() == ["u_x", "u_y"]
     assert model.dual_vars() == ["f_x", "f_y"]
+
+
+def test_truss_refuses_anything_but_seg2():
+    """A bar is a straight two-node segment: SEG3 and TRI3 are refused."""
+    for element_type, interpolation, points in [
+        ("SEG3", "LAGRANGE2", [[0.0, 0.0], [2.0, 0.0], [1.0, 0.0]]),
+        ("TRI3", "LAGRANGE1", [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]),
+    ]:
+        c = pyrucast.Coords(2)
+        mesh = pyrucast.Mesh(c, element_type)
+        mesh.unit().add_cell([c.add_node(p) for p in points])
+        fes = pyrucast.FiniteElementSpace(mesh, interpolation=interpolation)
+        try:
+            pyrucast.model.truss(fes)
+        except RuntimeError as err:
+            assert "needs SEG2" in str(err)
+        else:
+            raise AssertionError(f"a bar on {element_type} must be refused")

@@ -14,8 +14,8 @@ un tirant. Elle se pose sur des segments, en 1-D, 2-D ou 3-D.
 
 Une barre n'a aucune raideur transversale : chaque nœud doit être tenu dans
 les directions que la barre ne porte pas (par d'autres barres, un treillis
-triangulé, ou des appuis), sinon la matrice est singulière. Une géométrie de
-révolution est refusée.
+triangulé, ou des appuis), sinon la matrice est singulière. Tout autre
+élément qu'un `SEG2` est refusé, comme une géométrie de révolution.
 
 ## Théorie
 
