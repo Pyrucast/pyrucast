@@ -153,7 +153,6 @@ well, or keep it documented (`book/src/evolution.md` says so).
 Same rules as the reviewed pages: checked against the code, Python first then
 "Côté Rust", current state only.
 
-- `contraintes.md`.
 - `operateurs/assemblage.md`: heading "Règle invariante : un Model = une
   Matrice".
 - `operateurs/comportement.md`: heading `internal_forces(model, state)`; the

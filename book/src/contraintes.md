@@ -7,6 +7,18 @@ traite comme des [`SubModel`](model.md) ordinaires, contribuant leurs blocs à
 la **même** matrice globale que les physiques — pas de système point-selle
 séparé à orchestrer côté utilisateur.
 
+## Ce qu'elles ont en commun
+
+| | |
+|---|---|
+| tag | `constraint`, et le tag de la physique dont elles figent les inconnues ; `constraint` seul pour une relation qui lie deux physiques |
+| type | contrainte : ni sous-espace (`fespace()` rend `None`), ni matériau, ni comportement |
+| primale | `lambda`, le multiplicateur, un par relation |
+| duale | `imposed`, la ligne de la relation, où s'écrit son second membre |
+| raideur | les blocs `C` et `Cᵀ` ; aucune masse ni raideur géométrique |
+| tangente | = raideur |
+| forces internes | `Cᵀλ` sur les duales de la cible, `C·u` sur les lignes `imposed` |
+
 ## Multiplicateurs de Lagrange
 
 Les contraintes sont imposées par **multiplicateurs de Lagrange**. Une
@@ -53,9 +65,9 @@ u_s = \frac{1}{a_s}\Big(g - \sum_{k \neq s} a_k\\, u_k\Big),
 \\]
 
 d'où une transformation globale `u = T·û + u₀` (`û` = DOFs retenus). Le système
-se réduit à `K̂ û = f̂` avec `K̂ = Tᵀ K T`, `f̂ = Tᵀ(f − K·u₀)`, résolu par le
-**même** LU creux — mais sur une matrice **plus petite et définie**, sans DOF
-multiplicateur. La solution est prolongée `u = T·û + u₀` ; la **réaction**
+se réduit à `K̂ û = f̂` avec `K̂ = Tᵀ K T`, `f̂ = Tᵀ(f − K·u₀)`, résolu par la
+**même** factorisation, LU ou Cholesky, mais sur une matrice **plus petite et
+définie**, sans inconnue multiplicateur. La solution est prolongée `u = T·û + u₀` ; la **réaction**
 (équivalent du multiplicateur) est récupérée en post-traitement, `−(K·u − f)` à
 la ligne duale de chaque esclave (`= aₛ·λ`).
 
@@ -64,7 +76,7 @@ Les deux voies lisent la **même** description méthode-neutre des contraintes
 `g` au nœud-multiplicateur, ci-dessous) : passer de l'une à l'autre ne change que
 l'appel de résolution.
 
-**Périmètre v1** : non chaîné, esclaves disjoints — chaque relation élimine un
+**Périmètre** : non chaîné, esclaves disjoints — chaque relation élimine un
 esclave distinct, jamais réutilisé comme maître ni esclave dans une autre
 relation (couvre la périodicité). Un système chaîné est refusé avec une erreur
 explicite ; il reste résoluble par la voie Lagrange (`solve`).

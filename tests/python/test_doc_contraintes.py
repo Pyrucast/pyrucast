@@ -61,7 +61,7 @@ rhs = encastrement.constraint_rhs([(noeuds[0], 0.0)]) | butee.constraint_rhs(
     [(noeuds[-1], 0.0)]
 )
 # ANCHOR: solve_inequalities
-# The matrix knows which relations are inequalities: `solve` runs the active set.
+# La matrice sait quelles relations sont des inégalités : `solve` lance l'ensemble actif.
 solution = pyrucast.solver.solve(k, rhs)  # active_set, max_iter, tol
 # ANCHOR_END: solve_inequalities
 assert solution.node_count > 0
@@ -160,22 +160,22 @@ for i in range(N):
 edge_fes = pyrucast.FiniteElementSpace(edge)
 S = 1.0
 # ANCHOR: contact
-# Master: upper edge of the lower block, walked in −x (normal +y, towards the slave).
+# Maître : le bord haut du bloc du bas, parcouru en −x (normale +y, vers l'esclave).
 master = pyrucast.Mesh(c, "SEG2")
 for i in reversed(range(N)):
     master.unit().add_cell([bottom[idx(i + 1, N)], bottom[idx(i, N)]])
-# Slave: nodes of the upper block's lower edge.
+# Esclave : les nœuds du bord bas du bloc du haut.
 slave = pyrucast.mesh.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
 
 contact = pyrucast.model.contact(slave, master, elasticite, ["u_x", "u_y"])
-# The upper edge's pressure is a term of the model, like the contact.
+# La pression sur le bord haut est un terme du modèle, comme le contact.
 charge = pyrucast.model.flux(edge_fes, elasticite, "f_y")
 model = elasticite | appuis | contact | charge
 materials = pyrucast.element_field.material_field(
     model, [("E", 210.0), ("nu", 0.0), ("phi_f_y", -S)]
 )
 
-# The pressure, and the gap the contact carries.
+# La pression, et le jeu que porte le contact.
 rhs = pyrucast.node_field.external_forces(model, materials)
 solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
 # ANCHOR_END: contact
@@ -185,8 +185,8 @@ assert solution.node_count > 0
 # ── The contact's geometric right-hand side ─────────────────────────────────
 
 # ANCHOR: contact_rhs
-# The gap is a load the contact carries: on its own, `external_forces` gives
-# back -g0 at each of its multiplier nodes — here 0, the blocks touching.
+# Le jeu est un chargement que porte le contact : seul, `external_forces` rend
+# −g0 à chacun de ses nœuds multiplicateurs ; ici 0, les blocs se touchant.
 gaps = pyrucast.node_field.external_forces(contact, materials)
 mult_mesh = contact.multiplier_mesh()
 for r in range(N + 1):
@@ -196,12 +196,12 @@ for r in range(N + 1):
 # ── Updating the contact to a displaced configuration ───────────────────────
 
 # ANCHOR: update_contact
-# The upper block slid by a quarter to the right: each slave node is paired
-# again on its displaced position, the multipliers stay the same unknowns.
+# Le bloc du haut a glissé d'un quart vers la droite : chaque nœud esclave est
+# apparié de nouveau à sa position déplacée ; les multiplicateurs restent les mêmes.
 glisse = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(top), ["u_x", "u_y"])
 for n in top:
     glisse[0].set_value(n, "u_x", 0.25)
-nouveau = contact.update_contact(glisse)  # or pyrucast.model.update_contact(…)
+nouveau = contact.update_contact(glisse)  # ou pyrucast.model.update_contact(…)
 assert nouveau.multiplier_mesh().node(0, 0, 0).id == mult_mesh.node(0, 0, 0).id
 # ANCHOR_END: update_contact
 
@@ -211,7 +211,7 @@ assert nouveau.multiplier_mesh().node(0, 0, 0).id == mult_mesh.node(0, 0, 0).id
 # ANCHOR: dirichlet_complet
 import pyrucast
 
-# 1) Maillage + FE space
+# 1) Maillage et espace éléments finis
 c = pyrucast.Coords(dim=1)
 nodes = [c.add_node([i / 4.0]) for i in range(5)]
 mesh = pyrucast.Mesh(c, "SEG2")
@@ -219,7 +219,7 @@ for i in range(4):
     mesh.unit().add_cell([nodes[i], nodes[i + 1]])
 fes = pyrucast.FiniteElementSpace(mesh)
 
-# 2) Both constraints; each mints its multiplier node beside its imposed node.
+# 2) Les deux appuis ; chacun crée son nœud multiplicateur près du nœud imposé.
 imposed_left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
 imposed_right = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
 conduction = pyrucast.model.heat_conduction(fes)
@@ -228,20 +228,20 @@ right = pyrucast.model.dirichlet(imposed_right, conduction, "T")
 mult_left = left.multiplier_mesh().node(0, 0, 0)
 mult_right = right.multiplier_mesh().node(0, 0, 0)
 
-# 3) Whole model: conduction + both Dirichlet.
+# 3) Le modèle : la conduction et les deux appuis.
 model = conduction | left | right
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 
-# 4) Loading: the `constraint_rhs` helper designates each constraint by its
-#    constrained node and writes u_d at the multiplier node's `imposed` slot.
-#    Both are merged with `|`.
+# 4) Chargement : `constraint_rhs` désigne chaque relation par son nœud imposé
+#    et écrit la valeur à la composante `imposed` de son nœud multiplicateur.
+#    Les deux se réunissent par `|`.
 rhs = left.constraint_rhs([(nodes[0], 0.0)]) | right.constraint_rhs([(nodes[-1], 1.0)])
 
 # 5) Assemblage + résolution.
 K = pyrucast.matrix.stiffness(model, materials)
 solution = pyrucast.solver.solve(K, rhs)
-assert abs(solution.value(nodes[2], "T") - 0.5) < 1e-10  # T in the middle
-assert abs(solution.value(mult_left, "lambda") - 1.0) < 1e-10  # flux on the left
+assert abs(solution.value(nodes[2], "T") - 0.5) < 1e-10  # T au milieu
+assert abs(solution.value(mult_left, "lambda") - 1.0) < 1e-10  # le flux à gauche
 # ANCHOR_END: dirichlet_complet
 
 
@@ -276,9 +276,9 @@ model = base | dirichlet | mpc
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 
 # Chargement : valeur imposée de Dirichlet + second membre g de la MPC. Le
-# `constraint_rhs` helper designates each relation by a node (the constrained
-# node for Dirichlet, the term node for the MPC) and finds the multiplier node
-# on its own; the component is `imposed` for both. Both are merged with `|`.
+# `constraint_rhs` désigne chaque relation par un nœud (le nœud imposé pour
+# Dirichlet, un nœud d'un terme pour la MPC) et trouve son nœud multiplicateur ;
+# la composante est `imposed` pour les deux. Les deux se réunissent par `|`.
 rhs = dirichlet.constraint_rhs([(nodes[0], 0.0)]) | mpc.constraint_rhs(
     [(nodes[-1], 1.0)]
 )
@@ -313,11 +313,11 @@ host.unit().add_cell(corner_nodes)
 fes = pyrucast.FiniteElementSpace(host)
 base = pyrucast.model.heat_conduction(fes)
 
-# Corners fixed to the linear field (Dirichlet).
+# Les coins tenus au champ linéaire (Dirichlet).
 corner_mesh = pyrucast.mesh.poi1_from_nodes(corner_nodes)
 dirichlet = pyrucast.model.dirichlet(corner_mesh, base, "T")
 
-# Immersed node, tied to the host.
+# Le nœud immergé, lié à l'hôte.
 p = c.add_node([0.3, 0.6, 0.2])
 bar = pyrucast.mesh.poi1_from_nodes([p])
 embedded = pyrucast.model.embedded(bar, host, base, ["T"])
@@ -326,7 +326,7 @@ emb_mult = embedded.multiplier_mesh().node(0, 0, 0)
 model = base | dirichlet | embedded
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 
-# Loading: the field's value at each corner, g = 0 (tie) at the immersed node.
+# Chargement : la valeur du champ à chaque coin, g = 0 (la liaison) au nœud immergé.
 rhs = dirichlet.constraint_rhs([(n, field(x)) for n, x in zip(corner_nodes, corners)])
 rhs = rhs | embedded.constraint_rhs([(p, 0.0)])
 

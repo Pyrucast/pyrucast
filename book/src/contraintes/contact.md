@@ -1,151 +1,115 @@
 # Contact (nœud-surface)
 
-Une contrainte **contact** empêche les nœuds d'un maillage **esclave** de
-pénétrer une surface **maître** — le sibling **unilatéral** du
-[baignage](embedded.md). Chaque nœud esclave `s` est apparié à sa facette
-maître la plus proche (poids de projection `Nᵢ(ξ)`, normale `n`, jeu initial
-signé `g₀`), et la non-pénétration linéarisée s'écrit, par nœud esclave :
+## En bref
 
-\\[
-g_0 + n \cdot u(s) - \sum_i N_i(\xi)\\, n \cdot u(\text{maître}_i) \ \geq\ 0.
-\\]
+Empêche les nœuds d'un maillage **esclave** de pénétrer une surface
+**maître**, sans frottement : deux blocs posés l'un sur l'autre, une pièce
+contre un appui.
 
-C'est une **relation unilatérale** (`≥`, cf. la section [Relations
-unilatérales](../contraintes.md)) à coefficients variant par nœud (comme le
-baignage) et couplant **toutes les composantes** du déplacement via la
-normale. Le modèle se résout avec
-[`solve`](../operateurs/solveur.md), qui lit l'inégalité dans la matrice ; le multiplicateur `λ ≤ 0`
-porte la réaction de contact (`λ = 0` quand la paire est décollée).
-
-Implémentation : `src/models/contact.rs` ; opérateur `ops::model::contact(…)`.
-
-## Appariement à la construction (petits glissements)
-
-L'appariement est calculé **une seule fois, à la construction**, par
-**projection au point le plus proche** de chaque nœud esclave sur la surface
-maître (`ops::geom::project_points`, cf.
-[Opérateurs géométriques](../operateurs/geometrie.md)) : facette, `ξ` (clampé
-au domaine de référence — un nœud face à un bord se projette sur le bord),
-poids `Nᵢ(ξ)`, normale et jeu signé. Appariement et normale sont ensuite
-**figés** : c'est le contact **linéarisé** (petits déplacements, petits
-glissements, sans frottement). Les deux maillages doivent partager un même
-`Coords`.
-
-**Orientation.** La surface maître doit être **orientée de façon cohérente**,
-normale pointant **vers le corps esclave** : en 2D la normale d'un `SEG2` est
-la tangente tournée de −90° (`n = (t_y, −t_x)`), en 3D celle d'un `TRI3`/`QUA4`
-suit la règle de la main droite sur l'ordre des nœuds. Le jeu `g₀` est alors
-positif quand c'est décollé, négatif quand ça pénètre.
-
-Comme toute contrainte, il crée ses **nœuds-multiplicateurs**, un par
-relation (donc par nœud esclave), par [`barycenter`](../operateurs/maillage.md)
-sur le maillage esclave ; on les retrouve avec `Model.multiplier_mesh()`.
-
-## Une relation par nœud esclave
-
-Les noms sont ceux de **toute** relation de contrainte :
-
-| rôle | nom |
+| | |
 |---|---|
-| primale propre = réaction de contact `λ` | `lambda` |
-| duale propre = ligne de contrainte + slot de `−g₀` | `imposed` |
+| opérateur | `pyrucast.model.contact(slave, master, target, variables)` |
+| tag | `constraint` et celui de la cible |
+| type | contrainte (`label()` : `"Contact"`) |
+| support | les nœuds esclaves, et les facettes maîtres : segments en 2-D, triangles et quadrangles en 3-D |
 
-Signature complète :
+`variables` sont les déplacements de la cible, un par dimension de l'espace,
+dans l'ordre (`["u_x", "u_y"]`). Les deux maillages partagent un même
+`Coords`. La surface maître doit être **orientée** vers le corps esclave : en
+2-D, la normale d'un segment est sa tangente tournée de −90°,
+\\(n = (t_y, -t_x)\\) ; en 3-D, elle suit la règle de la main droite sur
+l'ordre des nœuds.
 
-```text
-model.contact(slave, master, target, variables)
-# variables : les primales de déplacement de la cible, une PAR dimension
-#             d'espace, dans l'ordre ambiant, p.ex. ["u_x", "u_y"]
-```
+## Théorie
 
-Contrairement au baignage (une relation *par composante*), le contact écrit
-**une seule relation scalaire** par nœud esclave : la normale couple les
-composantes entre elles (coefficients `+n_c` sur l'esclave, `−Nᵢ·n_c` sur
-chaque nœud maître). `variables` doit donc en donner exactement une par
-dimension.
-
-## Second membre : le jeu, porté par le contact
-
-Le second membre de chaque relation est `−g₀` — une donnée **géométrique**,
-que le sous-modèle connaît déjà et que l'utilisateur n'a pas à choisir. Le
-contact la **porte** donc comme une charge : [`external_forces`](../operateurs/comportement.md)
-la rend, au slot `imposed` de chaque nœud multiplicateur, avec les autres
-charges du modèle. Personne ne la calcule à la main, personne ne peut
-l'oublier — l'oubli se lisait comme un jeu nul, deux blocs écartés collés à
-distance.
-
-```python
-{{#include ../../../tests/python/test_doc_contraintes.py:contact_rhs}}
-```
-
-## Grands glissements : mettre le contact à jour
-
-L'appariement figé ne vaut que tant que le point projeté ne glisse pas :
-quand la facette change ou que la normale tourne, la relation écrite à la
-construction n'est plus le jeu. `update_contact(model, displacement)` (aussi
-`Model.update_contact(displacement)`) rend le modèle avec ses contacts
-**réappariés** sur les positions `X + u` — `X` la configuration active, `u` lu
-sur les variables du contact —, les autres sous-modèles partagés tels quels.
-
-Concrètement, pour chaque nœud esclave `s` : la facette maître la plus proche
-de `x_s = X_s + u_s`, le point projeté (donc `ξ` et les poids `Nᵢ`) et la
-normale `n` sont recalculés **sur les positions déplacées** ; le nœud
-multiplicateur, lui, ne change pas. La ligne de la matrice reste la même
-(`(multiplicateur, imposed)`, l'inconnue `lambda` aussi) ; ses coefficients
-(`+n` sur l'esclave, `−Nᵢ·n` sur les nœuds de la nouvelle facette) et son
-second membre changent.
-
-**Le jeu rangé.** Le solveur écrit toute relation en déplacement total depuis
-`X`. Mis à jour pour un déplacement `u_k`, le contact range donc le jeu du
-nouvel appariement mesuré **sur `X`** :
+Chaque nœud esclave \\(s\\) est apparié à son point le plus proche sur la
+surface maître : une facette, des poids \\(N_i(\xi)\\), une normale \\(n\\) et
+un jeu signé \\(g_0\\), positif quand c'est décollé. La non-pénétration
+linéarisée est une relation **unilatérale** par nœud esclave :
 
 \\[
-\tilde g = n \cdot \big(X_s - \textstyle\sum_i N_i X_{m_i}\big),
-\qquad \tilde g + C\\,u = g(X+u_k) + C\\,(u - u_k),
+g_0 + n\cdot u(s) - \sum_i N_i(\xi)\\,n\cdot u(\text{maître}_i) \ \ge\ 0 .
 \\]
 
-soit le jeu réel de `X + u_k`, linéarisé là.
+Une seule relation scalaire par nœud esclave : la normale couple les
+composantes, avec les coefficients \\(+n_c\\) sur l'esclave et
+\\(-N_i\\,n_c\\) sur chaque nœud maître. `solve` y trouve des inégalités et lance
+l'ensemble actif (voir [Contraintes](../contraintes.md#relations-unilatérales-inégalités)) :
+le multiplicateur \\(\lambda \le 0\\) porte la réaction de contact, et vaut
+exactement 0 quand la paire est décollée.
 
-Exemple : un nœud parti de `Y = 1` au-dessus d'un sol `y = 0`, descendu de
-`0,7` : son jeu actuel vaut `0,3`, `g̃` vaut `1`, et la relation reste
-`u_y ≥ −1` — il ne peut pas descendre de plus de 1 depuis sa position de
-référence. Le contact mis à jour porte ce `−g̃` comme second membre ;
-`update_contact(model, 0)` redonne la construction.
+L'appariement est calculé **à la construction**, par projection au point le
+plus proche (`ops::geom::project_points`), \\(\xi\\) ramené au domaine de
+référence : un nœud face à un bord se projette sur le bord. Il est ensuite
+figé : petits déplacements, petits glissements.
 
-**Des coefficients exacts.** Pour une projection au point le plus proche, la
-variation du jeu se réduit à `n·(δx_s − Σ Nᵢ δx_mᵢ)` : le glissement du point
-projeté est tangent à la facette, et la normale reste unitaire. Seul le terme
-du second ordre — la raideur géométrique du contact — est négligé, comme dans
-Cast3M.
+**Le jeu est un chargement que porte le contact.** Le second membre de chaque
+relation est \\(-g_0\\), une donnée géométrique : `external_forces` le rend, à
+la composante `imposed` de chaque nœud multiplicateur, avec les autres
+chargements du modèle.
 
-```python
-{{#include ../../../tests/python/test_doc_contraintes.py:update_contact}}
-```
+**Grands glissements.** `update_contact(modele, deplacement)` (ou
+`modele.update_contact(deplacement)`) rend le modèle avec ses contacts
+**appariés de nouveau** sur les positions \\(X + u\\), \\(X\\) étant la
+configuration active ; les autres sous-modèles sont partagés tels quels. Les
+nœuds multiplicateurs ne changent pas ; les coefficients et le second membre,
+si. Le jeu rangé est celui du nouvel appariement mesuré sur \\(X\\),
 
-Le [pas à pas](../pas-a-pas.md#grands-déplacements) s'en sert en grands
-déplacements : il met ses contacts à jour chaque fois qu'il reconstruit son
-opérateur.
+\\[
+\tilde g = n\cdot\Big(X_s - \textstyle\sum_i N_i\\,X_{m_i}\Big),
+\\]
 
-## Exemple : patch test à deux blocs
+si bien que \\(\tilde g + C\\,u\\) est le jeu réel en \\(X + u_k\\), linéarisé
+là. Pour une projection au point le plus proche, la variation du jeu se réduit
+à \\(n\cdot(\delta x_s - \sum N_i\\,\delta x_{m_i})\\) ; seul le terme du second
+ordre, la raideur géométrique du contact, est négligé. `update_contact(modele, 0)`
+redonne l'appariement de construction. Le [pas à pas](../pas-a-pas.md#grands-déplacements)
+met ses contacts à jour chaque fois qu'il reconstruit son opérateur.
 
-Deux blocs élastiques empilés (jeu initial `g₀`), `u_x` bloqué partout
-(colonne uniaxiale), pression `S` sur le bloc du haut : le contact se ferme et
-transmet exactement `σ_yy = −S` ; les réactions `−λᵢ` sont les forces nodales
-cohérentes de la pression (`Σ(−λᵢ) = S`). En soulevant le bloc du haut, toutes
-les paires se relâchent (`λ = 0` exactement).
+## Variables
+
+| | |
+|---|---|
+| primale | `lambda`, la réaction de contact |
+| duale | `imposed` |
+| ce qu'il contraint | les déplacements `variables`, aux nœuds esclaves et maîtres |
+| matériau, comportement | aucun |
+
+## Ce qu'il produit
+
+| | |
+|---|---|
+| raideur | une paire \\(C\\), \\(C^{\mathsf T}\\) |
+| masse, géométrique | — |
+| tangente | = raideur |
+| forces internes | \\(C^{\mathsf T}\lambda\\) sur les duales, \\(C\\,u\\) sur les lignes `imposed` |
+| forces externes | \\(-g_0\\) sur les lignes `imposed` |
+
+## Exemple
+
+Deux blocs élastiques empilés, `u_x` bloqué partout, une pression `S` sur le
+bloc du haut : le contact se ferme et transmet \\(\sigma_{yy} = -S\\), les
+réactions \\(-\lambda_i\\) étant les forces nodales de la pression.
 
 ```python
 {{#include ../../../tests/python/test_doc_contraintes.py:contact}}
 ```
 
-Le déroulé complet (2D et 3D) est dans `tests/contact.rs` et
-`tests/python/test_contact.py`.
+Le jeu que porte le contact, ici nul :
 
-## Périmètre v1 et suites
+```python
+{{#include ../../../tests/python/test_doc_contraintes.py:contact_rhs}}
+```
 
-- **Appariement à la demande** : figé à la construction, renouvelé par
-  `update_contact` ; le pas à pas le fait de lui-même en grands déplacements.
-- **Sans frottement** : seul le jeu normal est contraint, le glissement
-  tangentiel est libre.
-- Nœud-surface **simple passe** : pas de traitement maître/esclave symétrique,
-  pas de mortar.
+Le bloc du haut glissé d'un quart, et les contacts appariés de nouveau :
+
+```python
+{{#include ../../../tests/python/test_doc_contraintes.py:update_contact}}
+```
+
+## Côté Rust
+
+`Contact` (`src/models/contact.rs`) implémente `Constraint` et déclare son
+jeu comme force externe. `tests/contact.rs` et `tests/python/test_contact.py`
+déroulent les deux blocs en 2-D et en 3-D, et vérifient que soulever le bloc
+du haut relâche toutes les paires.

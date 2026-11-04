@@ -3,7 +3,7 @@
 Une loi de petites déformations — Hooke, von Mises, Mazars — lit `ε` et rend
 `σ`. Quand les rotations ou les déformations deviennent grandes, elle doit lire
 une **mesure** de déformation qui ne voie que ce qui déforme vraiment la
-matière. pyrucast suit la voie de MFront : le **lagrangien total**. La loi lit
+matière. pyrucast suit la voie du **lagrangien total** : la loi lit
 une mesure lagrangienne totale, rend sa contrainte duale, et tout son état reste
 sur la configuration de référence. Rien n'est transporté d'une configuration à
 l'autre.
@@ -27,8 +27,7 @@ Green–Lagrange ne lit pas des `eps_*` qui contiendraient `E`, elle lit `E_*`.
 Une loi de petites déformations relie une déformation à sa duale sans dire
 laquelle : la lire sur une autre mesure donne un **autre matériau**. Hooke sur
 `E` est Saint-Venant–Kirchhoff ; Hooke sur `H` est l'élasticité de Hencky ; J2
-sur `H` est le cadre de Miehe, Apel et Lambrecht. MFront fait ce choix dans la
-loi (`@StrainMeasure`), code_aster à la mise en données (`DEFORMATION`).
+sur `H` est le cadre de Miehe, Apel et Lambrecht.
 
 Le paramètre existe pour `elasticity`, pour les dix lois de plasticité et pour
 les trois lois d'endommagement. Deux combinaisons sont refusées : une mesure qui
@@ -126,7 +125,7 @@ son état, ses forces internes. Ce qui agit sur la **forme
 actuelle** se calcule sur une configuration courante `x = X + u` : l'opérateur
 de Newton, la pression qui suit la paroi, la thermique de la pièce
 déformée. Le contact, lui, se réapparie sur `X + u` sans changer de
-configuration : [`update_contact`](../contraintes/contact.md#grands-glissements--mettre-le-contact-à-jour)
+configuration : [`update_contact`](../contraintes/contact.md#théorie)
 lit `u` et range un jeu rapporté à la référence. Le `Coords` les porte
 toutes les deux ; on passe de l'une à l'autre en changeant d'indice, sans
 recopier le maillage. [`in_config`](../coords.md#plusieurs-configurations) rend
@@ -152,7 +151,7 @@ soustraire nœud par nœud.
 ## La pression suiveuse
 
 Une pression pousse sur la paroi **où elle est**. Le mode normal de
-[`flux`](../operateurs/assemblage.md) — la ligne `"n"`, une densité `phi_n`
+[`flux`](../echanges.md#flux-imposé) — la ligne `"n"`, une densité `phi_n`
 portée par la normale de la maille — lit la normale de la configuration
 active : évaluée sur la configuration courante, la charge suit la paroi.
 
@@ -232,8 +231,8 @@ elle, l'opérateur du pas à pas est singulier.
 La conductivité donnée au matériau est celle de la matière **telle qu'elle
 est** : déformer la pièce ne change pas ses valeurs. La thermique se calcule
 donc sur la pièce déformée, avec la conductivité donnée — conduction, échanges
-(convection, rayonnement, flux imposés) — et la loi écrit le flux réel,
-`q = −k ∇T`. Une barre **étirée** à `λ` est plus longue : à écart de
+(convection, rayonnement, flux imposés) — et la loi écrit le flux sur la
+pièce déformée, et non un flux rapporté à la référence. Une barre **étirée** à `λ` est plus longue : à écart de
 température donné, la chaleur qui la traverse est `k ΔT A / (λ L₀)`.
 
 Une conduction **orientée** porte ses axes dans le matériau (`V1*`, `V2*`),
