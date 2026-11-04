@@ -111,6 +111,15 @@ way: `book/src/sauvegarde.md` (a reloaded `Coords` alone "qu'un `gc()`
 collectera"), `book/src/aspect-informatique.md` ("`coords.gc()` collecte…"),
 and the Rust docs of `src/coords.rs` and `src/atoms/node.rs`.
 
+## `Evolution(steps)` ignores a zone a later step adds
+
+`Evolution::from_node_fields` / `from_element_fields`
+(`src/containers/evolution.rs`) build one curve per zone of the **first**
+step, and look each one up in the later steps by support. A later step missing
+one of them is refused; a later step carrying an extra zone, on a support the
+first step does not have, sees it dropped without a word. Decide: refuse it as
+well, or keep it documented (`book/src/evolution.md` says so).
+
 ## Book pages not reviewed yet
 
 Same rules as the reviewed pages: checked against the code, Python first then
@@ -121,7 +130,6 @@ Same rules as the reviewed pages: checked against the code, Python first then
   Matrice".
 - `operateurs/comportement.md`: heading `internal_forces(model, state)`; the
   signature is `internal_forces(model, state, solution, materials)`.
-- `evolution.md`.
 - `elements/index.md`: the rest of the page.
 - `sauvegarde.md`: a reloaded field is read through
   `o[...].coords().acquire(id)`; drop `gc()` and "la copie qu'un champ garde

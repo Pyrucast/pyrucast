@@ -1,8 +1,6 @@
 # Public Python entries no example of the book cites.
 # Ratchet ledger: it can only SHRINK.
 # Régénérer : python script/doc_lint.py --ratchet-python
-abscissa_type
-abscissas
 component_count
 component_index
 div_to_component
@@ -13,8 +11,6 @@ get_by_node
 is_alive
 mass_matrix
 node_values
-ordinate_type
-out_of_range
 pyrucast.coords.displace
 pyrucast.element_field.sub_material_field
 pyrucast.element_field.thermal_strain

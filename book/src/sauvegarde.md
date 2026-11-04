@@ -3,7 +3,7 @@
 Écrire des objets dans un fichier, et les relire **en gardant ce qu'ils partageaient**. Un dictionnaire à l'aller, un dictionnaire au retour.
 
 ```python
-{{#include ../../tests/python/test_doc_sauvegarde_evolution.py:save_load}}
+{{#include ../../tests/python/test_doc_sauvegarde.py:save_load}}
 ```
 
 Les clefs sont libres : un espace, un accent, une unité — tout ce qu'une chaîne Python peut porter. C'est la raison du dictionnaire explicite plutôt que des mots-clefs.
@@ -13,7 +13,7 @@ Les clefs sont libres : un espace, un accent, une unité — tout ce qu'une cha�
 C'est la propriété pour laquelle ce format existe. Deux champs bâtis sur un même support sont relus sur **un** support, pas sur deux copies aux mêmes nœuds :
 
 ```python
-{{#include ../../tests/python/test_doc_sauvegarde_evolution.py:partage}}
+{{#include ../../tests/python/test_doc_sauvegarde.py:partage}}
 ```
 
 L'union fusionne les zones qui partagent un support et laisse côte à côte celles qui n'en partagent pas — c'est l'observable la plus directe du partage. Sans cette garantie, un champ et son maillage relus ne combineraient plus : ils porteraient les mêmes nœuds sans être *le même* support, et toute l'arithmétique de champs tomberait à côté.
@@ -25,7 +25,7 @@ Le mécanisme tient en une phrase : les objets sont écrits sous des **identifia
 `save` prend ce qui vous intéresse. Ce dont ces objets ont besoin suit tout seul :
 
 ```python
-{{#include ../../tests/python/test_doc_sauvegarde_evolution.py:dependances}}
+{{#include ../../tests/python/test_doc_sauvegarde.py:dependances}}
 ```
 
 Il n'y a rien à énumérer, et rien à oublier.
@@ -41,7 +41,7 @@ La règle est simple : **ce qui se recalcule ne s'écrit pas**.
 Sortent donc du fichier tous les caches et toutes les mémoïsations — la matrice assemblée, la factorisation du solveur, le coloriage des mailles, les tables d'index paresseuses, la copie qu'un champ garde de la connectivité de son support. Tout cela se rebâtit à la première demande, exactement comme sur un graphe construit à la main :
 
 ```python
-{{#include ../../tests/python/test_doc_sauvegarde_evolution.py:reassemblage}}
+{{#include ../../tests/python/test_doc_sauvegarde.py:reassemblage}}
 ```
 
 Ce n'est pas une économie de place accessoire : la copie qu'un champ nodal garde de sa connectivité pèse autant que le maillage lui-même, et un fichier qui la porterait la porterait une fois par champ.
@@ -55,7 +55,7 @@ Ils ne sont pas écrits non plus, et c'est délibéré : un fichier contient *ce
 **Conséquence à connaître** : un nœud relu n'est protégé que par les objets présents dans le fichier. Un `Node` que vous teniez dans une variable Python n'est pas archivé — c'est un atome de votre script, pas un objet du graphe. Sauver une `Coords` seule et la relire donne donc des nœuds à compteur nul, qu'un `gc()` collectera :
 
 ```python
-{{#include ../../tests/python/test_doc_sauvegarde_evolution.py:refcount}}
+{{#include ../../tests/python/test_doc_sauvegarde.py:refcount}}
 ```
 
 C'est exactement l'état où l'on serait après avoir reconstruit les mêmes objets à la main sans en garder de `Node`. Pour qu'un nœud survive, sauvez ce qui l'utilise.
