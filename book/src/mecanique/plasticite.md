@@ -103,9 +103,9 @@ La sortie du comportement est la contrainte, suivie de l'état :
 | état relu (`prev`) | toute la sortie du pas précédent : la contrainte et l'état |
 
 La déformation plastique et la déformation totale ont toujours six
-composantes, quelle que soit la cinématique. Au premier pas, `prev=None` part
-d'un état nul. Ensuite, la sortie d'un pas se passe telle quelle comme `prev`
-au pas suivant.
+composantes, quelle que soit la cinématique. Au premier pas, `prev` est l'état
+de repos, `element_field.initial_state(modele, materiaux)`, où tout est nul.
+Ensuite, la sortie d'un pas se passe telle quelle comme `prev` au pas suivant.
 
 ## Ce qu'elle produit
 

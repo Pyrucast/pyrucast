@@ -53,7 +53,9 @@ def test_plasticity_caps_at_yield_plane_stress():
     # Strain well past yield.
     u = _uniform_strain(c, nodes, 1e-2)
     strain = pyrucast.element_field.deformation(u, fes)
-    state = pyrucast.element_field.integrate_behavior(model, strain, materials)
+    state = pyrucast.element_field.integrate_behavior(
+        model, strain, materials, pyrucast.element_field.initial_state(model, materials)
+    )
     sub = state[0]
     # Output carries stress + plastic-strain state + cumulated p.
     assert "sigma_xx" in sub.components()
@@ -80,7 +82,9 @@ def test_plasticity_elastic_below_yield():
     # ε small ⇒ σ ≈ E·ε (plane-stress uniaxial-strain) well under yield.
     u = _uniform_strain(c, nodes, 1e-4)
     strain = pyrucast.element_field.deformation(u, fes)
-    state = pyrucast.element_field.integrate_behavior(model, strain, materials)
+    state = pyrucast.element_field.integrate_behavior(
+        model, strain, materials, pyrucast.element_field.initial_state(model, materials)
+    )
     sub = state[0]
     for g in range(sub.gauss_count):
         assert abs(sub.value(0, g, "p")) < 1e-14

@@ -96,12 +96,10 @@ pub enum AssemblyInputs<'a> {
     MaterialOnly,
     /// Geometric stiffness: the current stress.
     State(&'a ElementField),
-    /// Consistent tangent: exactly what `behavior::integrate` receives. `prev`
-    /// is optional **here and nowhere below** — `None` means the rest state,
-    /// which is materialised per sub-model before any recipe is built.
+    /// Consistent tangent: exactly what `behavior::integrate` receives.
     Behavior {
         deformation: &'a ElementField,
-        prev: Option<&'a ElementField>,
+        prev: &'a ElementField,
         dt: Option<f64>,
     },
 }
@@ -147,11 +145,7 @@ impl AssemblyInputs<'_> {
                 // Two laws sharing the subspace: each takes the zone it reads.
                 let deformation =
                     deformation.sub_for_fespace_reading(fespace, &law.deformation_reads())?;
-                // Below this line, `prev` is always a real field.
-                let prev = match prev {
-                    Some(p) => p.sub_for_fespace_reading(fespace, &previous_state_names(law))?,
-                    None => Handle::new(law.initial_state(&deformation.read())?),
-                };
+                let prev = prev.sub_for_fespace_reading(fespace, &previous_state_names(law))?;
                 KernelInputs::Behavior {
                     deformation,
                     prev,
@@ -542,13 +536,13 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 /// `model` (Cast3M `KTAN`) — the operator that gives quadratic Newton
 /// convergence for a non-linear law.
 ///
-/// `state` is the behaviour field produced by [`crate::ops::element_field::behavior::integrate`]
-/// at the current iterate: besides the stress it carries the per-Gauss
-/// evaluated **at the Gauss point**, from what the law asks for — the same
-/// inputs as `behavior::integrate`. No modulus field is materialized: it would
-/// have had this assembler as its only reader. `prev` at `None` means the rest
-/// state, resolved here and never further down. `materials` resolves each zone
-/// [`stiffness`].
+/// `D_alg` is evaluated **at the Gauss point**, from the inputs
+/// [`crate::ops::element_field::behavior::integrate`] takes: the end-of-step
+/// `deformation`, the state at A `prev` —
+/// [`initial_state`](fn@crate::ops::element_field::behavior::initial_state) on
+/// a first step — and `dt`. No modulus field is materialized: it would have had
+/// this assembler as its only reader. `materials` resolves each zone exactly
+/// like [`stiffness`].
 ///
 /// ```
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -577,7 +571,8 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 /// // without any modulus field having been materialized to carry it there.
 /// let strain = ElementField::new(
 ///     &fes, vec!["eps_xx".into(), "eps_yy".into(), "eps_xy".into()]).unwrap();
-/// let kt = matrix::tangent(&model, &materials, &strain, None, None).unwrap();
+/// let repos = element_field::behavior::initial_state(&model, &materials).unwrap();
+/// let kt = matrix::tangent(&model, &materials, &strain, &repos, None).unwrap();
 /// let k = matrix::stiffness(&model, &materials).unwrap();
 ///
 /// assert_eq!(kt.to_dmatrix().unwrap(), k.to_dmatrix().unwrap());
@@ -586,7 +581,7 @@ pub fn tangent(
     model: &Model,
     materials: &ElementField,
     deformation: &ElementField,
-    prev: Option<&ElementField>,
+    prev: &ElementField,
     dt: Option<f64>,
 ) -> Result<Matrix> {
     assemble_kind(
@@ -842,7 +837,7 @@ impl Model {
         &self,
         materials: &ElementField,
         deformation: &ElementField,
-        prev: Option<&ElementField>,
+        prev: &ElementField,
         dt: Option<f64>,
     ) -> Result<Matrix> {
         tangent(self, materials, deformation, prev, dt)

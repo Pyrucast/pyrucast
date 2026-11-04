@@ -62,24 +62,24 @@ pub fn geometric(
 /// Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`
 /// (Cast3M `KTAN`). `D_alg` is evaluated **at the Gauss point**, from the same
 /// inputs `integrate_behavior` takes — no field of moduli is materialised, since
-/// this assembler would be its only reader. `prev=None` means the rest state.
+/// this assembler would be its only reader. `prev` is the state at A:
+/// `element_field.initial_state(model, materials)` on a first step.
 #[py_op(method_on = PyModel, name = "tangent_matrix")]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (model, materials, deformation, prev=None, dt=None))]
+#[pyo3(signature = (model, materials, deformation, prev, dt=None))]
 pub fn tangent(
     model: PyRef<PyModel>,
     materials: PyRef<PyElementField>,
     deformation: PyRef<PyElementField>,
-    prev: Option<PyRef<PyElementField>>,
+    prev: PyRef<PyElementField>,
     dt: Option<f64>,
 ) -> PyResult<PyMatrix> {
-    let prev_inner = prev.as_ref().map(|p| &p.inner);
     let m = crate::ops::matrix::tangent(
         &model.inner,
         &materials.inner,
         &deformation.inner,
-        prev_inner,
+        &prev.inner,
         dt,
     )?;
     Ok(PyMatrix { inner: m })

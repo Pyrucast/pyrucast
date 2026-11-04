@@ -7,6 +7,7 @@ next step's predictor needs — gathered in one mutable ``State``.
 
 from dataclasses import dataclass, field
 
+from .. import element_field
 from .fields import domain_mesh, uniform
 from .materials import materials_at
 
@@ -20,8 +21,9 @@ class State:
     ``solution`` is the full mechanical unknown — displacement **and** the
     constraints' multipliers, the multipliers being the current reactions;
     ``behaviour`` the converged output of the laws (stresses, internal
-    variables, strains); ``temperature`` likewise for the heat problem, with
-    the previous one kept for a three-level scheme.
+    variables, strains), the laws' rest state before the first step;
+    ``temperature`` likewise for the heat problem, with the previous one kept
+    for a three-level scheme, and ``heat_behaviour`` the heat laws' state.
     """
 
     time: float
@@ -65,10 +67,12 @@ def initial_state(data, problem, options):
 
     ``data["initial"]`` may give ``displacement``, ``behaviour`` (stresses and
     internal variables), ``temperature``, ``velocity`` and ``acceleration``;
-    what it does not give starts at rest: zero displacement and motion,
-    the laws' rest state, and a uniform temperature equal to ``t_ref`` (the
-    stress-free temperature). With a prescribed temperature the initial one is
-    the prescription at the first instant.
+    what it does not give starts at rest: zero displacement and motion, the
+    laws' rest state (``element_field.initial_state``), and a uniform
+    temperature equal to ``t_ref`` (the stress-free temperature). With a
+    prescribed temperature the initial one is the prescription at the first
+    instant. The heat laws start from their rest state too: every step then
+    hands each law the state it starts from.
     """
     initial = data.get("initial", {})
     t0 = options.times[0]
@@ -84,6 +88,10 @@ def initial_state(data, problem, options):
 
     state = State(time=t0, materials=materials_at(problem, temperature, t0))
     state.temperature = temperature
+    if problem.heat is not None:
+        state.heat_behaviour = element_field.initial_state(
+            problem.heat_domain, state.materials
+        )
 
     if problem.mechanics is not None:
         mesh = domain_mesh(problem.fespace)
@@ -93,6 +101,10 @@ def initial_state(data, problem, options):
         )
         state.solution = at_rest("displacement")
         state.behaviour = initial.get("behaviour")
+        if state.behaviour is None:
+            state.behaviour = element_field.initial_state(
+                problem.mechanics_domain, state.materials
+            )
         if options.dynamics:
             state.velocity = at_rest("velocity")
             state.acceleration = at_rest("acceleration")

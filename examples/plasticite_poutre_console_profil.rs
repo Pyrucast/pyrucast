@@ -72,7 +72,7 @@ use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
-use pyrucast::ops::element_field::behavior::integrate;
+use pyrucast::ops::element_field::behavior::{initial_state, integrate};
 use pyrucast::ops::element_field::mask;
 use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::element_field::{deformation, StrainMeasure};
@@ -234,8 +234,9 @@ fn main() -> Result<()> {
     // ── Simulation state (persistent across the steps) ──────────────────────
     // Accumulated displacement u (u_x, u_y on every node), initially zero.
     let mut u = NodeField::new(&mesh, vec!["u_x".into(), "u_y".into()])?;
-    // Converged state of the previous step (VAR0 = `prev`): `None` at the first step.
-    let mut state: Option<ElementField> = None;
+    // Converged state of the previous step (VAR0 = `prev`): the rest state at the
+    // first step — A is then the reference configuration (σ(A)=0, ε(A)=0).
+    let mut state: ElementField = initial_state(&model, &materials)?;
 
     // ── Loop over the load steps ────────────────────────────────────────────
     let max_newton = 200;
@@ -282,7 +283,7 @@ fn main() -> Result<()> {
                 let strain = tic(&T_DEFORM, || deformation(u, &fes, StrainMeasure::Linear))?;
                 // Behaviour A→B: ε(B) directly, state of A in `prev`.
                 let out = tic(&T_BEHAVIOR, || {
-                    integrate(&model, &strain, state.as_ref(), &materials, None)
+                    integrate(&model, &strain, &state, &materials, None)
                 })?;
                 let f_int = tic(&T_FINT, || internal_forces(&model, &out, u, &materials))?;
                 // Residual r = F_ext − F_int and its norm on the free DOFs.
@@ -361,7 +362,7 @@ fn main() -> Result<()> {
 
         // Diagnostics of the step.
         let (p_max_val, n_plastic) = tic(&T_DIAG, || plastic_diagnostics(&committed))?;
-        state = Some(committed);
+        state = committed;
         let defl = u.value(tip.id(), "u_y")?;
         any_plasticity |= n_plastic > 0;
         let flag = if converged {

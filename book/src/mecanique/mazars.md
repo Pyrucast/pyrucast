@@ -76,7 +76,9 @@ La sortie du comportement est la contrainte, suivie de l'état :
 | état relu (`prev`) | `kappa` |
 
 La contrainte ne dépend que de la déformation totale et de \\(\kappa\\) : il
-n'y a pas d'incrément. Au premier pas, `prev=None` revient à
+n'y a pas d'incrément. Au premier pas, `prev` est l'état de repos,
+`element_field.initial_state(modele, materiaux)`, où `kappa` vaut 0 : la loi
+prenant le maximum avec le seuil, cela revient à
 \\(\kappa = \varepsilon_{d0}\\).
 
 ## Ce qu'elle produit

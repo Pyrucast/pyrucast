@@ -28,7 +28,8 @@ use pyrucast::handle::Handle;
 use pyrucast::models::plasticity::law::PlasticLaw;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::{
-    behavior::integrate, deformation, material_field, StrainMeasure,
+    behavior::{initial_state, integrate},
+    deformation, material_field, StrainMeasure,
 };
 use pyrucast::ops::model;
 use pyrucast::Result;
@@ -44,7 +45,7 @@ fn norton_creep_follows_its_rate_law() -> Result<()> {
     // A step short enough that the stress barely relaxes, so the closed-form
     // rate at the trial stress is the right comparison.
     let dt = 1e-6;
-    let state = cube.step(&uniaxial(2e-3), None, dt)?;
+    let state = cube.step(&uniaxial(2e-3), &cube.rest()?, dt)?;
     let q = von_mises(&state.sigma);
     let expected = dt * (q / 400.0_f64).powf(5.0);
     assert!(
@@ -65,7 +66,7 @@ fn holding_a_strain_relaxes_the_stress() -> Result<()> {
     let strain = uniaxial(2e-3);
     let mut previous = f64::INFINITY;
     for dt in [1e-4, 1e-3, 1e-2, 1e-1] {
-        let q = von_mises(&cube.step(&strain, None, dt)?.sigma);
+        let q = von_mises(&cube.step(&strain, &cube.rest()?, dt)?.sigma);
         assert!(
             q < previous,
             "dt = {dt}: q = {q} did not fall below {previous}"
@@ -91,7 +92,14 @@ fn a_viscous_law_refuses_to_integrate_without_dt() -> Result<()> {
             &cube.fes,
             StrainMeasure::Linear,
         )?;
-        let err = integrate(&cube.model, &strain, None, &cube.materials, None).unwrap_err();
+        let err = integrate(
+            &cube.model,
+            &strain,
+            &cube.rest().unwrap(),
+            &cube.materials,
+            None,
+        )
+        .unwrap_err();
         let msg = err.to_string();
         assert!(
             msg.contains("rate-dependent") && msg.contains("dt"),
@@ -116,9 +124,9 @@ fn lemaitre_creep_decelerates_with_accumulated_strain() -> Result<()> {
     let cube = Cube::new(PlasticLaw::CreepLemaitre, LEMAITRE)?;
     let strain = uniaxial(2e-3);
     let dt = 1e-4;
-    let fresh = cube.step(&strain, None, dt)?;
+    let fresh = cube.step(&strain, &cube.rest()?, dt)?;
     // Feed its own output back as the previous state, then step again.
-    let crept = cube.step(&strain, Some(&fresh.field), dt)?;
+    let crept = cube.step(&strain, &fresh.field, dt)?;
     let (first, second) = (fresh.p, crept.p - fresh.p);
     assert!(
         second < first,
@@ -144,10 +152,11 @@ const BLACKBURN: &[(&str, f64)] = &[
 fn blackburn_primary_creep_saturates() -> Result<()> {
     let cube = Cube::new(PlasticLaw::CreepBlackburn, BLACKBURN)?;
     let strain = uniaxial(2e-3);
+    let rest = cube.rest()?;
     let mut prev: Option<Step> = None;
     let mut primaries = Vec::new();
     for _ in 0..6 {
-        let step = cube.step(&strain, prev.as_ref().map(|s| &s.field), 1e-2)?;
+        let step = cube.step(&strain, prev.as_ref().map_or(&rest, |s| &s.field), 1e-2)?;
         primaries.push(step.var("p_prim")?);
         prev = Some(step);
     }
@@ -181,11 +190,12 @@ fn the_back_stress_builds_up_under_load() -> Result<()> {
     let cube = Cube::new(PlasticLaw::ViscoplasticChaboche, CHABOCHE)?;
     let dt = 1e-2;
     // Load forwards in a few steps, accumulating the back stress.
+    let rest = cube.rest()?;
     let mut prev: Option<Step> = None;
     for i in 1..=4 {
         let step = cube.step(
             &uniaxial(1e-3 * i as f64),
-            prev.as_ref().map(|s| &s.field),
+            prev.as_ref().map_or(&rest, |s| &s.field),
             dt,
         )?;
         prev = Some(step);
@@ -225,10 +235,15 @@ const LEMAITRE_CHABOCHE: &[(&str, f64)] = &[
 fn damage_grows_with_plastic_strain_and_is_capped() -> Result<()> {
     let cube = Cube::new(PlasticLaw::ViscoplasticLemaitreChaboche, LEMAITRE_CHABOCHE)?;
     let dt = 1e-2;
+    let rest = cube.rest()?;
     let mut prev: Option<Step> = None;
     let mut damages = Vec::new();
     for _ in 0..8 {
-        let step = cube.step(&uniaxial(4e-3), prev.as_ref().map(|s| &s.field), dt)?;
+        let step = cube.step(
+            &uniaxial(4e-3),
+            prev.as_ref().map_or(&rest, |s| &s.field),
+            dt,
+        )?;
         damages.push(step.var("damage")?);
         prev = Some(step);
     }
@@ -326,9 +341,14 @@ impl Cube {
         Ok(NodeField::from_sub(u))
     }
 
-    /// Integrate one step A → B at the given strain, from an optional previous
-    /// state and over a time increment `dt`.
-    fn step(&self, disp: &[f64], prev: Option<&ElementField>, dt: f64) -> Result<Step> {
+    /// The laws' rest state: the state at A of a first step.
+    fn rest(&self) -> Result<ElementField> {
+        initial_state(&self.model, &self.materials)
+    }
+
+    /// Integrate one step A → B at the given strain, from the state at A and
+    /// over a time increment `dt`.
+    fn step(&self, disp: &[f64], prev: &ElementField, dt: f64) -> Result<Step> {
         let strain = deformation(&self.displacement(disp)?, &self.fes, StrainMeasure::Linear)?;
         let field = integrate(&self.model, &strain, prev, &self.materials, Some(dt))?;
         let sub = field.get(0)?.read();

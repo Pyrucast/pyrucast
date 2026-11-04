@@ -43,7 +43,8 @@ Trois briques, à la main, sans opérateur « tout-en-un » — comme en Cast3M
    \alpha \cdot (T - T\_{\text{ref}}) \\), la même formule que Cast3M
    `EPTH`, à partir d'un champ de température **aux points de Gauss**
    (`pyrucast.element_field.interp_to_gauss`) ;
-2. `pyrucast.element_field.integrate_behavior` : la pseudo-contrainte thermique
+2. `pyrucast.element_field.integrate_behavior`, depuis l'état de repos que
+   rend `pyrucast.element_field.initial_state` : la pseudo-contrainte thermique
    \\( \sigma\_{\text{th}} = D : \varepsilon\_{\text{th}} \\) ;
 3. `pyrucast.node_field.internal_forces` : la charge nodale équivalente
    \\( F\_{\text{th}} = \int B^T \sigma\_{\text{th}} \\, dV \\) (Cast3M

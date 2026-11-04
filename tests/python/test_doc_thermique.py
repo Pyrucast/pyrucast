@@ -53,7 +53,10 @@ gradient = pyrucast.element_field.strain(modele, T, materiaux)
 print(gradient.components())  # ['grad_T_x']
 print(gradient[0].value(0, 0, "grad_T_x"))  # -5.0
 
-flux = pyrucast.element_field.integrate_behavior(modele, gradient, materiaux)
+repos = pyrucast.element_field.initial_state(
+    modele, materiaux
+)  # l'état de départ de la loi
+flux = pyrucast.element_field.integrate_behavior(modele, gradient, materiaux, repos)
 print(flux[0].value(0, 0, "flux_x"))  # -10.0 = k·∂T/∂x
 
 f_int = pyrucast.node_field.internal_forces(modele, flux, T, materiaux)
@@ -115,11 +118,14 @@ materiaux = pyrucast.element_field.material_field(
 T = pyrucast.NodeField(carre, ["T"])
 T.unit().set_uniform("T", 1000.0)  # en kelvins
 entree = pyrucast.element_field.strain(modele, T, materiaux)  # ∇T dedans, T au bord
-sortie = pyrucast.element_field.integrate_behavior(modele, entree, materiaux)
+repos = pyrucast.element_field.initial_state(modele, materiaux)
+sortie = pyrucast.element_field.integrate_behavior(modele, entree, materiaux, repos)
 print(sortie[1].value(0, 0, "flux"))  # 44995.55… = σε(T⁴ − T∞⁴)
 
 K = pyrucast.matrix.stiffness(modele, materiaux)  # film linéarisé en T∞
-Kt = pyrucast.matrix.tangent(modele, materiaux, entree)  # film à la température T
+Kt = pyrucast.matrix.tangent(
+    modele, materiaux, entree, repos
+)  # film à la température T
 coin = haut.node(0, 0, 0)
 print(
     Kt.get(coin, "q", coin, "T") - K.get(coin, "q", coin, "T")

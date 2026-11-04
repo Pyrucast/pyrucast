@@ -36,7 +36,9 @@ def _uniform_strain(c, nodes, exx):
 
 def _tangent_for(model, fes, materials, u):
     strain = pyrucast.element_field.deformation(u, fes)
-    return pyrucast.matrix.tangent(model, materials, strain)
+    return pyrucast.matrix.tangent(
+        model, materials, strain, pyrucast.element_field.initial_state(model, materials)
+    )
 
 
 def test_elastic_tangent_equals_stiffness():
@@ -94,7 +96,7 @@ def test_model_tangent_matrix_method_in_elastic_regime():
     )
     strain = pyrucast.element_field.deformation(_uniform_strain(c, n, 1e-5), fes)
 
-    kt = model.tangent_matrix(materials, strain)
+    kt = model.tangent_matrix(materials, strain, model.initial_state(materials))
     assert kt.get(n[0], "f_x", n[0], "u_x") == pytest.approx(
         E * (3.0 - NU) / (6.0 * (1.0 - NU**2))
     )
@@ -110,6 +112,10 @@ def test_linear_conduction_tangent_is_its_conductivity():
     k = 3.0
     materials = pyrucast.element_field.material_field(model, [("k", k)])
 
-    kt = model.tangent_matrix(materials, pyrucast.ElementField(fes, ["grad_T_x"]))
+    kt = model.tangent_matrix(
+        materials,
+        pyrucast.ElementField(fes, ["grad_T_x"]),
+        model.initial_state(materials),
+    )
     for j, coef in enumerate([4.0, -1.0, -2.0, -1.0]):
         assert kt.get(n[0], "q", n[j], "T") == pytest.approx(k * coef / 6.0)

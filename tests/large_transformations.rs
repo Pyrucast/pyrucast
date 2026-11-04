@@ -31,7 +31,7 @@ use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::coords as ops_coords;
-use pyrucast::ops::element_field::behavior::integrate;
+use pyrucast::ops::element_field::behavior::{initial_state, integrate};
 use pyrucast::ops::element_field::{
     deformation, material_field, strain, stress_measure, StrainMeasure, StressMeasure,
 };
@@ -123,7 +123,7 @@ fn rotation(theta: f64) -> [[f64; 2]; 2] {
 /// The law's state at `u`: what `strain` and `integrate` give.
 fn state(m: &Model, mat: &ElementField, u: &NodeField) -> Result<(ElementField, ElementField)> {
     let eps = strain(m, u, mat)?;
-    let s = integrate(m, &eps, None, mat, None)?;
+    let s = integrate(m, &eps, &initial_state(m, mat)?, mat, None)?;
     Ok((eps, s))
 }
 

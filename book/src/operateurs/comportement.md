@@ -5,7 +5,23 @@ Le module `ops::element_field::behavior` **intègre la loi de comportement** d'u
 l'opérateur `ops::node_field::internal_forces` en calcule les **forces internes** —
 le `BSIG` de cast3m (`∫ Bᵀ σ`).
 
-## `integrate_behavior(model, deformation, materials, prev=None, dt=None)` → `ElementField`
+## `initial_state(model, materials)` → `ElementField`
+
+L'**état de repos** du modèle : ce que porte chaque loi avant que rien ne se
+soit passé. C'est l'état de A du premier pas, à donner comme `prev` à
+`integrate_behavior` et à [`matrix.tangent`](assemblage.md).
+
+Il a une zone par sous-modèle portant une loi, sur son sous-espace de
+comportement, avec toutes les composantes que la loi écrit, si bien que la
+loi y relit tout ce qu'elle attend. Presque toutes les lois partent de zéro :
+\\( \sigma = 0 \\), \\( \varepsilon = 0 \\), \\( \varepsilon_p = 0 \\),
+\\( p = 0 \\). Une loi dont une variable interne part d'une constante du
+matériau la lit dans `materials` : la porosité de [Gurson](../mecanique/endommagement.md)
+part de `f_0`. C'est pourquoi le matériau est un argument. Les sous-modèles de
+contrainte, qui n'ont pas de loi, sont ignorés. La méthode
+`modele.initial_state(materiaux)` fait de même.
+
+## `integrate_behavior(model, deformation, materials, prev, dt=None)` → `ElementField`
 
 Là où [`stiffness`](assemblage.md) produit la **linéarisation** du modèle (une
 matrice), `integrate_behavior` produit la **réponse ponctuelle exacte** comme
@@ -21,12 +37,13 @@ l'état convergé du **début de pas A** et la déformation de **fin de pas B**.
    [`beam_deformation`](champs.md) (`κ, γ`), [`shell_deformation`](champs.md)
    (`ε, κ, γ`). Ces producteurs géométriques ne dépendent que de l'espace EF et
    restent disponibles pour construire une entrée à la main ;
-2. `prev` est l'**état convergé de A** — la **sortie du pas précédent** : la
+2. `prev` est l'**état de A** : la **sortie du pas précédent**, soit la
    contrainte `σ(A)`, les variables internes `VAR(A)` et la déformation `ε(A)`.
-   Il vaut `None` au **premier pas**, où A est la configuration de référence
-   (`σ(A)=0`, `ε(A)=0`) ;
-3. `dt` est l'**incrément de temps**, `None` pour une loi indépendante du temps
-   (une loi visqueuse future erreurera s'il vaut `None`) ;
+   Au **premier pas**, c'est l'état de repos `initial_state(model, materials)`,
+   A étant la configuration de référence ;
+3. `dt` est l'**incrément de temps**, `None` pour une loi indépendante du
+   temps ; une loi de [fluage ou de viscoplasticité](../mecanique/fluage.md)
+   lève une erreur sans lui ;
 4. `integrate_behavior` prend ces entrées plus le **matériau par zone** et
    applique la loi de chaque physique **point par point** ;
 5. il renvoie l'**état matériau de B** : le flux / la contrainte dual(e) plus les

@@ -355,8 +355,13 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
     )?;
     let displacement = node_field::restrict_like(&solution, &NodeField::from_sub(zero))?;
     let strain = element_field::deformation(&displacement, &fes, StrainMeasure::Linear)?;
-    let stress =
-        pyrucast::ops::element_field::behavior::integrate(&model, &strain, None, &materials, None)?;
+    let stress = pyrucast::ops::element_field::behavior::integrate(
+        &model,
+        &strain,
+        &pyrucast::ops::element_field::behavior::initial_state(&model, &materials)?,
+        &materials,
+        None,
+    )?;
     // The radius at each Gauss point, obtained the same way any field is: the
     // nodal coordinates interpolated onto the quadrature.
     let gauss_r = element_field::interp_to_gauss(&node_field::positions(&solid_mesh, None)?, &fes)?;
@@ -458,8 +463,13 @@ fn internal_forces_match_stiffness_times_displacement() -> Result<()> {
     let u = NodeField::from_sub(u);
 
     let strain = element_field::deformation(&u, &fes, StrainMeasure::Linear)?;
-    let stress =
-        pyrucast::ops::element_field::behavior::integrate(&model, &strain, None, &materials, None)?;
+    let stress = pyrucast::ops::element_field::behavior::integrate(
+        &model,
+        &strain,
+        &pyrucast::ops::element_field::behavior::initial_state(&model, &materials)?,
+        &materials,
+        None,
+    )?;
     let bsig = pyrucast::ops::node_field::internal_forces(&model, &stress, &u, &materials)?;
 
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
@@ -712,7 +722,7 @@ fn stress_of(
     fes: &FiniteElementSpace,
     axisymmetric: bool,
     eps: (f64, f64, f64, f64),
-    prev: Option<&ElementField>,
+    prev: &ElementField,
 ) -> Result<ElementField> {
     let (rr, zz, hoop, rz) = eps;
     let mut names = vec!["eps_xx", "eps_yy", "eps_zz", "eps_xy"];
@@ -743,6 +753,8 @@ fn nonlinear_laws_agree_with_their_3d_twin() -> Result<()> {
     for kind in ["plasticity", "mazars"] {
         let (axi_m, axi_mat, axi_fes) = nonlinear_cell(kind, true)?;
         let (sol_m, sol_mat, sol_fes) = nonlinear_cell(kind, false)?;
+        let axi_rest = pyrucast::ops::element_field::behavior::initial_state(&axi_m, &axi_mat)?;
+        let sol_rest = pyrucast::ops::element_field::behavior::initial_state(&sol_m, &sol_mat)?;
         let (mut axi_prev, mut sol_prev) = (None, None);
 
         // A load path past yield / the damage threshold, with a non-proportional
@@ -759,8 +771,22 @@ fn nonlinear_laws_agree_with_their_3d_twin() -> Result<()> {
         ]
         .map(|(a, b, c, d): (f64, f64, f64, f64)| (a * scale, b * scale, c * scale, d * scale));
         for (step, &eps) in path.iter().enumerate() {
-            let a = stress_of(&axi_m, &axi_mat, &axi_fes, true, eps, axi_prev.as_ref())?;
-            let s = stress_of(&sol_m, &sol_mat, &sol_fes, false, eps, sol_prev.as_ref())?;
+            let a = stress_of(
+                &axi_m,
+                &axi_mat,
+                &axi_fes,
+                true,
+                eps,
+                axi_prev.as_ref().unwrap_or(&axi_rest),
+            )?;
+            let s = stress_of(
+                &sol_m,
+                &sol_mat,
+                &sol_fes,
+                false,
+                eps,
+                sol_prev.as_ref().unwrap_or(&sol_rest),
+            )?;
             let (ga, gs) = (a.get(0)?.read(), s.get(0)?.read());
             let mut peak = 0.0_f64;
             for comp in ["sigma_xx", "sigma_yy", "sigma_zz", "sigma_xy"] {

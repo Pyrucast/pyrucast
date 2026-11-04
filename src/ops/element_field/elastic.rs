@@ -291,7 +291,7 @@ mod tests {
     use crate::coords::Coords;
     use crate::models::symmetry::MaterialSymmetry;
     use crate::models::tensor::Kinematics;
-    use crate::ops::element_field::behavior::integrate;
+    use crate::ops::element_field::behavior::{initial_state, integrate};
     use crate::ops::element_field::material_field;
     use crate::ops::element_field::StrainMeasure;
     use crate::ops::model;
@@ -354,7 +354,7 @@ mod tests {
         let mat = material_field(&m, materials).unwrap();
         let eps = strain(fes, names);
         let ours = elastic_stress(&m, &eps, &mat).unwrap();
-        let law = integrate(&m, &eps, None, &mat, None).unwrap();
+        let law = integrate(&m, &eps, &initial_state(&m, &mat).unwrap(), &mat, None).unwrap();
         let (o, l) = (ours.get(0).unwrap(), law.get(0).unwrap());
         let (o, l) = (o.read(), l.read());
         for c in o.components() {

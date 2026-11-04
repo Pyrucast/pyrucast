@@ -41,6 +41,7 @@ pub mod stress_measure;
 pub mod thermal_strain;
 
 pub use beam_deformation::beam_deformation;
+pub use behavior::initial_state;
 pub use cell_integral::cell_integral;
 pub use consolidate::{check_unique_component_per_support, consolidate};
 pub use deformation::{deformation, StrainMeasure};

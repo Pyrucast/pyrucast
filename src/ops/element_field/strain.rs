@@ -290,11 +290,16 @@ mod tests {
         )
         .unwrap();
         let eps = strain(&coupled, &sol, &materials).unwrap();
-        let state = element_field::behavior::integrate(&coupled, &eps, None, &materials, None);
+        let state = element_field::behavior::integrate(
+            &coupled,
+            &eps,
+            &element_field::behavior::initial_state(&coupled, &materials).unwrap(),
+            &materials,
+            None,
+        );
         let state = state.unwrap();
         // The state at A, two zones on one space, is read back as well.
-        let again =
-            element_field::behavior::integrate(&coupled, &eps, Some(&state), &materials, None);
+        let again = element_field::behavior::integrate(&coupled, &eps, &state, &materials, None);
         assert!(again.is_ok(), "{:?}", again.err());
         let f_int = node_field::internal_forces(&coupled, &state, &sol, &materials).unwrap();
         let k = crate::ops::matrix::stiffness(&coupled, &materials).unwrap();

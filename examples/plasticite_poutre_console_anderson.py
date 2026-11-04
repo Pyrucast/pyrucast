@@ -229,11 +229,11 @@ def main():
     u = pyrucast.NodeField(
         mesh, ["u_x", "u_y"]
     )  # accumulated displacement, zero at first
-    # The state at rest: `None` at the first step, where A is the reference
-    # configuration. The operator materialises it itself, with **every** component
-    # the law reads back afterwards — σ(A), ε(A), the internal state — where a
+    # The state at A of the first step: the rest state, where A is the reference
+    # configuration. `initial_state` builds it with **every** component the law
+    # reads back afterwards — σ(A), ε(A), the internal state — where a
     # hand-written list forgets some.
-    state = None
+    state = pyrucast.element_field.initial_state(model, materials)
 
     # ── Loop over the load steps ────────────────────────────────────────────
     max_newton = 200
@@ -262,7 +262,7 @@ def main():
         def residual_at(u, state=state, load_scaled=load_scaled):
             strain = pyrucast.element_field.deformation(u, fes)
             out = pyrucast.element_field.integrate_behavior(
-                model, strain, materials, prev=state
+                model, strain, materials, state
             )
             f_int = pyrucast.node_field.internal_forces(model, out, u, materials)
             f_ext = pyrucast.node_field.restrict_like(load_scaled, f_int)

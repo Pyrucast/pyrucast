@@ -122,9 +122,9 @@ def integrate_increment(problem, solution, step, behaviour_start):
     """The laws integrated from the substep start to ``solution`` (Algo 5).
 
     The strain each law reads comes from the model's own strain operator,
-    minus the imposed strain; the laws step from ``behaviour_start`` (the
-    converged state of the substep start, ``None`` for the rest state).
-    Returns ``(strain, behaviour)``.
+    minus the imposed strain; the laws step from ``behaviour_start``, the
+    converged state of the substep start — the laws' rest state before the
+    first step. Returns ``(strain, behaviour)``.
     """
     strain = element_field.strain(problem.mechanics_domain, solution, step.materials)
     if step.imposed_strain is not None:
@@ -133,7 +133,7 @@ def integrate_increment(problem, solution, step, behaviour_start):
         problem.mechanics_domain,
         strain,
         step.materials,
-        prev=behaviour_start,
+        behaviour_start,
         dt=step.t_end - step.t_start,
     )
     return strain, behaviour
@@ -287,9 +287,7 @@ def iteration_operator(
             problem, state, step, options, mechanics, strain, behaviour, at
         )
     if options.tangent and strain is not None:
-        operator = matrix.tangent(
-            mechanics, step.materials, strain, prev=behaviour, dt=dt
-        )
+        operator = matrix.tangent(mechanics, step.materials, strain, behaviour, dt=dt)
     else:
         key = (step.materials, dt if options.dynamics else None)
         cached = state.operator_key
@@ -326,7 +324,7 @@ def _current_operator(problem, state, step, options, mechanics, strain, behaviou
     with problem.configurations.current_at(displacement):
         if options.tangent and strain is not None:
             operator = matrix.tangent(
-                mechanics, step.materials, strain, prev=behaviour, dt=dt
+                mechanics, step.materials, strain, behaviour, dt=dt
             )
         else:
             operator = matrix.stiffness(mechanics, step.materials)

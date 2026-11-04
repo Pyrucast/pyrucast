@@ -40,7 +40,10 @@ print(
 )  # 1.0 : le flux qui sort
 
 gradient = pyrucast.element_field.strain(modele, c_h2, materiaux)
-flux = pyrucast.element_field.integrate_behavior(modele, gradient, materiaux)
+repos = pyrucast.element_field.initial_state(
+    modele, materiaux
+)  # l'état de départ de la loi
+flux = pyrucast.element_field.integrate_behavior(modele, gradient, materiaux, repos)
 print(flux.components(), flux[0].value(0, 0, "j_H2_x"))  # ['j_H2_x'] -1.0 = D·∂c/∂x
 # ANCHOR_END: fick
 

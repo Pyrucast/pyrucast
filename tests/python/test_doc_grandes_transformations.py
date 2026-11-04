@@ -48,7 +48,8 @@ u = _mouvement(maillage, noeuds, [[c60, -s60], [s60, c60]])
 # ANCHOR: rotation
 # A rigid rotation of 60°: the strain, the stress and the forces are zero.
 E = solide.strain(u, materiaux)  # E_xx, E_xy, E_yy
-S = solide.integrate_behavior(E, materiaux)  # S_xx, S_xy, S_yy
+repos = solide.initial_state(materiaux)  # l'état de départ de la loi
+S = solide.integrate_behavior(E, materiaux, repos)  # S_xx, S_xy, S_yy
 F = pc.element_field.deformation(u, fes, "gradient")
 P = pc.element_field.stress_measure(S, F, "pk1")  # P = F S
 f_int = solide.internal_forces(P, u, materiaux)  # ∫ P·∇₀N dV₀
@@ -72,12 +73,12 @@ tourne = _mouvement(maillage, noeuds, [[1.2 * c60, -s60], [1.2 * s60, c60]])
 u = etire
 
 # ANCHOR: cauchy
-S = solide.integrate_behavior(solide.strain(u, materiaux), materiaux)
+S = solide.integrate_behavior(solide.strain(u, materiaux), materiaux, repos)
 F = pc.element_field.deformation(u, fes, "gradient")
 sigma = pc.element_field.stress_measure(S, F, "cauchy")  # J⁻¹ F S Fᵀ
 # ANCHOR_END: cauchy
 sxx = sigma[0].value(0, 0, "sigma_xx")
-S_t = solide.integrate_behavior(solide.strain(tourne, materiaux), materiaux)
+S_t = solide.integrate_behavior(solide.strain(tourne, materiaux), materiaux, repos)
 F_t = pc.element_field.deformation(tourne, fes, "gradient")
 sigma_t = pc.element_field.stress_measure(S_t, F_t, "cauchy")[0]
 # σ' = R σ Rᵀ with σ = diag(σ_xx, σ_yy): its trace is unchanged, and
@@ -110,7 +111,9 @@ assert noeuds[2].position() == [2.0, 0.0]
 # Plane strain, stretched 1.2 along x: H_xx = ln 1.2 alone, T_xx = (λ + 2μ) H_xx,
 # S_xx = T_xx / 1.2², and the nominal stress is P_xx = T_xx / 1.2.
 hencky = pc.model.elasticity(fes, "plane_strain", strain_measure="hencky")
-T = hencky.integrate_behavior(hencky.strain(etire, materiaux), materiaux)
+T = hencky.integrate_behavior(
+    hencky.strain(etire, materiaux), materiaux, hencky.initial_state(materiaux)
+)
 assert [z.components() for z in T] == [["T_xx", "T_yy", "T_xy"]]
 F = pc.element_field.deformation(etire, fes, "gradient")
 P = pc.element_field.stress_measure(T, F, "pk1")
@@ -167,7 +170,8 @@ deplacement[0].set_value(b, "u_y", 1.5 * s60)
 # (l² − L²)/2L², and writes the second Piola–Kirchhoff axial force S_n.
 cable = pc.model.truss(fes_barre, strain_measure="green_lagrange")
 section = pc.element_field.material_field(cable, [("E", 100.0), ("A", 2.0)])
-S_n = cable.integrate_behavior(cable.strain(deplacement, section), section)
+repos = cable.initial_state(section)  # l'état de départ de la loi
+S_n = cable.integrate_behavior(cable.strain(deplacement, section), section, repos)
 F = pc.element_field.deformation(deplacement, fes_barre, "gradient")
 P = pc.element_field.stress_measure(S_n, F, "pk1")  # S_n F t₀, along the chord
 n = pc.element_field.stress_measure(S_n, F, "cauchy")  # λ S_n, the true force

@@ -66,7 +66,12 @@ def test_section_forces_cantilever():
 
     # (κ, γ) puis efforts de section M, V.
     deformation = pyrucast.element_field.beam_deformation(solution, fes, materials)
-    forces = pyrucast.element_field.integrate_behavior(model, deformation, materials)
+    forces = pyrucast.element_field.integrate_behavior(
+        model,
+        deformation,
+        materials,
+        pyrucast.element_field.initial_state(model, materials),
+    )
     sub = forces[0]
     for cell in range(sub.cell_count):
         assert abs(abs(sub.value(cell, 0, "V")) - P) < 2e-2 * P  # V ≈ ±P (constant)

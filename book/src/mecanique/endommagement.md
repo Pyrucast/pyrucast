@@ -145,9 +145,10 @@ Une maille en traction sous Damage TC : seule la variable de traction croît.
 ## Côté Rust
 
 Damage TC et SiC/SiC vivent dans `src/models/damage/`, Gurson dans
-`src/models/plasticity/gurson.rs`. Une loi déclare l'état qu'elle relit ; au
-premier pas, `prev` est **vide** plutôt que nul, pour qu'une loi qui part d'une
-constante matériau (la porosité initiale de Gurson) la reconnaisse.
+`src/models/plasticity/gurson.rs`. Une loi déclare l'état qu'elle relit.
+L'état de repos que rend `initial_state` est nul, sauf la porosité de Gurson :
+la loi déclare qu'elle part de `f_0` (`initial_internal_sources`), et l'état
+de repos la lit dans le matériau.
 
 `tests/damage_laws.rs` vérifie qu'une fissure refermée reprend la charge en
 compression, que l'écrasement laisse l'endommagement de traction intact,

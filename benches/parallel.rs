@@ -231,6 +231,9 @@ fn bench_integrate(c: &mut Criterion) {
         ("axisymmetric", Kinematics::Axisymmetric),
     ] {
         let g = elasticity_grid_with(INTEGRATE_N, kind);
+        // Built once, outside the measured loop: only the law is timed.
+        let rest =
+            pyrucast::ops::element_field::behavior::initial_state(&g.model, &g.materials).unwrap();
         c.bench_function(
             &format!("integrate {tag} {INTEGRATE_N}x{INTEGRATE_N} QUA4"),
             |b| {
@@ -239,7 +242,7 @@ fn bench_integrate(c: &mut Criterion) {
                         pyrucast::ops::element_field::behavior::integrate(
                             &g.model,
                             &g.strain,
-                            None,
+                            &rest,
                             &g.materials,
                             None,
                         )
@@ -271,10 +274,12 @@ fn bench_axisymmetric(c: &mut Criterion) {
         ("axisymmetric", Kinematics::Axisymmetric),
     ] {
         let g = elasticity_grid_with(ASSEMBLY_N, kind);
+        let rest =
+            pyrucast::ops::element_field::behavior::initial_state(&g.model, &g.materials).unwrap();
         let state = pyrucast::ops::element_field::behavior::integrate(
             &g.model,
             &g.strain,
-            None,
+            &rest,
             &g.materials,
             None,
         )

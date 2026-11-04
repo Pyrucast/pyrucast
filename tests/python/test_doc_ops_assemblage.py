@@ -178,7 +178,10 @@ for noeud, x in zip(noeuds, [0.0, 1.0, 1.0, 0.0]):
     u[0].set_value(noeud, "u_y", 0.0)
 # ANCHOR: tangent
 strain = pyrucast.element_field.deformation(u, fes)
-Kt = pyrucast.matrix.tangent(model, materials, strain)
+repos = pyrucast.element_field.initial_state(
+    model, materials
+)  # premier pas : l'état de repos
+Kt = pyrucast.matrix.tangent(model, materials, strain, repos)
 # ANCHOR_END: tangent
 assert Kt.n_rows == Kt.n_cols
 

@@ -40,7 +40,9 @@ def _uniform_strain(c, nodes, eps_xx):
 def _stress(model, materials, c, nodes, fes, eps_xx):
     u = _uniform_strain(c, nodes, eps_xx)
     strain = pyrucast.element_field.deformation(u, fes)
-    state = pyrucast.element_field.integrate_behavior(model, strain, materials)
+    state = pyrucast.element_field.integrate_behavior(
+        model, strain, materials, pyrucast.element_field.initial_state(model, materials)
+    )
     return state[0]
 
 

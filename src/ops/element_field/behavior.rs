@@ -24,8 +24,8 @@
 //! the whole point of integrating the behaviour exactly.
 
 use crate::aggregate::Aggregate;
-use crate::containers::element_field::ElementField;
-use crate::containers::model::Model;
+use crate::containers::element_field::{ElementField, SubElementField};
+use crate::containers::model::{Model, SubModel};
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::Behavior;
@@ -34,9 +34,9 @@ use crate::models::Behavior;
 ///
 /// `deformation` is the **end-of-step** behaviour input ε(B) (from
 /// [`crate::ops::element_field::gradient`](fn@crate::ops::element_field::gradient) / [`crate::ops::element_field::deformation`](fn@crate::ops::element_field::deformation));
-/// `prev` is the **converged output of the previous step** (the state at A —
-/// σ(A), `VAR(A)`, ε(A)), or `None` on the first step; `materials` supplies the
-/// per-zone material data; `dt` is the time increment (`None` if
+/// `prev` is the **state at A** — the converged output of the previous step
+/// (σ(A), `VAR(A)`, ε(A)), or the rest state [`initial_state`] on the first
+/// step; `materials` supplies the per-zone material data; `dt` is the time increment (`None` if
 /// rate-independent). For each behaviour-bearing sub-model, the matching
 /// deformation, previous-state and material sub-fields are paired by FE
 /// subspace, and the physics's law is integrated point-by-point. Returns the
@@ -74,7 +74,9 @@ use crate::models::Behavior;
 /// let mut eps = ElementField::new(&fes,
 ///     vec!["eps_xx".into(), "eps_yy".into(), "eps_xy".into()])?;
 /// eps.get(0)?.write().set_uniform("eps_xx", 1e-3)?;
-/// let sig = element_field::behavior::integrate(&modele, &eps, None, &materiaux, None)?;
+/// // Le premier pas part de l'état de repos.
+/// let repos = element_field::behavior::initial_state(&modele, &materiaux)?;
+/// let sig = element_field::behavior::integrate(&modele, &eps, &repos, &materiaux, None)?;
 /// let attendu = 210e3 / (1.0 - 0.09) * 1e-3;
 /// assert!((sig.get(0)?.read().value(0, 0, "sigma_xx")? - attendu).abs() < 1e-6);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -82,20 +84,18 @@ use crate::models::Behavior;
 pub fn integrate(
     model: &Model,
     deformation: &ElementField,
-    prev: Option<&ElementField>,
+    prev: &ElementField,
     materials: &ElementField,
     dt: Option<f64>,
 ) -> Result<ElementField> {
     let mut out = ElementField::empty();
     for h in model {
-        // Cheap read under the sub-model lock: which FE subspaces this
-        // sub-model wants for its deformation and its material.
-        let (beh_fespace, mat_fespace, mat_components, reads) = {
+        // Cheap read under the sub-model lock: which FE subspace this
+        // sub-model wants for its deformation, and what its law reads.
+        let (beh_fespace, reads) = {
             let sub = h.read();
             (
                 sub.behavior_fespace(),
-                sub.material_fespace(),
-                sub.material_components(),
                 sub.as_kind()
                     .as_behavior()
                     .map(|law| (law.deformation_reads(), previous_state_names(law))),
@@ -107,38 +107,11 @@ pub fn integrate(
 
         // Pair the per-zone fields by FE subspace (locks SubElementField,
         // outside the sub-model lock), and — when two laws share the subspace —
-        // by what this law reads. The previous state is paired on the
-        // behaviour subspace, exactly like the deformation.
+        // by what this law reads. The state at A is paired on the behaviour
+        // subspace, exactly like the deformation.
         let input = deformation.sub_for_fespace_reading(&beh_fespace, &input_reads)?;
-        // Resolve the material zone by the components this physics needs, so a
-        // shared fespace carrying several component-disjoint material zones
-        // resolves each physics' own zone without an explicit consolidate.
-        // Resolved *before* the previous state, which a law may seed from it.
-        let material = match mat_fespace {
-            Some(fe) => Some(match mat_components {
-                Some(required) => materials.sub_for_fespace_with(&fe, &required)?,
-                None => materials.sub_for_fespace(&fe)?,
-            }),
-            None => None,
-        };
-
-        // A physics with a behaviour declares a material FE subspace, so the
-        // zone above always resolves one: the question is settled here, once,
-        // and nothing below asks it again.
-        let mat = material.as_ref().ok_or_else(|| {
-            PyrucastError::Message(format!(
-                "{}: a behaviour without material data cannot be integrated",
-                h.read().as_kind().label()
-            ))
-        })?;
-
-        // The state at A. A caller with nothing to hand over — the first step —
-        // gets the **rest state**, materialized here, once for the whole zone.
-        // Below this line the state always exists, so no physics has to ask.
-        let prev_zone = match prev {
-            Some(p) => p.sub_for_fespace_reading(&beh_fespace, &prev_reads)?,
-            None => Handle::new(h.read().initial_state(mat)?),
-        };
+        let prev_zone = prev.sub_for_fespace_reading(&beh_fespace, &prev_reads)?;
+        let mat = law_material(h, materials)?;
 
         // A rate-dependent law with no increment is refused here, before a
         // single point is integrated — where the message can name the physics,
@@ -156,11 +129,88 @@ pub fn integrate(
             }
         };
 
-        let state = sub.integrate_behavior(&input, &prev_zone, mat, dt)?;
+        let state = sub.integrate_behavior(&input, &prev_zone, &mat, dt)?;
         drop(sub);
         out.add_sub(Handle::new(state))?;
     }
     Ok(out)
+}
+
+/// The **rest state** of `model`: what each behaviour-bearing sub-model's law
+/// holds before anything has happened — the state at A of a first step, to
+/// hand to [`integrate`] and to [`crate::ops::matrix::tangent`].
+///
+/// One zone per behaviour-bearing sub-model, in model order, on its behaviour
+/// subspace and with the components its law writes. Nearly every law rests at
+/// zero (σ = 0, ε = 0, ε_p = 0, p = 0); a law whose internal variable starts
+/// from a material constant seeds it from `materials` — Gurson's porosity from
+/// `f_0` — which is why the material is an argument. Constraint sub-models,
+/// which have no law, are skipped.
+///
+/// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # use pyrucast::ops::element_field::StrainMeasure;
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::tensor::Kinematics;
+/// # use pyrucast::ops::element_field;
+/// # use pyrucast::ops::model;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let modele = model::plasticity_perfect(&fes, Kinematics::PlaneStrain, StrainMeasure::Linear).unwrap();
+/// # let materiaux = element_field::material_field(&modele,
+/// #     &[("E", 210e3), ("nu", 0.3), ("sigma_y", 250.0)]).unwrap();
+/// // L'état de repos porte tout ce que la loi écrit, à zéro.
+/// let repos = element_field::behavior::initial_state(&modele, &materiaux)?;
+/// let zone = repos.get(0)?;
+/// assert!(zone.read().components().iter().any(|c| c == "p"));
+/// assert_eq!(zone.read().value(0, 0, "sigma_xx")?, 0.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn initial_state(model: &Model, materials: &ElementField) -> Result<ElementField> {
+    let mut out = ElementField::empty();
+    for h in model {
+        if h.read().as_kind().as_behavior().is_none() {
+            continue; // constraint sub-model — no behaviour
+        }
+        let mat = law_material(h, materials)?;
+        let state = h.read().initial_state(&mat)?;
+        out.add_sub(Handle::new(state))?;
+    }
+    Ok(out)
+}
+
+/// The material zone the law of `h` reads, resolved by the components the
+/// physics requires — so that a shared subspace carrying several
+/// component-disjoint material zones gives each physics its own zone without
+/// an explicit consolidate. Shared by [`integrate`] and [`initial_state`],
+/// which must read the same zone.
+fn law_material(h: &Handle<SubModel>, materials: &ElementField) -> Result<Handle<SubElementField>> {
+    let (mat_fespace, mat_components) = {
+        let sub = h.read();
+        (sub.material_fespace(), sub.material_components())
+    };
+    // A physics with a behaviour declares a material FE subspace: the question
+    // is settled here, once, and nothing below asks it again.
+    let fe = mat_fespace.ok_or_else(|| {
+        PyrucastError::Message(format!(
+            "{}: a behaviour without material data cannot be integrated",
+            h.read().as_kind().label()
+        ))
+    })?;
+    match mat_components {
+        Some(required) => materials.sub_for_fespace_with(&fe, &required),
+        None => materials.sub_for_fespace(&fe),
+    }
 }
 
 /// The names that single out a law's **previous state** among the zones of its
@@ -234,7 +284,14 @@ mod tests {
         let def = gradient(&sol, &fes).unwrap();
         let materials = material_field(&model, &[("k", 1.5)]).unwrap();
 
-        let state = integrate(&model, &def, None, &materials, None).unwrap();
+        let state = integrate(
+            &model,
+            &def,
+            &initial_state(&model, &materials).unwrap(),
+            &materials,
+            None,
+        )
+        .unwrap();
         assert_eq!(state.len(), 1, "only the HC sub-model carries a behaviour");
         {
             let s = state.get(0).unwrap().read();
@@ -250,8 +307,13 @@ mod tests {
     fn integrate_errors_when_material_missing() {
         let (model, fes, sol) = seg2(1.0, 1.0, false);
         let def = gradient(&sol, &fes).unwrap();
+        let materials = material_field(&model, &[("k", 1.5)]).unwrap();
+        let rest = initial_state(&model, &materials).unwrap();
         let empty = ElementField::empty();
-        let err = integrate(&model, &def, None, &empty, None).unwrap_err();
+        let err = integrate(&model, &def, &rest, &empty, None).unwrap_err();
+        assert!(format!("{err}").contains("no SubElementField"));
+        // The rest state reads the same material zone, and is refused alike.
+        let err = initial_state(&model, &empty).unwrap_err();
         assert!(format!("{err}").contains("no SubElementField"));
     }
 
@@ -296,7 +358,14 @@ mod tests {
         let def = gradient(&sol, &fes).unwrap();
         let materials =
             material_field_per_sub_model(&model, &[&[("k", 1.0)], &[("k", 4.0)]]).unwrap();
-        let state = integrate(&model, &def, None, &materials, None).unwrap();
+        let state = integrate(
+            &model,
+            &def,
+            &initial_state(&model, &materials).unwrap(),
+            &materials,
+            None,
+        )
+        .unwrap();
         assert_eq!(state.len(), 2);
         // Zone A: k = 1 ⇒ flux = 1; zone B: k = 4 ⇒ flux = 4.
         {
@@ -351,7 +420,14 @@ mod tests {
         .unwrap();
         let def = beam_deformation(&sol, &fes, &materials).unwrap();
 
-        let state = integrate(&model, &def, None, &materials, None).unwrap();
+        let state = integrate(
+            &model,
+            &def,
+            &initial_state(&model, &materials).unwrap(),
+            &materials,
+            None,
+        )
+        .unwrap();
         assert_eq!(state.len(), 1);
         let s = state.get(0).unwrap().read();
         // The state field carries the section forces **and** `Φ`: the exact beam gets

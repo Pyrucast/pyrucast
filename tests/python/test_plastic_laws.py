@@ -38,7 +38,9 @@ def _stress(model, materials, c, nodes, corners, fes, exx):
         u[0].set_value(node, "u_y", 0.0)
         u[0].set_value(node, "u_z", 0.0)
     strain = pyrucast.element_field.deformation(u, fes)
-    state = pyrucast.element_field.integrate_behavior(model, strain, materials)
+    state = pyrucast.element_field.integrate_behavior(
+        model, strain, materials, pyrucast.element_field.initial_state(model, materials)
+    )
     return state[0]
 
 

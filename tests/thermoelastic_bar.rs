@@ -104,8 +104,13 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
 
     // ── Charge thermique f_th = ∫ Bᵀ D ε_th (BSIG de σ_th = D:ε_th) ─────────
     let eps_th = thermal_strain(&t_elem, &materials, &fes, T_REF, StrainMeasure::Linear)?;
-    let sig_th =
-        pyrucast::ops::element_field::behavior::integrate(&model, &eps_th, None, &materials, None)?;
+    let sig_th = pyrucast::ops::element_field::behavior::integrate(
+        &model,
+        &eps_th,
+        &pyrucast::ops::element_field::behavior::initial_state(&model, &materials)?,
+        &materials,
+        None,
+    )?;
     let f_th = internal_forces(&model, &sig_th, &NodeField::empty(), &materials)?;
 
     // ── Assemblage + résolution ────────────────────────────────────────────
@@ -123,8 +128,9 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     }
     let eps = deformation(&NodeField::from_sub(disp), &fes, StrainMeasure::Linear)?;
     let eps_mech = eps.merge_field(&eps_th, |a, b| a - b)?;
+    let rest = pyrucast::ops::element_field::behavior::initial_state(&model, &materials)?;
     let sigma = pyrucast::ops::element_field::behavior::integrate(
-        &model, &eps_mech, None, &materials, None,
+        &model, &eps_mech, &rest, &materials, None,
     )?;
 
     // ── Vérification : σ_xx = −E·α·ΔT, σ_yy = 0 ────────────────────────────
@@ -210,8 +216,9 @@ fn thermal_expansion_reaches_plasticity_and_damage() -> Result<()> {
         // The operator resolves its zone *by* `alpha`: before the fix this line
         // is where a plastic or damaging material stopped.
         let eps_th = thermal_strain(&t_elem, &materials, &fes, T_REF, StrainMeasure::Linear)?;
+        let rest = pyrucast::ops::element_field::behavior::initial_state(&model, &materials)?;
         let sigma = pyrucast::ops::element_field::behavior::integrate(
-            &model, &eps_th, None, &materials, None,
+            &model, &eps_th, &rest, &materials, None,
         )?;
         let sub = sigma.get(0)?.read();
         for g in 0..sub.gauss_count() {

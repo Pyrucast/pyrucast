@@ -75,14 +75,16 @@ pour le flambement et les analyses précontraintes. Le noyau
 {{#include ../../../tests/python/test_doc_ops_assemblage.py:geometric}}
 ```
 
-## `tangent(model, materials, deformation, prev=None, dt=None)` → `Matrix`
+## `tangent(model, materials, deformation, prev, dt=None)` → `Matrix`
 
 Assemble la **matrice tangente cohérente (algorithmique)** `K_t = ∫ Bᵀ D_alg B`
 (Cast3M `KTAN`), qui donne la convergence quadratique du Newton non-linéaire.
 
-Il prend **les mêmes arguments que `behavior.integrate`**, et pour la même
+Il prend **les mêmes arguments que `integrate_behavior`**, et pour la même
 raison : `D_alg` est la dérivée du *pas* `ε(B) ↦ σ(B)` à état A figé, donc les
-deux extrémités du pas sont dans sa définition. `prev=None` vaut l'état de repos.
+deux extrémités du pas sont dans sa définition. `prev` est l'état de A : au
+premier pas, l'état de repos
+[`initial_state(model, materials)`](comportement.md#initial_statemodel-materials--elementfield).
 
 Aucun champ de modules n'est matérialisé : il n'aurait eu que cet assembleur pour
 lecteur, et il pesait de 6 à 21 réels par point de Gauss. `D_alg` est évalué au
@@ -95,8 +97,8 @@ au lieu d'un, à chaque itération, que la tangente serve ou non.
 Une physique **linéaire** (conduction, Fick, échanges, barres, poutres, coques)
 et les **contraintes** (Dirichlet, MPC, contact…) n'ont pas de loi à dériver :
 leur tangente est leur raideur, et c'est elle qui est assemblée, sans lire
-`deformation`. Une physique non linéaire sans tangente propre (l'endommagement,
-pour l'instant) fait échouer l'appel plutôt que de rendre un bloc nul.
+`deformation`. Une physique non linéaire sans tangente propre (Mazars, Damage TC,
+SiC/SiC) fait échouer l'appel plutôt que de rendre un bloc nul.
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_assemblage.py:tangent}}

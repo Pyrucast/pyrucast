@@ -132,10 +132,11 @@ fn timoshenko_section_forces_cantilever() -> Result<()> {
 
     // (κ, γ) puis efforts de section M = EI·κ, V = GA_s·γ.
     let deformation = pyrucast::ops::element_field::beam_deformation(&solution, &fes, &materials)?;
+    let rest = pyrucast::ops::element_field::behavior::initial_state(&model, &materials)?;
     let forces = pyrucast::ops::element_field::behavior::integrate(
         &model,
         &deformation,
-        None,
+        &rest,
         &materials,
         None,
     )?;

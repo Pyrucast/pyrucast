@@ -327,6 +327,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
         py::ops::element_field::integrate_behavior,
         m
     )?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::initial_state, m)?)?;
     m.add_function(wrap_pyfunction!(
         py::ops::element_field::sub_material_field,
         m
