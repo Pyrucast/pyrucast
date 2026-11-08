@@ -36,7 +36,7 @@ page.
 
 Lancement / Running ::
 
-    maturin develop --release
+    pip install pyrucast
     python tutoriel/maillage.py
 
     # Figures du livre / book figures (book/src/tutoriel/img/) :
@@ -79,8 +79,8 @@ def show(mesh: pc.Mesh, title: str, file: str, wireframe: bool = False) -> None:
 
 # ── Géométrie / Geometry ──────────────────────────────────────────────────
 # ANCHOR: coords
-# FR — Un espace de coordonnées 3D, seul objet mutable de tout le script.
-# EN — One 3-D coordinate space, the script's only mutable object.
+# FR — Un espace de coordonnées 3D, où tous les mailleurs déposent leurs nœuds.
+# EN — One 3-D coordinate space, where every mesher drops its nodes.
 coords = pc.Coords(3)
 # ANCHOR_END: coords
 
@@ -117,8 +117,8 @@ def border_plate_with_hole() -> pc.Mesh:
     # ANCHOR_END: contour_bords
 
     # ANCHOR: contour_consolidate
-    # FR — `|` garde un sous-maillage par bord ; `consolidate_mesh` les fusionne.
-    # EN — `|` keeps one submesh per edge; `consolidate_mesh` fuses them.
+    # FR — `|` garde un sous-maillage par bord ; `consolidate` les fusionne.
+    # EN — `|` keeps one submesh per edge; `consolidate` fuses them.
     cex = pc.mesh.consolidate(cex)
     # ANCHOR_END: contour_consolidate
 
@@ -177,8 +177,8 @@ def unstructured_mesh(
     # ANCHOR_END: extrude
 
     # ANCHOR: skin
-    # FR — `skin` extrait la peau et la découpe en faces planes, à 85° près.
-    # EN — `skin` extracts the boundary and splits it into flat faces, at 85°.
+    # FR — `skin` extrait la peau et la découpe en faces, coupées au-delà de 85°.
+    # EN — `skin` extracts the boundary and splits it into faces, cut beyond 85°.
     skin = pc.mesh.skin(volume_extruded, angle_deg=85)
     for i, face in enumerate(skin):
         face.face_color = PALETTE[i % len(PALETTE)]
@@ -240,8 +240,8 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
     x13 = LENGTH - (HEIGHT / 2.0)
     sr1 = pc.mesh.extrude(l15, [x13, 0, 0], n12)
 
-    # FR — `plot=False` : les chapitres suivants importent le volume, sans figures.
-    # EN — `plot=False`: later chapters import the volume, without any figure.
+    # FR — `plot=False` : tutoriel/thermique.py importe le volume, sans figures.
+    # EN — `plot=False`: tutoriel/thermique.py imports the volume, without figures.
     if plot:
         show(sr1, "Grille structurée (QUA4)", "maillage-grille.svg")
     # ANCHOR_END: grille

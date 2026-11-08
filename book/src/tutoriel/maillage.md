@@ -1,8 +1,7 @@
 # Maillage
 
 Fil rouge du tutoriel : une **chape percée** — plaque rectangulaire
-terminée par un demi-disque, trouée en son centre. C'est l'équivalent
-pyrucast de la pièce « structure avec un trou » de la formation Cast3M originale.
+terminée par un demi-disque, trouée en son centre.
 
 Plaque de 30 cm × 10 cm, demi-disque de rayon 5 cm, trou de rayon 3,5 cm
 centré sur le demi-disque, épaisseur 2 cm. La pièce est plane dans **XZ** et
@@ -18,7 +17,8 @@ Deux familles de mailleurs coexistent :
 
 Le script complet est [`tutoriel/maillage.py`](https://github.com/Pyrucast/pyrucast/blob/master/tutoriel/maillage.py)
 ; tous les extraits ci-dessous en sont issus directement, dans l'ordre du
-fichier.
+fichier — sauf le petit utilitaire de tracé, défini en tête du script et
+présenté en fin de page.
 
 ## Géométrie
 
@@ -28,9 +28,9 @@ fichier.
 {{#include ../../../tutoriel/maillage.py:coords}}
 ```
 
-`pyrucast.Coords` est le **seul objet mutable** du script. Tous les mailleurs y
-déposent leurs nœuds, ce qui garantit que deux maillages construits côte à
-côte partagent bien leurs nœuds communs — c'est ce qui rend possible, plus
+`pyrucast.Coords` est le **magasin commun** de tous les nœuds du script. Tous
+les mailleurs y déposent leurs nœuds, ce qui garantit que deux maillages
+construits côte à côte partagent bien leurs nœuds communs — c'est ce qui rend possible, plus
 bas, de raccorder une couronne à une grille sans maillage non conforme.
 
 L'argument `3` est la dimension de l'espace : la pièce est plane, mais on la
@@ -43,9 +43,9 @@ décrit d'emblée en 3D pour n'avoir rien à relever au moment de l'extruder.
 ```
 
 Toutes les dimensions sont en mètres et nommées une seule fois : elles servent
-aux points guides, aux rayons du trou, à l'épaisseur d'extrusion, et les
-chapitres suivants les réimportent telles quelles pour placer leurs conditions
-aux limites.
+aux points guides, aux rayons du trou, à l'épaisseur d'extrusion, et la page
+[Calcul thermique](thermique.md) les réimporte telles quelles pour placer ses
+conditions aux limites.
 
 ### Points guides
 
@@ -159,23 +159,26 @@ cachées, ne montre que la peau :
 
 ![Volume extrudé, faces cachées](img/maillage-volume-extrude.svg)
 
-### `skin` — la peau, découpée en faces planes
+### `skin` — la peau, découpée en faces
 
 ```python
 {{#include ../../../tutoriel/maillage.py:skin}}
 ```
 
-`skin` extrait les facettes du bord du volume et les **regroupe par face
-plane** : deux facettes voisines restent dans la même face tant que leurs
-normales diffèrent de moins de l'angle donné (85° ici). On obtient un
-sous-maillage par face — dessus, dessous, chant du trou, chant extérieur —
-donc colorable et sélectionnable indépendamment, ce qui sert directement à
-poser les conditions aux limites.
+`skin` extrait les facettes du bord du volume et les **regroupe par face** :
+deux facettes voisines restent dans la même face tant que leurs normales
+diffèrent de moins de l'angle donné (85° ici). Chaque facette garde son type :
+les faces haute et basse de ce volume de prismes sont en `TRI3`, les chants en
+`QUA4`. On obtient cinq sous-maillages — dessous, chant du trou, chant
+extérieur (le demi-disque compris : sa courbure ne dépasse jamais 85° d'une
+facette à la suivante), face gauche, dessus — donc colorables et
+sélectionnables indépendamment, ce qui sert directement à poser les conditions
+aux limites.
 
-![Enveloppe QUA4, une couleur par face plane](img/maillage-enveloppe-qua4.svg)
+![Enveloppe QUA4, une couleur par face](img/maillage-enveloppe-qua4.svg)
 
-*(La figure ne montre que les faces intermédiaires, `skin[1:-1]`, pour voir à
-travers la pièce.)*
+*(La figure ne montre que les faces intermédiaires, `skin[1:-1]` — les trois
+chants en `QUA4` —, pour voir à travers la pièce.)*
 
 ### `convert` + `invert` — préparer l'enveloppe
 
@@ -246,10 +249,10 @@ par translation ; un `SEG2` balayé donne un `QUA4`, d'où une grille régulièr
 
 ![Grille structurée, 200 QUA4](img/maillage-grille.svg)
 
-C'est ici qu'apparaît le premier `if plot:` : les chapitres suivants importent
-`structured_mesh` pour calculer sur son volume et l'appellent avec
-`plot=False`, ce qui rend le maillage sans retracer aucune des figures de
-cette page.
+C'est ici qu'apparaît le premier `if plot:` : la page
+[Calcul thermique](thermique.md) importe `structured_mesh` pour calculer sur
+son volume et l'appelle avec `plot=False`, ce qui rend le maillage sans
+retracer aucune des figures de cette page.
 
 ### Un bord se récupère, il ne se refabrique pas
 
@@ -261,8 +264,8 @@ Pour raccorder la couronne à la grille, il faut le bord **droit** de la
 grille. Le reconstruire avec `line` donnerait une ligne jumelle ne partageant
 aucun nœud avec la grille, donc un maillage non conforme et une pièce en deux
 morceaux. On l'**extrait** : `border` donne le contour de la grille, une
-sélection sur la coordonnée X (`field.positions` + `field.select`) garde les
-nœuds de la dernière colonne, et `elements_on(..., strict=True)` remonte aux
+sélection sur la coordonnée X (`pyrucast.node_field.positions` +
+`pyrucast.mesh.select`) garde les nœuds de la dernière colonne, et `elements_on(..., strict=True)` remonte aux
 segments dont **tous** les nœuds y sont. Aucun indice n'est écrit à la main.
 
 ### Ses deux extrémités, par coordonnée
@@ -331,7 +334,7 @@ balayé donne un `HEX8`, le meilleur élément pour le calcul :
 
 ![Volume structuré (HEX8)](img/maillage-volume-structure.svg)
 
-C'est ce volume que reprennent les chapitres suivants. Importer la fonction
+C'est ce volume que reprend la page [Calcul thermique](thermique.md). Importer la fonction
 plutôt que recopier sa géométrie n'est pas un raffinement de style — deux
 maillages construits à l'identique dans deux scripts porteraient des nœuds
 **distincts**, et toute condition posée sur l'un serait sans effet sur
@@ -339,20 +342,22 @@ l'autre.
 
 ## Visualiser et exporter
 
-Une seule méthode, `plot(...)`, sur `Mesh`/`SubMesh` — l'équivalent de
-`TRAC` :
+Tout passe par la méthode `plot(...)` de `Mesh`/`SubMesh` :
 
 ```python
 {{#include ../../../tests/python/test_doc_demarrage.py:plot_interactif}}
 ```
 
-`save=None` ouvre une fenêtre interactive (nécessite la feature Cargo
-`viz-interactive`) ; `save="....png"` ou `"....svg"` exporte sans fenêtre
-(feature `viz`) — voir [Visualisation](../visualization.md) pour le détail
-(caméra, colormaps, coloration par champ).
+`save=None` ouvre une fenêtre interactive ; `save="....png"` ou `"....svg"`
+exporte sans fenêtre. La version installée par `pip install pyrucast` comprend
+les deux ; une version compilée à la main ne les a qu'avec les features
+`viz-interactive` (fenêtre et export) ou `viz` (export seul) — voir
+[Visualisation](../visualization.md) pour le détail (caméra, colormaps,
+coloration par champ).
 
-Le script réunit les deux dans un petit helper, pour que chaque tracé soit
-interactif à l'exécution et devienne une figure de cette page en mode batch :
+Le script réunit les deux dans une petite fonction, pour que chaque tracé
+s'ouvre dans une fenêtre quand on lance le script, et devienne une figure de
+cette page quand on produit les figures du livre :
 
 ```python
 {{#include ../../../tutoriel/maillage.py:figures}}
@@ -373,7 +378,7 @@ script/generate-tutoriel-figures.sh
 
 ## Script complet
 
-Une fois les explications retirées, tout le chapitre tient en une page — du
+Une fois les explications retirées, toute la page tient en un script — du
 premier point guide au volume structuré :
 
 ```python
