@@ -355,8 +355,9 @@ les deux ; une version compilée à la main ne les a qu'avec les features
 [Visualisation](../visualization.md) pour le détail (caméra, colormaps,
 coloration par champ).
 
-Le script réunit les deux dans un petit helper, pour que chaque tracé soit
-interactif à l'exécution et devienne une figure de cette page en mode batch :
+Le script réunit les deux dans une petite fonction, pour que chaque tracé
+s'ouvre dans une fenêtre quand on lance le script, et devienne une figure de
+cette page quand on produit les figures du livre :
 
 ```python
 {{#include ../../../tutoriel/maillage.py:figures}}

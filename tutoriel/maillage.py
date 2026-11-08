@@ -240,8 +240,8 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
     x13 = LENGTH - (HEIGHT / 2.0)
     sr1 = pc.mesh.extrude(l15, [x13, 0, 0], n12)
 
-    # FR — `plot=False` : les chapitres suivants importent le volume, sans figures.
-    # EN — `plot=False`: later chapters import the volume, without any figure.
+    # FR — `plot=False` : tutoriel/thermique.py importe le volume, sans figures.
+    # EN — `plot=False`: tutoriel/thermique.py imports the volume, without figures.
     if plot:
         show(sr1, "Grille structurée (QUA4)", "maillage-grille.svg")
     # ANCHOR_END: grille
