@@ -1,9 +1,9 @@
 # ANCHOR: script
 """Tutoriel débutant — 2. Calcul thermique. / Beginner tutorial — 2. Thermal.
 
-FR — Reprend la **chape percée** du chapitre 1 — le volume HEX8 structuré est
-importé de `tutoriel/maillage.py`, aucune cote n'est redonnée — et y résout la
-conduction **stationnaire** `div(-k·grad T) = q`, en deux temps :
+FR — Reprend la **chape percée** de la page « Maillage » — le volume HEX8
+structuré est importé de `tutoriel/maillage.py`, aucune cote n'est redonnée —
+et y résout la conduction **stationnaire** `div(-k·grad T) = q`, en deux temps :
 
 1. **conduction seule** — température imposée sur l'alésage, flux imposé sur la
    face gauche ;
@@ -12,13 +12,13 @@ conduction **stationnaire** `div(-k·grad T) = q`, en deux temps :
 
 Chaque étape est tracée avant d'être résolue, et les régions chargées sont
 repérées **par leur géométrie** : par forme (`pyrucast.mesh.points_*`) ou par
-coordonnée (`pyrucast.node_field.positions` + `pyrucast.mesh.select`). Ni
-rayonnement ni terme transitoire. Le détail pas à pas est dans le livre, page
-« Calcul thermique ».
+coordonnée (`pyrucast.node_field.positions` + `pyrucast.mesh.select`). Ce
+script ne traite ni rayonnement ni terme transitoire. Le détail pas à pas est
+dans le livre, page « Calcul thermique ».
 
-EN — Picks chapter 1's **pierced lug** back up — the structured HEX8 volume is
-imported from `tutoriel/maillage.py`, not one dimension is restated — and
-solves **steady** conduction `div(-k·grad T) = q` on it, in two steps:
+EN — Picks the meshing page's **pierced lug** back up — the structured HEX8
+volume is imported from `tutoriel/maillage.py`, not one dimension is restated —
+and solves **steady** conduction `div(-k·grad T) = q` on it, in two steps:
 
 1. **conduction alone** — imposed temperature on the bore, imposed flux on the
    left face;
@@ -27,12 +27,13 @@ solves **steady** conduction `div(-k·grad T) = q` on it, in two steps:
 
 Each step is plotted before being solved, and the loaded regions are located
 **by geometry**: by shape (`pyrucast.mesh.points_*`) or by coordinate
-(`pyrucast.node_field.positions` + `pyrucast.mesh.select`). No radiation, no
-transient term. The step-by-step walkthrough lives in the book's thermal page.
+(`pyrucast.node_field.positions` + `pyrucast.mesh.select`). This script handles
+neither radiation nor a transient term. The step-by-step walkthrough lives in
+the book's thermal page.
 
 Lancement / Running ::
 
-    maturin develop --release
+    pip install pyrucast
     python tutoriel/thermique.py
 
     # Figures du livre / book figures (book/src/tutoriel/img/) :
@@ -44,8 +45,8 @@ import os
 import pyrucast as pc
 from maillage import HEIGHT, HOLE_RADIUS, LENGTH, OUT, THICKNESS, show, structured_mesh
 
-# FR — Vue commune aux figures du chapitre 1 : azimut, élévation, échelle.
-# EN — The view shared by chapter 1's figures: azimuth, elevation, scale.
+# FR — La vue des figures de tutoriel/maillage.py : azimut, élévation, échelle.
+# EN — The view of tutoriel/maillage.py's figures: azimuth, elevation, scale.
 VUE = (-45, 25, 1.0)
 
 # FR — Une couleur par région chargée, tenue d'une figure à l'autre.
@@ -91,8 +92,8 @@ def show_nodefield(mesh: pc.Mesh, field: pc.NodeField, title: str, file: str) ->
 
 def main() -> None:
     # ANCHOR: maillage
-    # FR — Le maillage du chapitre 1, tel quel ; `plot=False` : pas ses figures.
-    # EN — Chapter 1's mesh, as is; `plot=False`: without its figures.
+    # FR — Le maillage de tutoriel/maillage.py, tel quel ; `plot=False` : pas ses figures.
+    # EN — tutoriel/maillage.py's mesh, as is; `plot=False`: without its figures.
     _, volume = structured_mesh(plot=False)
 
     # FR — Les charges réparties s'intègrent sur des faces : il faut la peau.
@@ -217,7 +218,10 @@ def main() -> None:
     basse_fes = pc.FiniteElementSpace(face_basse)
     conduction = pc.model.heat_conduction(fes)
     modele = conduction | pc.model.boundary_transfer(basse_fes, conduction, ["T"])
-    modele = modele | pc.model.dirichlet(alesage, modele, "T")
+
+    # FR — Le blocage de l'étape 1, repris tel quel avec ses multiplicateurs.
+    # EN — Step 1's constraint, taken back as is with its multipliers.
+    modele = modele | blocage_T
 
     # FR — Un seul champ matériau : « k » pour la conduction, « h » et son
     #      ambiant pour le film.
