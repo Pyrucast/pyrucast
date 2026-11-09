@@ -42,28 +42,28 @@ n'a pas d'élément de référence : ce n'est pas un élément fini.
 
 ### Lagrange-1
 
-| Élément | Nœuds | Dimension | Élément de référence | `"GAUSS"` : points, degré exact |
-|---|---:|:---:|---|---|
-| [SEG2](seg2.md) | 2 | 1 | \\( \xi\in[-1,1] \\) | Gauss 2, degré 3 |
-| [TRI3](tri3.md) | 3 | 2 | triangle \\( \xi+\eta\le 1 \\) | Hammer 3, degré 2 |
-| [QUA4](qua4.md) | 4 | 2 | \\( [-1,1]^2 \\) | 2×2, degré 3 par direction |
-| [TET4](tet4.md) | 4 | 3 | tétraèdre \\( \xi+\eta+\zeta\le 1 \\) | Hammer 4, degré 2 |
-| [PYRA5](pyra5.md) | 5 | 3 | pyramide à base carrée | conique 8, degré 3 |
-| [PENTA6](penta6.md) | 6 | 3 | prisme (triangle × \\( \zeta \\)) | 3 × 2 = 6, degré 2 dans le triangle, 3 en \\( \zeta \\) |
-| [HEX8](hex8.md) | 8 | 3 | \\( [-1,1]^3 \\) | 2×2×2, degré 3 par direction |
+| | Élément | Nœuds | Dimension | Élément de référence | `"GAUSS"` : points, degré exact |
+|:---:|---|---:|:---:|---|---|
+| ![SEG2](img/seg2-thumb.svg) | [SEG2](seg2.md) | 2 | 1 | \\( \xi\in[-1,1] \\) | Gauss 2, degré 3 |
+| ![TRI3](img/tri3-thumb.svg) | [TRI3](tri3.md) | 3 | 2 | triangle \\( \xi+\eta\le 1 \\) | Hammer 3, degré 2 |
+| ![QUA4](img/qua4-thumb.svg) | [QUA4](qua4.md) | 4 | 2 | \\( [-1,1]^2 \\) | 2×2, degré 3 par direction |
+| ![TET4](img/tet4-thumb.svg) | [TET4](tet4.md) | 4 | 3 | tétraèdre \\( \xi+\eta+\zeta\le 1 \\) | Hammer 4, degré 2 |
+| ![PYRA5](img/pyra5-thumb.svg) | [PYRA5](pyra5.md) | 5 | 3 | pyramide à base carrée | conique 8, degré 3 |
+| ![PENTA6](img/penta6-thumb.svg) | [PENTA6](penta6.md) | 6 | 3 | prisme (triangle × \\( \zeta \\)) | 3 × 2 = 6, degré 2 dans le triangle, 3 en \\( \zeta \\) |
+| ![HEX8](img/hex8-thumb.svg) | [HEX8](hex8.md) | 8 | 3 | \\( [-1,1]^3 \\) | 2×2×2, degré 3 par direction |
 
 ### Lagrange-2
 
-| Élément | Nœuds | Dimension | Parent | Type | `"GAUSS"` : points, degré exact |
-|---|---:|:---:|:---:|---|---|
-| [SEG3](seg3.md) | 3 | 1 | SEG2 | complet | Gauss 3, degré 5 |
-| [TRI6](tri6.md) | 6 | 2 | TRI3 | complet | Dunavant 6, degré 4 |
-| [QUA8](qua8.md) | 8 | 2 | QUA4 | sérendipité | 3×3, degré 5 par direction |
-| [QUA9](qua9.md) | 9 | 2 | QUA4 | complet | 3×3, degré 5 par direction |
-| [TET10](tet10.md) | 10 | 3 | TET4 | complet | Keast 11, degré 4 |
-| [PENTA15](penta15.md) | 15 | 3 | PENTA6 | sérendipité | 6 × 3 = 18, degré 4 dans le triangle, 5 en \\( \zeta \\) |
-| [HEX20](hex20.md) | 20 | 3 | HEX8 | sérendipité | 3×3×3, degré 5 par direction |
-| [HEX27](hex27.md) | 27 | 3 | HEX8 | complet | 3×3×3, degré 5 par direction |
+| | Élément | Nœuds | Dimension | Parent | Type | `"GAUSS"` : points, degré exact |
+|:---:|---|---:|:---:|:---:|---|---|
+| ![SEG3](img/seg3-thumb.svg) | [SEG3](seg3.md) | 3 | 1 | SEG2 | complet | Gauss 3, degré 5 |
+| ![TRI6](img/tri6-thumb.svg) | [TRI6](tri6.md) | 6 | 2 | TRI3 | complet | Dunavant 6, degré 4 |
+| ![QUA8](img/qua8-thumb.svg) | [QUA8](qua8.md) | 8 | 2 | QUA4 | sérendipité | 3×3, degré 5 par direction |
+| ![QUA9](img/qua9-thumb.svg) | [QUA9](qua9.md) | 9 | 2 | QUA4 | complet | 3×3, degré 5 par direction |
+| ![TET10](img/tet10-thumb.svg) | [TET10](tet10.md) | 10 | 3 | TET4 | complet | Keast 11, degré 4 |
+| ![PENTA15](img/penta15-thumb.svg) | [PENTA15](penta15.md) | 15 | 3 | PENTA6 | sérendipité | 6 × 3 = 18, degré 4 dans le triangle, 5 en \\( \zeta \\) |
+| ![HEX20](img/hex20-thumb.svg) | [HEX20](hex20.md) | 20 | 3 | HEX8 | sérendipité | 3×3×3, degré 5 par direction |
+| ![HEX27](img/hex27-thumb.svg) | [HEX27](hex27.md) | 27 | 3 | HEX8 | complet | 3×3×3, degré 5 par direction |
 
 Les éléments **sérendipité** (QUA8, PENTA15, HEX20) n'ont que des nœuds aux
 sommets et aux milieux d'arête. Les **complets** ont en plus les nœuds qu'exige

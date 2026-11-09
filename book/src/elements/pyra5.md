@@ -30,6 +30,8 @@ dans le sens trigonométrique vue depuis le sommet.
 | 1 | \\( (1, -1, 0) \\) | | 4 | \\( (0, 0, 1) \\) |
 | 2 | \\( (1, 1, 0) \\) | | | |
 
+![Élément de référence PYRA5 : 5 nœuds numérotés de 0 à 4 (sommet), axes ξ, η, ζ.](img/pyra5-reference.svg)
+
 ## Fonctions de forme
 
 Ses fonctions ne sont **pas polynomiales** : la base carrée doit se réduire à
@@ -111,6 +113,8 @@ un `HEX8` déformé.
 
 `"REDUCED"` : un point au centre de gravité \\( (0, 0, \tfrac14) \\), au quart
 de la hauteur, de poids \\( \tfrac43 \\).
+
+![Règles d'intégration du PYRA5 : 8 points de Gauss (disques d'aire proportionnelle au poids) et le point unique de la règle réduite.](img/pyra5-quadrature.svg)
 
 ## Exemple
 

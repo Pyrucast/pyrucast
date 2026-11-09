@@ -41,6 +41,8 @@ Le triangle \\( \xi, \eta \ge 0 \\), \\( \xi + \eta \le 1 \\), étiré sur
 | 13 | \\( (1, 0, \tfrac12) \\) | milieu de \\( (1,4) \\) |
 | 14 | \\( (0, 1, \tfrac12) \\) | milieu de \\( (2,5) \\) |
 
+![Élément de référence PENTA15 : 15 nœuds numérotés de 0 à 14 (milieu d'arête, sommet), axes ξ, η, ζ.](img/penta15-reference.svg)
+
 ## Fonctions de forme
 
 Avec \\( L_1 = 1-\xi-\eta \\), \\( L_2 = \xi \\), \\( L_3 = \eta \\) et
@@ -90,6 +92,8 @@ dont le triangle du haut est celui du bas déplacé.
 
 `"REDUCED"` : un point en \\( (\tfrac13, \tfrac13, \tfrac12) \\), de poids
 \\( \tfrac12 \\).
+
+![Règles d'intégration du PENTA15 : 18 points de Gauss (disques d'aire proportionnelle au poids) et le point unique de la règle réduite.](img/penta15-quadrature.svg)
 
 ## Exemple
 

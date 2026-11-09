@@ -31,6 +31,8 @@ La face 0-1-2 tourne dans le sens trigonométrique vue depuis le nœud 3.
 | 2 | \\( (0, 1, 0) \\) |
 | 3 | \\( (0, 0, 1) \\) |
 
+![Élément de référence TET4 : 4 nœuds numérotés de 0 à 3 (sommet), axes ξ, η, ζ.](img/tet4-reference.svg)
+
 ## Fonctions de forme
 
 Les coordonnées barycentriques :
@@ -73,6 +75,8 @@ La masse, de degré 2, est exacte ; la raideur, de degré 0, aussi.
 
 `"REDUCED"` : un point au centre de gravité \\( (\tfrac14, \tfrac14, \tfrac14) \\),
 de poids \\( \tfrac16 \\).
+
+![Règles d'intégration du TET4 : 4 points de Gauss (disques d'aire proportionnelle au poids) et le point unique de la règle réduite.](img/tet4-quadrature.svg)
 
 ## Exemple
 

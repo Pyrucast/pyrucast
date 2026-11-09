@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="401" height="331" viewBox="0 0 401 331" role="img" font-family="Helvetica, Arial, sans-serif">
+<title>TET4 — tétraèdre linéaire</title>
+<desc>Élément de référence TET4 : 4 nœuds numérotés de 0 à 3 (sommet), axes ξ, η, ζ.</desc>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7785"/></marker></defs>
+<rect x="0.5" y="0.5" width="400" height="330" rx="8" fill="#ffffff" stroke="#d5dbe3"/>
+<g transform="translate(132,269)">
+<polygon points="0,0 170,0 0,-170" fill="#d2dde9" stroke="none"/>
+<polygon points="170,0 125.3,-87.8 0,-170" fill="#e2eaf3" stroke="none"/>
+<line x1="0" y1="0" x2="125.3" y2="-87.8" stroke="#26323f" stroke-width="1.1" stroke-linecap="round" stroke-dasharray="4 4" stroke-opacity=".6"/>
+<line x1="125.3" y1="-87.8" x2="170" y2="0" stroke="#26323f" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="170" y1="0" x2="0" y2="0" stroke="#26323f" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="170" y1="0" x2="0" y2="-170" stroke="#26323f" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="0" y1="-170" x2="0" y2="0" stroke="#26323f" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="125.3" y1="-87.8" x2="0" y2="-170" stroke="#26323f" stroke-width="1.6" stroke-linecap="round"/>
+<circle cx="0" cy="0" r="10" fill="#ffffff" stroke="#1f5a99" stroke-width="2.4"/>
+<text x="0" y="3.8" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">0</text>
+<circle cx="170" cy="0" r="10" fill="#ffffff" stroke="#1f5a99" stroke-width="2.4"/>
+<text x="170" y="3.8" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">1</text>
+<circle cx="125.3" cy="-87.8" r="10" fill="#ffffff" stroke="#1f5a99" stroke-width="2.4"/>
+<text x="125.3" y="-84" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">2</text>
+<circle cx="0" cy="-170" r="10" fill="#ffffff" stroke="#1f5a99" stroke-width="2.4"/>
+<text x="0" y="-166.2" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">3</text>
+<line x1="-80" y1="2" x2="-46" y2="2" stroke="#6b7785" stroke-width="1.2" marker-end="url(#ah)"/>
+<text x="-35" y="7" font-size="15" text-anchor="middle" fill="#6b7785" font-weight="normal" font-style="italic">ξ</text>
+<line x1="-80" y1="2" x2="-52.1" y2="-17.5" stroke="#6b7785" stroke-width="1.2" marker-end="url(#ah)"/>
+<text x="-43.1" y="-18.8" font-size="15" text-anchor="middle" fill="#6b7785" font-weight="normal" font-style="italic">η</text>
+<line x1="-80" y1="2" x2="-80" y2="-32" stroke="#6b7785" stroke-width="1.2" marker-end="url(#ah)"/>
+<text x="-80" y="-38" font-size="15" text-anchor="middle" fill="#6b7785" font-weight="normal" font-style="italic">ζ</text>
+</g>
+<circle cx="178.2" cy="311" r="5" fill="#ffffff" stroke="#1f5a99" stroke-width="2.4"/>
+<text x="188.2" y="315" font-size="12" text-anchor="start" fill="#6b7785" font-weight="normal" font-style="normal">sommet</text>
+</svg>

@@ -29,6 +29,8 @@ trigonométrique.
 | 2 | \\( (+1, +1) \\) |
 | 3 | \\( (-1, +1) \\) |
 
+![Élément de référence QUA4 : 4 nœuds numérotés de 0 à 3 (sommet), axes ξ, η.](img/qua4-reference.svg)
+
 ## Fonctions de forme
 
 Pour le nœud \\( i \\) de coordonnées \\( (\xi_i, \eta_i) \\) :
@@ -72,6 +74,8 @@ La masse, de degré 2 par direction, est exacte sur un parallélogramme. Sur un
 quadrangle quelconque, le jacobien varie, et la raideur ne l'est plus.
 
 `"REDUCED"` : un point au centre \\( (0, 0) \\), de poids 4.
+
+![Règles d'intégration du QUA4 : 4 points de Gauss (disques d'aire proportionnelle au poids) et le point unique de la règle réduite.](img/qua4-quadrature.svg)
 
 ## Exemple
 

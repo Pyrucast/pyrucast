@@ -1,9 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="382.3" height="280.9" viewBox="0 0 382.3 280.9" role="img" font-family="Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="390.6" height="304.9" viewBox="0 0 390.6 304.9" role="img" font-family="Helvetica, Arial, sans-serif">
 <title>HEX20 — hexaèdre sérendipité</title>
-<desc>Élément de référence HEX20 : 20 nœuds numérotés de 0 à 19 (milieu d'arête, sommet), axes ξ, η, ζ.</desc>
+<desc>Élément de référence HEX20 : 20 nœuds numérotés de 0 à 19 (sommet, milieu d'arête), axes ξ, η, ζ.</desc>
 <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7785"/></marker></defs>
-<rect x="0.5" y="0.5" width="381.3" height="279.9" rx="8" fill="#ffffff" stroke="#d5dbe3"/>
-<g transform="translate(241.2,125.4)">
+<rect x="0.5" y="0.5" width="389.6" height="303.9" rx="8" fill="#ffffff" stroke="#d5dbe3"/>
+<g transform="translate(241.2,149.4)">
 <polygon points="-115.2,-56.6 40.8,-56.6 115.2,-99.4 -40.8,-99.4" fill="#f6f9fc" stroke="none"/>
 <polygon points="-115.2,99.4 40.8,99.4 40.8,-56.6 -115.2,-56.6" fill="#d2dde9" stroke="none"/>
 <polygon points="40.8,99.4 115.2,56.6 115.2,-99.4 40.8,-56.6" fill="#e2eaf3" stroke="none"/>
@@ -66,8 +66,8 @@
 <line x1="-189.2" y1="95.4" x2="-189.2" y2="61.4" stroke="#6b7785" stroke-width="1.2" marker-end="url(#ah)"/>
 <text x="-189.2" y="55.4" font-size="15" text-anchor="middle" fill="#6b7785" font-weight="normal" font-style="italic">ζ</text>
 </g>
-<circle cx="106.2" cy="260.9" r="5" fill="#ffffff" stroke="#1f5a99" stroke-width="2.4"/>
-<text x="116.2" y="264.9" font-size="12" text-anchor="start" fill="#6b7785" font-weight="normal" font-style="normal">sommet</text>
-<circle cx="178.8" cy="260.9" r="5" fill="#ffffff" stroke="#c8691a" stroke-width="2.4"/>
-<text x="188.8" y="264.9" font-size="12" text-anchor="start" fill="#6b7785" font-weight="normal" font-style="normal">milieu d'arête</text>
+<circle cx="110.3" cy="284.9" r="5" fill="#ffffff" stroke="#1f5a99" stroke-width="2.4"/>
+<text x="120.3" y="288.9" font-size="12" text-anchor="start" fill="#6b7785" font-weight="normal" font-style="normal">sommet</text>
+<circle cx="182.9" cy="284.9" r="5" fill="#ffffff" stroke="#c8691a" stroke-width="2.4"/>
+<text x="192.9" y="288.9" font-size="12" text-anchor="start" fill="#6b7785" font-weight="normal" font-style="normal">milieu d'arête</text>
 </svg>

@@ -26,6 +26,8 @@ segment peut être courbe. C'est le bord d'une surface quadratique.
 | 1 | \\( +1 \\) | extrémité |
 | 2 | \\( 0 \\) | milieu de \\( (0,1) \\) |
 
+![Élément de référence SEG3 : 3 nœuds numérotés de 0 à 2 (extrémité, milieu), axe ξ.](img/seg3-reference.svg)
+
 ## Fonctions de forme
 
 \\[
@@ -65,6 +67,8 @@ La masse, de degré 4, est exacte sur un segment droit dont le nœud milieu est
 au milieu.
 
 `"REDUCED"` : un point en \\( \xi = 0 \\), de poids 2.
+
+![Règles d'intégration du SEG3 : 3 points de Gauss (disques d'aire proportionnelle au poids) et le point unique de la règle réduite.](img/seg3-quadrature.svg)
 
 ## Exemple
 

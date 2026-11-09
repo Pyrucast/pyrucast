@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="620.6" height="340.9" viewBox="0 0 620.6 340.9" role="img" font-family="Helvetica, Arial, sans-serif">
+<title>HEX8 — quadrature</title>
+<desc>Règles d'intégration du HEX8 : 8 points de Gauss (disques d'aire proportionnelle au poids) et le point unique de la règle réduite.</desc>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7785"/></marker></defs>
+<rect x="0.5" y="0.5" width="619.6" height="339.9" rx="8" fill="#ffffff" stroke="#d5dbe3"/>
+<text x="145.2" y="26" font-size="14" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">"GAUSS" · 8 points</text>
+<g transform="translate(145.2,167.4)">
+<polygon points="-115.2,-56.6 40.8,-56.6 115.2,-99.4 -40.8,-99.4" fill="#f6f9fc" stroke="none"/>
+<polygon points="-115.2,99.4 40.8,99.4 40.8,-56.6 -115.2,-56.6" fill="#f6f9fc" stroke="none"/>
+<polygon points="40.8,99.4 115.2,56.6 115.2,-99.4 40.8,-56.6" fill="#f6f9fc" stroke="none"/>
+<line x1="-115.2" y1="99.4" x2="-40.8" y2="56.6" stroke="#9aa7b6" stroke-width="1.1" stroke-linecap="round" stroke-dasharray="4 4" stroke-opacity=".6"/>
+<line x1="-40.8" y1="56.6" x2="115.2" y2="56.6" stroke="#9aa7b6" stroke-width="1.1" stroke-linecap="round" stroke-dasharray="4 4" stroke-opacity=".6"/>
+<line x1="-40.8" y1="56.6" x2="-40.8" y2="-99.4" stroke="#9aa7b6" stroke-width="1.1" stroke-linecap="round" stroke-dasharray="4 4" stroke-opacity=".6"/>
+<line x1="115.2" y1="56.6" x2="40.8" y2="99.4" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="40.8" y1="99.4" x2="-115.2" y2="99.4" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="-115.2" y1="-56.6" x2="40.8" y2="-56.6" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="40.8" y1="-56.6" x2="115.2" y2="-99.4" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="115.2" y1="-99.4" x2="-40.8" y2="-99.4" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="-40.8" y1="-99.4" x2="-115.2" y2="-56.6" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="40.8" y1="99.4" x2="40.8" y2="-56.6" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="-115.2" y1="-56.6" x2="-115.2" y2="99.4" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="115.2" y1="56.6" x2="115.2" y2="-99.4" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<rect x="-117.7" y="96.9" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="38.3" y="96.9" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="112.7" y="54.1" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="-43.3" y="54.1" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="-117.7" y="-59.1" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="38.3" y="-59.1" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="112.7" y="-101.9" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="-43.3" y="-101.9" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<circle cx="-23.6" cy="32.6" r="7" fill="#c0392b" fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>
+<circle cx="-23.6" cy="-57.4" r="7" fill="#c0392b" fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>
+<circle cx="66.5" cy="32.6" r="7" fill="#c0392b" fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>
+<circle cx="66.5" cy="-57.4" r="7" fill="#c0392b" fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>
+<circle cx="-66.5" cy="57.4" r="7" fill="#c0392b" fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>
+<circle cx="-66.5" cy="-32.6" r="7" fill="#c0392b" fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>
+<circle cx="23.6" cy="57.4" r="7" fill="#c0392b" fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>
+<circle cx="23.6" cy="-32.6" r="7" fill="#c0392b" fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>
+</g>
+<text x="475.5" y="26" font-size="14" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">"REDUCED" · 1 point</text>
+<g transform="translate(475.5,167.4)">
+<polygon points="-115.2,-56.6 40.8,-56.6 115.2,-99.4 -40.8,-99.4" fill="#f6f9fc" stroke="none"/>
+<polygon points="-115.2,99.4 40.8,99.4 40.8,-56.6 -115.2,-56.6" fill="#f6f9fc" stroke="none"/>
+<polygon points="40.8,99.4 115.2,56.6 115.2,-99.4 40.8,-56.6" fill="#f6f9fc" stroke="none"/>
+<line x1="-115.2" y1="99.4" x2="-40.8" y2="56.6" stroke="#9aa7b6" stroke-width="1.1" stroke-linecap="round" stroke-dasharray="4 4" stroke-opacity=".6"/>
+<line x1="-40.8" y1="56.6" x2="115.2" y2="56.6" stroke="#9aa7b6" stroke-width="1.1" stroke-linecap="round" stroke-dasharray="4 4" stroke-opacity=".6"/>
+<line x1="-40.8" y1="56.6" x2="-40.8" y2="-99.4" stroke="#9aa7b6" stroke-width="1.1" stroke-linecap="round" stroke-dasharray="4 4" stroke-opacity=".6"/>
+<line x1="115.2" y1="56.6" x2="40.8" y2="99.4" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="40.8" y1="99.4" x2="-115.2" y2="99.4" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="-115.2" y1="-56.6" x2="40.8" y2="-56.6" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="40.8" y1="-56.6" x2="115.2" y2="-99.4" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="115.2" y1="-99.4" x2="-40.8" y2="-99.4" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="-40.8" y1="-99.4" x2="-115.2" y2="-56.6" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="40.8" y1="99.4" x2="40.8" y2="-56.6" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="-115.2" y1="-56.6" x2="-115.2" y2="99.4" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="115.2" y1="56.6" x2="115.2" y2="-99.4" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<rect x="-117.7" y="96.9" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="38.3" y="96.9" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="112.7" y="54.1" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="-43.3" y="54.1" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="-117.7" y="-59.1" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="38.3" y="-59.1" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="112.7" y="-101.9" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="-43.3" y="-101.9" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<path d="M-8,-8 L8,8 M-8,8 L8,-8" stroke="#c0392b" stroke-width="3" stroke-linecap="round"/>
+</g>
+<text x="310.3" y="324.9" font-size="12" text-anchor="middle" fill="#6b7785" font-weight="normal" font-style="normal">disque : aire proportionnelle au poids · carré : nœud de l'élément</text>
+</svg>

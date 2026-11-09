@@ -52,6 +52,8 @@ Le cube \\( [-1, +1]^3 \\).
 | 25 | \\( (0,0,+1) \\) | centre de la face \\( \zeta = +1 \\) |
 | 26 | \\( (0,0,0) \\) | centre |
 
+![Élément de référence HEX27 : 27 nœuds numérotés de 0 à 26 (centre, centre de face, milieu d'arête, sommet), axes ξ, η, ζ.](img/hex27-reference.svg)
+
 ## Fonctions de forme
 
 Le produit des trois fonctions de Lagrange quadratiques d'un segment, sur les
@@ -91,6 +93,8 @@ direction ; \\( \sum_g w_g = 8 \\). La masse, de degré 4 par direction, est
 exacte sur un parallélépipède à arêtes droites.
 
 `"REDUCED"` : un point au centre, de poids 8.
+
+![Règles d'intégration du HEX27 : 27 points de Gauss (disques d'aire proportionnelle au poids) et le point unique de la règle réduite.](img/hex27-quadrature.svg)
 
 ## Exemple
 

@@ -42,27 +42,30 @@ def test_figures_are_up_to_date():
 
 
 def tables(element, quadrature):
-    """(ξ…, w) of every Gauss point of `element`, sorted, rounded."""
+    """(ξ…, w) of every Gauss point of `element`, in a canonical order."""
+    figures.load(element)  # the nodes come from the page
+    # LAGRANGE1 is the default; the quadratic elements name their interpolation.
     space = pyrucast.FiniteElementSpace(
         pyrucast.Mesh(pyrucast.Coords(element.dim), element.name.upper()),
-        interpolation="LAGRANGE2",
+        **({"interpolation": "LAGRANGE2"} if element.quadratic else {}),
         quadrature=quadrature,
     )[0]
-    return sorted(
-        tuple(round(v, 9) + 0.0 for v in (*space.gauss_xi(g), space.gauss_weight(g)))
-        for g in range(space.gauss_count)
+    return canonical(
+        (tuple(space.gauss_xi(g)), space.gauss_weight(g)) for g in range(space.gauss_count)
     )
 
 
-def drawn(points):
-    return sorted(tuple(round(v, 9) + 0.0 for v in (*xi, w)) for xi, w in points)
+def canonical(points):
+    """Sorted on rounded values — two correct rules differ by 1e-15, not by the order."""
+    rows = [(*xi, w) for xi, w in points]
+    return sorted(rows, key=lambda r: tuple(round(v, 6) + 0.0 for v in r))
 
 
 @pytest.mark.parametrize("element", figures.ELEMENTS, ids=lambda e: e.name)
 def test_quadrature_matches_pyrucast(element):
     for mine, theirs in (
-        (drawn(element.gauss), tables(element, "GAUSS")),
-        (drawn([element.reduced]), tables(element, "REDUCED")),
+        (canonical(element.gauss), tables(element, "GAUSS")),
+        (canonical([element.reduced]), tables(element, "REDUCED")),
     ):
         assert len(mine) == len(theirs)
         for a, b in zip(mine, theirs):

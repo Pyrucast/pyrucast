@@ -33,6 +33,8 @@ Le carré \\( [-1, +1]^2 \\) : les nœuds du [QUA8](qua8.md), puis le centre.
 | 7 | \\( (-1, 0) \\) | milieu de \\( (3,0) \\) |
 | 8 | \\( (0, 0) \\) | centre |
 
+![Élément de référence QUA9 : 9 nœuds numérotés de 0 à 8 (centre, milieu d'arête, sommet), axes ξ, η.](img/qua9-reference.svg)
+
 ## Fonctions de forme
 
 Le produit des trois fonctions de Lagrange quadratiques d'un segment, sur les
@@ -73,6 +75,8 @@ direction ; \\( \sum_g w_g = 4 \\). La masse, de degré 4 par direction, est
 exacte sur un parallélogramme à côtés droits.
 
 `"REDUCED"` : un point au centre, de poids 4.
+
+![Règles d'intégration du QUA9 : 9 points de Gauss (disques d'aire proportionnelle au poids) et le point unique de la règle réduite.](img/qua9-quadrature.svg)
 
 ## Exemple
 

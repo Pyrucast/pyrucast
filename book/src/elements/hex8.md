@@ -29,6 +29,8 @@ puis celle du haut (nœuds 4 à 7), chacune dans le sens trigonométrique.
 | 2 | \\( (+1,+1,-1) \\) | | 6 | \\( (+1,+1,+1) \\) |
 | 3 | \\( (-1,+1,-1) \\) | | 7 | \\( (-1,+1,+1) \\) |
 
+![Élément de référence HEX8 : 8 nœuds numérotés de 0 à 7 (sommet), axes ξ, η, ζ.](img/hex8-reference.svg)
+
 ## Fonctions de forme
 
 Pour le nœud \\( i \\) de coordonnées \\( (\xi_i, \eta_i, \zeta_i) \\) :
@@ -65,6 +67,8 @@ La masse et la raideur d'un parallélépipède sont exactes ; celles d'un
 hexaèdre déformé, comme pour le `QUA4`, ne le sont plus.
 
 `"REDUCED"` : un point au centre, de poids 8.
+
+![Règles d'intégration du HEX8 : 8 points de Gauss (disques d'aire proportionnelle au poids) et le point unique de la règle réduite.](img/hex8-quadrature.svg)
 
 ## Exemple
 

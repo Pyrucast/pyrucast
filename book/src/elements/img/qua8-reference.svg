@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="336.5" height="366.5" viewBox="0 0 336.5 366.5" role="img" font-family="Helvetica, Arial, sans-serif">
 <title>QUA8 — quadrangle sérendipité</title>
-<desc>Élément de référence QUA8 : 8 nœuds numérotés de 0 à 7 (milieu d'arête, sommet), axes ξ, η.</desc>
+<desc>Élément de référence QUA8 : 8 nœuds numérotés de 0 à 7 (sommet, milieu d'arête), axes ξ, η.</desc>
 <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7785"/></marker></defs>
 <rect x="0.5" y="0.5" width="335.5" height="365.5" rx="8" fill="#ffffff" stroke="#d5dbe3"/>
 <g transform="translate(131,205.5)">

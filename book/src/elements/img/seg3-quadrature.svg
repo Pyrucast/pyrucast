@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="156" viewBox="0 0 760 156" role="img" font-family="Helvetica, Arial, sans-serif">
+<title>SEG3 — quadrature</title>
+<desc>Règles d'intégration du SEG3 : 3 points de Gauss (disques d'aire proportionnelle au poids) et le point unique de la règle réduite.</desc>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7785"/></marker></defs>
+<rect x="0.5" y="0.5" width="759" height="155" rx="8" fill="#ffffff" stroke="#d5dbe3"/>
+<text x="180" y="26" font-size="14" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">"GAUSS" · 3 points</text>
+<g transform="translate(180,75)">
+<line x1="-150" y1="0" x2="150" y2="0" stroke="#9aa7b6" stroke-width="2" stroke-linecap="round"/>
+<rect x="-152.5" y="-2.5" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="147.5" y="-2.5" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="-2.5" y="-2.5" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<circle cx="-116.2" cy="0" r="5.5" fill="#c0392b" fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>
+<circle cx="0" cy="0" r="7" fill="#c0392b" fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>
+<circle cx="116.2" cy="0" r="5.5" fill="#c0392b" fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>
+</g>
+<text x="580" y="26" font-size="14" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">"REDUCED" · 1 point</text>
+<g transform="translate(580,75)">
+<line x1="-150" y1="0" x2="150" y2="0" stroke="#9aa7b6" stroke-width="2" stroke-linecap="round"/>
+<rect x="-152.5" y="-2.5" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="147.5" y="-2.5" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="-2.5" y="-2.5" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<path d="M-8,-8 L8,8 M-8,8 L8,-8" stroke="#c0392b" stroke-width="3" stroke-linecap="round"/>
+</g>
+<text x="380" y="140" font-size="12" text-anchor="middle" fill="#6b7785" font-weight="normal" font-style="normal">disque : aire proportionnelle au poids · carré : nœud de l'élément</text>
+</svg>

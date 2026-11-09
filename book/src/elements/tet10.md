@@ -32,6 +32,8 @@ Le tétraèdre du `TET4`, avec ses coordonnées barycentriques
 | | | | 8 | \\( (1,3) \\) | \\( (\tfrac12,0,\tfrac12) \\) |
 | | | | 9 | \\( (2,3) \\) | \\( (0,\tfrac12,\tfrac12) \\) |
 
+![Élément de référence TET10 : 10 nœuds numérotés de 0 à 9 (milieu d'arête, sommet), axes ξ, η, ζ.](img/tet10-reference.svg)
+
 ## Fonctions de forme
 
 \\( L_i(2L_i - 1) \\) aux sommets, \\( 4 L_a L_b \\) aux milieux :
@@ -76,6 +78,8 @@ reste pas moins exacte. La masse, de degré 4, est exacte sur un tétraèdre à
 arêtes droites.
 
 `"REDUCED"` : un point au centre, de poids \\( \tfrac16 \\).
+
+![Règles d'intégration du TET10 : 11 points de Gauss (disques d'aire proportionnelle au poids) et le point unique de la règle réduite.](img/tet10-quadrature.svg)
 
 ## Exemple
 

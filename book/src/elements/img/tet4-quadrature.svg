@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="312" viewBox="0 0 500 312" role="img" font-family="Helvetica, Arial, sans-serif">
+<title>TET4 — quadrature</title>
+<desc>Règles d'intégration du TET4 : 4 points de Gauss (disques d'aire proportionnelle au poids) et le point unique de la règle réduite.</desc>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7785"/></marker></defs>
+<rect x="0.5" y="0.5" width="499" height="311" rx="8" fill="#ffffff" stroke="#d5dbe3"/>
+<text x="115" y="26" font-size="14" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">"GAUSS" · 4 points</text>
+<g transform="translate(30,238)">
+<polygon points="0,0 170,0 0,-170" fill="#f6f9fc" stroke="none"/>
+<polygon points="170,0 125.3,-87.8 0,-170" fill="#f6f9fc" stroke="none"/>
+<line x1="0" y1="0" x2="125.3" y2="-87.8" stroke="#9aa7b6" stroke-width="1.1" stroke-linecap="round" stroke-dasharray="4 4" stroke-opacity=".6"/>
+<line x1="125.3" y1="-87.8" x2="170" y2="0" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="170" y1="0" x2="0" y2="0" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="170" y1="0" x2="0" y2="-170" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="0" y1="-170" x2="0" y2="0" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="125.3" y1="-87.8" x2="0" y2="-170" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<rect x="-2.5" y="-2.5" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="167.5" y="-2.5" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="122.8" y="-90.3" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="-2.5" y="-172.5" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<circle cx="96.9" cy="-74.9" r="7" fill="#c0392b" fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>
+<circle cx="40.8" cy="-35.6" r="7" fill="#c0392b" fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>
+<circle cx="40.8" cy="-111.6" r="7" fill="#c0392b" fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>
+<circle cx="116.8" cy="-35.6" r="7" fill="#c0392b" fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>
+</g>
+<text x="385" y="26" font-size="14" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">"REDUCED" · 1 point</text>
+<g transform="translate(300,238)">
+<polygon points="0,0 170,0 0,-170" fill="#f6f9fc" stroke="none"/>
+<polygon points="170,0 125.3,-87.8 0,-170" fill="#f6f9fc" stroke="none"/>
+<line x1="0" y1="0" x2="125.3" y2="-87.8" stroke="#9aa7b6" stroke-width="1.1" stroke-linecap="round" stroke-dasharray="4 4" stroke-opacity=".6"/>
+<line x1="125.3" y1="-87.8" x2="170" y2="0" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="170" y1="0" x2="0" y2="0" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="170" y1="0" x2="0" y2="-170" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="0" y1="-170" x2="0" y2="0" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="125.3" y1="-87.8" x2="0" y2="-170" stroke="#9aa7b6" stroke-width="1.2" stroke-linecap="round"/>
+<rect x="-2.5" y="-2.5" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="167.5" y="-2.5" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="122.8" y="-90.3" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<rect x="-2.5" y="-172.5" width="5" height="5" fill="#ffffff" stroke="#9aa7b6" stroke-width="1"/>
+<path d="M65.8,-72.4 L81.8,-56.4 M65.8,-56.4 L81.8,-72.4" stroke="#c0392b" stroke-width="3" stroke-linecap="round"/>
+</g>
+<text x="250" y="296" font-size="12" text-anchor="middle" fill="#6b7785" font-weight="normal" font-style="normal">disque : aire proportionnelle au poids · carré : nœud de l'élément</text>
+</svg>

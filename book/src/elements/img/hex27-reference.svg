@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="430" height="330.6" viewBox="0 0 430 330.6" role="img" font-family="Helvetica, Arial, sans-serif">
+<title>HEX27 — hexaèdre triquadratique</title>
+<desc>Élément de référence HEX27 : 27 nœuds numérotés de 0 à 26 (sommet, milieu d'arête, centre de face, centre), axes ξ, η, ζ.</desc>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7785"/></marker></defs>
+<rect x="0.5" y="0.5" width="429" height="329.6" rx="8" fill="#ffffff" stroke="#d5dbe3"/>
+<g transform="translate(261.8,162.4)">
+<polygon points="-129.9,-63.8 46.1,-63.8 129.9,-112.2 -46.1,-112.2" fill="#f6f9fc" stroke="none"/>
+<polygon points="-129.9,112.2 46.1,112.2 46.1,-63.8 -129.9,-63.8" fill="#d2dde9" stroke="none"/>
+<polygon points="46.1,112.2 129.9,63.8 129.9,-112.2 46.1,-63.8" fill="#e2eaf3" stroke="none"/>
+<line x1="-129.9" y1="112.2" x2="-46.1" y2="63.8" stroke="#26323f" stroke-width="1.1" stroke-linecap="round" stroke-dasharray="4 4" stroke-opacity=".6"/>
+<line x1="-46.1" y1="63.8" x2="129.9" y2="63.8" stroke="#26323f" stroke-width="1.1" stroke-linecap="round" stroke-dasharray="4 4" stroke-opacity=".6"/>
+<line x1="-46.1" y1="63.8" x2="-46.1" y2="-112.2" stroke="#26323f" stroke-width="1.1" stroke-linecap="round" stroke-dasharray="4 4" stroke-opacity=".6"/>
+<line x1="129.9" y1="63.8" x2="46.1" y2="112.2" stroke="#26323f" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="46.1" y1="112.2" x2="-129.9" y2="112.2" stroke="#26323f" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="-129.9" y1="-63.8" x2="46.1" y2="-63.8" stroke="#26323f" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="46.1" y1="-63.8" x2="129.9" y2="-112.2" stroke="#26323f" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="129.9" y1="-112.2" x2="-46.1" y2="-112.2" stroke="#26323f" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="-46.1" y1="-112.2" x2="-129.9" y2="-63.8" stroke="#26323f" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="46.1" y1="112.2" x2="46.1" y2="-63.8" stroke="#26323f" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="-129.9" y1="-63.8" x2="-129.9" y2="112.2" stroke="#26323f" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="129.9" y1="63.8" x2="129.9" y2="-112.2" stroke="#26323f" stroke-width="1.6" stroke-linecap="round"/>
+<circle cx="-46.1" cy="63.8" r="10" fill="#ffffff" stroke="#1f5a99" stroke-width="2.4" stroke-dasharray="3 2" stroke-opacity=".65"/>
+<text x="-46.1" y="67.6" font-size="11" text-anchor="middle" fill="#6b7785" font-weight="bold" font-style="normal">3</text>
+<circle cx="41.9" cy="63.8" r="10" fill="#ffffff" stroke="#c8691a" stroke-width="2.4" stroke-dasharray="3 2" stroke-opacity=".65"/>
+<text x="41.9" y="67.6" font-size="11" text-anchor="middle" fill="#6b7785" font-weight="bold" font-style="normal">10</text>
+<circle cx="-88" cy="88" r="10" fill="#ffffff" stroke="#c8691a" stroke-width="2.4" stroke-dasharray="3 2" stroke-opacity=".65"/>
+<text x="-88" y="91.8" font-size="11" text-anchor="middle" fill="#6b7785" font-weight="bold" font-style="normal">11</text>
+<circle cx="-46.1" cy="-24.2" r="10" fill="#ffffff" stroke="#c8691a" stroke-width="2.4" stroke-dasharray="3 2" stroke-opacity=".65"/>
+<text x="-46.1" y="-20.4" font-size="11" text-anchor="middle" fill="#6b7785" font-weight="bold" font-style="normal">19</text>
+<circle cx="-88" cy="0" r="10" fill="#ffffff" stroke="#2a8a5c" stroke-width="2.4" stroke-dasharray="3 2" stroke-opacity=".65"/>
+<text x="-88" y="3.8" font-size="11" text-anchor="middle" fill="#6b7785" font-weight="bold" font-style="normal">20</text>
+<circle cx="41.9" cy="-24.2" r="10" fill="#ffffff" stroke="#2a8a5c" stroke-width="2.4" stroke-dasharray="3 2" stroke-opacity=".65"/>
+<text x="41.9" y="-20.4" font-size="11" text-anchor="middle" fill="#6b7785" font-weight="bold" font-style="normal">23</text>
+<circle cx="0" cy="88" r="10" fill="#ffffff" stroke="#2a8a5c" stroke-width="2.4" stroke-dasharray="3 2" stroke-opacity=".65"/>
+<text x="0" y="91.8" font-size="11" text-anchor="middle" fill="#6b7785" font-weight="bold" font-style="normal">24</text>
+<circle cx="-129.9" cy="112.2" r="10" fill="#ffffff" stroke="#1f5a99" stroke-width="2.4"/>
+<text x="-129.9" y="116" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">0</text>
+<circle cx="46.1" cy="112.2" r="10" fill="#ffffff" stroke="#1f5a99" stroke-width="2.4"/>
+<text x="46.1" y="116" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">1</text>
+<circle cx="129.9" cy="63.8" r="10" fill="#ffffff" stroke="#1f5a99" stroke-width="2.4"/>
+<text x="129.9" y="67.6" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">2</text>
+<circle cx="-129.9" cy="-63.8" r="10" fill="#ffffff" stroke="#1f5a99" stroke-width="2.4"/>
+<text x="-129.9" y="-60" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">4</text>
+<circle cx="46.1" cy="-63.8" r="10" fill="#ffffff" stroke="#1f5a99" stroke-width="2.4"/>
+<text x="46.1" y="-60" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">5</text>
+<circle cx="129.9" cy="-112.2" r="10" fill="#ffffff" stroke="#1f5a99" stroke-width="2.4"/>
+<text x="129.9" y="-108.4" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">6</text>
+<circle cx="-46.1" cy="-112.2" r="10" fill="#ffffff" stroke="#1f5a99" stroke-width="2.4"/>
+<text x="-46.1" y="-108.4" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">7</text>
+<circle cx="-41.9" cy="112.2" r="10" fill="#ffffff" stroke="#c8691a" stroke-width="2.4"/>
+<text x="-41.9" y="116" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">8</text>
+<circle cx="88" cy="88" r="10" fill="#ffffff" stroke="#c8691a" stroke-width="2.4"/>
+<text x="88" y="91.8" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">9</text>
+<circle cx="-41.9" cy="-63.8" r="10" fill="#ffffff" stroke="#c8691a" stroke-width="2.4"/>
+<text x="-41.9" y="-60" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">12</text>
+<circle cx="88" cy="-88" r="10" fill="#ffffff" stroke="#c8691a" stroke-width="2.4"/>
+<text x="88" y="-84.2" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">13</text>
+<circle cx="41.9" cy="-112.2" r="10" fill="#ffffff" stroke="#c8691a" stroke-width="2.4"/>
+<text x="41.9" y="-108.4" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">14</text>
+<circle cx="-88" cy="-88" r="10" fill="#ffffff" stroke="#c8691a" stroke-width="2.4"/>
+<text x="-88" y="-84.2" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">15</text>
+<circle cx="-129.9" cy="24.2" r="10" fill="#ffffff" stroke="#c8691a" stroke-width="2.4"/>
+<text x="-129.9" y="28" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">16</text>
+<circle cx="46.1" cy="24.2" r="10" fill="#ffffff" stroke="#c8691a" stroke-width="2.4"/>
+<text x="46.1" y="28" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">17</text>
+<circle cx="129.9" cy="-24.2" r="10" fill="#ffffff" stroke="#c8691a" stroke-width="2.4"/>
+<text x="129.9" y="-20.4" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">18</text>
+<circle cx="88" cy="0" r="10" fill="#ffffff" stroke="#2a8a5c" stroke-width="2.4"/>
+<text x="88" y="3.8" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">21</text>
+<circle cx="-41.9" cy="24.2" r="10" fill="#ffffff" stroke="#2a8a5c" stroke-width="2.4"/>
+<text x="-41.9" y="28" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">22</text>
+<circle cx="0" cy="-88" r="10" fill="#ffffff" stroke="#2a8a5c" stroke-width="2.4"/>
+<text x="0" y="-84.2" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">25</text>
+<circle cx="0" cy="0" r="10" fill="#ffffff" stroke="#8a3fa8" stroke-width="2.4" stroke-dasharray="3 2" stroke-opacity=".65"/>
+<text x="0" y="3.8" font-size="11" text-anchor="middle" fill="#26323f" font-weight="bold" font-style="normal">26</text>
+<line x1="-203.9" y1="108.2" x2="-169.9" y2="108.2" stroke="#6b7785" stroke-width="1.2" marker-end="url(#ah)"/>
+<text x="-158.9" y="113.2" font-size="15" text-anchor="middle" fill="#6b7785" font-weight="normal" font-style="italic">ξ</text>
+<line x1="-203.9" y1="108.2" x2="-174.5" y2="91.2" stroke="#6b7785" stroke-width="1.2" marker-end="url(#ah)"/>
+<text x="-164.9" y="90.7" font-size="15" text-anchor="middle" fill="#6b7785" font-weight="normal" font-style="italic">η</text>
+<line x1="-203.9" y1="108.2" x2="-203.9" y2="74.2" stroke="#6b7785" stroke-width="1.2" marker-end="url(#ah)"/>
+<text x="-203.9" y="68.2" font-size="15" text-anchor="middle" fill="#6b7785" font-weight="normal" font-style="italic">ζ</text>
+</g>
+<circle cx="31" cy="310.6" r="5" fill="#ffffff" stroke="#1f5a99" stroke-width="2.4"/>
+<text x="41" y="314.6" font-size="12" text-anchor="start" fill="#6b7785" font-weight="normal" font-style="normal">sommet</text>
+<circle cx="103.6" cy="310.6" r="5" fill="#ffffff" stroke="#c8691a" stroke-width="2.4"/>
+<text x="113.6" y="314.6" font-size="12" text-anchor="start" fill="#6b7785" font-weight="normal" font-style="normal">milieu d'arête</text>
+<circle cx="229" cy="310.6" r="5" fill="#ffffff" stroke="#2a8a5c" stroke-width="2.4"/>
+<text x="239" y="314.6" font-size="12" text-anchor="start" fill="#6b7785" font-weight="normal" font-style="normal">centre de face</text>
+<circle cx="354.4" cy="310.6" r="5" fill="#ffffff" stroke="#8a3fa8" stroke-width="2.4"/>
+<text x="364.4" y="314.6" font-size="12" text-anchor="start" fill="#6b7785" font-weight="normal" font-style="normal">centre</text>
+</svg>

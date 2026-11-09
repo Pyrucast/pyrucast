@@ -28,6 +28,8 @@ sens trigonométrique.
 | 1 | \\( (1, 0) \\) |
 | 2 | \\( (0, 1) \\) |
 
+![Élément de référence TRI3 : 3 nœuds numérotés de 0 à 2 (sommet), axes ξ, η.](img/tri3-reference.svg)
+
 ## Fonctions de forme
 
 Les **coordonnées barycentriques** du point :
@@ -73,6 +75,8 @@ Un point suffirait à la raideur, de degré 0 ; la masse
 
 `"REDUCED"` : un point au centre de gravité \\( (\tfrac13, \tfrac13) \\), de
 poids \\( \tfrac12 \\).
+
+![Règles d'intégration du TRI3 : 3 points de Gauss (disques d'aire proportionnelle au poids) et le point unique de la règle réduite.](img/tri3-quadrature.svg)
 
 ## Exemple
 

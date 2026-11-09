@@ -25,6 +25,8 @@ d'une surface.
 | 0 | \\( -1 \\) |
 | 1 | \\( +1 \\) |
 
+![Élément de référence SEG2 : 2 nœuds numérotés 0 et 1 (extrémité), axe ξ.](img/seg2-reference.svg)
+
 ## Fonctions de forme
 
 \\[
@@ -76,6 +78,8 @@ est de degré 2 : intégrée exactement. Sous `"HERMITE3"`, la raideur de flexio
 l'est aussi : ses dérivées secondes sont linéaires, leur produit de degré 2.
 
 `"REDUCED"` : un point en \\( \xi = 0 \\), de poids 2.
+
+![Règles d'intégration du SEG2 : 2 points de Gauss (disques d'aire proportionnelle au poids) et le point unique de la règle réduite.](img/seg2-quadrature.svg)
 
 ## Exemple
 

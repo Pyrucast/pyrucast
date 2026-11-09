@@ -29,6 +29,8 @@ haut (\\( \zeta = 1 \\)), chacun dans le sens trigonométrique.
 | 1 | \\( (1, 0, 0) \\) | | 4 | \\( (1, 0, 1) \\) |
 | 2 | \\( (0, 1, 0) \\) | | 5 | \\( (0, 1, 1) \\) |
 
+![Élément de référence PENTA6 : 6 nœuds numérotés de 0 à 5 (sommet), axes ξ, η, ζ.](img/penta6-reference.svg)
+
 ## Fonctions de forme
 
 Le produit des coordonnées barycentriques du triangle,
@@ -71,6 +73,8 @@ sont exactes sur un prisme dont le triangle du haut est celui du bas déplacé.
 
 `"REDUCED"` : un point en \\( (\tfrac13, \tfrac13, \tfrac12) \\), de poids
 \\( \tfrac12 \\).
+
+![Règles d'intégration du PENTA6 : 6 points de Gauss (disques d'aire proportionnelle au poids) et le point unique de la règle réduite.](img/penta6-quadrature.svg)
 
 ## Exemple
 
