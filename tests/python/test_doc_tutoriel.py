@@ -156,6 +156,25 @@ for i, cote in enumerate(cotes):
 
 assert cotes[3].face_color == PALETTE[0]
 
+# ANCHOR: listes_en_boucle
+instants = []  # une liste vide…
+for i in range(3):
+    instants.append(i * 150.0)  # …qui grandit d'un élément à chaque tour
+print(instants)  # [0.0, 150.0, 300.0]
+
+couples = [(0.0, 20.0), (150.0, 35.0)]
+for t, valeur in couples:  # chaque couple, défait en deux noms
+    print(t, valeur)
+
+for avant, apres in zip([20.0, 35.0], [21.0, 37.0]):  # deux listes à la fois
+    print(apres - avant)  # 1.0, puis 2.0
+
+print(max([2, 1, 2]), sum([2, 1, 2]))  # 2 5
+# ANCHOR_END: listes_en_boucle
+
+assert instants == [0.0, 150.0, 300.0]
+assert [apres - avant for avant, apres in zip([20.0, 35.0], [21.0, 37.0])] == [1.0, 2.0]
+
 
 # ── Conditions ──────────────────────────────────────────────────────────────
 

@@ -86,6 +86,7 @@
   - [Thermique linéaire](tutoriel/thermique-lineaire.md)
     - [Régime stationnaire](tutoriel/thermique.md)
     - [Régime transitoire](tutoriel/thermique-transitoire.md)
+  - [Thermique non linéaire](tutoriel/thermique-non-lineaire.md)
   - [Calcul mécanique](tutoriel/mecanique.md)
   - [Compléments](tutoriel/complements.md)
 

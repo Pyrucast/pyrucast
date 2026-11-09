@@ -89,7 +89,12 @@ def stepping_runs(tmp_path_factory):
         with pytest.MonkeyPatch.context() as mp:
             mp.syspath_prepend(str(TUTORIEL))
             script = __import__(name)
-            mp.setattr(script, "OUT", str(tmp_path_factory.mktemp(name)))
+            figures = str(tmp_path_factory.mktemp(name))
+            # The helpers `show` and `show_nodefield`, reused from
+            # tutoriel/maillage.py and tutoriel/thermique.py, read their own
+            # module's OUT.
+            for module in (script, __import__("maillage"), __import__("thermique")):
+                mp.setattr(module, "OUT", figures)
             recorded = []
             step_by_step = pyrucast.stepping.step_by_step
 
@@ -138,3 +143,38 @@ def test_transient_settles_onto_the_steady_state(stepping_runs, thermal_fields):
     # A ramp gone wrong — a source never on, a flux left off — leaves tens of
     # degrees.
     assert worst < 0.05
+
+
+def test_kelvin_run_without_radiation_is_the_transient(stepping_runs):
+    """Shifted back by 273.15, the nonlinear script's run without radiation is
+    the °C transient of `tutoriel/thermique_transitoire.py`, at every instant
+    and every node: conduction and convection only see differences."""
+    script, (sans, _) = stepping_runs("thermique_non_lineaire")
+    _, (transient,) = stepping_runs("thermique_transitoire")
+    in_celsius = pyrucast.mesh.consolidate(
+        transient["results"][0]["temperature"].support()
+    )
+    in_kelvin = pyrucast.mesh.consolidate(sans["results"][0]["temperature"].support())
+    assert in_celsius.cell_count == in_kelvin.cell_count == 4000
+    nodes = [in_celsius.node(0, i, 0) for i in range(in_celsius.cell_count)]
+    twins = [in_kelvin.nearest_node(node.position()) for node in nodes]
+    assert len(sans["results"]) == len(transient["results"]) == 101
+    worst = 0.0
+    for celsius, kelvin in zip(transient["results"], sans["results"]):
+        values_c = celsius["temperature"].values(nodes, "T")
+        values_k = kelvin["temperature"].values(twins, "T")
+        for c, k in zip(values_c, values_k):
+            worst = max(worst, abs(k - script.ZERO_ABSOLU - c))
+    # Measured 3.4e-13 K (2026-11-09): the shift is exact up to round-off.
+    assert worst < 1e-9
+
+
+def test_radiation_cools_every_point_followed(stepping_runs):
+    """With radiation, each of the four points ends colder than without."""
+    script, (sans, avec) = stepping_runs("thermique_non_lineaire")
+    nodes = pyrucast.mesh.consolidate(sans["results"][0]["temperature"].support())
+    for point in (script.POINT_A, script.POINT_B, script.POINT_C, script.POINT_D):
+        node = nodes.nearest_node(point)
+        without = sans["results"][-1]["temperature"].value(node, "T")
+        with_radiation = avec["results"][-1]["temperature"].value(node, "T")
+        assert with_radiation < without, point

@@ -41,6 +41,9 @@ Chaque ligne renvoie à la page qui la détaille.
 [Conduction](../thermique.md) isotrope, orthotrope ou anisotrope, en régime
 stationnaire ou transitoire ; [convection et flux imposé](../echanges.md),
 sources volumiques ; [rayonnement](../rayonnement.md) vers l'environnement.
+Dans ce tutoriel : [régime stationnaire](thermique.md),
+[régime transitoire](thermique-transitoire.md),
+[rayonnement](thermique-non-lineaire.md).
 
 **Diffusion.** La [loi de Fick](../diffusion.md), pour une ou plusieurs
 espèces.
