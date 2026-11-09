@@ -5,21 +5,25 @@ use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 
-/// Sweep two SEG2 meshes into a mesh of `element_type`, building `n_layers`
-/// layers. `element_type` is one of `QUA4` (default), `TRI3`, `QUA8`,
-/// `QUA9`, `TRI6`.
+/// Sweep two line meshes into a mesh of `element_type`, building `n_layers`
+/// layers between them.
 ///
-/// Both meshes must be single-submesh SEG2 meshes with the same number of
-/// elements, attached to the same `Coords`. `n_layers` must be ≥ 1.
+/// Both meshes must be single-submesh lines of the same degree with the same
+/// number of elements, attached to the same `Coords`. `n_layers` must be ≥ 1.
+///
+/// - **SEG2 lines**: `element_type` is one of `QUA4`, `TRI3`, `QUA8`,
+///   `QUA9`, `TRI6`. A `QUA4` mesh is always built first; the others are
+///   derived from it (diagonal split for triangles, [`super::to_quadratic`]
+///   for the quadratic siblings, a fresh centre node per cell for `QUA9`).
+/// - **SEG3 lines**: `element_type` is `QUA8` or `QUA9`, built directly
+///   by the sweep kernel itself: the lines' own mid-nodes are
+///   re-used, so a strip between two arcs follows them exactly.
 ///
 /// Column `j` of `mesh_a` is linearly interpolated with column `j` of
 /// `mesh_b` to produce the intermediate layers. Endpoint nodes from both
 /// meshes are re-used (refcount incremented); intermediate nodes are
-/// created at evenly spaced positions.
-///
-/// A `QUA4` mesh is always built first; `TRI3`/`QUA8`/`QUA9`/`TRI6` are then
-/// derived from it (diagonal split for triangles, [`super::to_quadratic`]
-/// for the quadratic siblings, and a fresh center node per cell for `QUA9`).
+/// created at evenly spaced positions. **Two closed loops** (each ending on
+/// its own first node) give a closed ring: the seam is shared, not doubled.
 ///
 /// QUA4 node order per element (counterclockwise, `mesh_a` side first):
 /// `[k][j]`, `[k][j+1]`, `[k+1][j+1]`, `[k+1][j]`.
@@ -47,8 +51,29 @@ pub fn sweep(
     n_layers: usize,
     element_type: ElementType,
 ) -> Result<Mesh> {
-    let qua4 = crate::ops::mesh::sweep_kernel::qua4_between(mesh_a, mesh_b, n_layers)?;
+    use crate::ops::mesh::sweep_kernel::grid_between;
+    if line_degree(mesh_a) == ElementType::SEG3 {
+        return match element_type {
+            ElementType::QUA8 | ElementType::QUA9 => {
+                grid_between(mesh_a, mesh_b, n_layers, element_type)
+            }
+            other => Err(PyrucastError::Message(format!(
+                "sweep: SEG3 lines give QUA8 or QUA9, not {other} (a SEG3 line has mid-nodes \
+                 that {other} cannot carry)"
+            ))),
+        };
+    }
+    let qua4 = grid_between(mesh_a, mesh_b, n_layers, ElementType::QUA4)?;
     finish_surface(qua4, element_type, "sweep")
+}
+
+/// The element type of a one-zone line, `SEG2` when the mesh has another
+/// shape — the sweep kernel then reports what is wrong.
+fn line_degree(mesh: &Mesh) -> ElementType {
+    match mesh.get(0) {
+        Ok(zone) if mesh.len() == 1 => zone.read().element_type(),
+        _ => ElementType::SEG2,
+    }
 }
 
 /// Deliver a `QUA4` grid as the surface type the caller asked for.
@@ -334,6 +359,163 @@ mod tests {
             qua9.node(0, 0, 8).unwrap().position().unwrap(),
             vec![0.5, 0.5]
         );
+    }
+
+    /// A closed square loop of four SEG2, corners at `±h`.
+    fn square_loop(coords: &Handle<Coords>, h: f64) -> Mesh {
+        let n: Vec<Node> = [[-h, -h], [h, -h], [h, h], [-h, h]]
+            .iter()
+            .map(|p| Node::create_in(coords.clone(), p).unwrap())
+            .collect();
+        let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+        for i in 0..4 {
+            sm.add_cell(&[n[i].id(), n[(i + 1) % 4].id()]).unwrap();
+        }
+        Mesh::from_submesh(sm)
+    }
+
+    /// The distinct node ids a one-zone mesh references.
+    fn distinct_nodes(mesh: &Mesh) -> std::collections::HashSet<NodeId> {
+        mesh.get(0)
+            .unwrap()
+            .read()
+            .connectivity()
+            .iter()
+            .copied()
+            .collect()
+    }
+
+    #[test]
+    fn sweep_two_closed_loops_close_the_ring() {
+        // 4 outer + 4 inner + 2 intermediate rings of 4: 16 nodes. A doubled
+        // seam would add one node per intermediate ring, 18 in all.
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let outer = square_loop(&coords, 2.0);
+        let inner = square_loop(&coords, 1.0);
+        let ring = sweep(&outer, &inner, 3, ElementType::QUA4).unwrap();
+        assert_eq!(ring.cell_count(), 12);
+        assert_eq!(distinct_nodes(&ring).len(), 16);
+        // Last column of every layer = first column: cell 3 of a layer ends
+        // where cell 0 starts.
+        for k in 0..3 {
+            assert_eq!(
+                ring.node(0, 4 * k + 3, 1).unwrap().id(),
+                ring.node(0, 4 * k, 0).unwrap().id()
+            );
+        }
+    }
+
+    #[test]
+    fn sweep_refuses_a_closed_loop_onto_an_open_line() {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let closed = square_loop(&coords, 2.0);
+        let a = Node::create_in(coords.clone(), &[0.0, 5.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[4.0, 5.0]).unwrap();
+        let open = line(&a, &b, 4, ElementType::SEG2).unwrap();
+        let err = sweep(&closed, &open, 2, ElementType::QUA4).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("mesh_a is a closed loop but mesh_b is open"));
+    }
+
+    /// Two parallel straight lines, `n` cells each, of the given degree.
+    fn two_lines(coords: &Handle<Coords>, n: usize, et: ElementType) -> (Mesh, Mesh) {
+        let p = |x: f64, y: f64| Node::create_in(coords.clone(), &[x, y]).unwrap();
+        (
+            line(&p(0.0, 0.0), &p(2.0, 0.5), n, et).unwrap(),
+            line(&p(0.0, 1.0), &p(2.0, 1.5), n, et).unwrap(),
+        )
+    }
+
+    /// Node positions of every cell, in local order.
+    fn cell_positions(mesh: &Mesh) -> Vec<Vec<Vec<f64>>> {
+        let npc = mesh.get(0).unwrap().read().element_type().nodes_per_cell();
+        (0..mesh.cell_count())
+            .map(|c| {
+                (0..npc)
+                    .map(|k| mesh.node(0, c, k).unwrap().position().unwrap())
+                    .collect()
+            })
+            .collect()
+    }
+
+    fn assert_same_cells(a: &Mesh, b: &Mesh) {
+        let (pa, pb) = (cell_positions(a), cell_positions(b));
+        assert_eq!(pa.len(), pb.len());
+        for (c, (ca, cb)) in pa.iter().zip(pb.iter()).enumerate() {
+            assert_eq!(ca.len(), cb.len());
+            for (k, (x, y)) in ca.iter().zip(cb.iter()).enumerate() {
+                for d in 0..x.len() {
+                    assert!(
+                        (x[d] - y[d]).abs() < 1e-12,
+                        "cell {c}, node {k}: {x:?} vs {y:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sweep_seg3_lines_match_the_promoted_strip_on_straight_lines() {
+        // Between straight lines, the native quadratic strip and the QUA4
+        // strip promoted by `to_quadratic` are the same mesh, node by node.
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let (a2, b2) = two_lines(&coords, 3, ElementType::SEG2);
+        let (a3, b3) = two_lines(&coords, 3, ElementType::SEG3);
+        for et in [ElementType::QUA8, ElementType::QUA9] {
+            let promoted = sweep(&a2, &b2, 2, et).unwrap();
+            let native = sweep(&a3, &b3, 2, et).unwrap();
+            assert_eq!(native.element_types().unwrap(), vec![et]);
+            assert_same_cells(&native, &promoted);
+        }
+    }
+
+    #[test]
+    fn sweep_seg3_between_arcs_follows_them() {
+        // A quarter ring between radii 1 and 2: the mid-nodes of the first
+        // and last rows are those of the arcs, on the circles.
+        use crate::ops::mesh::arc::arc;
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let p = |x: f64, y: f64| Node::create_in(coords.clone(), &[x, y]).unwrap();
+        let o = p(0.0, 0.0);
+        let inner = arc(&p(1.0, 0.0), &o, &p(0.0, 1.0), 4, ElementType::SEG3).unwrap();
+        let outer = arc(&p(2.0, 0.0), &o, &p(0.0, 2.0), 4, ElementType::SEG3).unwrap();
+        let ring = sweep(&inner, &outer, 2, ElementType::QUA8).unwrap();
+        assert_eq!(ring.cell_count(), 8);
+        let radius = |c: usize, k: usize| {
+            let x = ring.node(0, c, k).unwrap().position().unwrap();
+            (x[0] * x[0] + x[1] * x[1]).sqrt()
+        };
+        for j in 0..4 {
+            assert!((radius(j, 4) - 1.0).abs() < 1e-12); // first row, on the inner arc
+            assert!((radius(4 + j, 6) - 2.0).abs() < 1e-12); // last row, on the outer arc
+        }
+    }
+
+    #[test]
+    fn sweep_seg3_refuses_linear_targets_and_mixed_degrees() {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let (a2, _) = two_lines(&coords, 2, ElementType::SEG2);
+        let (a3, b3) = two_lines(&coords, 2, ElementType::SEG3);
+        assert!(sweep(&a3, &b3, 1, ElementType::QUA4).is_err());
+        assert!(sweep(&a3, &b3, 1, ElementType::TRI6).is_err());
+        assert!(sweep(&a3, &a2, 1, ElementType::QUA8).is_err());
+        assert!(sweep(&a2, &a3, 1, ElementType::QUA8).is_err());
+    }
+
+    #[test]
+    fn sweep_two_closed_seg3_loops_close_the_ring() {
+        // Two concentric SEG3 circles of 6 cells, 2 layers: the seam is
+        // shared on every level, mid-levels included.
+        use crate::ops::mesh::circle::circle;
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let o = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let inner = circle(&o, &[0.0, 0.0, 1.0], 1.0, 6, ElementType::SEG3).unwrap();
+        let outer = circle(&o, &[0.0, 0.0, 1.0], 2.0, 6, ElementType::SEG3).unwrap();
+        let ring = sweep(&inner, &outer, 2, ElementType::QUA8).unwrap();
+        // Three corner levels of 6 corners + 6 mid-nodes, two mid-levels of 6
+        // nodes: 36 + 12 = 48. A doubled seam would add one per level.
+        assert_eq!(distinct_nodes(&ring).len(), 48);
     }
 
     #[test]

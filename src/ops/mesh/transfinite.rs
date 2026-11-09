@@ -196,7 +196,7 @@ fn transfinite_qua4(side1: &Mesh, side2: &Mesh, side3: &Mesh, side4: &Mesh) -> R
 
 /// Ordered node ids and coordinates of a single-submesh `SEG2` line mesh,
 /// column `j` = first node of elem 0 (j=0), or second node of elem j-1
-/// (j≥1) — the same convention as [`super::sweep_kernel::qua4_between`].
+/// (j≥1) — the same convention as [`super::sweep_kernel::grid_between`].
 type SideColumns = (Handle<Coords>, Vec<NodeId>, Vec<Vec<f64>>);
 
 fn side_columns(mesh: &Mesh, label: &str) -> Result<SideColumns> {

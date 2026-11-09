@@ -15,8 +15,8 @@ use crate::error::{PyrucastError, Result};
 /// `n_elems` must be ≥ 3 and `radius` must be > 0. `n_elems` nodes are
 /// created at evenly spaced angles; the center node itself is **not**
 /// included in the mesh. The first and last elements share node 0,
-/// closing the loop. For `SEG3`, the result is then promoted to
-/// quadratic (one mid-edge node per element) via [`super::to_quadratic`].
+/// closing the loop. For `SEG3`, each element also gets its mid-node at
+/// the half angle — **on the circle**, not on the chord.
 ///
 /// The in-plane basis `(u, v)` is built by Gram-Schmidt against the
 /// least-aligned coordinate axis so that `(u, v, n̂)` is right-handed.
@@ -88,29 +88,41 @@ pub fn circle(
         center_coords.get(1).copied().unwrap_or(0.0),
         center_coords.get(2).copied().unwrap_or(0.0),
     );
-    // Every node of the ring in one locked pass, then the ring itself.
-    let mut flat: Vec<f64> = Vec::with_capacity(n_elems * dim);
+    // Every node of the ring — the corners, then the SEG3 mid-nodes at the
+    // half angles — in one locked pass, then the ring itself.
+    let quadratic = element_type == ElementType::SEG3;
+    let n_mids = if quadratic { n_elems } else { 0 };
+    let on_circle = |s: f64| {
+        let theta = 2.0 * PI * s / n_elems as f64;
+        centre + radius * (theta.cos() * u + theta.sin() * v)
+    };
+    let mut flat: Vec<f64> = Vec::with_capacity((n_elems + n_mids) * dim);
     for i in 0..n_elems {
-        let theta = 2.0 * PI * i as f64 / n_elems as f64;
-        let p3 = centre + radius * (theta.cos() * u + theta.sin() * v);
-        flat.extend_from_slice(&p3.as_slice()[..dim]);
+        flat.extend_from_slice(&on_circle(i as f64).as_slice()[..dim]);
+    }
+    for i in 0..n_mids {
+        flat.extend_from_slice(&on_circle(i as f64 + 0.5).as_slice()[..dim]);
     }
     let first = coords.write().add_nodes(&flat)?.start;
     let at = |i: usize| NodeId(first + i as u32);
+    let mid = |i: usize| NodeId(first + (n_elems + i) as u32);
 
-    let conn: Vec<NodeId> = (0..n_elems)
-        .flat_map(|i| [at(i), at((i + 1) % n_elems)])
-        .collect();
-    let sm = SubMesh::from_connectivity(coords.clone(), ElementType::SEG2, conn)?;
+    let conn: Vec<NodeId> = if quadratic {
+        (0..n_elems)
+            .flat_map(|i| [at(i), at((i + 1) % n_elems), mid(i)])
+            .collect()
+    } else {
+        (0..n_elems)
+            .flat_map(|i| [at(i), at((i + 1) % n_elems)])
+            .collect()
+    };
+    let sm = SubMesh::from_connectivity(coords.clone(), element_type, conn)?;
     // The ring owns its nodes now; hand back the unit `add_nodes` gave.
-    let owned: Vec<NodeId> = (first..first + n_elems as u32).map(NodeId).collect();
+    let owned: Vec<NodeId> = (first..first + (n_elems + n_mids) as u32)
+        .map(NodeId)
+        .collect();
     coords.write().decref_all(&owned)?;
-    let mut mesh = Mesh::from_submesh(sm);
-
-    if element_type == ElementType::SEG3 {
-        mesh = super::to_quadratic(&mesh)?;
-    }
-    Ok(mesh)
+    Ok(Mesh::from_submesh(sm))
 }
 
 #[cfg(test)]
@@ -184,6 +196,25 @@ mod tests {
         let mesh = circle(&center, &[0.0, 0.0, 1.0], 1.0, 6, ElementType::SEG3).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::SEG3]);
         assert_eq!(mesh.cell_count(), 6);
+    }
+
+    #[test]
+    fn circle_seg3_mid_nodes_lie_on_the_circle_and_the_ring_closes() {
+        // Six SEG3 of radius 2: every mid-node is on the circle (a chord
+        // midpoint would be at 2·cos(30°) ≈ 1.73), and the last cell ends on
+        // the first one's start.
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let center = Node::create_in(coords.clone(), &[1.0, -1.0]).unwrap();
+        let mesh = circle(&center, &[0.0, 0.0, 1.0], 2.0, 6, ElementType::SEG3).unwrap();
+        for cell in 0..6 {
+            let m = mesh.node(0, cell, 2).unwrap().position().unwrap();
+            let r = ((m[0] - 1.0).powi(2) + (m[1] + 1.0).powi(2)).sqrt();
+            assert!((r - 2.0).abs() < 1e-12, "cell {cell}: r = {r}");
+        }
+        assert_eq!(
+            mesh.node(0, 5, 1).unwrap().id(),
+            mesh.node(0, 0, 0).unwrap().id()
+        );
     }
 
     #[test]

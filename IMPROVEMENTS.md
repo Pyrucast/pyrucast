@@ -174,3 +174,24 @@ diagram. Apply the same style there once its rendering on the site suits.
 different supports, `+` brings the zones of both sides into the result, a zone
 present on one side only passing as is: it does gather zones. Reword: `|` is
 the union of objects; `+` computes, and on fields it pairs zones by support.
+
+## The online book describes master, not the installed version
+
+`.github/workflows/pages.yml` publishes the book and the Rust docs on every
+push to master, while `pip install pyrucast` installs the last tag (2026-11-08:
+master is 109 commits ahead of `v0.11.0`, breaking changes included). A reader
+of the site can meet functions, signatures or behaviours their version lacks.
+The `.pyi` stub and `help()` ship in the wheel and match the installed version;
+only the book drifts. Whoever installs an older version gets the matching stub,
+but no matching book.
+
+- (i) A banner on every page naming the version described (`git describe` in
+  CI, "development" off a tag).
+- (ii) A versioned site: root = the last release, built from its tag; `/dev/`
+  = master, with the banner. Both built in the same `pages.yml` run, no
+  `gh-pages` branch needed.
+- (iii) An HTML archive (book + Rust docs) attached to each GitHub Release:
+  keeps the docs of every version, but does not fix the main issue, since pip
+  users read the site.
+
+Recommended: (ii) + (iii), on a branch of their own.

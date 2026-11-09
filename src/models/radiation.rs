@@ -36,6 +36,13 @@
 //! that the behaviour integration produced — the same producer/consumer pairing
 //! as the plastic `D_alg`.
 //!
+//! All three are evaluated at the **Gauss points** of the face: `T` is
+//! interpolated there from the nodal values and raised to the fourth power
+//! there, so the residual integrates `σε(T_g⁴ − T_∞⁴)` and the tangent is its
+//! exact derivative with respect to the nodal temperatures.
+//! `pyrucast.stepping` then cancels the residual by successive corrections,
+//! the tangent taken once at the start of each step.
+//!
 //! ## Nature
 //!
 //! It declares **two** natures, `[Thermal, Radiation]`. A radiating boundary is
@@ -485,5 +492,5 @@ crate::physics_operator! {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn radiation(fespace, target) via SubModel::radiation;
-    python: "`model.radiation(fespace, target)` — radiation to infinity on a\n*boundary* `fespace`: `q·n = σε(T⁴ − T_∞⁴)`, cooling the model `target`.\nSame DOFs (`\"T\"`/`\"q\"`) as `heat_conduction`, which `target` must\nassemble — a radiating boundary with no conduction beneath it raises —, so\nit composes with `|`:\n`conduction = model.heat_conduction(bulk)`\n`model = conduction | model.radiation(boundary, conduction)`.\n\nMaterial: `emis` (emissivity) and `T_inf` (far-field temperature), plus an\noptional `sigma` overriding the SI Stefan-Boltzmann constant. With the\ndefault `sigma`, `T` is an **absolute** temperature — a fourth power has\nno invariance to shift an origin through.\n\nUnlike convection this law is non-linear, so it contributes three terms:\nthe linearised film `4σεT_∞³∫NᵢNⱼ` as stiffness, the exact residual\n`∫Nᵢσε(T⁴ − T_∞⁴)` through `internal_forces`, and the consistent tangent\n`4σεT³∫NᵢNⱼ` through `matrix.tangent(...)`. Its natures are `\"thermal\"`\n**and** `\"radiation\"`."
+    python: "`model.radiation(fespace, target)` — radiation to infinity on a\n*boundary* `fespace`: `q·n = σε(T⁴ − T_∞⁴)`, cooling the model `target`.\nSame DOFs (`\"T\"`/`\"q\"`) as `heat_conduction`, which `target` must\nassemble — a radiating boundary with no conduction beneath it raises —, so\nit composes with `|`:\n`conduction = model.heat_conduction(bulk)`\n`model = conduction | model.radiation(boundary, conduction)`.\n\nMaterial: `emis` (emissivity) and `T_inf` (far-field temperature), plus an\noptional `sigma` overriding the SI Stefan-Boltzmann constant. With the\ndefault `sigma`, `T` is an **absolute** temperature — a fourth power has\nno invariance to shift an origin through.\n\nUnlike convection this law is non-linear, so it contributes three terms:\nthe linearised film `4σεT_∞³∫NᵢNⱼ` as stiffness, the exact residual\n`∫Nᵢσε(T⁴ − T_∞⁴)` through `internal_forces`, and the consistent tangent\n`4σεT³∫NᵢNⱼ` through `matrix.tangent(...)`, all evaluated at the face's\nGauss points with `T` interpolated there. Its natures are `\"thermal\"`\n**and** `\"radiation\"`."
 }

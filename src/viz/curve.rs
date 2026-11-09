@@ -13,14 +13,21 @@ use crate::viz::camera::Bbox3;
 use crate::viz::drawable::{pl_err, Drawable};
 use crate::viz::View;
 
-/// Distinct stroke colours cycled across series (one per zone).
-const PALETTE: [RGBColor; 6] = [
-    RGBColor(31, 119, 180),
-    RGBColor(214, 39, 40),
-    RGBColor(44, 160, 44),
-    RGBColor(148, 103, 189),
-    RGBColor(255, 127, 14),
-    RGBColor(23, 190, 207),
+/// The stroke colour of each series (one per zone), in a fixed order: eight
+/// hues told apart on the white chart surface, also under the three common
+/// colour-vision deficiencies — every pair of neighbouring slots stays at
+/// least ΔE 9 apart in OKLab ×100 (blue, orange, aqua, yellow, magenta, green,
+/// violet, red). Past eight curves the colours come round again: a figure
+/// that needs more should be split.
+const PALETTE: [RGBColor; 8] = [
+    RGBColor(42, 120, 214),
+    RGBColor(235, 104, 52),
+    RGBColor(27, 175, 122),
+    RGBColor(237, 161, 0),
+    RGBColor(232, 123, 164),
+    RGBColor(0, 131, 0),
+    RGBColor(98, 80, 214),
+    RGBColor(227, 73, 72),
 ];
 
 /// A set of labelled `(x, y)` series drawn as connected lines with markers.
@@ -146,6 +153,40 @@ mod tests {
         assert!(buf.contains("time"));
         assert!(buf.contains("evolution"));
         assert!(buf.contains("zone 0"));
+    }
+
+    #[test]
+    fn eight_curves_get_eight_colours() {
+        // One stroke colour per series, none repeated before the ninth.
+        let series: Vec<(String, Vec<(f64, f64)>)> = (0..8)
+            .map(|i| {
+                (
+                    format!("zone {i}"),
+                    vec![(0.0, i as f64), (1.0, i as f64 + 1.0)],
+                )
+            })
+            .collect();
+        let plot = CurvePlot {
+            series,
+            x_label: "t".into(),
+            y_label: "T".into(),
+            title: String::new(),
+        };
+        let mut buf = String::new();
+        {
+            let backend = SVGBackend::with_string(&mut buf, (640, 480));
+            let area = backend.into_drawing_area();
+            area.fill(&WHITE).unwrap();
+            plot.draw_on(&area, &View::default()).unwrap();
+            area.present().unwrap();
+        }
+        let distinct: std::collections::HashSet<_> =
+            PALETTE.iter().map(|c| (c.0, c.1, c.2)).collect();
+        assert_eq!(distinct.len(), 8);
+        for c in PALETTE {
+            let hex = format!("#{:02X}{:02X}{:02X}", c.0, c.1, c.2);
+            assert!(buf.contains(&hex), "{hex} missing from the SVG");
+        }
     }
 
     #[test]

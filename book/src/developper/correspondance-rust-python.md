@@ -116,7 +116,8 @@ omettent souvent le `&` et le `Result` pour la lisibilité.
 ### `ops::mesh` — construction et transformation de maillages
 
 Les mailleurs prennent `element_type=None` en Python : `"SEG2"` pour `line`,
-`circle` et `arc`, `"QUA4"` pour `sweep` et `transfinite`.
+`circle` et `arc`, `"QUA4"` pour `transfinite`, et pour `sweep` la surface du
+degré des lignes (`"QUA4"` entre deux `SEG2`, `"QUA8"` entre deux `SEG3`).
 
 | Rust (`ops::mesh::…`) | Python (`pyrucast.mesh.…`) |
 |---|---|
@@ -138,6 +139,7 @@ Les mailleurs prennent `element_type=None` en Python : `"SEG2"` pour `line`,
 | `symmetry_point(mesh: &Mesh, center: &[f64]) -> Mesh` | `symmetry_point(mesh, center) -> Mesh` |
 | `symmetry_line(mesh: &Mesh, a: &[f64], b: &[f64]) -> Mesh` | `symmetry_line(mesh, a, b) -> Mesh` |
 | `symmetry_plane(mesh: &Mesh, a: &[f64], b: &[f64], c: &[f64]) -> Mesh` | `symmetry_plane(mesh, a, b, c) -> Mesh` |
+| `project_on_sphere(mesh: &Mesh, center: &[f64], radius: f64) -> Mesh` | `project_on_sphere(mesh, center, radius) -> Mesh` |
 | `triangulate_surface(contour: &Mesh, element_type: ElementType, target_size: Option<f64>) -> Mesh` | `triangulate_surface(contour, element_type, size=None) -> Mesh` |
 | `pave_surface(contour: &Mesh, element_type: ElementType, target_size: Option<f64>, prefer_quads: bool, relax: FrontRelax) -> Mesh` | `pave_surface(contour, element_type, size=None, prefer_quads=False, relax=None) -> Mesh` |
 | `grid_surface(contour: &Mesh, element_type: ElementType, target_size: Option<f64>, band: usize, prefer_quads: bool, relax: FrontRelax) -> Mesh` | `grid_surface(contour, element_type, size=None, band=0, prefer_quads=False, relax=None) -> Mesh` |

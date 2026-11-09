@@ -45,7 +45,7 @@ use crate::handle::Handle;
 pub(super) fn map_coords(
     mesh: &Mesh,
     reverse: bool,
-    mut f: impl FnMut(&[f64]) -> Result<Vec<f64>>,
+    mut f: impl FnMut(&[f64], &mut Vec<f64>) -> Result<()>,
 ) -> Result<Mesh> {
     let coords = mesh.coords()?;
 
@@ -79,14 +79,8 @@ pub(super) fn map_coords(
     {
         let c = coords.read();
         for &id in &sources {
-            let moved = f(c.position(id)?)?;
-            if moved.len() != dim {
-                return Err(PyrucastError::Message(format!(
-                    "map_coords: the transform returned {} coordinates in a {dim}-D mesh",
-                    moved.len()
-                )));
-            }
-            flat.extend_from_slice(&moved);
+            f(c.position(id)?, &mut flat)?;
+            debug_assert_eq!(flat.len() % dim, 0, "a transform appends dim coordinates");
         }
     }
     // One fresh node per distinct source node (so nodes shared between cells
@@ -170,8 +164,9 @@ pub fn translate(mesh: &Mesh, vector: &[f64]) -> Result<Mesh> {
             dim
         )));
     }
-    map_coords(mesh, false, |c| {
-        Ok(c.iter().zip(vector).map(|(&x, &d)| x + d).collect())
+    map_coords(mesh, false, |c, out| {
+        out.extend(c.iter().zip(vector).map(|(&x, &d)| x + d));
+        Ok(())
     })
 }
 
@@ -219,9 +214,10 @@ pub fn rotate(mesh: &Mesh, angle: f64, center: &[f64], axis: Option<&[f64]>) -> 
     match dim {
         2 => {
             let (cx, cy) = (center[0], center[1]);
-            map_coords(mesh, false, |c| {
+            map_coords(mesh, false, |c, out| {
                 let (x, y) = (c[0] - cx, c[1] - cy);
-                Ok(vec![cx + cos * x - sin * y, cy + sin * x + cos * y])
+                out.extend_from_slice(&[cx + cos * x - sin * y, cy + sin * x + cos * y]);
+                Ok(())
             })
         }
         3 => {
@@ -242,7 +238,7 @@ pub fn rotate(mesh: &Mesh, angle: f64, center: &[f64], axis: Option<&[f64]>) -> 
             }
             let u = [axis[0] / norm, axis[1] / norm, axis[2] / norm];
             let (cx, cy, cz) = (center[0], center[1], center[2]);
-            map_coords(mesh, false, |c| {
+            map_coords(mesh, false, |c, out| {
                 let v = [c[0] - cx, c[1] - cy, c[2] - cz];
                 // Rodrigues: v' = v cosθ + (u×v) sinθ + u (u·v)(1-cosθ).
                 let cross = [
@@ -252,11 +248,12 @@ pub fn rotate(mesh: &Mesh, angle: f64, center: &[f64], axis: Option<&[f64]>) -> 
                 ];
                 let dot = u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
                 let k = dot * (1.0 - cos);
-                Ok(vec![
+                out.extend_from_slice(&[
                     cx + v[0] * cos + cross[0] * sin + u[0] * k,
                     cy + v[1] * cos + cross[1] * sin + u[1] * k,
                     cz + v[2] * cos + cross[2] * sin + u[2] * k,
-                ])
+                ]);
+                Ok(())
             })
         }
         other => Err(PyrucastError::Message(format!(
@@ -334,8 +331,9 @@ fn unit(v: &[f64], name: &str, op: &str) -> Result<Vec<f64>> {
 pub fn symmetry_point(mesh: &Mesh, center: &[f64]) -> Result<Mesh> {
     let dim = dim_of(mesh, center, "center", "symmetry_point")?;
     // x ↦ 2c − x flips every axis: reversing iff the dimension is odd.
-    map_coords(mesh, dim % 2 == 1, |c| {
-        Ok(c.iter().zip(center).map(|(&x, &g)| 2.0 * g - x).collect())
+    map_coords(mesh, dim % 2 == 1, |c, out| {
+        out.extend(c.iter().zip(center).map(|(&x, &g)| 2.0 * g - x));
+        Ok(())
     })
 }
 
@@ -394,13 +392,11 @@ pub fn symmetry_line(mesh: &Mesh, a: &[f64], b: &[f64]) -> Result<Mesh> {
     let dir: Vec<f64> = b.iter().zip(a).map(|(&bi, &ai)| bi - ai).collect();
     let d = unit(&dir, "the direction a → b", "symmetry_line")?;
     // The line keeps one direction and flips the dim−1 others.
-    map_coords(mesh, dim % 2 == 0, |c| {
-        let v: Vec<f64> = c.iter().zip(a).map(|(&x, &ai)| x - ai).collect();
-        let along: f64 = v.iter().zip(&d).map(|(&vi, &di)| vi * di).sum();
-        // x' = a + 2 (v·d̂) d̂ − v.
-        Ok((0..v.len())
-            .map(|i| a[i] + 2.0 * along * d[i] - v[i])
-            .collect())
+    map_coords(mesh, dim % 2 == 0, |c, out| {
+        // x' = a + 2 (v·d̂) d̂ − v, with v = x − a.
+        let along: f64 = (0..c.len()).map(|i| (c[i] - a[i]) * d[i]).sum();
+        out.extend((0..c.len()).map(|i| a[i] + 2.0 * along * d[i] - (c[i] - a[i])));
+        Ok(())
     })
 }
 
@@ -479,17 +475,15 @@ pub fn symmetry_plane(mesh: &Mesh, a: &[f64], b: &[f64], c: &[f64]) -> Result<Me
     }
     let n = unit(&cross, "the plane normal", "symmetry_plane")?;
     // A single flipped direction: always orientation-reversing.
-    map_coords(mesh, true, |x| {
+    map_coords(mesh, true, |x, out| {
         let gap: f64 = x
             .iter()
             .zip(a)
             .zip(&n)
             .map(|((&xi, &ai), &ni)| (xi - ai) * ni)
             .sum();
-        Ok(x.iter()
-            .zip(&n)
-            .map(|(&xi, &ni)| xi - 2.0 * gap * ni)
-            .collect())
+        out.extend(x.iter().zip(&n).map(|(&xi, &ni)| xi - 2.0 * gap * ni));
+        Ok(())
     })
 }
 

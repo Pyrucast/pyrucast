@@ -1228,6 +1228,44 @@ impl FiniteElementSpace {
         Self::new(mesh, Interpolation::Lagrange1)
     }
 
+    /// Build the FE space of **each submesh's own degree** over `mesh`:
+    /// `Lagrange1` on a linear submesh (HEX8, QUA4…), `Lagrange2` on a
+    /// quadratic one (HEX20, QUA8…), with the default Gauss quadrature. What
+    /// Python's `FiniteElementSpace(mesh)` builds.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+    /// // A linear line and a quadratic one: each gets its own degree.
+    /// let droite = mesh::line(&p(&[0.0, 0.0]), &p(&[1.0, 0.0]), 2, ElementType::SEG2)?;
+    /// let courbe = mesh::line(&p(&[0.0, 1.0]), &p(&[1.0, 1.0]), 2, ElementType::SEG3)?;
+    /// let fes = FiniteElementSpace::lagrange(&droite.union(&courbe)?)?;
+    /// assert_eq!(fes.get(0)?.read().interpolation(), Interpolation::Lagrange1);
+    /// assert_eq!(fes.get(1)?.read().interpolation(), Interpolation::Lagrange2);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn lagrange(mesh: &Mesh) -> Result<Self> {
+        // A submesh with no degree (POI1) keeps `Lagrange1`, for the
+        // subspace to report what is wrong with it.
+        let choices: Vec<(Interpolation, QuadratureRule)> = mesh
+            .into_iter()
+            .map(|sm| {
+                let own = sm.read().element_type().as_kind().degree();
+                (
+                    own.unwrap_or(Interpolation::Lagrange1),
+                    QuadratureRule::Gauss,
+                )
+            })
+            .collect();
+        Self::with(mesh, &choices)
+    }
+
     /// Element view on cell `cell_idx` of subspace `subspace_idx`.
     ///
     /// ```

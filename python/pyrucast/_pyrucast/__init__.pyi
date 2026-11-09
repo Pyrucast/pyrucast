@@ -120,6 +120,7 @@ __all__ = [
     "points_on_torus",
     "positions",
     "project",
+    "project_on_sphere",
     "psca",
     "radiation",
     "read_gmsh",
@@ -895,7 +896,9 @@ class Evolution:
         `save` writes a PNG/SVG (a single `frame`, default = last for fields);
         omit it for the interactive window. `mesh` supplies the surface for
         field evolutions (node frames default to a point cloud). `x_label` /
-        `y_label` / `title` label the curve.
+        `y_label` label the curve's axes; `title` names the figure — above a
+        curve, below a field frame (or as the window title), as for
+        `Mesh.plot`.
         `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
         of revolution — see `SubMesh.plot`.
         """
@@ -966,12 +969,13 @@ class FiniteElementSpace:
     """
     def __new__(cls, mesh: Mesh, interpolation: typing.Optional[builtins.str] = None, quadrature: typing.Optional[builtins.str] = None) -> FiniteElementSpace:
         r"""
-        `FiniteElementSpace(mesh)` — Lagrange-1 + default Gauss for
-        every submesh.
+        `FiniteElementSpace(mesh)` — on every submesh, the Lagrange
+        interpolation of its own degree (`LAGRANGE1` on a HEX8, `LAGRANGE2`
+        on a HEX20 or a QUA8) and the default Gauss quadrature.
         
-        `FiniteElementSpace(mesh, interpolation="LAGRANGE1", quadrature="GAUSS")`
-        — same `(interpolation, quadrature)` applied to every submesh. Those two
-        names **are** the defaults; omitting either one keeps it.
+        `FiniteElementSpace(mesh, interpolation="LAGRANGE2", quadrature="GAUSS")`
+        — an interpolation given applies to every submesh; omitting it keeps
+        each submesh's own degree. `"GAUSS"` is the default quadrature.
         """
     @classmethod
     def with_choices(cls, mesh: Mesh, choices: typing.Sequence[tuple[builtins.str, builtins.str]]) -> FiniteElementSpace:
@@ -1685,12 +1689,19 @@ class Mesh:
         """
     def sweep(self, mesh_b: Mesh, n_layers: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
-        Sweep two SEG2 line meshes into a mesh of `element_type`, building
-        `n_layers` layers between `mesh_a` and `mesh_b`.
+        Sweep two line meshes into a mesh of `element_type`, building `n_layers`
+        layers between `mesh_a` and `mesh_b`.
         
-        `element_type` is `"QUA4"` (default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
-        `"TRI6"` — a `QUA4` mesh is always built first, then converted (diagonal
-        split for the triangles, promoted to quadratic for `QUA8`/`QUA9`/`TRI6`).
+        Between **SEG2** lines, `element_type` is `"QUA4"` (default), `"TRI3"`,
+        `"QUA8"`, `"QUA9"` or `"TRI6"` — a `QUA4` mesh is always built first, then
+        converted (diagonal split for the triangles, promoted to quadratic for
+        `QUA8`/`QUA9`/`TRI6`). Between **SEG3** lines, it is `"QUA8"` (default) or
+        `"QUA9"`, built directly: the lines' own mid-nodes are re-used, so a strip
+        between two arcs follows them exactly.
+        
+        Two **closed loops** (each ending on its own first node) give a closed
+        ring, the seam shared between its first and last cells; a closed loop
+        swept onto an open line is an error.
         """
     def transfinite(self, side2: Mesh, side3: Mesh, side4: Mesh, element_type: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
@@ -1761,6 +1772,19 @@ class Mesh:
         the same position (nodes shared between cells stay shared), so the two
         meshes no longer move together. With `new_nodes=False` they share their
         nodes: moving one moves it in both.
+        """
+    def project_on_sphere(self, center: typing.Sequence[builtins.float], radius: builtins.float) -> Mesh:
+        r"""
+        Project `mesh` **radially** onto the sphere of centre `center` and radius
+        `radius`: every node — corners and mid-nodes alike — is pushed along the
+        ray from `center` through it, to the distance `radius`.
+        
+        Returns a fresh copy with its own nodes (one per distinct node, so a
+        closed loop stays closed), in the same zones, types and colours; `mesh`
+        is left untouched. In a plane through `center` the sphere is a circle: a
+        contour of that plane lands on it node for node, each at its own angle —
+        the inner loop of a ring, ready for `sweep`. A node on `center` has no
+        direction and is an error.
         """
     def translate(self, vector: typing.Sequence[builtins.float]) -> Mesh:
         r"""
@@ -5475,6 +5499,20 @@ def project(field: NodeField, mesh: Mesh, target: Mesh, tol: builtins.float = 1e
     `Coords`; `mesh` and `target` in different dimensions.
     """
 
+def project_on_sphere(mesh: Mesh, center: typing.Sequence[builtins.float], radius: builtins.float) -> Mesh:
+    r"""
+    Project `mesh` **radially** onto the sphere of centre `center` and radius
+    `radius`: every node — corners and mid-nodes alike — is pushed along the
+    ray from `center` through it, to the distance `radius`.
+    
+    Returns a fresh copy with its own nodes (one per distinct node, so a
+    closed loop stays closed), in the same zones, types and colours; `mesh`
+    is left untouched. In a plane through `center` the sphere is a circle: a
+    contour of that plane lands on it node for node, each at its own angle —
+    the inner loop of a ring, ready for `sweep`. A node on `center` has no
+    direction and is an error.
+    """
+
 def psca(x: typing.Any, y: typing.Any) -> typing.Any:
     r"""
     Node-by-node (or point-by-point) scalar product of two fields — Cast3M's
@@ -5508,7 +5546,8 @@ def radiation(fespace: FiniteElementSpace, target: Model) -> Model:
     Unlike convection this law is non-linear, so it contributes three terms:
     the linearised film `4σεT_∞³∫NᵢNⱼ` as stiffness, the exact residual
     `∫Nᵢσε(T⁴ − T_∞⁴)` through `internal_forces`, and the consistent tangent
-    `4σεT³∫NᵢNⱼ` through `matrix.tangent(...)`. Its natures are `"thermal"`
+    `4σεT³∫NᵢNⱼ` through `matrix.tangent(...)`, all evaluated at the face's
+    Gauss points with `T` interpolated there. Its natures are `"thermal"`
     **and** `"radiation"`.
     """
 
@@ -5906,12 +5945,19 @@ def sum_to_nodes(field: ElementField) -> NodeField:
 
 def sweep(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
-    Sweep two SEG2 line meshes into a mesh of `element_type`, building
-    `n_layers` layers between `mesh_a` and `mesh_b`.
+    Sweep two line meshes into a mesh of `element_type`, building `n_layers`
+    layers between `mesh_a` and `mesh_b`.
     
-    `element_type` is `"QUA4"` (default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
-    `"TRI6"` — a `QUA4` mesh is always built first, then converted (diagonal
-    split for the triangles, promoted to quadratic for `QUA8`/`QUA9`/`TRI6`).
+    Between **SEG2** lines, `element_type` is `"QUA4"` (default), `"TRI3"`,
+    `"QUA8"`, `"QUA9"` or `"TRI6"` — a `QUA4` mesh is always built first, then
+    converted (diagonal split for the triangles, promoted to quadratic for
+    `QUA8`/`QUA9`/`TRI6`). Between **SEG3** lines, it is `"QUA8"` (default) or
+    `"QUA9"`, built directly: the lines' own mid-nodes are re-used, so a strip
+    between two arcs follows them exactly.
+    
+    Two **closed loops** (each ending on its own first node) give a closed
+    ring, the seam shared between its first and last cells; a closed loop
+    swept onto an open line is an error.
     """
 
 def sweep_solid(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:

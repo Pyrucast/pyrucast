@@ -167,7 +167,7 @@ modèle d'objets, et la section [Objets](objets.md) détaille chaque brique
 des problèmes complets de bout en bout.
 
 - **Tutoriel** : un parcours guidé, du maillage au calcul thermique et
-  mécanique — [Tutoriel débutant](tutoriel/debutant.md).
+  mécanique — [Premiers pas](tutoriel/debutant.md).
 - **Référence API Rust** : publiée sur
   <https://pyrucast.github.io/pyrucast/rust/>, ou en local avec
   `cargo doc --no-deps --lib --open`.

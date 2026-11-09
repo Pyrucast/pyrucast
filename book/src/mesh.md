@@ -96,8 +96,8 @@ d'arête**, dans l'ordre d'arêtes de la convention VTK ; `QUA9` et `HEX27`
 ajoutent encore leurs nœuds de face et leur nœud central. `QUA8`, `PENTA15` et
 `HEX20` sont **sérendipité** (nœuds d'arête seulement), les autres sont des
 Lagrange complets. Un espace éléments finis les accepte avec l'interpolation
-`LAGRANGE2`, qu'il faut demander : `pyrucast.FiniteElementSpace(mesh,
-"LAGRANGE2")` — l'interpolation par défaut, `LAGRANGE1`, les refuse (cf.
+`LAGRANGE2`, qu'il prend de lui-même : `pyrucast.FiniteElementSpace(mesh)`
+choisit pour chaque zone le Lagrange de son degré (cf.
 [Espace éléments finis](fe-space.md)).
 
 ## Un maillage compte ses nœuds

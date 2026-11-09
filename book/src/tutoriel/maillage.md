@@ -1,8 +1,7 @@
 # Maillage
 
 Fil rouge du tutoriel : une **chape percée** — plaque rectangulaire
-terminée par un demi-disque, trouée en son centre. C'est l'équivalent
-pyrucast de la pièce « structure avec un trou » de la formation Cast3M originale.
+terminée par un demi-disque, trouée en son centre.
 
 Plaque de 30 cm × 10 cm, demi-disque de rayon 5 cm, trou de rayon 3,5 cm
 centré sur le demi-disque, épaisseur 2 cm. La pièce est plane dans **XZ** et
@@ -18,7 +17,8 @@ Deux familles de mailleurs coexistent :
 
 Le script complet est [`tutoriel/maillage.py`](https://github.com/Pyrucast/pyrucast/blob/master/tutoriel/maillage.py)
 ; tous les extraits ci-dessous en sont issus directement, dans l'ordre du
-fichier.
+fichier — sauf le petit utilitaire de tracé, défini en tête du script et
+présenté en fin de page.
 
 ## Géométrie
 
@@ -28,9 +28,9 @@ fichier.
 {{#include ../../../tutoriel/maillage.py:coords}}
 ```
 
-`pyrucast.Coords` est le **seul objet mutable** du script. Tous les mailleurs y
-déposent leurs nœuds, ce qui garantit que deux maillages construits côte à
-côte partagent bien leurs nœuds communs — c'est ce qui rend possible, plus
+`pyrucast.Coords` est le **magasin commun** de tous les nœuds du script. Tous
+les mailleurs y déposent leurs nœuds, ce qui garantit que deux maillages
+construits côte à côte partagent bien leurs nœuds communs — c'est ce qui rend possible, plus
 bas, de raccorder une couronne à une grille sans maillage non conforme.
 
 L'argument `3` est la dimension de l'espace : la pièce est plane, mais on la
@@ -44,8 +44,8 @@ décrit d'emblée en 3D pour n'avoir rien à relever au moment de l'extruder.
 
 Toutes les dimensions sont en mètres et nommées une seule fois : elles servent
 aux points guides, aux rayons du trou, à l'épaisseur d'extrusion, et les
-chapitres suivants les réimportent telles quelles pour placer leurs conditions
-aux limites.
+pages de [Thermique linéaire](thermique-lineaire.md) les réimportent telles
+quelles pour placer leurs conditions aux limites.
 
 ### Points guides
 
@@ -159,23 +159,26 @@ cachées, ne montre que la peau :
 
 ![Volume extrudé, faces cachées](img/maillage-volume-extrude.svg)
 
-### `skin` — la peau, découpée en faces planes
+### `skin` — la peau, découpée en faces
 
 ```python
 {{#include ../../../tutoriel/maillage.py:skin}}
 ```
 
-`skin` extrait les facettes du bord du volume et les **regroupe par face
-plane** : deux facettes voisines restent dans la même face tant que leurs
-normales diffèrent de moins de l'angle donné (85° ici). On obtient un
-sous-maillage par face — dessus, dessous, chant du trou, chant extérieur —
-donc colorable et sélectionnable indépendamment, ce qui sert directement à
-poser les conditions aux limites.
+`skin` extrait les facettes du bord du volume et les **regroupe par face** :
+deux facettes voisines restent dans la même face tant que leurs normales
+diffèrent de moins de l'angle donné (85° ici). Chaque facette garde son type :
+les faces haute et basse de ce volume de prismes sont en `TRI3`, les chants en
+`QUA4`. On obtient cinq sous-maillages — dessous, chant du trou, chant
+extérieur (le demi-disque compris : sa courbure ne dépasse jamais 85° d'une
+facette à la suivante), face gauche, dessus — donc colorables et
+sélectionnables indépendamment, ce qui sert directement à poser les conditions
+aux limites.
 
-![Enveloppe QUA4, une couleur par face plane](img/maillage-enveloppe-qua4.svg)
+![Enveloppe QUA4, une couleur par face](img/maillage-enveloppe-qua4.svg)
 
-*(La figure ne montre que les faces intermédiaires, `skin[1:-1]`, pour voir à
-travers la pièce.)*
+*(La figure ne montre que les faces intermédiaires, `skin[1:-1]` — les trois
+chants en `QUA4` —, pour voir à travers la pièce.)*
 
 ### `convert` + `invert` — préparer l'enveloppe
 
@@ -234,6 +237,12 @@ En structuré on ne donne plus une taille de maille mais un **nombre
 d'éléments** par direction. La pièce est traitée en deux morceaux : une grille
 rectangulaire à gauche, une couronne autour du trou à droite.
 
+**Les éléments sont quadratiques.** Chaque arête porte un nœud en son milieu,
+en plus de ses deux extrémités : `SEG3` pour les lignes, `QUA8` pour les
+surfaces, `HEX20` pour le volume. Sur une arête courbe, ce nœud milieu est
+**sur la courbe** : le trou et le demi-disque sont suivis exactement, et non
+par des cordes.
+
 ### La grille, par balayage du bord gauche
 
 ```python
@@ -241,13 +250,15 @@ rectangulaire à gauche, une couronne autour du trou à droite.
 ```
 
 **Balayer plutôt que remplir.** `extrude(ligne, vecteur, n)` balaie une ligne
-par translation ; un `SEG2` balayé donne un `QUA4`, d'où une grille régulière
-`n12 × n15`. La grille s'arrête à `x13`, l'abscisse où commence le demi-disque.
+par translation ; un `SEG3` balayé donne un `QUA8`, d'où une grille régulière
+`n12 × n15`. Le degré se choisit une fois, sur la ligne de départ (`"SEG3"`) :
+les mailleurs qui suivent le gardent. La grille s'arrête à `x13`, l'abscisse
+où commence le demi-disque.
 
-![Grille structurée, 200 QUA4](img/maillage-grille.svg)
+![Grille structurée, 200 QUA8](img/maillage-grille.svg)
 
-C'est ici qu'apparaît le premier `if plot:` : les chapitres suivants importent
-`structured_mesh` pour calculer sur son volume et l'appellent avec
+C'est ici qu'apparaît le premier `if plot:` : les scripts de thermique
+importent `structured_mesh` pour calculer sur son volume et l'appellent avec
 `plot=False`, ce qui rend le maillage sans retracer aucune des figures de
 cette page.
 
@@ -260,10 +271,13 @@ cette page.
 Pour raccorder la couronne à la grille, il faut le bord **droit** de la
 grille. Le reconstruire avec `line` donnerait une ligne jumelle ne partageant
 aucun nœud avec la grille, donc un maillage non conforme et une pièce en deux
-morceaux. On l'**extrait** : `border` donne le contour de la grille, une
-sélection sur la coordonnée X (`field.positions` + `field.select`) garde les
-nœuds de la dernière colonne, et `elements_on(..., strict=True)` remonte aux
-segments dont **tous** les nœuds y sont. Aucun indice n'est écrit à la main.
+morceaux. On l'**extrait** : `border` donne le contour de la grille — en
+`SEG3`, puisque la grille est en `QUA8` —, une sélection sur la coordonnée X
+(`pyrucast.node_field.positions` + `pyrucast.mesh.select`) garde les nœuds de
+la dernière colonne, et `elements_on(..., strict=True)` remonte aux segments
+dont **tous** les nœuds y sont. Le seuil est à un quart de maille du bord : les
+nœuds milieux des segments voisins, à une demi-maille, restent dehors. Aucun
+indice n'est écrit à la main.
 
 ### Ses deux extrémités, par coordonnée
 
@@ -272,8 +286,10 @@ segments dont **tous** les nœuds y sont. Aucun indice n'est écrit à la main.
 ```
 
 Même méthode pour les deux points de raccord de la couronne, repérés par leur
-coordonnée Z (le plus bas et le plus haut) : la sélection rend un maillage
-`POI1` d'un seul nœud, dont `node(0, 0, 0)` extrait le point.
+coordonnée Z (le plus bas et le plus haut), à un quart de maille près : le
+nœud milieu du premier segment, à une demi-maille du bout, n'est pas pris. La
+sélection rend un maillage `POI1` d'un seul nœud, dont `node(0, 0, 0)` extrait
+le point.
 
 ### La boucle extérieure de la couronne
 
@@ -282,26 +298,33 @@ coordonnée Z (le plus bas et le plus haut) : la sélection rend un maillage
 ```
 
 Elle réunit le demi-disque, les deux tronçons de bord restants et le bord
-droit de la grille — 10 + 10 + 5 + 10 + 5 = **40 segments** — consolidés en une
-seule boucle fermée, comme pour le contour non structuré.
+droit de la grille — 10 + 10 + 5 + 10 + 5 = **40 segments** `SEG3` —
+consolidés en une seule boucle fermée, comme pour le contour non structuré. Sur
+les arcs, `arc(..., "SEG3")` pose le nœud milieu de chaque segment à mi-angle,
+sur le cercle.
 
-### La boucle intérieure, alignée sur elle
+### La boucle intérieure, projetée sur le trou
 
 ```python
 {{#include ../../../tutoriel/maillage.py:boucle_interieure}}
 ```
 
 **Les deux boucles doivent se correspondre.** `sweep` relie les nœuds de la
-première boucle à ceux de la seconde, une paire à la fois : elles doivent donc
-avoir le **même nombre de segments**. D'où le trou découpé en quatre quarts de
-10 segments, soit 40 également — et les quatre points de départ `p14`…`p17`
-posés explicitement pour que les deux découpages s'alignent.
+première boucle à ceux de la seconde, une paire à la fois : il en faut autant
+de part et d'autre, et en vis-à-vis. On obtient les deux d'un coup en
+**projetant** la boucle extérieure sur le trou :
+`pyrucast.mesh.project_on_sphere` pousse chaque nœud le long du rayon issu de
+`p6` jusqu'au rayon du trou — dans le plan de la pièce, la sphère est le
+cercle du trou. Chaque nœud du trou est en face du nœud extérieur dont il
+vient, nœuds milieux compris, et la boucle projetée est fermée comme
+l'originale.
 
 ![Les deux boucles de la couronne](img/maillage-boucles.svg)
 
 La figure montre les deux boucles seules, l'extérieure en bleu et l'intérieure
-en rouge : 40 segments de chaque côté, et les découpages en vis-à-vis. C'est
-exactement ce que `sweep` demande.
+en rouge : 40 segments de chaque côté, chaque nœud intérieur sur le rayon de
+son vis-à-vis. Le découpage du trou n'est pas régulier : il suit celui de la
+boucle extérieure. C'est exactement ce que `sweep` demande.
 
 ### `sweep`, puis l'union
 
@@ -311,27 +334,35 @@ exactement ce que `sweep` demande.
 
 `sweep(a, b, n)` balaie une ligne **sur une autre**, en `n` couches : entre
 deux boucles fermées, c'est le moyen d'obtenir un maillage structuré propre
-autour d'un trou. Les 40 paires de nœuds donnent ici 40 × 3 = 120 `QUA4`.
+autour d'un trou. Les 40 paires de segments donnent ici 40 × 3 = 120 `QUA8`.
+Entre deux lignes `SEG3`, `sweep` construit directement des `QUA8` et reprend
+les nœuds milieux des deux boucles : ceux des arcs, sur le cercle.
 
-![Couronne balayée, 120 QUA4](img/maillage-couronne.svg)
+**Deux boucles fermées donnent un anneau fermé.** Là où chaque boucle se
+referme, le rayon qui les relie est partagé par la première et la dernière
+maille de chaque couche, sans nœud en double : la couronne n'est pas fendue le
+long de ce rayon.
+
+![Couronne balayée, 120 QUA8](img/maillage-couronne.svg)
 
 Grille et couronne partageant les nœuds du bord droit `l1213`, l'union `|`
-suffit ensuite à en faire un maillage conforme — 200 + 120 = 320 `QUA4` :
+suffit ensuite à en faire un maillage conforme — 200 + 120 = 320 `QUA8` :
 
-![Plaque structurée (QUA4)](img/maillage-structure.svg)
+![Plaque structurée (QUA8)](img/maillage-structure.svg)
 
-### Le volume HEX8
+### Le volume HEX20
 
 ```python
-{{#include ../../../tutoriel/maillage.py:volume_hex8}}
+{{#include ../../../tutoriel/maillage.py:volume_hex20}}
 ```
 
-La même extrusion que pour le non structuré donne le volume — mais un `QUA4`
-balayé donne un `HEX8`, le meilleur élément pour le calcul :
+La même extrusion que pour le non structuré donne le volume — mais un `QUA8`
+balayé donne un `HEX20`, l'hexaèdre quadratique à 20 nœuds : 640 éléments et
+4 000 nœuds, dont les nœuds milieux des arêtes.
 
-![Volume structuré (HEX8)](img/maillage-volume-structure.svg)
+![Volume structuré (HEX20)](img/maillage-volume-structure.svg)
 
-C'est ce volume que reprennent les chapitres suivants. Importer la fonction
+C'est ce volume que reprennent les pages de [Thermique linéaire](thermique-lineaire.md). Importer la fonction
 plutôt que recopier sa géométrie n'est pas un raffinement de style — deux
 maillages construits à l'identique dans deux scripts porteraient des nœuds
 **distincts**, et toute condition posée sur l'un serait sans effet sur
@@ -339,20 +370,22 @@ l'autre.
 
 ## Visualiser et exporter
 
-Une seule méthode, `plot(...)`, sur `Mesh`/`SubMesh` — l'équivalent de
-`TRAC` :
+Tout passe par la méthode `plot(...)` de `Mesh`/`SubMesh` :
 
 ```python
 {{#include ../../../tests/python/test_doc_demarrage.py:plot_interactif}}
 ```
 
-`save=None` ouvre une fenêtre interactive (nécessite la feature Cargo
-`viz-interactive`) ; `save="....png"` ou `"....svg"` exporte sans fenêtre
-(feature `viz`) — voir [Visualisation](../visualization.md) pour le détail
-(caméra, colormaps, coloration par champ).
+`save=None` ouvre une fenêtre interactive ; `save="....png"` ou `"....svg"`
+exporte sans fenêtre. La version installée par `pip install pyrucast` comprend
+les deux ; une version compilée à la main ne les a qu'avec les features
+`viz-interactive` (fenêtre et export) ou `viz` (export seul) — voir
+[Visualisation](../visualization.md) pour le détail (caméra, colormaps,
+coloration par champ).
 
-Le script réunit les deux dans un petit helper, pour que chaque tracé soit
-interactif à l'exécution et devienne une figure de cette page en mode batch :
+Le script réunit les deux dans une petite fonction, pour que chaque tracé
+s'ouvre dans une fenêtre quand on lance le script, et devienne une figure de
+cette page quand on produit les figures du livre :
 
 ```python
 {{#include ../../../tutoriel/maillage.py:figures}}
@@ -373,12 +406,13 @@ script/generate-tutoriel-figures.sh
 
 ## Script complet
 
-Une fois les explications retirées, tout le chapitre tient en une page — du
+Une fois les explications retirées, toute la page tient en un script — du
 premier point guide au volume structuré :
 
 ```python
 {{#include ../../../tutoriel/maillage.py:script}}
 ```
 
-Suite : [Calcul thermique](thermique.md), qui reprend le volume `HEX8`
-structuré de cette page et y pose des conditions aux limites.
+Suite : [Thermique linéaire](thermique-lineaire.md), dont les pages
+reprennent le volume `HEX20` structuré de cette page et y posent des
+conditions aux limites.

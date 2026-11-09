@@ -10,9 +10,9 @@
 <polyline stroke="#000000" points="549,196 549,179 532,185 549,196 "/>
 <polygon fill="#440154" points="579,196 549,179 549,196 "/>
 <polyline stroke="#000000" points="579,196 549,179 549,196 579,196 "/>
-<polygon fill="#39B776" points="532,185 512,189 530,198 "/>
+<polygon fill="#39B777" points="532,185 512,189 530,198 "/>
 <polyline stroke="#000000" points="532,185 512,189 530,198 532,185 "/>
-<polygon fill="#20958A" points="512,189 483,182 488,202 "/>
+<polygon fill="#20948A" points="512,189 483,182 488,202 "/>
 <polyline stroke="#000000" points="512,189 483,182 488,202 512,189 "/>
 <polygon fill="#2F6B8D" points="532,185 530,198 549,196 "/>
 <polyline stroke="#000000" points="532,185 530,198 549,196 532,185 "/>
@@ -38,7 +38,7 @@
 <polyline stroke="#000000" points="488,202 494,214 514,208 488,202 "/>
 <polygon fill="#440154" points="610,214 579,196 579,215 "/>
 <polyline stroke="#000000" points="610,214 579,196 579,215 610,214 "/>
-<polygon fill="#461164" points="488,202 474,214 494,214 "/>
+<polygon fill="#461163" points="488,202 474,214 494,214 "/>
 <polyline stroke="#000000" points="488,202 474,214 494,214 488,202 "/>
 <polygon fill="#440154" points="562,207 541,210 559,217 "/>
 <polyline stroke="#000000" points="562,207 541,210 559,217 562,207 "/>
@@ -70,7 +70,7 @@
 <polyline stroke="#000000" points="474,214 454,227 485,225 474,214 "/>
 <polygon fill="#440154" points="559,217 545,227 569,228 "/>
 <polyline stroke="#000000" points="559,217 545,227 569,228 559,217 "/>
-<polygon fill="#345D8D" points="579,215 569,228 597,230 "/>
+<polygon fill="#355D8D" points="579,215 569,228 597,230 "/>
 <polyline stroke="#000000" points="579,215 569,228 597,230 579,215 "/>
 <polygon fill="#2A768E" points="640,231 610,214 597,230 "/>
 <polyline stroke="#000000" points="640,231 610,214 597,230 640,231 "/>
