@@ -390,9 +390,15 @@ pub(crate) fn submesh_primitives_smooth(
     if n_cells == 0 {
         return Ok(Vec::new());
     }
+    // The subdivision follows the cell's own shape functions: Lagrange of its
+    // degree, so a quadratic cell is drawn through its mid-nodes.
     let sub = match et {
         crate::atoms::ElementType::POI1 => CellSubdivision::Points,
-        _ => subdivide(et, Interpolation::Lagrange1, n)?,
+        _ => subdivide(
+            et,
+            et.as_kind().degree().unwrap_or(Interpolation::Lagrange1),
+            n,
+        )?,
     };
 
     // Volume cells: keep only boundary faces. Both the subdivision's `Faces`
@@ -829,6 +835,35 @@ mod tests {
         let ctx = data.for_submesh(&seg_h).unwrap();
         let values = submesh_cell_values(&ctx, &seg_h.read(), "T").unwrap();
         assert!((values[0] - 4.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn smooth_rendering_draws_a_quadratic_volume() {
+        // A HEX20 with a value per node: the smooth rendering subdivides it
+        // with its own (quadratic) shape functions instead of refusing it.
+        use crate::ops::mesh::{extrude, to_quadratic};
+        let coords = Handle::new(Coords::new(3).unwrap());
+        let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+        let n: Vec<Node> = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ]
+        .iter()
+        .map(|x| p(x))
+        .collect();
+        let mut base = RawSubMesh::new(coords.clone(), ElementType::QUA4);
+        base.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])
+            .unwrap();
+        let hex20 = to_quadratic(&extrude(&Mesh::from_submesh(base), &[0.0, 0.0, 1.0], 1).unwrap())
+            .unwrap();
+        let sm = hex20.get(0).unwrap();
+        assert_eq!(sm.read().element_type(), ElementType::HEX20);
+        let nodal = vec![(0..20).map(|i| i as f64).collect::<Vec<f64>>()];
+        let prims =
+            submesh_primitives_smooth(&sm.read(), &nodal, Colormap::Viridis, 0.0, 19.0, 2).unwrap();
+        assert!(!prims.is_empty());
     }
 
     #[test]
