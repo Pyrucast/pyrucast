@@ -20,13 +20,13 @@ fonctions :
 | étape | ce qu'on fait | dans pyrucast | vu dans |
 |---|---|---|---|
 | géométrie, maillage | poser des points, mailler lignes, surfaces et volumes | `Coords`, `pyrucast.mesh` | [Premiers pas](debutant.md), [Maillage](maillage.md) |
-| espace éléments finis | choisir l'interpolation sur le maillage | `FiniteElementSpace` | [Premiers pas](debutant.md), [Calcul thermique](thermique.md) |
-| modèle | déclarer la physique, ses blocages, ses chargements | `pyrucast.model` | [Calcul thermique](thermique.md) |
-| matériaux | donner les coefficients que le modèle réclame | `pyrucast.element_field.material_field` | [Calcul thermique](thermique.md) |
-| second membre | intégrer les chargements | `pyrucast.node_field.external_forces` | [Calcul thermique](thermique.md) |
-| assemblage | construire la matrice du système | `pyrucast.matrix.stiffness` | [Calcul thermique](thermique.md) |
-| résolution | résoudre le système | `pyrucast.solver.solve` | [Calcul thermique](thermique.md) |
-| exploitation | tracer, extraire, exporter, sauvegarder | `plot`, `pyrucast.export.export_vtk`, `pyrucast.save` | [Maillage](maillage.md), [Calcul thermique](thermique.md) |
+| espace éléments finis | choisir l'interpolation sur le maillage | `FiniteElementSpace` | [Premiers pas](debutant.md), [Régime stationnaire](thermique.md) |
+| modèle | déclarer la physique, ses blocages, ses chargements | `pyrucast.model` | [Régime stationnaire](thermique.md) |
+| matériaux | donner les coefficients que le modèle réclame | `pyrucast.element_field.material_field` | [Régime stationnaire](thermique.md) |
+| second membre | intégrer les chargements | `pyrucast.node_field.external_forces` | [Régime stationnaire](thermique.md) |
+| assemblage | construire la matrice du système | `pyrucast.matrix.stiffness` | [Régime stationnaire](thermique.md) |
+| résolution | résoudre le système | `pyrucast.solver.solve` | [Régime stationnaire](thermique.md) |
+| exploitation | tracer, extraire, exporter, sauvegarder | `plot`, `pyrucast.export.export_vtk`, `pyrucast.save` | [Maillage](maillage.md), [Régime stationnaire](thermique.md) |
 
 Quand le problème n'est pas linéaire ou évolue dans le temps, le
 [calcul pas à pas](../pas-a-pas.md) (`pyrucast.stepping.step_by_step`) répète
@@ -41,6 +41,9 @@ Chaque ligne renvoie à la page qui la détaille.
 [Conduction](../thermique.md) isotrope, orthotrope ou anisotrope, en régime
 stationnaire ou transitoire ; [convection et flux imposé](../echanges.md),
 sources volumiques ; [rayonnement](../rayonnement.md) vers l'environnement.
+Dans ce tutoriel : [régime stationnaire](thermique.md),
+[régime transitoire](thermique-transitoire.md),
+[rayonnement](thermique-non-lineaire.md).
 
 **Diffusion.** La [loi de Fick](../diffusion.md), pour une ou plusieurs
 espèces.

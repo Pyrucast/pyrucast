@@ -15,8 +15,10 @@ FR — Deux familles de mailleurs sont comparées : le **non structuré**
 (`pyrucast.mesh.triangulate_surface`), où l'on donne un contour fermé et une
 **taille de maille** cible, et le **structuré** (`pyrucast.mesh.extrude`,
 `pyrucast.mesh.sweep`), où l'on impose un **nombre d'éléments** et où le
-maillage a la topologie d'une grille. Le détail pas à pas est dans le livre,
-page « Maillage ».
+maillage a la topologie d'une grille. Le structuré est **quadratique**
+(SEG3, QUA8, HEX20) : chaque arête porte un nœud milieu, posé sur la courbe
+quand l'arête est courbe. Le détail pas à pas est dans le livre, page
+« Maillage ».
 
 EN — Builds the part used as the guiding thread: a **pierced lug**, a
 rectangular plate capped by a half-disc and holed at its centre, meshed in four
@@ -31,8 +33,9 @@ EN — Two families of meshers are compared: **unstructured**
 (`pyrucast.mesh.triangulate_surface`), where you hand in a closed contour and
 a target **element size**, and **structured** (`pyrucast.mesh.extrude`,
 `pyrucast.mesh.sweep`), where you impose an **element count** and the mesh
-has grid topology. The step-by-step walkthrough lives in the book's meshing
-page.
+has grid topology. The structured mesh is **quadratic** (SEG3, QUA8,
+HEX20): every edge carries a mid-node, on the curve when the edge is curved.
+The step-by-step walkthrough lives in the book's meshing page.
 
 Lancement / Running ::
 
@@ -234,66 +237,66 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
     # ANCHOR_END: comptes
 
     # ANCHOR: grille
-    # FR — La grille : le bord gauche balayé par translation, un SEG2 → un QUA4.
-    # EN — The grid: the left edge swept by translation, a SEG2 → a QUA4.
-    l15 = pc.mesh.line(p1, p5, n15)
+    # FR — La grille : le bord gauche balayé par translation. En SEG3, chaque
+    #      segment porte un nœud en son milieu, et un SEG3 balayé donne un QUA8.
+    # EN — The grid: the left edge swept by translation. In SEG3 every segment
+    #      carries a node at its middle, and a swept SEG3 gives a QUA8.
+    l15 = pc.mesh.line(p1, p5, n15, "SEG3")
     x13 = LENGTH - (HEIGHT / 2.0)
     sr1 = pc.mesh.extrude(l15, [x13, 0, 0], n12)
 
-    # FR — `plot=False` : tutoriel/thermique.py importe le volume, sans figures.
-    # EN — `plot=False`: tutoriel/thermique.py imports the volume, without figures.
+    # FR — `plot=False` : les scripts de thermique importent le volume, sans figures.
+    # EN — `plot=False`: the thermal scripts import the volume, without figures.
     if plot:
-        show(sr1, "Grille structurée (QUA4)", "maillage-grille.svg")
+        show(sr1, "Grille structurée (QUA8)", "maillage-grille.svg")
     # ANCHOR_END: grille
 
     # ANCHOR: bord_droit
-    # FR — Le bord droit de la grille ne se refabrique pas : il s'extrait.
-    # EN — The grid's right edge is not rebuilt: it is extracted.
+    # FR — Le bord droit de la grille ne se refabrique pas : il s'extrait, en SEG3.
+    # EN — The grid's right edge is not rebuilt: it is extracted, in SEG3.
     border_sr1 = pc.mesh.border(sr1)
     right_nodes = pc.mesh.select(
-        pc.node_field.positions(border_sr1, ["X"]), ge=x13 * (n12 - 0.5) / n12
+        pc.node_field.positions(border_sr1, ["X"]), ge=x13 * (n12 - 0.25) / n12
     )
     l1213 = pc.mesh.elements_on(border_sr1, right_nodes, strict=True)
     # ANCHOR_END: bord_droit
 
     # ANCHOR: extremites
-    # FR — Ses deux extrémités, la plus basse et la plus haute en Z.
-    # EN — Its two ends, the lowest and the highest in Z.
+    # FR — Ses deux extrémités, la plus basse et la plus haute en Z : à un quart
+    #      de maille près, car un nœud milieu est à une demi-maille du bout.
+    # EN — Its two ends, the lowest and the highest in Z: within a quarter of a
+    #      cell, since a mid-node sits half a cell from the end.
     p13 = pc.mesh.select(
-        pc.node_field.positions(l1213, ["Z"]), le=0.5 / n15 * HEIGHT
+        pc.node_field.positions(l1213, ["Z"]), le=0.25 / n15 * HEIGHT
     ).node(0, 0, 0)
     p12 = pc.mesh.select(
-        pc.node_field.positions(l1213, ["Z"]), ge=(n15 - 0.5) / n15 * HEIGHT
+        pc.node_field.positions(l1213, ["Z"]), ge=(n15 - 0.25) / n15 * HEIGHT
     ).node(0, 0, 0)
     # ANCHOR_END: extremites
 
     # ANCHOR: boucle_exterieure
-    # FR — Boucle extérieure de la couronne : 10+10+5+10+5 = 40 segments.
-    # EN — The ring's outer loop: 10+10+5+10+5 = 40 segments.
+    # FR — Boucle extérieure de la couronne : 10+10+5+10+5 = 40 segments SEG3.
+    #      Sur les arcs, le nœud milieu de chaque segment est sur le cercle.
+    # EN — The ring's outer loop: 10+10+5+10+5 = 40 SEG3 segments. On the
+    #      arcs, each segment's mid-node lies on the circle.
     cext = (
-        pc.mesh.arc(p2, p6, p3, n15)
-        | pc.mesh.arc(p3, p6, p4, n15)
-        | pc.mesh.line(p4, p12, int(n15 / 2))
+        pc.mesh.arc(p2, p6, p3, n15, "SEG3")
+        | pc.mesh.arc(p3, p6, p4, n15, "SEG3")
+        | pc.mesh.line(p4, p12, int(n15 / 2), "SEG3")
         | l1213
-        | pc.mesh.line(p13, p2, int(n15 / 2))
+        | pc.mesh.line(p13, p2, int(n15 / 2), "SEG3")
     )
     cext = pc.mesh.consolidate(cext)
     # ANCHOR_END: boucle_exterieure
 
     # ANCHOR: boucle_interieure
-    # FR — Boucle intérieure : le trou en quatre quarts, 40 segments aussi.
-    # EN — Inner loop: the hole as four quarters, 40 segments as well.
-    p14 = coords.add_node([LENGTH, 0.0, HEIGHT / 2.0 - HOLE_RADIUS])
-    p15 = coords.add_node([LENGTH + HOLE_RADIUS, 0.0, HEIGHT / 2.0])
-    p16 = coords.add_node([LENGTH, 0.0, HEIGHT / 2.0 + HOLE_RADIUS])
-    p17 = coords.add_node([LENGTH - HOLE_RADIUS, 0.0, HEIGHT / 2.0])
-    cin = (
-        pc.mesh.arc(p14, p6, p15, n15)
-        | pc.mesh.arc(p15, p6, p16, n15)
-        | pc.mesh.arc(p16, p6, p17, n15)
-        | pc.mesh.arc(p17, p6, p14, n15)
-    )
-    cin = pc.mesh.consolidate(cin)
+    # FR — Boucle intérieure : la boucle extérieure projetée sur le trou, chaque
+    #      nœud poussé le long du rayon issu de p6 — un nœud du trou en face de
+    #      chaque nœud de la boucle extérieure.
+    # EN — Inner loop: the outer loop projected onto the hole, each node
+    #      pushed along the ray from p6 — one hole node facing each node of the
+    #      outer loop.
+    cin = pc.mesh.project_on_sphere(cext, p6.position(), HOLE_RADIUS)
 
     # FR — Les deux boucles, l'une bleue et l'autre rouge : découpages alignés.
     # EN — Both loops, one blue and one red: their cuttings line up.
@@ -303,32 +306,34 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
     # ANCHOR_END: boucle_interieure
 
     # ANCHOR: sweep
-    # FR — `sweep` relie les deux boucles par 3 couches de QUA4.
-    # EN — `sweep` links both loops with 3 layers of QUA4.
+    # FR — `sweep` relie les deux boucles par 3 couches de QUA8 ; deux boucles
+    #      fermées donnent un anneau fermé, sans couture doublée.
+    # EN — `sweep` links both loops with 3 layers of QUA8; two closed loops
+    #      give a closed ring, with no doubled seam.
     sh1 = pc.mesh.sweep(cext, cin, 3)
     if plot:
-        show(sh1, "Couronne balayée (QUA4)", "maillage-couronne.svg")
+        show(sh1, "Couronne balayée (QUA8)", "maillage-couronne.svg")
 
     # FR — Grille et couronne partagent les nœuds du bord droit : `|` suffit.
     # EN — Grid and ring share the right edge's nodes: `|` is enough.
     grid = sr1 | sh1
     if plot:
         print(f"structured      : {grid.element_types()}, {grid.cell_count} mailles")
-        show(grid, "Plaque structurée (QUA4)", "maillage-structure.svg")
+        show(grid, "Plaque structurée (QUA8)", "maillage-structure.svg")
     # ANCHOR_END: sweep
 
-    # ANCHOR: volume_hex8
-    # FR — Même extrusion qu'en non structuré, mais un QUA4 donne un HEX8.
-    # EN — Same extrusion as in the unstructured case, but a QUA4 gives an HEX8.
+    # ANCHOR: volume_hex20
+    # FR — Même extrusion qu'en non structuré, mais un QUA8 donne un HEX20.
+    # EN — Same extrusion as in the unstructured case, but a QUA8 gives an HEX20.
     volume_structure = pc.mesh.extrude(grid, [0, THICKNESS, 0], 2)
     if plot:
         show(
             volume_structure,
-            "Volume structuré (HEX8)",
+            "Volume structuré (HEX20)",
             "maillage-volume-structure.svg",
         )
     return grid, volume_structure
-    # ANCHOR_END: volume_hex8
+    # ANCHOR_END: volume_hex20
 
 
 def main() -> None:

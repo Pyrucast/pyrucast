@@ -209,6 +209,21 @@ exactement ce que fait `tutoriel/maillage.py` pour colorier les faces d'une
 peau. Pour répéter un bloc `n` fois, on écrit `for i in range(n):`, où `i`
 vaut `0`, `1`, …, `n - 1`.
 
+Les scripts du calcul pas à pas **remplissent des listes** dans des boucles :
+
+```python
+{{#include ../../../tests/python/test_doc_tutoriel.py:listes_en_boucle}}
+```
+
+`liste.append(x)` ajoute `x` au bout de la liste : c'est ainsi que
+`tutoriel/thermique_transitoire.py` construit la liste de ses instants, et
+une liste de couples `(temps, température)` par point suivi. Quand chaque
+élément est un couple, `for t, valeur in couples:` le **défait** en deux
+noms. `zip(a, b)` parcourt deux listes ensemble, un élément de chacune à
+chaque tour — le script du rayonnement s'en sert pour lire, instant par
+instant, ses deux calculs côte à côte. `max(liste)` et `sum(liste)` donnent
+le plus grand élément et la somme.
+
 ### Choisir : `if`
 
 ```python
@@ -461,7 +476,7 @@ partagent, il **ne somme pas** les valeurs. Pour additionner deux chargements
 qui se touchent, on les ramène d'abord sur les mêmes nœuds avec
 `pyrucast.node_field.restrict`, puis on les somme par `+` — c'est l'objet du
 passage *Trois chargements qui se touchent* de la page
-[Calcul thermique](thermique.md).
+[Régime stationnaire](thermique.md).
 
 ### Les noms des composantes
 

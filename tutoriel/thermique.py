@@ -1,7 +1,7 @@
 # ANCHOR: script
-"""Tutoriel débutant — 2. Calcul thermique. / Beginner tutorial — 2. Thermal.
+"""Tutoriel débutant — 2. Régime stationnaire. / Beginner tutorial — 2. Steady state.
 
-FR — Reprend la **chape percée** de la page « Maillage » — le volume HEX8
+FR — Reprend la **chape percée** de la page « Maillage » — le volume HEX20
 structuré est importé de `tutoriel/maillage.py`, aucune cote n'est redonnée —
 et y résout la conduction **stationnaire** `div(-k·grad T) = q`, en deux temps :
 
@@ -13,10 +13,11 @@ et y résout la conduction **stationnaire** `div(-k·grad T) = q`, en deux temps
 Chaque étape est tracée avant d'être résolue, et les régions chargées sont
 repérées **par leur géométrie** : par forme (`pyrucast.mesh.points_*`) ou par
 coordonnée (`pyrucast.node_field.positions` + `pyrucast.mesh.select`). Ce
-script ne traite ni rayonnement ni terme transitoire. Le détail pas à pas est
-dans le livre, page « Calcul thermique ».
+script ne traite ni rayonnement ni terme transitoire : ce sont les scripts
+`tutoriel/thermique_transitoire.py` et `tutoriel/thermique_non_lineaire.py`.
+Le détail pas à pas est dans le livre, page « Régime stationnaire ».
 
-EN — Picks the meshing page's **pierced lug** back up — the structured HEX8
+EN — Picks the meshing page's **pierced lug** back up — the structured HEX20
 volume is imported from `tutoriel/maillage.py`, not one dimension is restated —
 and solves **steady** conduction `div(-k·grad T) = q` on it, in two steps:
 
@@ -28,8 +29,9 @@ and solves **steady** conduction `div(-k·grad T) = q` on it, in two steps:
 Each step is plotted before being solved, and the loaded regions are located
 **by geometry**: by shape (`pyrucast.mesh.points_*`) or by coordinate
 (`pyrucast.node_field.positions` + `pyrucast.mesh.select`). This script handles
-neither radiation nor a transient term. The step-by-step walkthrough lives in
-the book's thermal page.
+neither radiation nor a transient term: those are
+`tutoriel/thermique_transitoire.py` and `tutoriel/thermique_non_lineaire.py`.
+The step-by-step walkthrough lives in the book's steady-state page.
 
 Lancement / Running ::
 
@@ -116,8 +118,8 @@ def main() -> None:
     # ANCHOR_END: alesage
 
     # ANCHOR: face_gauche
-    # FR — La face gauche : les nœuds du plan x = 0, puis les QUA4 portés.
-    # EN — The left face: the nodes of the plane x = 0, then the QUA4 they carry.
+    # FR — La face gauche : les nœuds du plan x = 0, puis les QUA8 portés.
+    # EN — The left face: the nodes of the plane x = 0, then the QUA8 they carry.
     noeuds_gauche = pc.mesh.points_on_plane(peau, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0])
     face_gauche = pc.mesh.elements_on(peau, noeuds_gauche, strict=True)
     # ANCHOR_END: face_gauche
@@ -237,11 +239,11 @@ def main() -> None:
     # EN — The convection's external term, h·T_ext: the model carries it.
     charge_convection = pc.node_field.external_forces(modele, materiaux)
 
-    # FR — Source volumique sur des HEX8, donc une densité volumique. Une
+    # FR — Source volumique sur des HEX20, donc une densité volumique. Une
     #      charge ne contribuant à aucune matrice, elle se tient très bien en
     #      modèle à elle seule — avec sa propre densité, distincte de celle du
     #      flux de bord bien qu'elles alimentent la même ligne « q ».
-    # EN — A volume source over HEX8 cells. A load contributes to no matrix, so
+    # EN — A volume source over HEX20 cells. A load contributes to no matrix, so
     #      it stands perfectly well as a model of its own — with its own
     #      density, distinct from the boundary flux's though both feed "q".
     source_fes = pc.FiniteElementSpace(zone_source)
@@ -275,10 +277,10 @@ def main() -> None:
     )
     # ANCHOR_END: resolution_complet
 
-    print(f"volume         : {volume.cell_count} HEX8")
-    print(f"face gauche    : {face_gauche.cell_count} QUA4")
-    print(f"face convectée : {face_basse.cell_count} QUA4")
-    print(f"zone chauffée  : {zone_source.cell_count} HEX8")
+    print(f"volume         : {volume.cell_count} HEX20")
+    print(f"face gauche    : {face_gauche.cell_count} QUA8")
+    print(f"face convectée : {face_basse.cell_count} QUA8")
+    print(f"zone chauffée  : {zone_source.cell_count} HEX20")
     print(
         f"étape 1 : T min = {t_conduction.min('T'):.1f} °C, "
         f"T max = {t_conduction.max('T'):.1f} °C"

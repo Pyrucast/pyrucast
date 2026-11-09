@@ -7,7 +7,7 @@ en comprenant chaque ligne. Il suppose quelques notions sur la méthode des
 [Python & conventions pyrucast](langage-python.md) en donne tout ce qu'il faut.
 
 Le fil rouge des pages [Maillage](maillage.md) et
-[Calcul thermique](thermique.md) est une **chape percée** — une plaque terminée
+[Thermique linéaire](thermique-lineaire.md) est une **chape percée** — une plaque terminée
 par un demi-disque, trouée en son centre — que l'on maille, puis que l'on
 chauffe :
 
@@ -138,14 +138,19 @@ du dépôt. Le code affiché dans les pages est **extrait directement de ces
 scripts**, qui sont exécutés à chaque vérification du projet : ce que vous
 lisez est ce qui tourne. Chaque page se termine par son script complet.
 
-Pour suivre les pages [Maillage](maillage.md) et
-[Calcul thermique](thermique.md), enregistrez `maillage.py` et `thermique.py`
-dans **le même dossier** — le second reprend le maillage du premier — puis
-lancez-les comme le premier calcul :
+Pour suivre les pages [Maillage](maillage.md),
+[Thermique linéaire](thermique-lineaire.md) et
+[Thermique non linéaire](thermique-non-lineaire.md), enregistrez
+`maillage.py`, `thermique.py`, `thermique_transitoire.py` et
+`thermique_non_lineaire.py` dans **le même dossier** — chacun reprend le
+maillage et les données des précédents — puis lancez-les comme le premier
+calcul :
 
 ```bash
 python maillage.py
 python thermique.py
+python thermique_transitoire.py
+python thermique_non_lineaire.py
 ```
 
 Chaque figure s'ouvre dans sa fenêtre ; fermez-la pour passer à la suivante.
@@ -158,8 +163,14 @@ Chaque figure s'ouvre dans sa fenêtre ; fermez-la pour passer à la suivante.
 3. [Python & conventions pyrucast](langage-python.md) — le Python des
    scripts, les raccourcis de pyrucast, où chercher une fonction.
 4. [Maillage](maillage.md) — mailler la chape, en non structuré
-   (triangulation) puis en structuré (balayages).
-5. [Calcul thermique](thermique.md) — conduction, flux imposé, convection et
-   source, sur des régions repérées par leur géométrie.
-6. [Calcul mécanique](mecanique.md) — déplacements et contraintes.
-7. [Compléments](complements.md) — pour aller plus loin.
+   (triangulation) puis en structuré quadratique (balayages).
+5. [Thermique linéaire](thermique-lineaire.md) — l'équation de la chaleur,
+   puis ses deux régimes :
+   [stationnaire](thermique.md) (conduction, flux imposé, convection et
+   source, sur des régions repérées par leur géométrie) et
+   [transitoire](thermique-transitoire.md) (les sollicitations qui
+   s'établissent dans le temps, le flux de chaleur).
+6. [Thermique non linéaire](thermique-non-lineaire.md) — le rayonnement, en
+   kelvins.
+7. [Calcul mécanique](mecanique.md) — déplacements et contraintes.
+8. [Compléments](complements.md) — pour aller plus loin.
