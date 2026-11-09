@@ -44,6 +44,8 @@ Le cube \\( [-1, +1]^3 \\). Un milieu d'arête a exactement une coordonnée null
 | 18 | \\( (+1,+1,0) \\) | milieu de \\( (2,6) \\) |
 | 19 | \\( (-1,+1,0) \\) | milieu de \\( (3,7) \\) |
 
+![Élément de référence HEX20 : cube de sommets 0 à 7 et de milieux d'arête 8 à 19](img/hex20-reference.svg)
+
 ## Fonctions de forme
 
 Pour un nœud de coordonnées \\( (p, q, r) \\).
@@ -84,6 +86,8 @@ direction ; le point 13 est le centre ; \\( \sum_g w_g = 8 \\). La masse, de
 degré 4 par direction, est exacte sur un parallélépipède à arêtes droites.
 
 `"REDUCED"` : un point au centre, de poids 8.
+
+![Règles GAUSS (27 points) et REDUCED (1 point) du HEX20 sur l'élément de référence](img/hex20-quadrature.svg)
 
 ## Exemple
 

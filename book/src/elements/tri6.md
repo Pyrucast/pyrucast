@@ -32,6 +32,8 @@ Le triangle du `TRI3`, avec ses coordonnées barycentriques
 | 4 | \\( (\tfrac12, \tfrac12) \\) | milieu de \\( (1,2) \\) |
 | 5 | \\( (0, \tfrac12) \\) | milieu de \\( (2,0) \\) |
 
+![Élément de référence TRI6 : triangle de sommets 0, 1, 2 et de milieux d'arête 3, 4, 5](img/tri6-reference.svg)
+
 ## Fonctions de forme
 
 \\( L_i(2L_i - 1) \\) aux sommets, \\( 4 L_a L_b \\) aux milieux :
@@ -84,6 +86,8 @@ barycentriques \\( (b, b, 1 - 2b) \\) et leurs permutations.
 
 `"REDUCED"` : un point au centre de gravité \\( (\tfrac13, \tfrac13) \\), de
 poids \\( \tfrac12 \\).
+
+![Règles GAUSS (6 points) et REDUCED (1 point) du TRI6 sur l'élément de référence](img/tri6-quadrature.svg)
 
 ## Exemple
 

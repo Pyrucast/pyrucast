@@ -76,6 +76,13 @@ dans `SUMMARY.md`, une ligne dans le catalogue
 d'[`elements/index.md`](../elements/index.md), et une ligne dans la table de
 correspondance gmsh d'[`operateurs/maillage.md`](../operateurs/maillage.md).
 
+Les deux figures de la fiche (élément de référence, quadrature) se génèrent :
+déclarer l'élément dans `ELEMENTS` de `script/elements_figures.py` (sa règle de
+quadrature, et ses faces s'il est 3-D), puis lancer
+`python script/elements_figures.py`. Les nœuds sont lus dans la table de la
+fiche. `tests/python/test_doc_elements_figures.py` échoue si un SVG est périmé
+ou si la règle dessinée diffère de celle de `pyrucast`.
+
 ## Ce que le trait demande, et pourquoi
 
 ### L'élément de référence

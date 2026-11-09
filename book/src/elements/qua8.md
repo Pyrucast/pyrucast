@@ -32,6 +32,8 @@ Le carré \\( [-1, +1]^2 \\) : les sommets 0 à 3, puis les milieux 4 à 7.
 | 6 | \\( (0, +1) \\) | milieu de \\( (2,3) \\) |
 | 7 | \\( (-1, 0) \\) | milieu de \\( (3,0) \\) |
 
+![Élément de référence QUA8 : carré de sommets 0 à 3 et de milieux d'arête 4 à 7](img/qua8-reference.svg)
+
 ## Fonctions de forme
 
 Aux sommets, de coordonnées \\( (\xi_i, \eta_i) \\) :
@@ -72,6 +74,8 @@ direction. Le point 4 est le centre, de poids \\( \tfrac{64}{81} \\) ;
 parallélogramme à côtés droits.
 
 `"REDUCED"` : un point au centre, de poids 4.
+
+![Règles GAUSS (9 points) et REDUCED (1 point) du QUA8 sur l'élément de référence](img/qua8-quadrature.svg)
 
 ## Exemple
 
