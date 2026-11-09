@@ -896,7 +896,9 @@ class Evolution:
         `save` writes a PNG/SVG (a single `frame`, default = last for fields);
         omit it for the interactive window. `mesh` supplies the surface for
         field evolutions (node frames default to a point cloud). `x_label` /
-        `y_label` / `title` label the curve.
+        `y_label` label the curve's axes; `title` names the figure — above a
+        curve, below a field frame (or as the window title), as for
+        `Mesh.plot`.
         `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
         of revolution — see `SubMesh.plot`.
         """
@@ -5544,7 +5546,8 @@ def radiation(fespace: FiniteElementSpace, target: Model) -> Model:
     Unlike convection this law is non-linear, so it contributes three terms:
     the linearised film `4σεT_∞³∫NᵢNⱼ` as stiffness, the exact residual
     `∫Nᵢσε(T⁴ − T_∞⁴)` through `internal_forces`, and the consistent tangent
-    `4σεT³∫NᵢNⱼ` through `matrix.tangent(...)`. Its natures are `"thermal"`
+    `4σεT³∫NᵢNⱼ` through `matrix.tangent(...)`, all evaluated at the face's
+    Gauss points with `T` interpolated there. Its natures are `"thermal"`
     **and** `"radiation"`.
     """
 
