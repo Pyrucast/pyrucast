@@ -315,8 +315,10 @@ enchaînement :
 - **Dupont à trois niveaux d'un pas à l'autre** : `T_{n−1}` est la vraie
   température précédente ; `DUPONT2` dégénère en θ = ¾ entre deux pas.
 - **Rayonnement** : l'opérateur est la tangente `4σεT³` à `T_n` plutôt que la
-  sécante `σε(T² + T∞²)(T + T∞)` ; le résidu est exact dans les deux cas, et le
-  schéma `linear` linéarise le rayonnement au lieu de l'ignorer.
+  sécante `σε(T² + T∞²)(T + T∞)` évaluée aux nœuds ; le résidu est le flux
+  `σε(T⁴ − T∞⁴)` calculé aux points de Gauss, et le schéma `linear` linéarise
+  le rayonnement au lieu de l'ignorer. Les deux méthodes, et ce qui les
+  sépare, sont décrites dans [Rayonnement](rayonnement.md#dans-un-calcul).
 - **Un pas adaptatif raté n'est pas gardé** : il est rejoué, réduit, depuis le
   dernier état convergé.
 - **La température initiale** vaut `t_ref` quand elle n'est pas donnée.

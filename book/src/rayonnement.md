@@ -74,6 +74,60 @@ d'unités, on donne `sigma` dans le matériau.
 | forces internes | le flux rayonné, pondéré par \\(N_i\\) |
 | forces externes | aucune |
 
+## Dans un calcul
+
+**Le flux se calcule aux points de Gauss de la face.** La température y est
+interpolée à partir de ses valeurs aux nœuds,
+\\( T\_g = \sum\_j N\_j(x\_g)\\,T\_j \\), élevée à la puissance quatrième
+**en ce point**, et le flux \\( \sigma\varepsilon(T\_g^4 - T\_\infty^4) \\) est
+intégré avec le poids \\( w\_g \\) de chaque point (la mesure de la surface
+comprise) :
+
+\\[ R\_i = \sum\_g w\_g\\, N\_i(x\_g)\\, \sigma\varepsilon\\,(T\_g^4 - T\_\infty^4),
+\qquad (K\_r)\_{ij} = \sum\_g w\_g\\, 4\sigma\varepsilon\\,T\_g^3\\, N\_i(x\_g)\\, N\_j(x\_g) \\]
+
+\\( R \\) est le résidu, que rendent les forces internes, et \\( K\_r \\) sa
+dérivée exacte par rapport aux températures nodales : la tangente.
+
+**Le calcul pas à pas annule le résidu par corrections successives.** À chaque
+pas de temps, [`pyrucast.stepping`](pas-a-pas.md) part de la température du
+pas précédent et calcule le résidu de tout le problème — conduction, capacité,
+chargements, rayonnement. Il résout la correction avec un opérateur qui
+contient la tangente \\( K\_r \\), prise une fois au début du pas, puis
+recommence avec le résidu de la nouvelle température, jusqu'à ce que la
+correction tombe sous `precision` (\\( 10^{-4} \\) par défaut) relativement
+à la température. Le résidu suit donc la température à chaque itération ;
+l'opérateur, lui, reste celui du début du pas. Comme il contient la dérivée de
+\\( T^4 \\), une ou deux corrections suffisent quand le pas de temps est
+raisonnable (algorithme détaillé dans [Calcul pas à pas](pas-a-pas.md),
+Algo 2).
+
+La raideur, film linéarisé autour de \\( T\_\infty \\), est une matrice
+constante : employée seule à chaque itération, elle donne une itération de
+point fixe, qui converge plus lentement que la tangente.
+
+> **Une autre méthode** consiste à écrire le rayonnement **comme une
+> convection** dont le coefficient dépend de la température. Puisque
+> \\( T^4 - T\_\infty^4 = (T^2 + T\_\infty^2)(T + T\_\infty)(T - T\_\infty) \\),
+> le flux vaut \\( h\_r\\,(T - T\_\infty) \\), avec
+>
+> \\[ h\_r = \sigma\varepsilon\\,(T^2 + T\_\infty^2)(T + T\_\infty). \\]
+>
+> On calcule \\( h\_r \\) **aux nœuds**, avec la température nodale de
+> l'itération en cours, on l'interpole aux points de Gauss, et chaque itération
+> résout un problème de convection : \\( \int\_\Gamma h\_r N\_i N\_j \\) dans
+> la matrice, \\( \int\_\Gamma h\_r\\,T\_\infty N\_i \\) au second membre. On
+> recommence avec la nouvelle température jusqu'à ce qu'elle ne bouge plus.
+>
+> Deux choses changent. \\( h\_r \\) est une **sécante**, pas la tangente
+> \\( 4\sigma\varepsilon T^3 \\) : chaque itération corrige moins, et il en
+> faut davantage pour la même précision. Et le problème discret n'est pas tout
+> à fait le même : \\( h\_r \\) interpolé depuis les nœuds n'est pas
+> \\( h\_r \\) calculé avec la température des points de Gauss. Les deux
+> méthodes convergent vers la même solution quand le maillage s'affine ; sur un
+> maillage donné, leurs solutions convergées diffèrent de l'ordre de l'erreur
+> de discrétisation.
+
 ## Exemple
 
 Une plaque à 1000 K qui rayonne par son bord supérieur vers 300 K. On lit le
