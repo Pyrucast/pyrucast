@@ -12,7 +12,8 @@ la température : le problème n'est plus linéaire, et il se calcule en
    précédente ;
 2. **avec rayonnement** — même description, un terme de plus dans le modèle ;
 
-puis compare les températures des quatre points suivis.
+puis compare les températures des quatre points suivis, parcourt le champ
+dans le temps d'un seul tracé, et sauvegarde le calcul dans un fichier.
 
 EN — Picks the transient page's analysis back up — the pierced lug at 0 °C,
 the same loads and the same ramps — and adds a **radiation** exchange: the
@@ -25,7 +26,8 @@ analyses, one after the other:
    transient;
 2. **with radiation** — the same description, one more term in the model;
 
-then compares the temperatures of the four points followed.
+then compares the temperatures of the four points followed, runs through
+the field over time in a single plot, and saves the analysis to a file.
 
 Lancement / Running ::
 
@@ -37,6 +39,7 @@ Lancement / Running ::
 """
 
 import os
+import tempfile
 
 import pyrucast as pc
 from maillage import HEIGHT, HOLE_RADIUS, LENGTH, OUT, THICKNESS, show, structured_mesh
@@ -50,6 +53,7 @@ from thermique import (
     T_EXT,
     T_IMPOSEE,
     TOL,
+    VUE,
     show_nodefield,
 )
 from thermique_transitoire import (
@@ -303,6 +307,54 @@ def main() -> None:
     )
     # ANCHOR_END: champ_final
 
+    # ANCHOR: champ_temps
+    # FR — Les 101 champs avec rayonnement, ramenés en °C, rangés dans une
+    #      évolution et tracés d'un seul appel : dans la fenêtre, un curseur
+    #      parcourt les instants. L'échelle reste celle du transitoire, du
+    #      fluide (−80 °C) à l'alésage (250 °C). `frame` choisit l'instant de
+    #      l'image enregistrée : le pas 50, à 7 500 s.
+    # EN — The 101 fields with radiation, back in °C, stored in an evolution
+    #      and plotted in a single call: in the window, a slider runs through
+    #      the instants. The scale stays the transient's, from the fluid
+    #      (−80 °C) to the bore (250 °C). `frame` picks the saved image's
+    #      instant: step 50, at 7,500 s.
+    champs = []
+    for resultat in avec["results"]:
+        champs.append((resultat["time"], resultat["temperature"] - ZERO_ABSOLU))
+    evolution = pc.Evolution(champs)
+    evolution.plot(
+        mesh=volume,
+        view=VUE,
+        component="T",
+        vmin=T_EXT,
+        vmax=T_IMPOSEE,
+        x_label="temps (s)",
+        title="Avec rayonnement — température (°C)",
+        frame=N_PAS // 2,
+        save=os.path.join(OUT, "thermique-non-lineaire-t7500.svg") if OUT else None,
+    )
+    # ANCHOR_END: champ_temps
+
+    # ANCHOR: sauvegarde
+    # FR — Le volume et l'évolution des températures, écrits dans un fichier
+    #      sous des clefs libres, puis relus : un dictionnaire à l'aller, un
+    #      dictionnaire au retour. Un nœud du volume relu lit l'évolution
+    #      relue, ici interpolée à 10 000 s, entre deux pas.
+    # EN — The volume and the temperature evolution, written to a file under
+    #      free keys, then read back: a dictionary on the way out, a
+    #      dictionary on the way back. A node of the volume read back reads
+    #      the evolution read back, interpolated here at 10,000 s, between
+    #      two steps.
+    chemin = os.path.join(tempfile.gettempdir(), "thermique.pyr")
+    pc.save(chemin, {"volume": volume, "température (°C)": evolution})
+
+    relu = pc.load(chemin)
+    volume_relu = relu["volume"]
+    evolution_relue = relu["température (°C)"]
+    b_relu = volume_relu.nearest_node(POINT_B)
+    t_b = evolution_relue.interpolate(10000.0).value(b_relu, "T")
+    # ANCHOR_END: sauvegarde
+
     print(f"face rayonnante : {face_rayonnante.cell_count} QUA8")
     for nom, calcul in [("sans", sans), ("avec", avec)]:
         iterations = []
@@ -322,6 +374,19 @@ def main() -> None:
     print(
         f"points au dernier instant, avec : A {avec_a[-1][1]:.2f}, "
         f"B {avec_b[-1][1]:.2f}, C {avec_c[-1][1]:.2f}, D {avec_d[-1][1]:.2f} °C"
+    )
+    milieu = evolution.frames()[N_PAS // 2]
+    print(
+        f"avec rayonnement à {instants[N_PAS // 2]:.0f} s : T min = "
+        f"{milieu.min('T'):.2f} °C, T max = {milieu.max('T'):.2f} °C"
+    )
+    print(
+        f"sauvegarde {chemin} : {os.path.getsize(chemin) / 1e6:.1f} Mo ; relu "
+        f"{volume_relu.cell_count} HEX20, {len(evolution_relue.frames())} champs"
+    )
+    print(
+        f"B relu à 10000 s : {t_b:.2f} °C, entre {avec_b[66][1]:.2f} °C à "
+        f"{avec_b[66][0]:.0f} s et {avec_b[67][1]:.2f} °C à {avec_b[67][0]:.0f} s"
     )
 
 

@@ -171,6 +171,6 @@ Chaque figure s'ouvre dans sa fenêtre ; fermez-la pour passer à la suivante.
    [transitoire](thermique-transitoire.md) (les sollicitations qui
    s'établissent dans le temps, le flux de chaleur).
 6. [Thermique non linéaire](thermique-non-lineaire.md) — le rayonnement, en
-   kelvins.
+   kelvins ; le champ parcouru dans le temps, la sauvegarde du calcul.
 7. [Calcul mécanique](mecanique.md) — déplacements et contraintes.
 8. [Compléments](complements.md) — pour aller plus loin.

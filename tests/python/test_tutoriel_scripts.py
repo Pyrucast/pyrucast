@@ -76,10 +76,11 @@ def _bore(script, mesh):
 @pytest.fixture(scope="module")
 def stepping_runs(tmp_path_factory):
     """Run a stepping script of the tutorial once, figures in a temporary
-    directory; return the module and the `data` of each `step_by_step` call.
+    directory; return the module, the `data` of each `step_by_step` call and
+    the path of each file written by `pyrucast.save`.
 
-    The calls are recorded by wrapping `pyrucast.stepping.step_by_step`: the
-    script stays exactly as the book shows it.
+    The calls are recorded by wrapping `pyrucast.stepping.step_by_step` and
+    `pyrucast.save`: the script stays exactly as the book shows it.
     """
     runs = {}
 
@@ -102,9 +103,17 @@ def stepping_runs(tmp_path_factory):
                 step_by_step(data)
                 recorded.append(data)
 
+            saved = []
+            save = pyrucast.save
+
+            def saving(path, objects):
+                save(path, objects)
+                saved.append(path)
+
             mp.setattr(pyrucast.stepping, "step_by_step", recording)
+            mp.setattr(pyrucast, "save", saving)
             script.main()
-        runs[name] = (script, recorded)
+        runs[name] = (script, recorded, saved)
         return runs[name]
 
     return run
@@ -112,7 +121,7 @@ def stepping_runs(tmp_path_factory):
 
 def test_transient_holds_the_bore_once_its_ramp_is_over(stepping_runs):
     """From 0.1 t_f on, the bore sits at T_IMPOSEE at every instant."""
-    script, (data,) = stepping_runs("thermique_transitoire")
+    script, (data,), _ = stepping_runs("thermique_transitoire")
     support = pyrucast.mesh.consolidate(data["initial"]["temperature"].support())
     bore = _bore(script, support)
     held = [r for r in data["results"] if r["time"] >= script.T_ALESAGE_CHAUD - 1e-9]
@@ -126,7 +135,7 @@ def test_transient_holds_the_bore_once_its_ramp_is_over(stepping_runs):
 def test_transient_settles_onto_the_steady_state(stepping_runs, thermal_fields):
     """At the last instant, node by node, the transient is the steady field of
     `tutoriel/thermique.py` (step 2), solved directly on its own mesh."""
-    _, (data,) = stepping_runs("thermique_transitoire")
+    _, (data,), _ = stepping_runs("thermique_transitoire")
     last = data["results"][-1]["temperature"]
     _, solved = thermal_fields
     steady_volume, steady = solved["thermique-complet.svg"]
@@ -149,8 +158,8 @@ def test_kelvin_run_without_radiation_is_the_transient(stepping_runs):
     """Shifted back by 273.15, the nonlinear script's run without radiation is
     the °C transient of `tutoriel/thermique_transitoire.py`, at every instant
     and every node: conduction and convection only see differences."""
-    script, (sans, _) = stepping_runs("thermique_non_lineaire")
-    _, (transient,) = stepping_runs("thermique_transitoire")
+    script, (sans, _), _ = stepping_runs("thermique_non_lineaire")
+    _, (transient,), _ = stepping_runs("thermique_transitoire")
     in_celsius = pyrucast.mesh.consolidate(
         transient["results"][0]["temperature"].support()
     )
@@ -171,10 +180,39 @@ def test_kelvin_run_without_radiation_is_the_transient(stepping_runs):
 
 def test_radiation_cools_every_point_followed(stepping_runs):
     """With radiation, each of the four points ends colder than without."""
-    script, (sans, avec) = stepping_runs("thermique_non_lineaire")
+    script, (sans, avec), _ = stepping_runs("thermique_non_lineaire")
     nodes = pyrucast.mesh.consolidate(sans["results"][0]["temperature"].support())
     for point in (script.POINT_A, script.POINT_B, script.POINT_C, script.POINT_D):
         node = nodes.nearest_node(point)
         without = sans["results"][-1]["temperature"].value(node, "T")
         with_radiation = avec["results"][-1]["temperature"].value(node, "T")
         assert with_radiation < without, point
+
+
+def test_saved_file_holds_the_radiation_run_in_celsius(stepping_runs):
+    """The file the nonlinear script writes, loaded again, holds its volume
+    and, at every instant and every node, the radiation run's temperature in
+    °C. The values are read through the nodes of the loaded volume: a field
+    that came back on copies of them would read 0 there, a node it does not
+    carry."""
+    script, (_, avec), (path,) = stepping_runs("thermique_non_lineaire")
+    loaded = pyrucast.load(path)
+    volume = loaded["volume"]
+    evolution = loaded["température (°C)"]
+    assert volume.cell_count == 640
+    assert evolution.shared_abscissas() == [r["time"] for r in avec["results"]]
+
+    computed = pyrucast.mesh.consolidate(avec["results"][0]["temperature"].support())
+    assert computed.cell_count == 4000
+    nodes = [computed.node(0, i, 0) for i in range(computed.cell_count)]
+    twins = [volume.nearest_node(node.position()) for node in nodes]
+    for node, twin in zip(nodes, twins):
+        assert twin.position() == pytest.approx(node.position(), abs=1e-12)
+    worst = 0.0
+    for frame, record in zip(evolution.frames(), avec["results"]):
+        read = frame.values(twins, "T")
+        kelvin = record["temperature"].values(nodes, "T")
+        for celsius, k in zip(read, kelvin):
+            worst = max(worst, abs(celsius - (k - script.ZERO_ABSOLU)))
+    # The file holds the very values the script computed: 0 expected.
+    assert worst < 1e-12

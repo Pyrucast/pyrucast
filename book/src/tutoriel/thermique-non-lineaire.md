@@ -5,7 +5,8 @@ percée à 0 °C, les mêmes sollicitations, les mêmes rampes — et ajoute un
 échange par **rayonnement** : la grande face arrière de la pièce rayonne vers
 un environnement lointain à −140 °C. Le calcul est mené deux fois, l'un après
 l'autre, **sans** puis **avec** le rayonnement, pour lire ce qu'il change en
-quatre points de la pièce.
+quatre points de la pièce. On parcourt enfin le champ dans le temps, d'un seul
+tracé, et on sauvegarde le calcul dans un fichier.
 
 Le script complet est [`tutoriel/thermique_non_lineaire.py`](https://github.com/Pyrucast/pyrucast/blob/master/tutoriel/thermique_non_lineaire.py)
 ; tous les extraits ci-dessous en sont issus directement, dans l'ordre du
@@ -183,10 +184,60 @@ confondent : le flux rayonné croît comme \\( T^4 \\) en kelvins, et une face
 Au dernier instant, le point le plus froid est à 21,67 °C au lieu de
 40,25 °C sans rayonnement ; l'alésage reste à 250 °C, tenu par son blocage.
 
+## Parcourir le calcul dans le temps
+
+```python
+{{#include ../../../tutoriel/thermique_non_lineaire.py:champ_temps}}
+```
+
+**Pas de boucle de tracés : une évolution se parcourt.** Plutôt que de tracer
+les 101 instants l'un après l'autre, on range les champs, ramenés en °C, dans
+une `pc.Evolution` de champs, et on la trace d'un seul appel. Dans la fenêtre,
+un **curseur** sous la pièce passe d'un instant à l'autre : on le fait glisser
+à la souris, ou on avance d'un pas avec les flèches ← et →. Au-dessus du
+curseur s'affichent le numéro de l'instant et le temps, sous le nom donné par
+`x_label`. La fenêtre s'ouvre sur le premier instant, la pièce entière à
+0 °C. L'échelle, fixée par `vmin` et `vmax` du fluide à l'alésage comme au
+transitoire, ne change pas d'un instant à l'autre : les couleurs se comparent.
+
+Une image de livre ne se parcourt pas : `frame` choisit l'instant qu'on
+enregistre, ici le pas 50, à 7 500 s. Sans `save`, la fenêtre les montre tous,
+et `frame` ne sert pas.
+
+![Température avec rayonnement à 7 500 s](img/thermique-non-lineaire-t7500.svg)
+
+À 7 500 s, les sollicitations deviennent pleines, et toute la pièce est passée
+au-dessus de 0 °C : 4,01 °C au plus froid. Il reste la seconde moitié du
+calcul pour qu'elle s'établisse, à 21,67 °C au plus froid.
+
+## Sauvegarder le calcul
+
+```python
+{{#include ../../../tutoriel/thermique_non_lineaire.py:sauvegarde}}
+```
+
+**Un fichier garde le calcul pour plus tard.** `pc.save` écrit des objets
+sous des clefs libres — un accent, une unité entre parenthèses — et `pc.load`
+rend le même dictionnaire, avec des objets neufs. On ne donne que ce qui
+intéresse, le volume et l'évolution : ce dont ils ont besoin, les nœuds et les
+supports des champs, suit tout seul. Le fichier pèse ici 3,5 Mo, pour 640
+`HEX20` et 101 champs.
+
+**Le partage survit à la relecture.** Les champs relus portent les nœuds du
+volume relu, pas des copies : un nœud cherché sur `volume_relu` lit
+directement l'évolution relue. Interpolée à 10 000 s, entre deux pas de
+calcul, elle donne 204,69 °C en B, entre 204,58 °C à 9 900 s et 204,74 °C à
+10 050 s.
+
+Le fichier va dans le dossier temporaire du système, pour ne rien laisser dans
+le dossier du tutoriel ; tout autre chemin convient. La page
+[Sauvegarde et relecture](../sauvegarde.md) dit ce que le fichier porte, et ce
+qu'il ne porte pas.
+
 ## Script complet
 
 Une fois les explications retirées, tout tient en un script — du maillage
-importé à la comparaison des deux calculs :
+importé à la sauvegarde du calcul :
 
 ```python
 {{#include ../../../tutoriel/thermique_non_lineaire.py:script}}

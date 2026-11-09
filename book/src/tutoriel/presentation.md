@@ -26,7 +26,7 @@ fonctions :
 | second membre | intégrer les chargements | `pyrucast.node_field.external_forces` | [Régime stationnaire](thermique.md) |
 | assemblage | construire la matrice du système | `pyrucast.matrix.stiffness` | [Régime stationnaire](thermique.md) |
 | résolution | résoudre le système | `pyrucast.solver.solve` | [Régime stationnaire](thermique.md) |
-| exploitation | tracer, extraire, exporter, sauvegarder | `plot`, `pyrucast.export.export_vtk`, `pyrucast.save` | [Maillage](maillage.md), [Régime stationnaire](thermique.md) |
+| exploitation | tracer, extraire, exporter, sauvegarder | `plot`, `pyrucast.export.export_vtk`, `pyrucast.save` | [Maillage](maillage.md), [Régime stationnaire](thermique.md), [Thermique non linéaire](thermique-non-lineaire.md) |
 
 Quand le problème n'est pas linéaire ou évolue dans le temps, le
 [calcul pas à pas](../pas-a-pas.md) (`pyrucast.stepping.step_by_step`) répète
