@@ -98,7 +98,7 @@ Toutes les méthodes `plot(...)` — `Mesh`, `SubMesh`, `NodeField`, `ElementFie
 {{#include ../../tests/python/test_doc_visualization.py:titre}}
 ```
 
-> Pour les **courbes** d'`Evolution` / `SubEvolution`, le `title` existant reste la légende en haut du graphe (voir plus bas) ; il n'est pas repris en bas.
+> Pour les **courbes** d'`Evolution` / `SubEvolution`, le `title` est la légende en haut du graphe (voir plus bas) ; il n'est pas repris en bas. Pour une **évolution de champs**, il nomme la figure comme pour un champ seul : en bas de l'image exportée, ou en titre de la fenêtre.
 
 ## Couleur de face par `SubMesh`
 

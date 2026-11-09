@@ -52,7 +52,10 @@ pub fn copy(mesh: &Mesh, new_nodes: bool) -> Result<Mesh> {
     }
     if new_nodes {
         // The identity is not orientation-reversing: nothing to re-order.
-        super::transform::map_coords(mesh, false, |position| Ok(position.to_vec()))
+        super::transform::map_coords(mesh, false, |position, out| {
+            out.extend_from_slice(position);
+            Ok(())
+        })
     } else {
         mesh.duplicate()
     }

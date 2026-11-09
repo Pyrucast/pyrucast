@@ -1897,6 +1897,8 @@ impl Evolution {
     /// fields); `save=None` opens the interactive window. `mesh` supplies the
     /// surface for field evolutions (node frames default to a point cloud;
     /// element frames reconstruct their FE support when no mesh is given).
+    /// `title` names the figure: above a curve, below a field frame or as the
+    /// window title, as for [`crate::containers::mesh::Mesh::plot`].
     #[cfg(feature = "viz")]
     #[allow(clippy::too_many_arguments)]
     pub fn plot(
@@ -1953,6 +1955,7 @@ impl Evolution {
                     frame,
                     view,
                     save,
+                    title,
                 )
             }
             ValueKind::Element => {
@@ -1979,6 +1982,7 @@ impl Evolution {
                     frame,
                     view,
                     save,
+                    title,
                 )
             }
         }
