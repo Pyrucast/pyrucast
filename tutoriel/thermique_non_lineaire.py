@@ -269,33 +269,25 @@ def main() -> None:
         avec_c.append((t, r_avec["temperature"].value(c, "T") - ZERO_ABSOLU))
         avec_d.append((t, r_avec["temperature"].value(d, "T") - ZERO_ABSOLU))
 
-    # FR — Deux figures de quatre courbes, chaque point sans puis avec
-    #      rayonnement : A et B, puis C et D.
-    # EN — Two figures of four curves, each point without then with
-    #      radiation: A and B, then C and D.
-    courbes_ab = (
+    # FR — Huit courbes sur une figure : A, B, C, D sans rayonnement, puis
+    #      les mêmes avec.
+    # EN — Eight curves on one figure: A, B, C, D without radiation, then the
+    #      same with it.
+    courbes = (
         pc.SubEvolution(sans_a)
-        | pc.SubEvolution(avec_a)
         | pc.SubEvolution(sans_b)
-        | pc.SubEvolution(avec_b)
-    )
-    courbes_ab.plot(
-        x_label="temps (s)",
-        y_label="T (°C)",
-        title="A et B, sans puis avec rayonnement",
-        save=os.path.join(OUT, "thermique-non-lineaire-ab.svg") if OUT else None,
-    )
-    courbes_cd = (
-        pc.SubEvolution(sans_c)
-        | pc.SubEvolution(avec_c)
+        | pc.SubEvolution(sans_c)
         | pc.SubEvolution(sans_d)
+        | pc.SubEvolution(avec_a)
+        | pc.SubEvolution(avec_b)
+        | pc.SubEvolution(avec_c)
         | pc.SubEvolution(avec_d)
     )
-    courbes_cd.plot(
+    courbes.plot(
         x_label="temps (s)",
         y_label="T (°C)",
-        title="C et D, sans puis avec rayonnement",
-        save=os.path.join(OUT, "thermique-non-lineaire-cd.svg") if OUT else None,
+        title="Température en A, B, C, D, sans puis avec rayonnement",
+        save=os.path.join(OUT, "thermique-non-lineaire-courbes.svg") if OUT else None,
     )
     # ANCHOR_END: courbes
 

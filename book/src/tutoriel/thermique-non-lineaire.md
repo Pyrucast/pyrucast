@@ -48,7 +48,9 @@ T\_n^3\\, [N]^T [N] \\, dS \\]
 \\( T\_n \\). Le résidu, lui, est recalculé exactement à chaque itération,
 avec \\( T^4 \\). Le calcul s'arrête quand la correction tombe sous
 \\( 10^{-4} \\) fois la température. La température imposée garde ses
-multiplicateurs, comme au transitoire.
+multiplicateurs, comme au transitoire. La page [Rayonnement](../rayonnement.md#dans-un-calcul)
+détaille ce traitement — le flux évalué aux points de Gauss, la tangente
+exacte — et une autre méthode, qui traite le rayonnement comme une convection.
 
 Chaque terme nouveau correspond à un objet du script :
 
@@ -150,12 +152,10 @@ près \\( T^3 \\) pour qu'une correction suffise à la précision demandée.
 {{#include ../../../tutoriel/thermique_non_lineaire.py:courbes}}
 ```
 
-Chaque figure montre deux points, chacun sans puis avec rayonnement : zone 0
-et zone 1 pour le premier point, zone 2 et zone 3 pour le second.
+La légende numérote les courbes dans l'ordre de l'union : zones 0 à 3 pour
+A, B, C, D sans rayonnement, zones 4 à 7 pour les mêmes points avec.
 
-![A et B, sans puis avec rayonnement](img/thermique-non-lineaire-ab.svg)
-
-![C et D, sans puis avec rayonnement](img/thermique-non-lineaire-cd.svg)
+![A, B, C, D, sans puis avec rayonnement](img/thermique-non-lineaire-courbes.svg)
 
 **Le rayonnement refroidit toute la pièce**, d'autant plus que le point est
 loin de l'alésage qui le tient. Au dernier instant :
@@ -167,7 +167,8 @@ loin de l'alésage qui le tient. Au dernier instant :
 | C, avant le trou | 222,98 °C | 214,07 °C | −8,91 °C |
 | D, la pointe | 249,99 °C | 249,57 °C | −0,42 °C |
 
-D, à 1,5 cm de l'alésage tenu à 250 °C, ne bouge presque pas ; B, loin de
+D, à 1,5 cm de l'alésage tenu à 250 °C, ne bouge presque pas — ses deux
+courbes, zones 3 et 7, se recouvrent sur la figure ; B, loin de
 lui et au-dessus de la tranche chauffée, perd le plus : la face arrière, à
 plus de 200 °C, y rayonne vers −140 °C. Au tout début, les courbes se
 confondent : le flux rayonné croît comme \\( T^4 \\) en kelvins, et une face
