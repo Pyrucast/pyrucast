@@ -233,7 +233,7 @@ la recompilation.
 | `cargo check --all-targets` | le build **Rust pur** compile encore | — | <1 s | ✓ | | ✓ | | | | ✓ | ✓ |
 | `cargo test --features viz` | 1036 tests + 893 doctests | `#[cfg(test)]` dans 123 fichiers de `src/`, 42 fichiers `tests/*.rs`, commentaires `///` et `//!` | 154 s | ✓ | | ✓ | | | | ✓ | ✓ |
 | `cargo build --features viz-interactive` | la fenêtre winit compile | aucun test — 960 lignes que rien n'exerce sans écran | 14 s | ✓ | | ✓ | | | | ✓ | ✓ |
-| `maturin develop --release --features extension-module,viz` | l'extension Python s'installe, compilée en release comme la roue | — | 20 s | | | | ✓ | | | ✓ | ✓ |
+| `maturin develop --release --features extension-module,viz` | l'extension Python s'installe, compilée en release comme la roue | — | 4 s | | | | ✓ | | | ✓ | ✓ |
 | `python -m pytest` | l'API Python, unité par unité | 73 fichiers `tests/python/test_*.py`, dont 13 `test_doc_*.py` qui sont aussi les sources des exemples du book | 32 s | | | | ✓ | | | ✓ | ✓ |
 | `script/run_examples.sh` | des chaînes de calcul **de bout en bout** | 30 `examples/*.py`, 3 `examples/*.rs`, 6 `tutoriel/*.py` | 80 s | | | | | ✓ | | ✓ | ✓ |
 | `cargo doc --no-deps --lib` (`-D warnings`) | la rustdoc n'a aucun lien cassé | — | 1 s | | | | | | ✓ | ✓ | ✓ |
@@ -247,8 +247,8 @@ Et les totaux, dans le même régime :
 |---|---|--:|
 | `check_format` | formatage seul | 2 s |
 | `check_rust` | cœur Rust | 169 s |
-| `check_python` | liaison et tests Python | 64 s |
-| `check_examples` | exemples et tutoriel | 80 s |
+| `check_python` | liaison et tests Python | 50 s |
+| `check_examples` | exemples et tutoriel | 46 s |
 | `check_doc` | rustdoc, garde-fous, book | 50 s |
 | `check_clippy` | quatre jeux de features, `-D warnings` | ~2 min |
 | `check_gmsh` | l'interface gmsh (exige `pip install gmsh`) | 5 s |
