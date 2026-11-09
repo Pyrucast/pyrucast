@@ -52,7 +52,7 @@ pub fn sweep(
     element_type: ElementType,
 ) -> Result<Mesh> {
     use crate::ops::mesh::sweep_kernel::grid_between;
-    if line_degree(mesh_a)? == ElementType::SEG3 {
+    if line_degree(mesh_a) == ElementType::SEG3 {
         return match element_type {
             ElementType::QUA8 | ElementType::QUA9 => {
                 grid_between(mesh_a, mesh_b, n_layers, element_type)
@@ -69,11 +69,11 @@ pub fn sweep(
 
 /// The element type of a one-zone line, `SEG2` when the mesh has another
 /// shape — the sweep kernel then reports what is wrong.
-fn line_degree(mesh: &Mesh) -> Result<ElementType> {
-    if mesh.len() != 1 {
-        return Ok(ElementType::SEG2);
+fn line_degree(mesh: &Mesh) -> ElementType {
+    match mesh.get(0) {
+        Ok(zone) if mesh.len() == 1 => zone.read().element_type(),
+        _ => ElementType::SEG2,
     }
-    Ok(mesh.get(0)?.read().element_type())
 }
 
 /// Deliver a `QUA4` grid as the surface type the caller asked for.

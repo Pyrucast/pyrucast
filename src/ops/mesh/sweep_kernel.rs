@@ -153,67 +153,81 @@ pub fn grid_between(
 
     let quadratic = line_type == ElementType::SEG3;
     let n_levels = if quadratic { 2 * n_layers } else { n_layers };
-    // A QUA8 has no node in the middle of a cell, where an odd level crosses
-    // an odd column; a QUA9 has.
-    let wanted = |level: usize, col: usize| -> bool {
-        !(quadratic && level % 2 == 1 && col % 2 == 1) || element_type == ElementType::QUA9
-    };
+    let with_centre = element_type == ElementType::QUA9;
 
-    let position = |id: NodeId| -> Result<Vec<f64>> { Ok(coords.read().position(id)?.to_vec()) };
-    let pos_a: Vec<Vec<f64>> = row_a[..n_cols]
-        .iter()
-        .map(|&id| position(id))
-        .collect::<Result<_>>()?;
-    let pos_b: Vec<Vec<f64>> = row_b[..n_cols]
-        .iter()
-        .map(|&id| position(id))
-        .collect::<Result<_>>()?;
-
-    // The intermediate levels, laid out flat and created in one locked pass:
-    // interpolating a million nodes must not mean a million write locks.
-    // `slot[(level - 1) * n_cols + col]` is the rank of that node among the
-    // created ones.
+    // The two rows' positions, flat, `dim` numbers per column.
     let dim = coords.read().dim() as usize;
-    let mut slot: Vec<u32> = vec![u32::MAX; n_levels.saturating_sub(1) * n_cols];
+    let mut pos_a: Vec<f64> = Vec::with_capacity(n_cols * dim);
+    let mut pos_b: Vec<f64> = Vec::with_capacity(n_cols * dim);
+    {
+        let c = coords.read();
+        for col in 0..n_cols {
+            pos_a.extend_from_slice(c.position(row_a[col])?);
+            pos_b.extend_from_slice(c.position(row_b[col])?);
+        }
+    }
+
+    // The fine grid of the strip, `width` columns per level: every node the
+    // cells will read, decided once, so the cell loop below only indexes.
+    // Levels 0 and `n_levels` are the two lines; the levels in between are
+    // created here, laid out flat and added in one locked pass —
+    // interpolating a million nodes must not mean a million write locks.
+    // A QUA8 has no node where an odd level crosses an odd column (the middle
+    // of a cell), a QUA9 has: odd levels of a QUA8 strip take every other
+    // column.
+    let width = last + 1;
+    let mut grid: Vec<NodeId> = vec![NodeId(u32::MAX); (n_levels + 1) * width];
+    grid[..n_cols].copy_from_slice(&row_a[..n_cols]);
+    grid[n_levels * width..n_levels * width + n_cols].copy_from_slice(&row_b[..n_cols]);
     let mut flat: Vec<f64> = Vec::with_capacity(n_levels.saturating_sub(1) * n_cols * dim);
     let mut created: u32 = 0;
     for level in 1..n_levels {
         let t = level as f64 / n_levels as f64;
-        for col in 0..n_cols {
-            if !wanted(level, col) {
-                continue;
-            }
-            flat.extend(
-                pos_a[col]
-                    .iter()
-                    .zip(pos_b[col].iter())
-                    .map(|(&ca, &cb)| ca + t * (cb - ca)),
+        let stride = if quadratic && level % 2 == 1 && !with_centre {
+            2
+        } else {
+            1
+        };
+        for col in (0..n_cols).step_by(stride) {
+            let (a, b) = (
+                &pos_a[col * dim..(col + 1) * dim],
+                &pos_b[col * dim..(col + 1) * dim],
             );
-            slot[(level - 1) * n_cols + col] = created;
+            flat.extend(a.iter().zip(b).map(|(&ca, &cb)| ca + t * (cb - ca)));
+            // The rank among the created nodes, turned into an id below.
+            grid[level * width + col] = NodeId(created);
             created += 1;
         }
     }
     let first = coords.write().add_nodes(&flat)?.start;
-    // Node at a level and a column of the fine grid.
-    let at = |level: usize, col: usize| -> NodeId {
-        let col = if closed && col == last { 0 } else { col };
-        if level == 0 {
-            row_a[col]
-        } else if level == n_levels {
-            row_b[col]
+    for level in 1..n_levels {
+        let stride = if quadratic && level % 2 == 1 && !with_centre {
+            2
         } else {
-            NodeId(first + slot[(level - 1) * n_cols + col])
+            1
+        };
+        for col in (0..n_cols).step_by(stride) {
+            grid[level * width + col].0 += first;
         }
-    };
+    }
+    // A closed strip's last column is its first.
+    if closed {
+        for level in 0..=n_levels {
+            grid[level * width + last] = grid[level * width];
+        }
+    }
+    let at = |level: usize, col: usize| grid[level * width + col];
 
     let npc = element_type.nodes_per_cell();
     let mut conn: Vec<NodeId> = Vec::with_capacity(n_layers * n_elems * npc);
-    for k in 0..n_layers {
-        for j in 0..n_elems {
-            if quadratic {
-                let (l0, lm, l1) = (2 * k, 2 * k + 1, 2 * k + 2);
+    if quadratic {
+        for k in 0..n_layers {
+            let (l0, lm, l1) = (2 * k, 2 * k + 1, 2 * k + 2);
+            for j in 0..n_elems {
                 let (c0, cm, c1) = (2 * j, 2 * j + 1, 2 * j + 2);
-                conn.extend_from_slice(&[
+                // The QUA9 order; a QUA8 keeps its first eight (its grid has
+                // no centre: that slot holds a placeholder, dropped here).
+                let cell = [
                     at(l0, c0),
                     at(l0, c1),
                     at(l1, c1),
@@ -222,11 +236,14 @@ pub fn grid_between(
                     at(lm, c1),
                     at(l1, cm),
                     at(lm, c0),
-                ]);
-                if element_type == ElementType::QUA9 {
-                    conn.push(at(lm, cm));
-                }
-            } else {
+                    at(lm, cm),
+                ];
+                conn.extend_from_slice(&cell[..npc]);
+            }
+        }
+    } else {
+        for k in 0..n_layers {
+            for j in 0..n_elems {
                 conn.extend_from_slice(&[at(k, j), at(k, j + 1), at(k + 1, j + 1), at(k + 1, j)]);
             }
         }
@@ -311,7 +328,9 @@ fn swept_type(et: ElementType, op: &str) -> Result<ElementType> {
 }
 
 /// Sweep `mesh` into `n_layers` layers of cells, the node of a column at
-/// level `s` sitting where `place(base_position, s)` puts it.
+/// level `s` sitting where `place(base_position, s, flat)` puts it — the
+/// placement appends the position to `flat`, the buffer the nodes are created
+/// from, so no position is allocated on its own.
 ///
 /// Layer 0 re-uses the source nodes (refcount incremented); levels `1..` are
 /// newly created — except when `closed` is set, where the last level *is*
@@ -343,14 +362,15 @@ fn layered(
     n_layers: usize,
     closed: bool,
     op: &str,
-    place: impl Fn(&[f64], f64) -> Vec<f64>,
+    place: impl Fn(&[f64], f64, &mut Vec<f64>),
 ) -> Result<Mesh> {
     let coords = mesh.coords()?;
     let n_cols = cols.ids.len();
     let dim = coords.read().dim() as usize;
 
-    // The degree of the sweep, and which columns are corners: only those get
-    // a node at the half levels.
+    // Each zone's swept type, the degree of the sweep, and which columns are
+    // corners: only those get a node at the half levels.
+    let mut swept: Vec<(ElementType, ElementType)> = Vec::new();
     let mut quadratic: Option<bool> = None;
     let mut corner_rank: Vec<u32> = vec![u32::MAX; n_cols];
     let mut n_corner_cols: u32 = 0;
@@ -365,14 +385,13 @@ fn layered(
             )));
         }
         let is_quadratic = et.as_kind().is_quadratic();
-        match quadratic {
-            Some(q) if q != is_quadratic => {
-                return Err(PyrucastError::Message(format!(
-                    "{op}: linear and quadratic zones cannot be swept together"
-                )))
-            }
-            _ => quadratic = Some(is_quadratic),
+        if quadratic.is_some_and(|q| q != is_quadratic) {
+            return Err(PyrucastError::Message(format!(
+                "{op}: linear and quadratic zones cannot be swept together"
+            )));
         }
+        quadratic = Some(is_quadratic);
+        swept.push((et, swept_et));
         let (npc, corners) = (et.nodes_per_cell(), et.as_kind().corner_count());
         for cell in s.connectivity().chunks(npc) {
             for &id in &cell[..corners] {
@@ -395,7 +414,7 @@ fn layered(
     let mut flat: Vec<f64> = Vec::with_capacity(n_created * dim);
     for k in 1..=last_created {
         for c in 0..n_cols {
-            flat.extend_from_slice(&place(&cols.positions[c], k as f64));
+            place(&cols.positions[c], k as f64, &mut flat);
         }
     }
     let mut corners_in_order: Vec<usize> = vec![0; n_corner_cols as usize];
@@ -406,88 +425,55 @@ fn layered(
     }
     for k in 0..n_half {
         for &c in &corners_in_order {
-            flat.extend_from_slice(&place(&cols.positions[c], k as f64 + 0.5));
+            place(&cols.positions[c], k as f64 + 0.5, &mut flat);
         }
     }
     let first = coords.write().add_nodes(&flat)?.start;
+
+    // The node of every column at every level, decided once, so the cell
+    // loop below only indexes: `whole` at the whole levels 0..=n_layers (a
+    // closed sweep's last level is its first), `halves` at the half levels
+    // k + ½, for the corner columns.
+    let mut whole: Vec<NodeId> = Vec::with_capacity((n_layers + 1) * n_cols);
+    whole.extend_from_slice(&cols.ids);
+    whole.extend((0..last_created * n_cols).map(|i| NodeId(first + i as u32)));
+    if closed {
+        whole.extend_from_slice(&cols.ids);
+    }
     let first_half = first + (last_created * n_cols) as u32;
-    // Node at whole level k, column col.
-    let at = |k: usize, col: usize| -> NodeId {
-        if k == 0 || (closed && k == n_layers) {
-            cols.ids[col]
-        } else {
-            NodeId(first + ((k - 1) * n_cols + col) as u32)
+    let mut halves: Vec<NodeId> = vec![NodeId(u32::MAX); n_half * n_cols];
+    for k in 0..n_half {
+        for (col, &rank) in corner_rank.iter().enumerate() {
+            if rank != u32::MAX {
+                halves[k * n_cols + col] = NodeId(first_half + k as u32 * n_corner_cols + rank);
+            }
         }
-    };
-    // Node at half level k + ½, corner column col.
-    let half = |k: usize, col: usize| -> NodeId {
-        NodeId(first_half + k as u32 * n_corner_cols + corner_rank[col])
-    };
+    }
 
     let mut result = Mesh::empty();
-    for sm_handle in mesh {
+    for (sm_handle, &(et, swept_et)) in mesh.into_iter().zip(&swept) {
         // Guard held for this zone's pass: what follows only reads.
         let s = sm_handle.read();
-        let (et, n_cells, conn) = (s.element_type(), s.cell_count(), s.connectivity());
         let npc = et.nodes_per_cell();
-        let swept_et = swept_type(et, op)?;
+        let pattern = sweep_pattern(et);
+        // The zone's connectivity as column indices, looked up once rather
+        // than once per layer.
+        let conn_cols: Vec<usize> = s.connectivity().iter().map(|&id| cols.of(id)).collect();
 
         let mut out: Vec<NodeId> =
-            Vec::with_capacity(n_layers * n_cells * swept_et.nodes_per_cell());
+            Vec::with_capacity(n_layers * s.cell_count() * swept_et.nodes_per_cell());
         for k in 0..n_layers {
-            for ci in 0..n_cells {
-                let cell = &conn[ci * npc..(ci + 1) * npc];
-                let bot = |i: usize| at(k, cols.of(cell[i]));
-                let top = |i: usize| at(k + 1, cols.of(cell[i]));
-                let v = |i: usize| half(k, cols.of(cell[i]));
-
-                match et {
-                    ElementType::SEG2 => {
-                        out.extend_from_slice(&[bot(0), bot(1), top(1), top(0)]);
-                    }
-                    ElementType::TRI3 => {
-                        out.extend_from_slice(&[bot(0), bot(1), bot(2), top(0), top(1), top(2)]);
-                    }
-                    ElementType::QUA4 => {
-                        out.extend_from_slice(&[
-                            bot(0),
-                            bot(1),
-                            bot(2),
-                            bot(3),
-                            top(0),
-                            top(1),
-                            top(2),
-                            top(3),
-                        ]);
-                    }
-                    ElementType::SEG3 => {
-                        out.extend_from_slice(&[
-                            bot(0),
-                            bot(1),
-                            top(1),
-                            top(0),
-                            bot(2),
-                            v(1),
-                            top(2),
-                            v(0),
-                        ]);
-                    }
-                    ElementType::TRI6 => {
-                        out.extend((0..3).map(bot));
-                        out.extend((0..3).map(top));
-                        out.extend((3..6).map(bot));
-                        out.extend((3..6).map(top));
-                        out.extend((0..3).map(v));
-                    }
-                    ElementType::QUA8 => {
-                        out.extend((0..4).map(bot));
-                        out.extend((0..4).map(top));
-                        out.extend((4..8).map(bot));
-                        out.extend((4..8).map(top));
-                        out.extend((0..4).map(v));
-                    }
-                    _ => unreachable!("swept_type admits no other type"),
-                }
+            let levels: [&[NodeId]; 3] = [
+                &whole[k * n_cols..(k + 1) * n_cols],
+                &whole[(k + 1) * n_cols..(k + 2) * n_cols],
+                if quadratic {
+                    &halves[k * n_cols..(k + 1) * n_cols]
+                } else {
+                    &[]
+                },
+            ];
+            for cell in conn_cols.chunks(npc) {
+                out.extend(pattern.iter().map(|&(level, i)| levels[level][cell[i]]));
             }
         }
 
@@ -503,6 +489,79 @@ fn layered(
     let owned: Vec<NodeId> = (first..first + n_created as u32).map(NodeId).collect();
     coords.write().decref_all(&owned)?;
     Ok(result)
+}
+
+/// The cell a layered sweep builds from a source cell, as `(level, local)`
+/// pairs in the swept cell's node order: level 0 the layer's bottom, 1 its
+/// top, 2 its half level; `local` the source cell's node.
+fn sweep_pattern(et: ElementType) -> &'static [(usize, usize)] {
+    const B: usize = 0;
+    const T: usize = 1;
+    const H: usize = 2;
+    match et {
+        ElementType::SEG2 => &[(B, 0), (B, 1), (T, 1), (T, 0)],
+        ElementType::TRI3 => &[(B, 0), (B, 1), (B, 2), (T, 0), (T, 1), (T, 2)],
+        ElementType::QUA4 => &[
+            (B, 0),
+            (B, 1),
+            (B, 2),
+            (B, 3),
+            (T, 0),
+            (T, 1),
+            (T, 2),
+            (T, 3),
+        ],
+        ElementType::SEG3 => &[
+            (B, 0),
+            (B, 1),
+            (T, 1),
+            (T, 0),
+            (B, 2),
+            (H, 1),
+            (T, 2),
+            (H, 0),
+        ],
+        ElementType::TRI6 => &[
+            (B, 0),
+            (B, 1),
+            (B, 2),
+            (T, 0),
+            (T, 1),
+            (T, 2),
+            (B, 3),
+            (B, 4),
+            (B, 5),
+            (T, 3),
+            (T, 4),
+            (T, 5),
+            (H, 0),
+            (H, 1),
+            (H, 2),
+        ],
+        // QUA8, the last type `swept_type` admits.
+        _ => &[
+            (B, 0),
+            (B, 1),
+            (B, 2),
+            (B, 3),
+            (T, 0),
+            (T, 1),
+            (T, 2),
+            (T, 3),
+            (B, 4),
+            (B, 5),
+            (B, 6),
+            (B, 7),
+            (T, 4),
+            (T, 5),
+            (T, 6),
+            (T, 7),
+            (H, 0),
+            (H, 1),
+            (H, 2),
+            (H, 3),
+        ],
+    }
 }
 
 /// Extrude a mesh by `n_layers` layers along `direction`.
@@ -542,12 +601,16 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
 
     let cols = columns(mesh, "extrude")?;
     let step: Vec<f64> = direction.iter().map(|&d| d / n_layers as f64).collect();
-    layered(mesh, &cols, n_layers, false, "extrude", |base, level| {
-        base.iter()
-            .zip(step.iter())
-            .map(|(&c, &s)| c + level * s)
-            .collect()
-    })
+    layered(
+        mesh,
+        &cols,
+        n_layers,
+        false,
+        "extrude",
+        |base, level, out| {
+            out.extend(base.iter().zip(step.iter()).map(|(&c, &s)| c + level * s));
+        },
+    )
 }
 
 /// Revolve a mesh by `n_layers` layers over a total `angle` (radians) — the
@@ -677,15 +740,31 @@ pub fn revolve(
     }
 
     let step = angle / n_layers as f64;
-    layered(mesh, &cols, n_layers, closed, "revolve", |base, level| {
-        let theta = step * level;
-        let (cos, sin) = (theta.cos(), theta.sin());
-        match unit_axis {
-            None => {
+    // The rotation is chosen once, outside the per-node placement.
+    match unit_axis {
+        None => layered(
+            mesh,
+            &cols,
+            n_layers,
+            closed,
+            "revolve",
+            |base, level, out| {
+                let (sin, cos) = (step * level).sin_cos();
                 let (x, y) = (base[0] - center[0], base[1] - center[1]);
-                vec![center[0] + cos * x - sin * y, center[1] + sin * x + cos * y]
-            }
-            Some(u) => {
+                out.extend_from_slice(&[
+                    center[0] + cos * x - sin * y,
+                    center[1] + sin * x + cos * y,
+                ]);
+            },
+        ),
+        Some(u) => layered(
+            mesh,
+            &cols,
+            n_layers,
+            closed,
+            "revolve",
+            |base, level, out| {
+                let (sin, cos) = (step * level).sin_cos();
                 let v = [
                     base[0] - center[0],
                     base[1] - center[1],
@@ -697,16 +776,15 @@ pub fn revolve(
                     u[2] * v[0] - u[0] * v[2],
                     u[0] * v[1] - u[1] * v[0],
                 ];
-                let dot = u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
-                let k = dot * (1.0 - cos);
-                vec![
-                    center[0] + v[0] * cos + cross[0] * sin + u[0] * k,
-                    center[1] + v[1] * cos + cross[1] * sin + u[1] * k,
-                    center[2] + v[2] * cos + cross[2] * sin + u[2] * k,
-                ]
-            }
-        }
-    })
+                let along = (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) * (1.0 - cos);
+                out.extend_from_slice(&[
+                    center[0] + v[0] * cos + cross[0] * sin + u[0] * along,
+                    center[1] + v[1] * cos + cross[1] * sin + u[1] * along,
+                    center[2] + v[2] * cos + cross[2] * sin + u[2] * along,
+                ]);
+            },
+        ),
+    }
 }
 
 /// Sweep between two matching surface meshes to produce a solid mesh —

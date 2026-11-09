@@ -52,13 +52,15 @@ pub fn project_on_sphere(mesh: &Mesh, center: &[f64], radius: f64) -> Result<Mes
             center.len()
         )));
     }
-    super::transform::map_coords(mesh, false, |p| {
+    super::transform::map_coords(mesh, false, |p, out| {
         let distance = p
             .iter()
             .zip(center)
             .map(|(x, c)| (x - c) * (x - c))
             .sum::<f64>()
             .sqrt();
+        // The one test per node is the computation's own: a node on the
+        // centre has no direction.
         if distance == 0.0 {
             return Err(PyrucastError::Message(format!(
                 "project_on_sphere: the node at {p:?} sits on the centre, it has no direction \
@@ -66,10 +68,8 @@ pub fn project_on_sphere(mesh: &Mesh, center: &[f64], radius: f64) -> Result<Mes
             )));
         }
         let scale = radius / distance;
-        Ok(p.iter()
-            .zip(center)
-            .map(|(x, c)| c + scale * (x - c))
-            .collect())
+        out.extend(p.iter().zip(center).map(|(x, c)| c + scale * (x - c)));
+        Ok(())
     })
 }
 
