@@ -544,6 +544,7 @@ pub(crate) fn render_evolution_field(
     frame: Option<usize>,
     view: View,
     save: Option<&Path>,
+    title: Option<&str>,
 ) -> Result<()> {
     if frames.is_empty() {
         return Err(PyrucastError::Message(
@@ -568,7 +569,7 @@ pub(crate) fn render_evolution_field(
                 smooth,
                 view,
                 Some(path),
-                None,
+                title,
             )
         }
         None => {
@@ -583,12 +584,12 @@ pub(crate) fn render_evolution_field(
                     scale,
                     smooth,
                     view,
-                    None,
+                    title,
                 )
             }
             #[cfg(not(feature = "viz-interactive"))]
             {
-                let _ = (abscissas, abscissa_label, smooth);
+                let _ = (abscissas, abscissa_label, smooth, title);
                 Err(PyrucastError::Message(
                     "interactive viz disabled — recompile with --features viz-interactive \
                      or pass an output path to save a PNG/SVG"

@@ -72,6 +72,21 @@ def test_plot_title_is_engraved_at_the_bottom(tmp_path):
     assert "cantilever-beam" not in plain.read_text()
 
 
+def test_field_evolution_frame_is_titled(tmp_path):
+    # A field evolution draws one frame like `Mesh.plot(field=...)`: its
+    # `title` names the figure the same way.
+    _, sm = _make_two_triangles()
+    mesh = sm | sm
+    mesh = pyrucast.mesh.consolidate(mesh)
+    nodes = pyrucast.mesh.consolidate(pyrucast.mesh.to_poi1(mesh))
+    cold = pyrucast.NodeField(nodes, ["T"])
+    hot = cold + 100.0
+    evolution = pyrucast.Evolution([(0.0, cold), (1.0, hot)])
+    titled = tmp_path / "frame.svg"
+    evolution.plot(save=str(titled), mesh=mesh, frame=1, title="t = 1 s")
+    assert "t = 1 s" in titled.read_text()
+
+
 def test_plot_unsupported_extension(tmp_path):
     _, sm = _make_two_triangles()
     path = tmp_path / "tri.jpg"

@@ -491,7 +491,9 @@ impl PyEvolution {
     /// `save` writes a PNG/SVG (a single `frame`, default = last for fields);
     /// omit it for the interactive window. `mesh` supplies the surface for
     /// field evolutions (node frames default to a point cloud). `x_label` /
-    /// `y_label` / `title` label the curve.
+    /// `y_label` label the curve's axes; `title` names the figure — above a
+    /// curve, below a field frame (or as the window title), as for
+    /// `Mesh.plot`.
     /// `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
     /// of revolution — see `SubMesh.plot`.
     #[cfg(feature = "viz")]
