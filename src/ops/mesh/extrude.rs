@@ -5,7 +5,10 @@ use crate::error::Result;
 ///
 /// `direction` is the **total** displacement vector; each intermediate
 /// layer is placed at an evenly spaced fraction. Supported element types:
-/// SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8. Other types produce an error.
+/// SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8, and their quadratic siblings
+/// SEG3 → QUA8, TRI6 → PENTA15, QUA8 → HEX20: the source's mid-nodes are
+/// copied on every layer, and each edge along the extrusion gets its
+/// mid-node halfway. Other types produce an error.
 ///
 /// Nodes shared between cells in the source mesh remain shared in the
 /// extruded mesh. Source nodes are re-used (refcount incremented);
@@ -15,6 +18,9 @@ use crate::error::Result;
 /// - QUA4: `bot[0], bot[1], top[1], top[0]`
 /// - PENTA6: `bot[0..3], top[0..3]`
 /// - HEX8: `bot[0..4], top[0..4]`
+/// - QUA8, PENTA15, HEX20: the corners as above, then the mid-nodes in the
+///   edge order of the linear cell — the bottom face's, the top face's, then
+///   those of the edges along the extrusion.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -39,6 +45,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::aggregate::Aggregate;
     use crate::atoms::ElementType;
     use crate::atoms::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
@@ -121,6 +128,88 @@ mod tests {
         // Top of first layer sits one step (z = 1) above the base.
         let top0 = penta.node(0, 0, 3).unwrap();
         assert_eq!(top0.position().unwrap(), vec![0.0, 0.0, 1.0]);
+    }
+
+    /// Node positions of every cell of every zone, in local order.
+    fn cell_positions(mesh: &Mesh) -> Vec<Vec<Vec<f64>>> {
+        let mut out = Vec::new();
+        for (z, sm) in mesh.into_iter().enumerate() {
+            let (n_cells, npc) = {
+                let s = sm.read();
+                (s.cell_count(), s.element_type().nodes_per_cell())
+            };
+            for c in 0..n_cells {
+                out.push(
+                    (0..npc)
+                        .map(|k| mesh.node(z, c, k).unwrap().position().unwrap())
+                        .collect(),
+                );
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn quadratic_extrusion_matches_the_promoted_linear_one() {
+        // On straight geometry, extruding the quadratic source and promoting
+        // the extruded linear mesh give the same cells, node by node — SEG3 →
+        // QUA8, TRI6 → PENTA15 and QUA8 → HEX20 alike.
+        use crate::ops::mesh::to_quadratic;
+        let coords = Handle::new(Coords::new(3).unwrap());
+        let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+        let n: Vec<Node> = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.2, 0.9, 0.0],
+            [0.1, 1.0, 0.0],
+        ]
+        .iter()
+        .map(|x| p(x))
+        .collect();
+        let seg = line(&n[0], &n[1], 2, ElementType::SEG2).unwrap();
+        let mut qua = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
+        qua.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])
+            .unwrap();
+        let mut tri = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+        tri.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+
+        for (linear, expected) in [
+            (seg, ElementType::QUA8),
+            (tri, ElementType::PENTA15),
+            (qua, ElementType::HEX20),
+        ] {
+            let direction = if expected == ElementType::QUA8 {
+                [0.0, 1.5, 0.0]
+            } else {
+                [0.0, 0.0, 1.5]
+            };
+            let native = extrude(&to_quadratic(&linear).unwrap(), &direction, 3).unwrap();
+            let promoted = to_quadratic(&extrude(&linear, &direction, 3).unwrap()).unwrap();
+            assert_eq!(native.element_types().unwrap(), vec![expected]);
+            let (a, b) = (cell_positions(&native), cell_positions(&promoted));
+            assert_eq!(a.len(), b.len());
+            for (ca, cb) in a.iter().zip(b.iter()) {
+                for (x, y) in ca.iter().zip(cb.iter()) {
+                    for d in 0..3 {
+                        assert!((x[d] - y[d]).abs() < 1e-12, "{expected}: {x:?} vs {y:?}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn extrude_refuses_linear_and_quadratic_zones_together() {
+        use crate::ops::mesh::to_quadratic;
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+        let seg2 = line(&p(&[0.0, 0.0]), &p(&[1.0, 0.0]), 1, ElementType::SEG2).unwrap();
+        let seg3 =
+            to_quadratic(&line(&p(&[2.0, 0.0]), &p(&[3.0, 0.0]), 1, ElementType::SEG2).unwrap())
+                .unwrap();
+        let mixed = seg2.union(&seg3).unwrap();
+        let err = extrude(&mixed, &[0.0, 1.0], 1).unwrap_err();
+        assert!(err.to_string().contains("linear and quadratic"));
     }
 
     #[test]

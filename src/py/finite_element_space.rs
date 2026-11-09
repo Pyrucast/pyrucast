@@ -1,7 +1,6 @@
 //! Python wrappers for [`crate::containers::finite_element_space::SubFiniteElementSpace`] and
 //! [`crate::containers::finite_element_space::FiniteElementSpace`].
 
-use crate::aggregate::Aggregate;
 use crate::atoms::Element;
 use crate::atoms::Interpolation;
 use crate::atoms::QuadratureRule;
@@ -187,12 +186,13 @@ pub struct PyFiniteElementSpace {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyFiniteElementSpace {
-    /// `FiniteElementSpace(mesh)` — Lagrange-1 + default Gauss for
-    /// every submesh.
+    /// `FiniteElementSpace(mesh)` — on every submesh, the Lagrange
+    /// interpolation of its own degree (`LAGRANGE1` on a HEX8, `LAGRANGE2`
+    /// on a HEX20 or a QUA8) and the default Gauss quadrature.
     ///
-    /// `FiniteElementSpace(mesh, interpolation="LAGRANGE1", quadrature="GAUSS")`
-    /// — same `(interpolation, quadrature)` applied to every submesh. Those two
-    /// names **are** the defaults; omitting either one keeps it.
+    /// `FiniteElementSpace(mesh, interpolation="LAGRANGE2", quadrature="GAUSS")`
+    /// — an interpolation given applies to every submesh; omitting it keeps
+    /// each submesh's own degree. `"GAUSS"` is the default quadrature.
     #[new]
     #[pyo3(signature = (mesh, interpolation=None, quadrature=None))]
     fn py_new(
@@ -200,12 +200,23 @@ impl PyFiniteElementSpace {
         interpolation: Option<Interpolation>,
         quadrature: Option<QuadratureRule>,
     ) -> PyResult<Self> {
-        let interp = interpolation.unwrap_or(Interpolation::Lagrange1);
-        let quad = quadrature.unwrap_or(QuadratureRule::Gauss);
-        let n_sub = mesh.inner.len();
-        let choices: Vec<(Interpolation, QuadratureRule)> =
-            (0..n_sub).map(|_| (interp, quad)).collect();
-        let fes = FiniteElementSpace::with(&mesh.inner, &choices)?;
+        let fes = match (interpolation, quadrature) {
+            (None, None) => FiniteElementSpace::lagrange(&mesh.inner)?,
+            _ => {
+                let quad = quadrature.unwrap_or(QuadratureRule::Gauss);
+                let choices: Vec<(Interpolation, QuadratureRule)> = (&mesh.inner)
+                    .into_iter()
+                    .map(|sm| {
+                        let own = sm.read().element_type().as_kind().degree();
+                        (
+                            interpolation.or(own).unwrap_or(Interpolation::Lagrange1),
+                            quad,
+                        )
+                    })
+                    .collect();
+                FiniteElementSpace::with(&mesh.inner, &choices)?
+            }
+        };
         Ok(Self { inner: fes })
     }
 

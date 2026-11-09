@@ -3,8 +3,8 @@
 //! [`border`] is the inverse companion of
 //! [`crate::ops::mesh::triangulate_surface()`]
 //! (whose input is one or more closed SEG2 loops): it takes a surface mesh
-//! (TRI3 / QUA4 cells) and returns its boundary as one or more closed SEG2
-//! loops, one per submesh.
+//! (TRI3 / QUA4 cells, or their quadratic TRI6 / QUA8 / QUA9) and returns its
+//! boundary as one or more closed SEG2 (or SEG3) loops, one per submesh.
 //!
 //! A *boundary* edge is an element edge used by exactly one cell; interior
 //! edges are shared by two cells (with opposite orientations) and cancel.
@@ -36,7 +36,8 @@ fn edge_key(u: NodeId, v: NodeId) -> (NodeId, NodeId) {
 }
 
 /// Extract the boundary of a **surface** mesh (TRI3 / QUA4 cells) as one or
-/// more closed SEG2 loops.
+/// more closed SEG2 loops — or, for a quadratic surface (TRI6 / QUA8 /
+/// QUA9), as SEG3 loops that keep the mid-node of every boundary edge.
 ///
 /// Every element edge is taken with the cell's CCW orientation; an edge used
 /// by exactly one cell is a *boundary* edge (interior edges appear twice,
@@ -62,13 +63,18 @@ fn edge_key(u: NodeId, v: NodeId) -> (NodeId, NodeId) {
 /// single closed loop. `angle_deg = None` keeps every boundary as one closed
 /// loop (no splitting) — the default.
 ///
+/// The edges are read on the cells' corners; a quadratic cell's mid-node of
+/// edge `i` (local `corners + i`) becomes the mid-node of the SEG3. Linear
+/// and quadratic surface zones cannot be mixed.
+///
 /// POI1 submeshes are ignored (a point has no edge). Errors if the mesh has
 /// no surface cells, if it lists one zone twice (every edge would sit under
 /// two cells, the border would be empty), if it carries cells that are
-/// neither POI1, TRI3 nor QUA4 (1-D and 3-D borders are not handled here —
-/// see [`skin()`](fn@crate::ops::mesh::skin) for the boundary of a volume),
-/// or if the boundary is not a clean set of closed loops (an open or
-/// non-manifold edge).
+/// neither POI1 nor a surface type listed above (1-D and 3-D borders are not
+/// handled here — see [`skin()`](fn@crate::ops::mesh::skin) for the boundary
+/// of a volume), if it mixes linear and quadratic surfaces, or if the
+/// boundary is not a clean set of closed loops (an open or non-manifold
+/// edge).
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -96,42 +102,51 @@ pub fn border(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
     // 1. Count every element edge across all surface submeshes. A boundary
     //    edge is one whose undirected key occurs exactly once.
     let mut counts: HashMap<(NodeId, NodeId), u32> = HashMap::new();
-    let mut any_surface = false;
+    let mut quadratic: Option<bool> = None;
     for sm in mesh {
         // Guard held for this zone's pass: the loop below only reads.
         let s = sm.read();
         let (et, conn) = (s.element_type(), s.connectivity());
-        match et {
+        let is_quadratic = match et {
             ElementType::POI1 => continue, // no edges — tolerated
-            ElementType::TRI3 | ElementType::QUA4 => {}
+            ElementType::TRI3 | ElementType::QUA4 => false,
+            ElementType::TRI6 | ElementType::QUA8 | ElementType::QUA9 => true,
             other => {
                 return Err(PyrucastError::Message(format!(
-                    "border: only surface meshes (TRI3/QUA4) are supported, got {}",
+                    "border: only surface meshes (TRI3/QUA4, TRI6/QUA8/QUA9) are supported, got {}",
                     other
                 )));
             }
+        };
+        if quadratic.is_some_and(|q| q != is_quadratic) {
+            return Err(PyrucastError::Message(
+                "border: linear and quadratic surface zones cannot be bordered together".into(),
+            ));
         }
-        any_surface = true;
-        let npc = et.nodes_per_cell();
+        quadratic = Some(is_quadratic);
+        let (npc, corners) = (et.nodes_per_cell(), et.as_kind().corner_count());
         for cell in conn.chunks(npc) {
-            for i in 0..npc {
-                let key = edge_key(cell[i], cell[(i + 1) % npc]);
+            for i in 0..corners {
+                let key = edge_key(cell[i], cell[(i + 1) % corners]);
                 *counts.entry(key).or_insert(0) += 1;
             }
         }
     }
-    if !any_surface {
+    let Some(quadratic) = quadratic else {
         return Err(PyrucastError::Message(
-            "border: mesh has no surface cells (TRI3/QUA4)".into(),
+            "border: mesh has no surface cells (TRI3/QUA4, TRI6/QUA8/QUA9)".into(),
         ));
-    }
+    };
 
     // 2. Re-walk the cells in order, collecting boundary edges with their
     //    cell orientation. `adj` maps a from-node to the to-nodes still to be
     //    consumed; `order` keeps the from-nodes in a deterministic order so
     //    the loops (and their starts) are reproducible.
+    //    A quadratic cell also hands over the mid-node of each boundary edge,
+    //    keyed by the directed edge.
     let mut adj: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
     let mut order: Vec<NodeId> = Vec::new();
+    let mut mids: HashMap<(NodeId, NodeId), NodeId> = HashMap::new();
     for sm in mesh {
         // Guard held for this zone's pass: the loop below only reads.
         let s = sm.read();
@@ -139,17 +154,21 @@ pub fn border(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
         if et == ElementType::POI1 {
             continue;
         }
-        let npc = et.nodes_per_cell();
+        let (npc, corners) = (et.nodes_per_cell(), et.as_kind().corner_count());
         for cell in conn.chunks(npc) {
-            for i in 0..npc {
-                let (u, v) = (cell[i], cell[(i + 1) % npc]);
+            for i in 0..corners {
+                let (u, v) = (cell[i], cell[(i + 1) % corners]);
                 if counts.get(&edge_key(u, v)) == Some(&1) {
                     adj.entry(u).or_default().push(v);
                     order.push(u);
+                    if quadratic {
+                        mids.insert((u, v), cell[corners + i]);
+                    }
                 }
             }
         }
     }
+    let mids = quadratic.then_some(&mids);
 
     // 3. Chain the boundary edges into closed loops (node-id sequences).
     let mut loops: Vec<Vec<NodeId>> = Vec::new();
@@ -186,7 +205,7 @@ pub fn border(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
     match angle_deg {
         None => {
             for chain in &loops {
-                emit_closed(&mut result, &coords, chain)?;
+                emit_closed(&mut result, &coords, chain, mids)?;
             }
         }
         Some(a) => {
@@ -210,9 +229,9 @@ pub fn border(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
             }
             for (nodes, closed) in &pieces {
                 if *closed {
-                    emit_closed(&mut result, &coords, nodes)?;
+                    emit_closed(&mut result, &coords, nodes, mids)?;
                 } else {
-                    emit_open(&mut result, &coords, nodes)?;
+                    emit_open(&mut result, &coords, nodes, mids)?;
                 }
             }
         }
@@ -220,22 +239,53 @@ pub fn border(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
     Ok(result)
 }
 
-/// Append a **closed** SEG2 loop (segments wrap from the last node back to the
-/// first) as one submesh of `result`.
-fn emit_closed(result: &mut Mesh, coords: &Handle<Coords>, chain: &[NodeId]) -> Result<()> {
-    let n = chain.len();
-    let conn: Vec<NodeId> = (0..n)
-        .flat_map(|i| [chain[i], chain[(i + 1) % n]])
-        .collect();
-    let sub = SubMesh::from_connectivity(coords.clone(), ElementType::SEG2, conn)?;
+/// Append the segments `(u, v)` as one submesh of `result`: SEG2, or SEG3
+/// `[u, v, mid]` when the boundary's mid-nodes are given.
+fn emit(
+    result: &mut Mesh,
+    coords: &Handle<Coords>,
+    segments: impl Iterator<Item = (NodeId, NodeId)>,
+    mids: Option<&HashMap<(NodeId, NodeId), NodeId>>,
+) -> Result<()> {
+    let (et, conn): (ElementType, Vec<NodeId>) = match mids {
+        None => (
+            ElementType::SEG2,
+            segments.flat_map(|(u, v)| [u, v]).collect(),
+        ),
+        Some(mids) => (
+            ElementType::SEG3,
+            segments.flat_map(|(u, v)| [u, v, mids[&(u, v)]]).collect(),
+        ),
+    };
+    let sub = SubMesh::from_connectivity(coords.clone(), et, conn)?;
     result.add_sub(Handle::new(sub))
 }
 
-/// Append an **open** SEG2 polyline (an arête: no wrap-around) as one submesh.
-fn emit_open(result: &mut Mesh, coords: &Handle<Coords>, arc: &[NodeId]) -> Result<()> {
-    let conn: Vec<NodeId> = arc.windows(2).flatten().copied().collect();
-    let sub = SubMesh::from_connectivity(coords.clone(), ElementType::SEG2, conn)?;
-    result.add_sub(Handle::new(sub))
+/// Append a **closed** loop (segments wrap from the last node back to the
+/// first) as one submesh of `result`.
+fn emit_closed(
+    result: &mut Mesh,
+    coords: &Handle<Coords>,
+    chain: &[NodeId],
+    mids: Option<&HashMap<(NodeId, NodeId), NodeId>>,
+) -> Result<()> {
+    let n = chain.len();
+    emit(
+        result,
+        coords,
+        (0..n).map(|i| (chain[i], chain[(i + 1) % n])),
+        mids,
+    )
+}
+
+/// Append an **open** polyline (an arête: no wrap-around) as one submesh.
+fn emit_open(
+    result: &mut Mesh,
+    coords: &Handle<Coords>,
+    arc: &[NodeId],
+    mids: Option<&HashMap<(NodeId, NodeId), NodeId>>,
+) -> Result<()> {
+    emit(result, coords, arc.windows(2).map(|w| (w[0], w[1])), mids)
 }
 
 /// Indices, into the cyclic `chain`, of the **corner** nodes: those where the
@@ -531,5 +581,72 @@ mod tests {
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TET4));
         m.add_cell(&ns).unwrap();
         assert!(border(&m, None).is_err());
+    }
+
+    /// A 2 × 2 grid of QUA4 on [0, 2]², 9 nodes.
+    fn grid_2x2(coords: &Handle<Coords>) -> Mesh {
+        let n: Vec<NodeId> = (0..9)
+            .map(|k| {
+                Node::create_in(coords.clone(), &[(k % 3) as f64, (k / 3) as f64])
+                    .unwrap()
+                    .id()
+            })
+            .collect();
+        let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
+        for (i, j) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+            let k = 3 * j + i;
+            sm.add_cell(&[n[k], n[k + 1], n[k + 4], n[k + 3]]).unwrap();
+        }
+        Mesh::from_submesh(sm)
+    }
+
+    #[test]
+    fn quadratic_surface_border_is_seg3_on_its_own_mid_nodes() {
+        // The border of the promoted grid and the promoted border of the
+        // grid: same segments, mid-nodes at the same places — and the SEG3
+        // re-use the surface's own mid-nodes, they create none.
+        use crate::ops::mesh::to_quadratic;
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let grid = grid_2x2(&coords);
+        let quad = to_quadratic(&grid).unwrap();
+        let from_quad = border(&quad, None).unwrap();
+        let promoted = to_quadratic(&border(&grid, None).unwrap()).unwrap();
+        assert_eq!(from_quad.element_types().unwrap(), vec![ElementType::SEG3]);
+        assert_eq!(from_quad.cell_count(), 8);
+        let surface_nodes: std::collections::HashSet<NodeId> = quad
+            .get(0)
+            .unwrap()
+            .read()
+            .connectivity()
+            .iter()
+            .copied()
+            .collect();
+        for c in 0..8 {
+            for k in 0..3 {
+                let a = from_quad.node(0, c, k).unwrap();
+                let b = promoted.node(0, c, k).unwrap();
+                assert_eq!(
+                    a.position().unwrap(),
+                    b.position().unwrap(),
+                    "cell {c}, node {k}"
+                );
+                assert!(surface_nodes.contains(&a.id()));
+            }
+        }
+        // Split at the corners, the arêtes stay SEG3.
+        let sides = border(&quad, Some(45.0)).unwrap();
+        assert_eq!(sides.len(), 4);
+        assert_eq!(sides.element_types().unwrap(), vec![ElementType::SEG3; 4]);
+    }
+
+    #[test]
+    fn linear_and_quadratic_surfaces_are_not_bordered_together() {
+        use crate::ops::mesh::to_quadratic;
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let grid = grid_2x2(&coords);
+        let other = to_quadratic(&grid_2x2(&coords)).unwrap();
+        let mixed = grid.union(&other).unwrap();
+        let err = border(&mixed, None).unwrap_err();
+        assert!(err.to_string().contains("linear and quadratic"));
     }
 }

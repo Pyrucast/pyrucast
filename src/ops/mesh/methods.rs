@@ -220,6 +220,11 @@ impl Mesh {
         crate::ops::mesh::skin(self, angle_deg)
     }
 
+    /// See [`mesh::project_on_sphere`](fn@crate::ops::mesh::project_on_sphere).
+    pub fn project_on_sphere(&self, center: &[f64], radius: f64) -> Result<Mesh> {
+        crate::ops::mesh::project_on_sphere(self, center, radius)
+    }
+
     /// See [`mesh::sweep`](fn@crate::ops::mesh::sweep).
     pub fn sweep(&self, mesh_b: &Mesh, n_layers: usize, element_type: ElementType) -> Result<Mesh> {
         crate::ops::mesh::sweep(self, mesh_b, n_layers, element_type)

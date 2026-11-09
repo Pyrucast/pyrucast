@@ -45,6 +45,27 @@ def test_lagrange1_classmethod_equivalent():
     assert fes_a[0].quadrature == fes_b[0].quadrature
 
 
+def test_default_interpolation_follows_each_submesh_degree():
+    # A linear zone and a quadratic one: each gets the Lagrange of its own
+    # degree, with no argument. An interpolation given applies to every zone.
+    c = pyrucast.Coords(2)
+    a, b = c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0])
+    p, q = c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0])
+    droite = pyrucast.mesh.extrude(pyrucast.mesh.line(a, b, 2), [0.0, 0.5], 1)
+    courbe = pyrucast.mesh.extrude(pyrucast.mesh.line(p, q, 2, "SEG3"), [0.0, 0.5], 1)
+    fes = pyrucast.FiniteElementSpace(droite | courbe)
+    assert [sub.interpolation for sub in fes] == ["LAGRANGE1", "LAGRANGE2"]
+    assert [sub.element_type for sub in fes] == ["QUA4", "QUA8"]
+    seule = pyrucast.FiniteElementSpace(courbe, "LAGRANGE2", "REDUCED")
+    assert seule[0].quadrature == "REDUCED"
+    try:
+        pyrucast.FiniteElementSpace(droite | courbe, "LAGRANGE1")
+    except RuntimeError as err:
+        assert "LAGRANGE1 not compatible with element type QUA8" in str(err)
+    else:
+        raise AssertionError("LAGRANGE1 on a QUA8 zone must be refused")
+
+
 def test_with_choices_explicit_per_submesh():
     c = pyrucast.Coords(2)
     n0 = c.add_node([0.0, 0.0])
