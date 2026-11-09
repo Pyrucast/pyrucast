@@ -8,8 +8,9 @@
 //!   polygon-with-holes pipeline).
 //! - `tetrahedralization` — 3-D primitives (exact predicates, Delaunay
 //!   kernel) behind the tetrahedral mesher.
-//! - `sweep_kernel` — extrusion, revolution and SEG2→QUA4 kernel used
-//!   by [`sweep()`](fn@sweep), [`extrude()`] and [`revolve()`].
+//! - `sweep_kernel` — the structured kernels behind [`sweep()`](fn@sweep),
+//!   [`extrude()`] and [`revolve()`]: strips between two lines (SEG2 → QUA4,
+//!   SEG3 → QUA8/QUA9) and layered sweeps, linear or quadratic.
 
 pub mod arc;
 pub mod arrays;
@@ -40,6 +41,7 @@ pub(crate) mod plaster;
 pub mod poi1_from_nodes;
 pub mod points;
 pub mod predicates;
+pub mod project;
 pub mod quadratic;
 pub mod revolve;
 pub mod select;
@@ -86,6 +88,7 @@ pub use points::{
     points_on_cone, points_on_cylinder, points_on_line, points_on_plane, points_on_sphere,
     points_on_torus,
 };
+pub use project::project_on_sphere;
 pub use quadratic::to_quadratic;
 pub use revolve::revolve;
 pub use select::{select_cells, select_nodes, select_sub_cells, select_sub_nodes};

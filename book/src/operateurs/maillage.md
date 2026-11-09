@@ -12,11 +12,11 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `from_live_nodes(coords)` | un `Mesh` POI1 de **tous** les nœuds vivants d'un `Coords` |
 | `poi1_from_nodes(nodes)` | un `Mesh` POI1 sur une liste de nœuds donnée |
 | `line(a, b, n_elems, element_type="SEG2")` | une ligne de `n_elems` éléments (`SEG2` ou `SEG3`) entre deux nœuds (nœuds intermédiaires créés) |
-| `circle(center, normal, radius, n_elems, element_type="SEG2")` | un cercle fermé (`SEG2` ou `SEG3`, plan défini par `normal`) |
-| `arc(a, center, b, n_elems, element_type="SEG2")` | un arc de `a` à `b` sur le cercle de centre `center` passant par les deux (le plus court des deux arcs) |
-| `extrude(mesh, direction, n_layers)` | extrude un maillage le long de `direction` (SEG2→QUA4, TRI3→PENTA6, QUA4→HEX8) |
-| `revolve(mesh, angle, n_layers, center, axis=None)` | **compagnon rotatif** d'`extrude` : balaye un maillage de `angle` (rad) autour de `center` (axe `axis` en 3D), SEG2→QUA4, TRI3→PENTA6, QUA4→HEX8 ; un tour complet **referme** l'anneau (voir plus bas) |
-| `sweep(mesh_a, mesh_b, n_layers, element_type="QUA4")` | tisse `QUA4`/`TRI3`/`QUA8`/`QUA9`/`TRI6` entre deux lignes `SEG2` (un `QUA4` est toujours construit d'abord, puis converti) |
+| `circle(center, normal, radius, n_elems, element_type="SEG2")` | un cercle fermé (`SEG2` ou `SEG3`, plan défini par `normal`) ; en `SEG3`, le nœud milieu est **sur le cercle** |
+| `arc(a, center, b, n_elems, element_type="SEG2")` | un arc de `a` à `b` sur le cercle de centre `center` passant par les deux (le plus court des deux arcs) ; en `SEG3`, le nœud milieu est **sur l'arc** |
+| `extrude(mesh, direction, n_layers)` | extrude un maillage le long de `direction` (SEG2→QUA4, TRI3→PENTA6, QUA4→HEX8, et en quadratique SEG3→QUA8, TRI6→PENTA15, QUA8→HEX20) |
+| `revolve(mesh, angle, n_layers, center, axis=None)` | **compagnon rotatif** d'`extrude` : balaye un maillage de `angle` (rad) autour de `center` (axe `axis` en 3D), mêmes types qu'`extrude` ; un tour complet **referme** l'anneau (voir plus bas) |
+| `sweep(mesh_a, mesh_b, n_layers, element_type=None)` | tisse une surface entre deux lignes : `QUA4` (défaut), `TRI3`, `QUA8`, `QUA9`, `TRI6` entre deux `SEG2` ; `QUA8` (défaut) ou `QUA9` entre deux `SEG3` ; deux boucles fermées donnent un anneau fermé (voir plus bas) |
 | `transfinite(side1, side2, side3, side4, element_type="QUA4")` | **généralisation de `sweep` à 4 côtés** (l'équivalent Cast3M de `DALL`) : interpolation transfinie (patch de Coons) entre quatre lignes `SEG2` formant un contour fermé (voir plus bas) |
 | `sweep_solid(mesh_a, mesh_b, n_layers)` | **compagnon 3D** de `sweep` : tisse un solide entre deux surfaces (TRI3→PENTA6, QUA4→HEX8) |
 | `copy(mesh, new_nodes=True)` | **copie** du maillage sur des nœuds **neufs** aux mêmes endroits, ou (`new_nodes=False`) sur les **mêmes** nœuds — dans les deux cas descellée (voir plus bas) |
@@ -25,6 +25,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `symmetry_point(mesh, center)` | **copie** symétrique par rapport au **point** `center` (Cast3M `SYME`, voir plus bas) |
 | `symmetry_line(mesh, a, b)` | **copie** symétrique par rapport à la **droite** passant par `a` et `b` (demi-tour en 3D) |
 | `symmetry_plane(mesh, a, b, c)` | **copie** symétrique par rapport au **plan** passant par trois points (3D) |
+| `project_on_sphere(mesh, center, radius)` | **copie** projetée radialement sur la sphère (le cercle en 2D) : chaque nœud poussé le long du rayon issu de `center` (voir plus bas) |
 | `triangulate_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
 | `pave_surface(contour, type, size=None, prefer_quads=False, relax="free")` | **pave** l'intérieur de contours **orientés** (CCW extérieur, CW trous) en `QUA4`/`QUA8`/`QUA9`, par **front avançant** en rangées parallèles au bord (voir plus bas) |
 | `grid_surface(contour, type, size=None, band=0, prefer_quads=False, relax="free")` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **cœur en grille** cartésienne et **bande frontale** au bord : sur une forme rectilinéaire, la grille régulière que le front ne sait pas produire (voir plus bas) |
@@ -34,7 +35,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `regularize(mesh, sweeps=20, angular=True, in_place=False)` | **lisse** un maillage de surface existant : déplace ses nœuds intérieurs pour améliorer ses mailles, sans toucher ni à la connectivité ni au bord (voir plus bas) |
 | `cleanup(mesh)` | **corrige la connectivité** d’un maillage de surface : doublets, valences fautives, effondrement de l’étoile d’un nœud intérieur qui n’a que trois mailles, et de la paire de nœuds voisins qui en manquent (voir plus bas) |
 | `merge_triangles(mesh)` | **retire les triangles** d'un maillage à dominante quadrangulaire, **par paires** — leur nombre a la parité du bord (voir plus bas) |
-| `border(mesh, angle_deg=None)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2` (une par sous-maillage) ; avec `angle_deg`, découpé en **arêtes** ouvertes aux coins (voir plus bas) |
+| `border(mesh, angle_deg=None)` | le **bord** d'un maillage de surface en boucles `SEG2` (TRI3/QUA4) ou `SEG3` (TRI6/QUA8/QUA9), une par sous-maillage ; avec `angle_deg`, découpé en **arêtes** ouvertes aux coins (voir plus bas) |
 | `skin(mesh, angle_deg=None)` | la **peau** d'un maillage volumique (tout type, y compris `PYRA5` et les quadratiques) en faces de **même degré**, **une par face plane** du solide (voir plus bas) |
 | `orient(mesh)` | **harmonise** l'orientation des cellules (normales cohérentes), toute dimension (SEG/TRI/QUA/TET/PENTA/HEX), équivalent Cast3M `ORIE` (voir plus bas) |
 | `invert(mesh)` | **inverse** l'orientation de toutes les cellules, toute dimension, équivalent Cast3M `INVE` (voir plus bas) |
@@ -77,12 +78,28 @@ nœuds-multiplicateurs, un par relation (cf. [Dirichlet](../contraintes/dirichle
 {{#include ../../../tests/python/test_doc_ops_maillage.py:line}}
 ```
 
-## `sweep` : QUA4 par défaut, ou toute variante dérivée
+**En quadratique, le maillage garde son degré.** Une ligne `SEG3` s'extrude en
+`QUA8`, une surface `QUA8` en `HEX20`, une `TRI6` en `PENTA15`. Les nœuds
+milieux de la source sont recopiés à chaque couche, et chaque arête dans le
+sens de l'extrusion reçoit le sien à mi-hauteur. Le bord d'une surface
+quadratique est fait de `SEG3`, et l'espace éléments finis d'un maillage
+quadratique prend de lui-même l'interpolation `LAGRANGE2` (cf.
+[Espace éléments finis](../fe-space.md)) :
 
-`sweep(mesh_a, mesh_b, n_layers, element_type="QUA4")` tisse `n_layers`
-couches entre deux lignes `SEG2`. Un maillage `QUA4` est **toujours construit
-en premier** (le cœur géométrique du tissage) ; si `element_type` demande
-autre chose, il est ensuite **converti** :
+```python
+{{#include ../../../tests/python/test_doc_ops_maillage.py:extrude_quadratique}}
+```
+
+## `sweep` : une surface entre deux lignes
+
+`sweep(mesh_a, mesh_b, n_layers, element_type=None)` tisse `n_layers` couches
+entre deux lignes de même degré et de même nombre d'éléments : le nœud `j` de
+la première est relié au nœud `j` de la seconde, et les couches
+intermédiaires sont interpolées entre eux.
+
+Entre deux lignes `SEG2`, un maillage `QUA4` est **toujours construit en
+premier** (le cœur géométrique du tissage) ; si `element_type` demande autre
+chose, il est ensuite **converti** :
 
 - `"TRI3"` — chaque `QUA4` est coupé en deux `TRI3` le long de la diagonale
   `(0, 2)` (pas de nœud créé) ;
@@ -96,6 +113,22 @@ autre chose, il est ensuite **converti** :
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_maillage.py:sweep}}
+```
+
+Entre deux lignes **`SEG3`**, la surface est construite directement en `QUA8`
+(le défaut) ou en `QUA9` : les nœuds milieux des deux lignes sont **repris**,
+si bien qu'une couronne entre deux arcs suit exactement leurs courbes. Les
+nœuds milieux des arêtes qui vont d'une ligne à l'autre sont interpolés à
+mi-couche.
+
+**Deux boucles fermées donnent un anneau fermé.** Quand chaque ligne se termine
+sur son propre premier nœud — un cercle, un contour fermé —, la dernière
+colonne de chaque couche *est* la première : la couture entre les deux
+boucles est partagée, pas doublée. Une boucle fermée balayée vers une ligne
+ouverte est une erreur.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_maillage.py:sweep_anneau}}
 ```
 
 ## Surface entre 4 côtés : `transfinite`
@@ -211,6 +244,29 @@ Appliquer `invert` au résultat redonne la connectivité miroir brute.
 {{#include ../../../tests/python/test_doc_ops_maillage.py:transformations}}
 ```
 
+### Projection sur une sphère : `project_on_sphere`
+
+`project_on_sphere(mesh, center, radius)` renvoie, elle aussi, une **copie
+neuve** : chaque nœud — sommets et nœuds milieux — est poussé le long du
+rayon issu de `center`, jusqu'à la distance `radius`. La copie garde les zones,
+les types, les couleurs et la connectivité de la source ; un nœud partagé le
+reste, donc une boucle fermée reste fermée.
+
+Dans un plan qui passe par `center`, la sphère est un **cercle** : un contour
+de ce plan s'y pose nœud pour nœud, chacun à son propre angle. C'est la façon
+de construire le trou d'une couronne à partir du contour qui l'entoure : un
+nœud du trou en face de chaque nœud du contour, ce que [`sweep`](#sweep--une-surface-entre-deux-lignes)
+demande.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_maillage.py:project_on_sphere}}
+```
+
+`radius` doit être positif et fini, `center` avoir la dimension du maillage.
+Un nœud posé sur `center` n'a pas de direction : c'est une erreur, et aucun
+nœud n'est créé. Côté Rust, `ops::mesh::project_on_sphere(&mesh, &center,
+radius)`.
+
 ## Tissage d'un solide entre deux surfaces : `sweep_solid`
 
 `sweep_solid(mesh_a, mesh_b, n_layers)` est le **compagnon 3D** de `sweep` :
@@ -239,7 +295,9 @@ rotatif** d'`extrude` : là où `extrude` translate le maillage source couche
 après couche le long d'un vecteur, `revolve` le fait tourner d'un angle total
 `angle` (en **radians**), en `n_layers` couches d'angle égal. Les montées de
 type sont les mêmes — `SEG2→QUA4`, `TRI3→PENTA6`, `QUA4→HEX8` — et l'ordre des
-nœuds par cellule aussi (couche basse puis couche haute).
+nœuds par cellule aussi (couche basse puis couche haute). En quadratique
+(`SEG3`, `TRI6`, `QUA8`), le nœud milieu d'une arête dans le sens de la
+rotation est pris au **demi-angle** : il est sur l'arc.
 
 - En **2D**, la révolution se fait autour du **point** `center` (sens direct
   pour un `angle` positif) ; `axis` est ignoré. Seul un `SEG2` a du sens : une
@@ -289,7 +347,13 @@ et **partagé** entre toutes les cellules (tous sous-maillages confondus) qui
 utilisent cette arête — le résultat reste donc conforme. Le maillage d'origine
 n'est pas modifié. Un sous-maillage `POI1` ou déjà quadratique lève une erreur.
 
-Le maillage obtenu se calcule avec l'interpolation `LAGRANGE2` (cf.
+Les nœuds milieux sont au milieu des **cordes** : sur un bord courbe, la
+copie quadratique reste un polygone. Pour suivre une courbe, on maille
+directement en quadratique — `arc` ou `circle` en `SEG3`, puis `sweep` ou
+`extrude` —, et les nœuds milieux sont alors sur la courbe.
+
+Le maillage obtenu se calcule avec l'interpolation `LAGRANGE2`, que
+l'espace éléments finis prend de lui-même (cf.
 [Espace éléments finis](../fe-space.md)) :
 
 ```python
@@ -1871,7 +1935,10 @@ et `triangulate_volume_cancellable(…, cancel)` pour la forme interruptible.
 
 `border(mesh, angle_deg=None)` est l'**inverse** de `triangulate_surface` : il
 prend un maillage de surface (cellules `TRI3` / `QUA4`) et renvoie son **bord**
-sous forme de boucles `SEG2` fermées.
+sous forme de boucles `SEG2` fermées. Une surface quadratique (`TRI6`,
+`QUA8`, `QUA9`) donne des boucles `SEG3`, qui reprennent le nœud milieu de
+chaque arête de bord ; une surface qui mêle zones linéaires et quadratiques
+est refusée.
 
 Une arête de cellule utilisée par **exactement une** cellule est une arête de
 bord ; les arêtes intérieures sont partagées par deux cellules (orientations
@@ -1908,7 +1975,7 @@ fermée. `angle_deg=None` (défaut) garde chaque bord en une boucle fermée.
 
 Les sous-maillages POI1 (un point n'a pas d'arête) sont ignorés. La fonction
 lève une erreur si le maillage n'a aucune cellule de surface, s'il porte des
-cellules autres que POI1/TRI3/QUA4 (les bords 1D et 3D ne sont pas gérés ici —
+cellules autres que POI1/TRI3/QUA4/TRI6/QUA8/QUA9 (les bords 1D et 3D ne sont pas gérés ici —
 voir [`skin`](#peau-dun-volume--skin) pour le bord d'un volume), ou si le bord
 n'est pas un ensemble propre de boucles fermées (arête ouverte ou non-manifold).
 

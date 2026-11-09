@@ -116,6 +116,75 @@ assert qua8.element_types() == ["QUA8"]
 assert qua9.element_types() == ["QUA9"]
 assert tri6.element_types() == ["TRI6"]
 
+# ── sweep between two closed loops, and between two SEG3 lines ─────────────
+
+c = pyrucast.Coords(2)
+centre = c.add_node([0.0, 0.0])
+# ANCHOR: sweep_anneau
+# Two concentric circles of 8 segments, 2 layers between them.
+dedans = pyrucast.mesh.circle(centre, [0.0, 0.0, 1.0], 1.0, 8)
+dehors = pyrucast.mesh.circle(centre, [0.0, 0.0, 1.0], 2.0, 8)
+anneau = pyrucast.mesh.sweep(dedans, dehors, 2)
+print(anneau.cell_count, pyrucast.mesh.to_poi1(anneau).cell_count)  # 16 24
+
+# The same ring in SEG3: QUA8, the mid-nodes of the circles reused.
+dedans3 = pyrucast.mesh.circle(centre, [0.0, 0.0, 1.0], 1.0, 8, "SEG3")
+dehors3 = pyrucast.mesh.circle(centre, [0.0, 0.0, 1.0], 2.0, 8, "SEG3")
+anneau3 = pyrucast.mesh.sweep(dedans3, dehors3, 2)
+print(anneau3.element_types())  # ['QUA8']
+# ANCHOR_END: sweep_anneau
+# 3 rings of 8 nodes: the seam is shared, not doubled (a doubled one gives 26).
+assert anneau.cell_count == 16 and pyrucast.mesh.to_poi1(anneau).cell_count == 24
+assert anneau3.element_types() == ["QUA8"]
+# Corner levels: 8 corners + 8 mid-nodes, three times; mid-levels: 8, twice.
+assert pyrucast.mesh.to_poi1(anneau3).cell_count == 3 * 16 + 2 * 8
+for cellule in range(8):  # first row: the inner circle's own mid-nodes, at radius 1
+    x, y = anneau3.node(0, cellule, 4).position()
+    assert abs(math.hypot(x, y) - 1.0) < 1e-12
+
+# ── project_on_sphere ──────────────────────────────────────
+
+# ANCHOR: project_on_sphere
+c = pyrucast.Coords(2)
+coins = [c.add_node(p) for p in ([2.0, -2.0], [2.0, 2.0], [-2.0, 2.0], [-2.0, -2.0])]
+carre = pyrucast.mesh.consolidate(
+    pyrucast.mesh.line(coins[0], coins[1], 2)
+    | pyrucast.mesh.line(coins[1], coins[2], 2)
+    | pyrucast.mesh.line(coins[2], coins[3], 2)
+    | pyrucast.mesh.line(coins[3], coins[0], 2)
+)
+
+# Every node of the square pushed onto the circle of radius 1: one node of
+# the hole facing each node of the square.
+trou = pyrucast.mesh.project_on_sphere(carre, [0.0, 0.0], 1.0)
+couronne = pyrucast.mesh.sweep(carre, trou, 3)
+print(couronne.cell_count)  # 24
+# ANCHOR_END: project_on_sphere
+assert trou.cell_count == carre.cell_count == 8
+assert couronne.cell_count == 24
+for cellule in range(8):
+    x, y = trou.node(0, cellule, 0).position()
+    assert abs(math.hypot(x, y) - 1.0) < 1e-12
+# The square's corner (2, 2) lands at 45°.
+assert all(abs(v - math.sqrt(0.5)) < 1e-12 for v in trou.node(0, 1, 1).position())
+
+# ── extrude and border in quadratic ───────────────────────
+
+# ANCHOR: extrude_quadratique
+c = pyrucast.Coords(3)
+a, b = c.add_node([0.0, 0.0, 0.0]), c.add_node([1.0, 0.0, 0.0])
+ligne3 = pyrucast.mesh.line(a, b, 2, "SEG3")
+plaque8 = pyrucast.mesh.extrude(ligne3, [0.0, 1.0, 0.0], 2)  # SEG3 → QUA8
+bloc20 = pyrucast.mesh.extrude(plaque8, [0.0, 0.0, 0.5], 1)  # QUA8 → HEX20
+bord3 = pyrucast.mesh.border(plaque8)  # the border of a QUA8 surface: SEG3
+print(plaque8.element_types(), bloc20.element_types(), bord3.element_types())
+# ['QUA8'] ['HEX20'] ['SEG3']
+# ANCHOR_END: extrude_quadratique
+assert (plaque8.cell_count, bloc20.cell_count, bord3.cell_count) == (4, 4, 8)
+assert pyrucast.mesh.to_poi1(bloc20).cell_count == (5 * 5 - 4) * 2 + 3 * 3
+fes20 = pyrucast.FiniteElementSpace(bloc20)
+assert fes20[0].interpolation == "LAGRANGE2"
+
 # ── Transfinite mesh (DALL) ─────────────────────────────────────────────────
 
 

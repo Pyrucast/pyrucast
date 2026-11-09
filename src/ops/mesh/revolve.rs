@@ -6,8 +6,10 @@ use crate::error::Result;
 ///
 /// Each node is swept along the circle it describes about the rotation centre
 /// (2-D) or axis (3-D), and consecutive angular positions are linked by one
-/// layer of cells: SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8. Other element
-/// types produce an error.
+/// layer of cells: SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8, and in quadratic
+/// SEG3 → QUA8, TRI6 → PENTA15, QUA8 → HEX20 — the mid-node of an edge along
+/// the sweep sits at the half angle, on the arc. Other element types produce
+/// an error.
 ///
 /// - **2-D** (`center` has 2 components): revolution about the point
 ///   `center`, counterclockwise for a positive `angle`; `axis` is ignored.
@@ -27,6 +29,9 @@ use crate::error::Result;
 /// - QUA4: `bot[0], bot[1], top[1], top[0]`
 /// - PENTA6: `bot[0..3], top[0..3]`
 /// - HEX8: `bot[0..4], top[0..4]`
+/// - QUA8, PENTA15, HEX20: the corners as above, then the mid-nodes in the
+///   edge order of the linear cell — the bottom face's, the top face's, then
+///   those of the edges along the sweep.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -133,6 +138,42 @@ mod tests {
         let first = ring.node(0, 0, 0).unwrap();
         let last = ring.node(0, 3, 3).unwrap();
         assert_eq!(first.id(), last.id());
+    }
+
+    #[test]
+    fn quadratic_revolve_puts_its_mid_nodes_on_the_arcs() {
+        // A radial SEG3 from radius 1 to 2, a quarter turn in 2 layers: the
+        // mid-nodes along the sweep (local 5 and 7 of the QUA8) are on the
+        // circles at the half angle, not on the chords.
+        use crate::ops::mesh::to_quadratic;
+        let seg3 = to_quadratic(&radial_seg2_2d(1)).unwrap();
+        let ring = revolve(&seg3, PI / 2.0, 2, &[0.0, 0.0], None).unwrap();
+        assert_eq!(ring.element_types().unwrap(), vec![ElementType::QUA8]);
+        let polar = |c: usize, k: usize| {
+            let x = ring.node(0, c, k).unwrap().position().unwrap();
+            ((x[0] * x[0] + x[1] * x[1]).sqrt(), x[1].atan2(x[0]))
+        };
+        for (cell, angle) in [(0, PI / 8.0), (1, 3.0 * PI / 8.0)] {
+            let (r_outer, a_outer) = polar(cell, 5);
+            let (r_inner, a_inner) = polar(cell, 7);
+            assert!((r_outer - 2.0).abs() < 1e-12 && (a_outer - angle).abs() < 1e-12);
+            assert!((r_inner - 1.0).abs() < 1e-12 && (a_inner - angle).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn quadratic_full_turn_closes_the_ring() {
+        // 4 layers round a SEG3 of one cell: 4 positions × 3 nodes on the
+        // whole levels, 4 × 2 corners on the half levels — 20, no duplicate.
+        use crate::ops::mesh::to_quadratic;
+        let seg3 = to_quadratic(&radial_seg2_2d(1)).unwrap();
+        let ring = revolve(&seg3, TAU, 4, &[0.0, 0.0], None).unwrap();
+        assert_eq!(ring.cell_count(), 4);
+        assert_eq!(distinct_nodes(&ring), 20);
+        assert_eq!(
+            ring.node(0, 3, 3).unwrap().id(),
+            ring.node(0, 0, 0).unwrap().id()
+        );
     }
 
     #[test]

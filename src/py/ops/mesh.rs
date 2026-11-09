@@ -564,12 +564,19 @@ pub fn arc(
     Ok(PyMesh { inner: mesh })
 }
 
-/// Sweep two SEG2 line meshes into a mesh of `element_type`, building
-/// `n_layers` layers between `mesh_a` and `mesh_b`.
+/// Sweep two line meshes into a mesh of `element_type`, building `n_layers`
+/// layers between `mesh_a` and `mesh_b`.
 ///
-/// `element_type` is `"QUA4"` (default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
-/// `"TRI6"` — a `QUA4` mesh is always built first, then converted (diagonal
-/// split for the triangles, promoted to quadratic for `QUA8`/`QUA9`/`TRI6`).
+/// Between **SEG2** lines, `element_type` is `"QUA4"` (default), `"TRI3"`,
+/// `"QUA8"`, `"QUA9"` or `"TRI6"` — a `QUA4` mesh is always built first, then
+/// converted (diagonal split for the triangles, promoted to quadratic for
+/// `QUA8`/`QUA9`/`TRI6`). Between **SEG3** lines, it is `"QUA8"` (default) or
+/// `"QUA9"`, built directly: the lines' own mid-nodes are re-used, so a strip
+/// between two arcs follows them exactly.
+///
+/// Two **closed loops** (each ending on its own first node) give a closed
+/// ring, the seam shared between its first and last cells; a closed loop
+/// swept onto an open line is an error.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -580,7 +587,12 @@ pub fn sweep(
     n_layers: usize,
     element_type: Option<ElementType>,
 ) -> PyResult<PyMesh> {
-    let element_type = element_type.unwrap_or(ElementType::QUA4);
+    // `None`: the surface the lines' degree calls for.
+    let element_type = match element_type {
+        Some(et) => et,
+        None if mesh_a.inner.element_types()? == [ElementType::SEG3] => ElementType::QUA8,
+        None => ElementType::QUA4,
+    };
     let mesh = crate::ops::mesh::sweep(&mesh_a.inner, &mesh_b.inner, n_layers, element_type)?;
     Ok(PyMesh { inner: mesh })
 }
@@ -713,6 +725,24 @@ pub fn convert(mesh: PyRef<PyMesh>, element_type: ElementType) -> PyResult<PyMes
 #[pyo3(signature = (mesh, new_nodes=true))]
 pub fn copy(mesh: PyRef<PyMesh>, new_nodes: bool) -> PyResult<PyMesh> {
     let result = crate::ops::mesh::copy(&mesh.inner, new_nodes)?;
+    Ok(PyMesh { inner: result })
+}
+
+/// Project `mesh` **radially** onto the sphere of centre `center` and radius
+/// `radius`: every node — corners and mid-nodes alike — is pushed along the
+/// ray from `center` through it, to the distance `radius`.
+///
+/// Returns a fresh copy with its own nodes (one per distinct node, so a
+/// closed loop stays closed), in the same zones, types and colours; `mesh`
+/// is left untouched. In a plane through `center` the sphere is a circle: a
+/// contour of that plane lands on it node for node, each at its own angle —
+/// the inner loop of a ring, ready for `sweep`. A node on `center` has no
+/// direction and is an error.
+#[py_op(method_on = PyMesh)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn project_on_sphere(mesh: PyRef<PyMesh>, center: Vec<f64>, radius: f64) -> PyResult<PyMesh> {
+    let result = crate::ops::mesh::project_on_sphere(&mesh.inner, &center, radius)?;
     Ok(PyMesh { inner: result })
 }
 

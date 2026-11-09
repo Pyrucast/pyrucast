@@ -21,12 +21,13 @@ sous-espaces, et les opérateurs qui interpolent ou intègrent
 
 ## Construire un espace
 
-`pyrucast.FiniteElementSpace(mesh)` pose sur chaque zone l'interpolation
-`"LAGRANGE1"` et la quadrature `"GAUSS"` ; `FiniteElementSpace.lagrange1(mesh)`
-en est un autre nom. Les arguments `interpolation=` et `quadrature=` changent
-l'un ou l'autre pour toutes les zones à la fois, et
-`FiniteElementSpace.with_choices(mesh, [(interpolation, quadrature), …])` en
-donne un couple par zone.
+`pyrucast.FiniteElementSpace(mesh)` pose sur chaque zone l'interpolation de
+Lagrange **de son propre degré** — `"LAGRANGE1"` sur des mailles linéaires,
+`"LAGRANGE2"` sur des quadratiques — et la quadrature `"GAUSS"` ;
+`FiniteElementSpace.lagrange1(mesh)` impose `"LAGRANGE1"` partout. Un argument
+`interpolation=` donné s'applique à toutes les zones à la fois, `quadrature=`
+de même, et `FiniteElementSpace.with_choices(mesh, [(interpolation,
+quadrature), …])` en donne un couple par zone.
 
 ```python
 {{#include ../../tests/python/test_doc_conteneurs.py:fes_construire}}
@@ -34,8 +35,8 @@ donne un couple par zone.
 
 | interpolation | mailles | ce qu'elle interpole |
 |---|---|---|
-| `"LAGRANGE1"` (défaut) | linéaires : `SEG2`, `TRI3`, `QUA4`, `TET4`, `PYRA5`, `PENTA6`, `HEX8` | une valeur par nœud |
-| `"LAGRANGE2"` | quadratiques : `SEG3`, `TRI6`, `QUA8`, `QUA9`, `TET10`, `PENTA15`, `HEX20`, `HEX27` | une valeur par nœud, sommets et nœuds milieux |
+| `"LAGRANGE1"` (défaut des linéaires) | linéaires : `SEG2`, `TRI3`, `QUA4`, `TET4`, `PYRA5`, `PENTA6`, `HEX8` | une valeur par nœud |
+| `"LAGRANGE2"` (défaut des quadratiques) | quadratiques : `SEG3`, `TRI6`, `QUA8`, `QUA9`, `TET10`, `PENTA15`, `HEX20`, `HEX27` | une valeur par nœud, sommets et nœuds milieux |
 | `"HERMITE3"` | `SEG2` | une valeur **et une pente** par nœud : la poutre d'[Euler-Bernoulli](mecanique/bernoulli.md) |
 | `"MODEL_EMBEDDED"` | toutes | rien : la physique porte ses propres fonctions, comme la poutre de [Timoshenko](mecanique/timoshenko.md) |
 
@@ -44,8 +45,10 @@ donne un couple par zone.
 | `"GAUSS"` (défaut) | la règle du type de maille, voir [Quadrature de Gauss](#quadrature-de-gauss) |
 | `"REDUCED"` | un seul, au centre de la maille |
 
-Une interpolation de Lagrange doit avoir le **degré des mailles** : un maillage
-qui mêle zones linéaires et quadratiques se pose avec `with_choices`.
+Une interpolation de Lagrange doit avoir le **degré des mailles** : c'est ce
+que fait le choix par défaut, zone par zone, si bien qu'un maillage qui mêle
+zones linéaires et quadratiques se pose sans argument. Une interpolation donnée
+explicitement, elle, vaut pour toutes les zones.
 `"REDUCED"` sert à porter une valeur par maille, par exemple l'intégrale que
 rend `element_field.cell_integral` ; les [coques](mecanique/coques.md)
 l'emploient aussi, en interne, pour leur cisaillement transverse.

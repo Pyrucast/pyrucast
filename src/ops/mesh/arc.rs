@@ -15,8 +15,8 @@ use crate::error::{PyrucastError, Result};
 ///
 /// Both endpoint nodes are re-used (their refcount is incremented);
 /// `n_elems - 1` intermediate corner nodes are created at evenly spaced
-/// angles. For `SEG3`, the result is then promoted to quadratic (one
-/// mid-edge node per element) via [`super::to_quadratic`].
+/// angles. For `SEG3`, each element also gets its mid-node at the half
+/// angle — **on the arc**, not on the chord.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -112,14 +112,19 @@ pub fn arc(
         .clamp(-1.0, 1.0)
         .acos();
 
-    // The two ends are the caller's own nodes; the intermediate ones are laid
-    // out flat and created in one locked pass.
-    let mut flat: Vec<f64> = Vec::new();
+    // The two ends are the caller's own nodes; the intermediate corners, then
+    // the SEG3 mid-nodes at the half angles, are laid out flat and created in
+    // one locked pass.
+    let quadratic = element_type == ElementType::SEG3;
+    let n_corners = n_elems - 1;
+    let n_mids = if quadratic { n_elems } else { 0 };
+    let on_arc = |s: f64| centre + radius_a * ((s * theta).cos() * u + (s * theta).sin() * v);
+    let mut flat: Vec<f64> = Vec::with_capacity((n_corners + n_mids) * dim);
     for i in 1..n_elems {
-        let t = i as f64 / n_elems as f64;
-        let phi = t * theta;
-        let p3 = centre + radius_a * (phi.cos() * u + phi.sin() * v);
-        flat.extend_from_slice(&p3.as_slice()[..dim]);
+        flat.extend_from_slice(&on_arc(i as f64 / n_elems as f64).as_slice()[..dim]);
+    }
+    for i in 0..n_mids {
+        flat.extend_from_slice(&on_arc((i as f64 + 0.5) / n_elems as f64).as_slice()[..dim]);
     }
     let first = coords.write().add_nodes(&flat)?.start;
     let at = |i: usize| -> NodeId {
@@ -131,20 +136,22 @@ pub fn arc(
             NodeId(first + (i - 1) as u32)
         }
     };
+    let mid = |i: usize| NodeId(first + (n_corners + i) as u32);
 
-    let conn: Vec<NodeId> = (0..n_elems).flat_map(|i| [at(i), at(i + 1)]).collect();
-    let sm = SubMesh::from_connectivity(coords.clone(), ElementType::SEG2, conn)?;
+    let conn: Vec<NodeId> = if quadratic {
+        (0..n_elems)
+            .flat_map(|i| [at(i), at(i + 1), mid(i)])
+            .collect()
+    } else {
+        (0..n_elems).flat_map(|i| [at(i), at(i + 1)]).collect()
+    };
+    let sm = SubMesh::from_connectivity(coords.clone(), element_type, conn)?;
     // The arc owns the fresh nodes now; hand back the unit `add_nodes` gave.
-    let owned: Vec<NodeId> = (first..first + n_elems.saturating_sub(1) as u32)
+    let owned: Vec<NodeId> = (first..first + (n_corners + n_mids) as u32)
         .map(NodeId)
         .collect();
     coords.write().decref_all(&owned)?;
-    let mut mesh = Mesh::from_submesh(sm);
-
-    if element_type == ElementType::SEG3 {
-        mesh = super::to_quadratic(&mesh)?;
-    }
-    Ok(mesh)
+    Ok(Mesh::from_submesh(sm))
 }
 
 #[cfg(test)]
@@ -208,6 +215,30 @@ mod tests {
         let mesh = arc(&a, &center, &b, 2, ElementType::SEG3).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::SEG3]);
         assert_eq!(mesh.cell_count(), 2);
+    }
+
+    #[test]
+    fn arc_seg3_mid_nodes_lie_on_the_arc_at_the_half_angle() {
+        // A quarter of the unit circle in 2 SEG3: the mid-nodes sit at 22.5°
+        // and 67.5°, on the circle — a chord midpoint would be at radius
+        // cos(22.5°) ≈ 0.924.
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let a = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+
+        let mesh = arc(&a, &center, &b, 2, ElementType::SEG3).unwrap();
+        for (cell, angle) in [(0, PI / 8.0), (1, 3.0 * PI / 8.0)] {
+            let m = mesh.node(0, cell, 2).unwrap().position().unwrap();
+            assert!((m[0] - angle.cos()).abs() < 1e-12, "{m:?}");
+            assert!((m[1] - angle.sin()).abs() < 1e-12, "{m:?}");
+        }
+        // The corners are shared between consecutive cells.
+        assert_eq!(
+            mesh.node(0, 0, 1).unwrap().id(),
+            mesh.node(0, 1, 0).unwrap().id()
+        );
+        assert_eq!(mesh.node(0, 1, 1).unwrap().id(), b.id());
     }
 
     #[test]
