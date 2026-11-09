@@ -83,7 +83,8 @@
   - [Ce que fait pyrucast](tutoriel/presentation.md)
   - [Python & conventions pyrucast](tutoriel/langage-python.md)
   - [Maillage](tutoriel/maillage.md)
-  - [Calcul thermique](tutoriel/thermique.md)
+  - [Thermique linéaire](tutoriel/thermique-lineaire.md)
+    - [Régime stationnaire](tutoriel/thermique.md)
   - [Calcul mécanique](tutoriel/mecanique.md)
   - [Compléments](tutoriel/complements.md)
 

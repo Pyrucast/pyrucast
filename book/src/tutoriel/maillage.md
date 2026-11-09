@@ -43,9 +43,9 @@ décrit d'emblée en 3D pour n'avoir rien à relever au moment de l'extruder.
 ```
 
 Toutes les dimensions sont en mètres et nommées une seule fois : elles servent
-aux points guides, aux rayons du trou, à l'épaisseur d'extrusion, et la page
-[Calcul thermique](thermique.md) les réimporte telles quelles pour placer ses
-conditions aux limites.
+aux points guides, aux rayons du trou, à l'épaisseur d'extrusion, et les
+pages de [Thermique linéaire](thermique-lineaire.md) les réimportent telles
+quelles pour placer leurs conditions aux limites.
 
 ### Points guides
 
@@ -257,10 +257,10 @@ où commence le demi-disque.
 
 ![Grille structurée, 200 QUA8](img/maillage-grille.svg)
 
-C'est ici qu'apparaît le premier `if plot:` : la page
-[Calcul thermique](thermique.md) importe `structured_mesh` pour calculer sur
-son volume et l'appelle avec `plot=False`, ce qui rend le maillage sans
-retracer aucune des figures de cette page.
+C'est ici qu'apparaît le premier `if plot:` : les scripts de thermique
+importent `structured_mesh` pour calculer sur son volume et l'appellent avec
+`plot=False`, ce qui rend le maillage sans retracer aucune des figures de
+cette page.
 
 ### Un bord se récupère, il ne se refabrique pas
 
@@ -362,7 +362,7 @@ balayé donne un `HEX20`, l'hexaèdre quadratique à 20 nœuds : 640 éléments 
 
 ![Volume structuré (HEX20)](img/maillage-volume-structure.svg)
 
-C'est ce volume que reprend la page [Calcul thermique](thermique.md). Importer la fonction
+C'est ce volume que reprennent les pages de [Thermique linéaire](thermique-lineaire.md). Importer la fonction
 plutôt que recopier sa géométrie n'est pas un raffinement de style — deux
 maillages construits à l'identique dans deux scripts porteraient des nœuds
 **distincts**, et toute condition posée sur l'un serait sans effet sur
@@ -413,5 +413,6 @@ premier point guide au volume structuré :
 {{#include ../../../tutoriel/maillage.py:script}}
 ```
 
-Suite : [Calcul thermique](thermique.md), qui reprend le volume `HEX20`
-structuré de cette page et y pose des conditions aux limites.
+Suite : [Thermique linéaire](thermique-lineaire.md), dont les pages
+reprennent le volume `HEX20` structuré de cette page et y posent des
+conditions aux limites.

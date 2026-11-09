@@ -1,4 +1,4 @@
-# Calcul thermique
+# Régime stationnaire
 
 Reprend la chape percée de la page [Maillage](maillage.md) pour un calcul de
 **conduction thermique stationnaire**, mené en deux temps : d'abord la
@@ -13,25 +13,23 @@ fichier.
 
 ## L'équation résolue
 
-Le bilan d'énergie sur un volume `V` s'écrit, avec `φ` la densité de flux de
-chaleur et `q` une source volumique :
+La page [Thermique linéaire](thermique-lineaire.md) a posé l'équation de la
+chaleur et sa forme discrétisée,
+\\( [C]\\{\dot{T}\\} + [K]\\{T\\} = \\{P\\} \\). En **régime stationnaire**
+la température ne varie plus : le terme de capacité disparaît, et il reste
+l'équilibre entre la conduction et les sollicitations,
 
-\\[ \rho c\_p \frac{\partial T}{\partial t} + \operatorname{div}(\phi) = q,
-\qquad \phi = -\lambda \operatorname{grad}(T) \\]
-
-En **régime stationnaire** le premier terme disparaît : il reste
-\\( \operatorname{div}(-\lambda \operatorname{grad} T) = q \\), complété par
-les conditions aux limites — température imposée sur une partie du bord, flux
-sur l'autre :
-
-\\[ T = T\_{\text{imp}} \ \text{ sur } \partial V\_T, \qquad
-\phi \cdot n = \phi\_{\text{imp}} + h\\,(T - T\_f) \ \text{ sur }
+\\[ \operatorname{div}(-\lambda \operatorname{grad} T) = q \ \text{ dans } V,
+\qquad T = T\_{\text{imp}} \ \text{ sur } \partial V\_T, \qquad
+-\phi \cdot n = \phi\_{\text{imp}} + h\\,(T\_f - T) \ \text{ sur }
 \partial V\_\phi \\]
 
-Le terme en \\( h \\) est la **convection** (loi de Newton) : un échange avec
-un fluide à \\( T\_f \\), proportionnel à l'écart de température. Il dépend de
-l'inconnue, donc il ne se range pas entièrement au second membre — on y
-revient plus bas.
+— la troisième équation compte la chaleur **reçue** par le bord (\\( n \\) la
+normale sortante) : un \\( \phi\_{\text{imp}} \\) positif en apporte, les
+−40 kW/m² de la face gauche en retirent. Le terme en \\( h \\) est la
+**convection** (loi de Newton) : un échange avec un fluide à \\( T\_f \\),
+proportionnel à l'écart de température. Il dépend de l'inconnue, donc il ne
+se range pas entièrement au second membre — on y revient plus bas.
 
 Discrétisée sur les éléments finis, avec
 \\( T(x) = [N(x)]\\{T\\} \\) et
@@ -46,13 +44,35 @@ linéaire :
 \\[ \\{P\\} = \int_V [N]^T q \\, dV
       + \int_{\partial V\_\phi} [N]^T (\phi\_{\text{imp}} + h\\,T\_f) \\, dS \\]
 
+La température imposée n'entre pas dans \\( [K] \\) : elle passe par des
+**multiplicateurs de Lagrange** \\( \\{\mu\\} \\), un par nœud bloqué. La
+relation \\( [A]\\{T\\} = \\{T\_{\text{imp}}\\} \\) — chaque ligne de
+\\( [A] \\) lit la température d'un nœud de l'alésage — s'ajoute au système,
+et c'est celui-ci que pyrucast résout :
+
+\\[ \begin{bmatrix} K & A^T \\\\ A & 0 \end{bmatrix}
+   \begin{Bmatrix} T \\\\ \mu \end{Bmatrix} =
+   \begin{Bmatrix} P \\\\ T\_{\text{imp}} \end{Bmatrix} \\]
+
+Les \\( \\{\mu\\} \\) sont les **réactions** : les flux qu'il faut injecter aux
+nœuds bloqués pour les tenir à 250 °C.
+
+**Le second membre se vérifie par sa somme.** Les fonctions de forme valent 1
+à elles toutes en chaque point, si bien que la somme des lignes de
+\\( \\{P\\} \\) est la puissance que les sollicitations apportent à la pièce :
+
+\\[ \sum\_i P\_i = \int_V q \\, dV
+      + \int_{\partial V\_\phi} (\phi\_{\text{imp}} + h\\,T\_f) \\, dS \\]
+
+— le contrôle que l'on fait plus bas sur le second membre de l'étape 2.
+
 Chaque terme correspond à un objet du script :
 
 | Terme | pyrucast |
 |---|---|
 | \\( \int_V [B]^T \lambda [B] \\, dV \\) | `pc.model.heat_conduction(fes)`, assemblé par `pc.matrix.stiffness` |
 | \\( \int_{\partial V\_\phi} h [N]^T [N] \\, dS \\) | `pc.model.boundary_transfer(fes, conduction, ["T"])`, **dans la même matrice** |
-| \\( T = T\_{\text{imp}} \\) | `pc.model.dirichlet(alesage, modele, "T")` (multiplicateurs de Lagrange) |
+| \\( [A]\\{T\\} = \\{T\_{\text{imp}}\\} \\) | `pc.model.dirichlet(alesage, modele, "T")`, dont les multiplicateurs \\( \\{\mu\\} \\) sont la composante « lambda » de la solution |
 | \\( \int_{\partial V\_\phi} [N]^T \phi\_{\text{imp}} \\, dS \\) | `pc.model.flux(fes, modele, "q")` sur des `QUA8`, densité `phi_q`, lu par `pc.node_field.external_forces` |
 | \\( \int_{\partial V\_\phi} [N]^T h\\,T\_f \\, dS \\) | porté par le même `pc.model.boundary_transfer`, ambiant `a_ext_T`, lu par `pc.node_field.external_forces` |
 | \\( \int_V [N]^T q \\, dV \\) | `pc.model.flux(fes, modele, "q")` sur des `HEX20`, densité `phi_q`, lu par `pc.node_field.external_forces` |
@@ -178,22 +198,15 @@ et « q » (dual) sur tout le volume et porte le terme
 réellement, avec le \\( \lambda \\) lu dans le champ matériau sous le nom
 « k ».
 
-La température imposée passe par des **multiplicateurs de Lagrange** : le
-système résolu n'est plus \\( [K]\\{T\\} = \\{P\\} \\) mais
-
-\\[ \begin{bmatrix} K & C^T \\\\ C & 0 \end{bmatrix}
-   \begin{Bmatrix} T \\\\ \lambda \end{Bmatrix} =
-   \begin{Bmatrix} P \\\\ T\_{\text{imp}} \end{Bmatrix} \\]
-
-où \\( C \\) est la relation \\( T = T\_{\text{imp}} \\) sur les nœuds de
-l'alésage. `pc.model.dirichlet` ne reçoit qu'un maillage `POI1` : le support
-bloqué (l'alésage, tel que `points_on_cylinder` l'a renvoyé). Les inconnues
-\\( \lambda \\), elles, ont besoin de leurs propres nœuds : la contrainte les
-**crée elle-même**, un par nœud bloqué et à la même position, et
-`blocage_T.multiplier_mesh()` rend le maillage qui les porte. Deux jeux de
-nœuds distincts, donc deux jeux d'inconnues : la solution renvoyée contient
-les deux, et les multiplicateurs sont les **réactions** (ici les flux qu'il
-faut injecter pour tenir l'alésage à 250 °C).
+La température imposée, c'est la relation \\( [A]\\{T\\} = \\{T\_{\text{imp}}\\} \\)
+du système par blocs posé plus haut. `pc.model.dirichlet` ne reçoit qu'un
+maillage `POI1` : le support bloqué (l'alésage, tel que `points_on_cylinder`
+l'a renvoyé). Les inconnues \\( \\{\mu\\} \\), elles, ont besoin de leurs
+propres nœuds : la contrainte les **crée elle-même**, un par nœud bloqué et à
+la même position, et `blocage_T.multiplier_mesh()` rend le maillage qui les
+porte. Deux jeux de nœuds distincts, donc deux jeux d'inconnues : la solution
+renvoyée contient les deux, la température « T » et les multiplicateurs
+« lambda », qui sont les **réactions**.
 
 Le flux imposé, lui, est un **terme du modèle** : `pc.model.flux` le déclare sur
 l'espace éléments finis de la face gauche, et `|` le réunit au reste.
@@ -215,7 +228,7 @@ champ nodal.
 
 La température imposée, elle, se pose sur le maillage des **multiplicateurs**
 et non sur l'alésage lui-même : c'est le \\( T\_{\text{imp}} \\) du second bloc
-du système ci-dessus, en face des inconnues \\( \lambda \\).
+du système par blocs, en face des inconnues \\( \\{\mu\\} \\).
 
 ### Résolution
 
@@ -379,19 +392,10 @@ remonte de 32 à 40 °C), le film convectif pompe la chaleur sous la pièce — 
 avec les cotes de la page Maillage c'est la convection qui l'emporte : rien ne passe
 au-dessus de la température de l'alésage.
 
-> **Pour aller plus loin.**
->
-> - **Rayonnement.** Un échange par rayonnement avec un environnement
->   lointain, \\( \phi \cdot n = \sigma\\,\varepsilon\\,(T^4 - T\_\infty^4) \\),
->   se pose sur le bord comme la convection, par `pyrucast.model.radiation`.
->   Il n'est pas linéaire en \\( T \\) et se résout donc par itérations : voir
->   [Rayonnement](../rayonnement.md).
-> - **Régime transitoire.** Avec une masse volumique « rho » et une capacité
->   « cp » dans le champ matériau, `pyrucast.matrix.mass` assemble la matrice
->   de capacité \\( [C] = \int_V \rho c\_p [N]^T [N] \\, dV \\), et le calcul
->   pas à pas intègre \\( [C]\\{\dot{T}\\} + [K]\\{T\\} = \\{P\\} \\) en temps :
->   voir [Conduction thermique](../thermique.md) et
->   [Calcul pas à pas](../pas-a-pas.md).
+Ce régime établi est celui que la pièce atteint quand les sollicitations
+durent : la page [Régime transitoire](thermique-transitoire.md) part d'une
+pièce à 0 °C, installe les mêmes chargements au fil du temps, et s'approche
+de ce champ au dernier instant.
 
 ## Script complet
 
@@ -402,4 +406,4 @@ complet, du maillage importé aux deux résolutions :
 {{#include ../../../tutoriel/thermique.py:script}}
 ```
 
-Suite : [Calcul mécanique](mecanique.md).
+Suite : [Régime transitoire](thermique-transitoire.md).

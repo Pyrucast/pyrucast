@@ -461,7 +461,7 @@ partagent, il **ne somme pas** les valeurs. Pour additionner deux chargements
 qui se touchent, on les ramène d'abord sur les mêmes nœuds avec
 `pyrucast.node_field.restrict`, puis on les somme par `+` — c'est l'objet du
 passage *Trois chargements qui se touchent* de la page
-[Calcul thermique](thermique.md).
+[Régime stationnaire](thermique.md).
 
 ### Les noms des composantes
 

@@ -1,5 +1,5 @@
 # ANCHOR: script
-"""Tutoriel débutant — 2. Calcul thermique. / Beginner tutorial — 2. Thermal.
+"""Tutoriel débutant — 2. Régime stationnaire. / Beginner tutorial — 2. Steady state.
 
 FR — Reprend la **chape percée** de la page « Maillage » — le volume HEX20
 structuré est importé de `tutoriel/maillage.py`, aucune cote n'est redonnée —
@@ -13,8 +13,9 @@ et y résout la conduction **stationnaire** `div(-k·grad T) = q`, en deux temps
 Chaque étape est tracée avant d'être résolue, et les régions chargées sont
 repérées **par leur géométrie** : par forme (`pyrucast.mesh.points_*`) ou par
 coordonnée (`pyrucast.node_field.positions` + `pyrucast.mesh.select`). Ce
-script ne traite ni rayonnement ni terme transitoire. Le détail pas à pas est
-dans le livre, page « Calcul thermique ».
+script ne traite ni rayonnement ni terme transitoire : ce sont les scripts
+`tutoriel/thermique_transitoire.py` et `tutoriel/thermique_non_lineaire.py`.
+Le détail pas à pas est dans le livre, page « Régime stationnaire ».
 
 EN — Picks the meshing page's **pierced lug** back up — the structured HEX20
 volume is imported from `tutoriel/maillage.py`, not one dimension is restated —
@@ -28,8 +29,9 @@ and solves **steady** conduction `div(-k·grad T) = q` on it, in two steps:
 Each step is plotted before being solved, and the loaded regions are located
 **by geometry**: by shape (`pyrucast.mesh.points_*`) or by coordinate
 (`pyrucast.node_field.positions` + `pyrucast.mesh.select`). This script handles
-neither radiation nor a transient term. The step-by-step walkthrough lives in
-the book's thermal page.
+neither radiation nor a transient term: those are
+`tutoriel/thermique_transitoire.py` and `tutoriel/thermique_non_lineaire.py`.
+The step-by-step walkthrough lives in the book's steady-state page.
 
 Lancement / Running ::
 

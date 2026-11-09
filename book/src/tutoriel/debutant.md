@@ -7,7 +7,7 @@ en comprenant chaque ligne. Il suppose quelques notions sur la méthode des
 [Python & conventions pyrucast](langage-python.md) en donne tout ce qu'il faut.
 
 Le fil rouge des pages [Maillage](maillage.md) et
-[Calcul thermique](thermique.md) est une **chape percée** — une plaque terminée
+[Thermique linéaire](thermique-lineaire.md) est une **chape percée** — une plaque terminée
 par un demi-disque, trouée en son centre — que l'on maille, puis que l'on
 chauffe :
 
