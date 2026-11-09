@@ -85,6 +85,7 @@
   - [Maillage](tutoriel/maillage.md)
   - [Thermique linéaire](tutoriel/thermique-lineaire.md)
     - [Régime stationnaire](tutoriel/thermique.md)
+    - [Régime transitoire](tutoriel/thermique-transitoire.md)
   - [Calcul mécanique](tutoriel/mecanique.md)
   - [Compléments](tutoriel/complements.md)
 
