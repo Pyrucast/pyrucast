@@ -53,17 +53,17 @@ Chaque terme correspond à un objet du script :
 | \\( \int_V [B]^T \lambda [B] \\, dV \\) | `pc.model.heat_conduction(fes)`, assemblé par `pc.matrix.stiffness` |
 | \\( \int_{\partial V\_\phi} h [N]^T [N] \\, dS \\) | `pc.model.boundary_transfer(fes, conduction, ["T"])`, **dans la même matrice** |
 | \\( T = T\_{\text{imp}} \\) | `pc.model.dirichlet(alesage, modele, "T")` (multiplicateurs de Lagrange) |
-| \\( \int_{\partial V\_\phi} [N]^T \phi\_{\text{imp}} \\, dS \\) | `pc.model.flux(fes, modele, "q")` sur des `QUA4`, densité `phi_q`, lu par `pc.node_field.external_forces` |
+| \\( \int_{\partial V\_\phi} [N]^T \phi\_{\text{imp}} \\, dS \\) | `pc.model.flux(fes, modele, "q")` sur des `QUA8`, densité `phi_q`, lu par `pc.node_field.external_forces` |
 | \\( \int_{\partial V\_\phi} [N]^T h\\,T\_f \\, dS \\) | porté par le même `pc.model.boundary_transfer`, ambiant `a_ext_T`, lu par `pc.node_field.external_forces` |
-| \\( \int_V [N]^T q \\, dV \\) | `pc.model.flux(fes, modele, "q")` sur des `HEX8`, densité `phi_q`, lu par `pc.node_field.external_forces` |
+| \\( \int_V [N]^T q \\, dV \\) | `pc.model.flux(fes, modele, "q")` sur des `HEX20`, densité `phi_q`, lu par `pc.node_field.external_forces` |
 
 Les trois dernières lignes disent deux choses. D'abord, **un chargement est un
 terme du modèle** : on le réunit au modèle, sa densité entre dans le champ
 matériau, et `pc.node_field.external_forces` calcule le second membre de tous
 les termes à la fois. Ensuite, **`flux` est l'unique opérateur de charge
 répartie** (première et dernière de ces lignes), quelle que soit la dimension
-du sous-espace éléments finis sur lequel on l'applique — une face `QUA4`
-intègre une densité surfacique, un `HEX8` une densité volumique. Flux
+du sous-espace éléments finis sur lequel on l'applique — une face `QUA8`
+intègre une densité surfacique, un `HEX20` une densité volumique. Flux
 surfacique, pression et source volumique passent donc tous par le même
 opérateur.
 
@@ -88,7 +88,7 @@ explicite plutôt que cachée dans le mailleur.
 
 Le script ne redonne **aucune cote**. Il importe `structured_mesh` de
 [`tutoriel/maillage.py`](https://github.com/Pyrucast/pyrucast/blob/master/tutoriel/maillage.py)
-et calcule sur le volume **HEX8 structuré** de la page précédente — 640
+et calcule sur le volume **HEX20 structuré** de la page précédente — 640
 hexaèdres.
 
 ```python
@@ -127,12 +127,13 @@ pièce : la normale du plan de la pièce (\\( Y \\)), passant par le centre du
 demi-disque. `points_on_cylinder` retient alors les nœuds **sur** le cylindre
 de rayon `HOLE_RADIUS` — les disques d'extrémité sont laissés de côté, ce sont
 des faces planes et `points_on_plane` est là pour celles-là. Ce qui revient est
-donc exactement la paroi du trou, 120 nœuds.
+donc exactement la paroi du trou, 320 nœuds : 120 sommets et 200 nœuds
+milieux, puisque le volume est quadratique.
 
 **Un blocage ne demande que des nœuds.** La sélection se lit donc directement
 sur le **volume**, sans en extraire la peau : les nœuds de la paroi du trou
 sont des nœuds de bord par définition, et `points_on_cylinder` y trouve les
-mêmes 120 nœuds que sur la peau.
+mêmes 320 nœuds que sur la peau.
 
 **Un `points_*` renvoie déjà un maillage `POI1`.** Le résultat est utilisable
 tel quel comme support d'un `pc.model.dirichlet`, sans passer par
@@ -149,7 +150,7 @@ sous-maillage **vide** que laisse la partie du volume qui ne touche pas le trou
 Même principe, mais un flux s'intègre sur une **surface** : les nœuds ne
 suffisent pas. `pyrucast.mesh.elements_on(..., strict=True)` remonte des
 nœuds sélectionnés aux mailles dont **tous** les sommets sont retenus — ici les
-20 `QUA4` de la face gauche. Le plan donné à `points_on_plane` est infini, mais
+20 `QUA8` de la face gauche. Le plan donné à `points_on_plane` est infini, mais
 il ne coupe la peau qu'à cet endroit.
 
 ### La figure des conditions aux limites
@@ -208,7 +209,7 @@ quels coefficients celui-ci réclame — « k » pour la conduction, et la densi
 ```
 
 Le flux imposé ne touche que le second membre : `pc.node_field.external_forces`
-intègre \\( \int [N]^T \phi\_{\text{imp}} \\, dS \\) sur les 20 `QUA4` de la
+intègre \\( \int [N]^T \phi\_{\text{imp}} \\, dS \\) sur les 20 `QUA8` de la
 face gauche, avec la densité « phi_q » lue dans le champ matériau, et rend un
 champ nodal.
 
@@ -254,7 +255,7 @@ sont repérées par **coordonnée**, la seconde façon de découper une région.
 peau sous forme de `NodeField`, et `pyrucast.mesh.select` garde ceux dont la
 valeur tombe dans une **bande** — `ge=-TOL, le=TOL` pour « z = 0 ». Le résultat
 est un maillage `POI1`, exactement comme celui d'un `points_*` : la suite ne
-change pas, `elements_on(..., strict=True)` remonte aux `QUA4` que ces nœuds
+change pas, `elements_on(..., strict=True)` remonte aux `QUA8` que ces nœuds
 portent entièrement.
 
 ### La zone chauffée, en bande
@@ -266,7 +267,7 @@ portent entièrement.
 ![Zone chauffée](img/thermique-cl-source.svg)
 
 Même démarche, mais sur X et sur le **volume** : une bande de valeurs au lieu
-d'une égalité, et des `HEX8` au lieu de `QUA4`. Comme pour l'alésage,
+d'une égalité, et des `HEX20` au lieu de `QUA8`. Comme pour l'alésage,
 `mesh.consolidate` écarte le sous-maillage vide laissé par la partie du volume qui
 ne rencontre pas la bande.
 
@@ -309,7 +310,7 @@ La part en \\( T\_f \\) de la convection donne
 « h_T » et « a_ext_T » lus dans le champ matériau.
 
 La source volumique, elle, est le terme \\( \int_V [N]^T q \\, dV \\) : encore
-`flux`, mais appliqué à des `HEX8`. La dimension de l'intégrale est celle des
+`flux`, mais appliqué à des `HEX20`. La dimension de l'intégrale est celle des
 éléments qu'on lui donne, donc une densité **volumique** ici. Un chargement ne
 contribue à aucune matrice : il forme ici un modèle à lui seul, `source`, avec
 son propre champ matériau, parce que sa densité « phi_q » n'est pas celle du
