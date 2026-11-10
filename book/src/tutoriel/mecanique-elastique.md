@@ -48,9 +48,9 @@ connaît : \\( \varepsilon = [B]\\{U\\} \\), \\( \sigma = [C]\\,\varepsilon \\).
 Pour juger d'un état de contrainte d'un seul nombre, on calcule la
 **contrainte équivalente de von Mises** :
 
-\\[ \sigma\_{\text{VM}} = \sqrt{ \tfrac{1}{2} \left[ (\sigma\_{xx} - \sigma\_{yy})^2
-+ (\sigma\_{yy} - \sigma\_{zz})^2 + (\sigma\_{zz} - \sigma\_{xx})^2 \right]
-+ 3 \left( \sigma\_{xy}^2 + \sigma\_{yz}^2 + \sigma\_{xz}^2 \right) } \\]
+\\[ \sigma\_{\text{VM}} = \sqrt{ \tfrac{1}{2} \left[ (\sigma\_{xx} - \sigma\_{yy})^2 +
+(\sigma\_{yy} - \sigma\_{zz})^2 + (\sigma\_{zz} - \sigma\_{xx})^2 \right] +
+3 \left( \sigma\_{xy}^2 + \sigma\_{yz}^2 + \sigma\_{xz}^2 \right) } \\]
 
 Un acier commence à se déformer de façon permanente quand elle atteint sa
 limite d'élasticité. Elle vaut 0 pour une pression égale dans toutes les
