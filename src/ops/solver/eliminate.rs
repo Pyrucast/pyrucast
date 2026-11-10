@@ -530,6 +530,9 @@ fn build_condensation(
                 lambda_col: n_free + i,
                 term_cols,
                 sense: rel.sense,
+                // The reduced system is built here, unscaled.
+                lambda_scale: 1.0,
+                row_scale: 1.0,
             });
         }
         Reduced::Unilateral(ReducedInequalities {
