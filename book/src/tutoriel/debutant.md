@@ -138,19 +138,22 @@ du dépôt. Le code affiché dans les pages est **extrait directement de ces
 scripts**, qui sont exécutés à chaque vérification du projet : ce que vous
 lisez est ce qui tourne. Chaque page se termine par son script complet.
 
-Pour suivre les pages [Maillage](maillage.md),
-[Thermique linéaire](thermique-lineaire.md) et
-[Thermique non linéaire](thermique-non-lineaire.md), enregistrez
-`maillage.py`, `thermique.py`, `thermique_transitoire.py` et
-`thermique_non_lineaire.py` dans **le même dossier** — chacun reprend le
-maillage et les données des précédents — puis lancez-les comme le premier
-calcul :
+Pour suivre les pages qui partent de [Maillage](maillage.md), enregistrez
+leurs scripts dans **le même dossier** — chacun reprend le maillage et les
+données des précédents — puis lancez-les dans cet ordre, comme le premier
+calcul. Les scripts de dilatation et de plasticité relisent le fichier
+qu'écrit `thermique_non_lineaire.py` : il doit avoir tourné avant eux.
 
 ```bash
 python maillage.py
 python thermique.py
 python thermique_transitoire.py
 python thermique_non_lineaire.py
+python mecanique_elastique.py
+python mecanique_dilatation.py
+python mecanique_heterogene.py
+python plasticite.py
+python contact.py
 ```
 
 Chaque figure s'ouvre dans sa fenêtre ; fermez-la pour passer à la suivante.
@@ -172,5 +175,15 @@ Chaque figure s'ouvre dans sa fenêtre ; fermez-la pour passer à la suivante.
    s'établissent dans le temps, le flux de chaleur).
 6. [Thermique non linéaire](thermique-non-lineaire.md) — le rayonnement, en
    kelvins ; le champ parcouru dans le temps, la sauvegarde du calcul.
-7. [Calcul mécanique](mecanique.md) — déplacements et contraintes.
-8. [Compléments](complements.md) — pour aller plus loin.
+7. [Mécanique linéaire](mecanique-lineaire.md) — l'équilibre et la loi de
+   Hooke, puis la chape encastrée sous une masse :
+   [élasticité](mecanique-elastique.md) (trois façons de poser la masse,
+   déformée, contraintes, von Mises le long d'une ligne),
+   [dilatation](mecanique-dilatation.md) (la température relue du calcul
+   thermique) et [matériau hétérogène](mecanique-heterogene.md) (un
+   coefficient de dilatation qui varie).
+8. [Mécanique non linéaire](mecanique-non-lineaire.md) — le calcul pas à
+   pas : [plasticité](plasticite.md) (une limite d'élasticité constante,
+   puis selon la température) et [contact](contact.md) (un appui posé dans
+   l'alésage).
+9. [Compléments](complements.md) — pour aller plus loin.

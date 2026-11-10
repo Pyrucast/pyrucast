@@ -1,137 +1,264 @@
-"""Tutoriel débutant — 5. Contact (unilatéral, nœud-surface).
+# ANCHOR: script
+"""Tutoriel débutant — 9.8.2 Contact. / Beginner tutorial — 9.8.2 Contact.
 
-A classic patch test: two elastic blocks stacked along `y`, separated by an
-initial gap `G0`. A pressure on the upper block closes the contact and
-transmits a uniform stress across the interface — the pyrucast equivalent of
-Cast3M's node-to-surface contact (section 10 of the Cast3M training), driven here
-straight by the active-set loop of `solve`, in a single solve —
-`pyrucast.stepping.step_by_step` composes the same contact with heat,
-plasticity and load steps when a history is needed.
+FR — La masse suspendue des pages précédentes devient un **appui** posé dans
+l'alésage : un secteur de 90° du même rayon que le trou, mille fois plus
+raide que la chape, qui ne peut que monter ou descendre. Le poids est appliqué
+sur l'axe de l'appui, en 20 pas. Entre l'appui et la moitié basse de
+l'alésage, un **contact** : les nœuds de l'appui ne traversent pas la paroi,
+et le contact ne fait que pousser. Le détail pas à pas est dans le livre,
+page « Contact ».
 
-Lancement ::
+EN — The previous pages' hanging mass becomes a **support** laid in the
+bore: a 90° sector of the hole's radius, a thousand times stiffer than the
+lug, free only to move up or down. The weight is applied on the support's
+axis, in 20 steps. Between the support and the lower half of the bore, a
+**contact**: the support's nodes do not cross the wall, and the contact only
+pushes. The step-by-step walkthrough lives in the book's "Contact" page.
 
-    maturin develop --release
+Lancement / Running ::
+
+    pip install pyrucast
     python tutoriel/contact.py
 
-    # To regenerate the book figure (book/src/tutoriel/img/):
+    # Figures du livre / book figures (book/src/tutoriel/img/) :
     # PYRUCAST_TUTORIEL_IMG_DIR=book/src/tutoriel/img python tutoriel/contact.py
 """
 
+import math
 import os
-import tempfile
 
 import pyrucast as pc
+from maillage import HEIGHT, HOLE_RADIUS, LENGTH, OUT, THICKNESS, show, structured_mesh
 
-E = 100.0
-S = 5.0  # pression appliquée
-G0 = 0.01  # initial gap between the two blocks
-N = 2  # N×N grid of QUA4 per block
+# FR — La vue des figures de tutoriel/maillage.py : azimut, élévation, échelle.
+# EN — The view of tutoriel/maillage.py's figures: azimuth, elevation, scale.
+VUE = (-45, 25, 1.0)
 
+ROUGE = (255, 0, 0)  # encastrement / clamp
+ORANGE = (255, 140, 0)  # moitié basse de l'alésage / lower half of the bore
+VERT = (0, 170, 0)  # l'appui / the support
 
-def idx(i, j):
-    return j * (N + 1) + i
-
-
-def bloc(coords: pc.Coords, y0: float):
-    """Bloc `[0,1] × [y0, y0+1]`, grille N×N de QUA4 — mailleurs dédiés
-    (`line` for the bottom/top edges, `sweep` between them, as in
-    `tutoriel/maillage.py`). Returns `(mesh, grille)`, `grille[idx(i,j)]`
-    étant le nœud `(i,j)` (`i` : abscisse, `j` : ordonnée)."""
-    bas = pc.mesh.line(coords.add_node([0.0, y0]), coords.add_node([1.0, y0]), N)
-    haut = pc.mesh.line(
-        coords.add_node([0.0, y0 + 1.0]), coords.add_node([1.0, y0 + 1.0]), N
-    )
-    mesh = pc.mesh.sweep(bas, haut, N)
-
-    grille = [None] * ((N + 1) * (N + 1))
-    for cy in range(N):
-        for cx in range(N):
-            cell = cy * N + cx
-            grille[idx(cx, cy)] = mesh.node(0, cell, 0)
-            grille[idx(cx + 1, cy)] = mesh.node(0, cell, 1)
-            grille[idx(cx + 1, cy + 1)] = mesh.node(0, cell, 2)
-            grille[idx(cx, cy + 1)] = mesh.node(0, cell, 3)
-    return mesh, grille
-
-
-def clamp(target, nodes, var):
-    imposed = pc.mesh.poi1_from_nodes(nodes)
-    return pc.model.dirichlet(imposed, target, var)
-
-
-def bord_horizontal(mesh: pc.Mesh, y: float) -> pc.Mesh:
-    """Extracts, among `mesh`'s border segments (`pyrucast.mesh.border`, the
-    Cast3M `CONTOUR` equivalent), those at ordinate `y` — an existing edge of
-    the mesh, not a line rebuilt beside it (`line` would make
-    nouveaux nœuds, disjoints de `mesh`)."""
-    frontiere = pc.mesh.border(mesh)
-    ordonnee = pc.node_field.positions(frontiere, ["Y"])
-    noeuds = pc.mesh.select(ordonnee, ge=y - 1e-9, le=y + 1e-9)
-    return pc.mesh.elements_on(frontiere, noeuds, strict=True)
+# ── Données physiques / Physical data ──────────────────────────────────────
+# ANCHOR: donnees
+E, NU = 200e9, 0.3  # Pa, — : la chape / the lug
+E_APPUI = 1000.0 * E  # Pa : l'appui, quasi indéformable / nearly rigid support
+MASSE, G = 2500.0, 9.81  # kg, m/s²
+POIDS = MASSE * G  # N
+T_FINAL, N_PAS = 1.0, 20  # temps fictif / fictitious time
+AMPLIFICATION = 50.0
+TOL = 1e-9  # m
+# ANCHOR_END: donnees
 
 
 def main() -> None:
-    # ANCHOR: geometrie_contact
-    coords = pc.Coords(2)
-    mesh_bas, bas = bloc(coords, 0.0)
-    mesh_haut, haut = bloc(coords, 1.0 + G0)
-    mesh = mesh_bas | mesh_haut
-    fes = pc.FiniteElementSpace(mesh)
+    # ANCHOR: chape
+    # FR — La chape, ses régions : l'encastrement et la moitié basse de
+    #      l'alésage, comme à la page « Élasticité ».
+    # EN — The lug, its regions: the clamp and the lower half of the bore, as
+    #      on the "Élasticité" page.
+    _, volume = structured_mesh(plot=False)
+    coords = volume.coords()
+    peau = pc.mesh.consolidate(pc.mesh.skin(volume))
+    encastrement = pc.mesh.points_on_plane(volume, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0])
+    face_gauche = pc.mesh.elements_on(peau, encastrement, strict=True)
+    bas_axe = [LENGTH, -THICKNESS, HEIGHT / 2.0]
+    haut_axe = [LENGTH, 2.0 * THICKNESS, HEIGHT / 2.0]
+    noeuds_alesage = pc.mesh.points_on_cylinder(peau, bas_axe, haut_axe, HOLE_RADIUS)
+    alesage = pc.mesh.elements_on(peau, noeuds_alesage, strict=True)
+    z_alesage = pc.node_field.positions(alesage, ["Z"])
+    noeuds_bas = pc.mesh.select(z_alesage, le=HEIGHT / 2.0 + TOL)
+    demi_alesage = pc.mesh.consolidate(
+        pc.mesh.elements_on(alesage, noeuds_bas, strict=True)
+    )
+    # ANCHOR_END: chape
 
-    # Master: top edge of the lower block (`contour` already orients the
-    # boundary counter-clockwise, so this edge naturally runs right to left —
-    # the associated normal points towards +y). Slave: nodes of the upper
-    # block's bottom edge.
-    maitre = bord_horizontal(mesh_bas, 1.0)
-    esclave = pc.mesh.poi1_from_nodes([haut[idx(i, 0)] for i in range(N + 1)])
+    # ANCHOR: appui
+    # FR — L'appui : un rayon, du centre du trou vers le bas à gauche, à 45°
+    #      de la verticale, en 2 segments ; tourné de 90° autour de l'axe du
+    #      trou en 7 secteurs, il balaie le quart bas du disque. Le nœud du
+    #      centre est sur l'axe : les mailles qui le touchent sont des
+    #      triangles. Puis l'épaisseur, en 2 couches.
+    # EN — The support: a radius, from the hole's centre down to the left,
+    #      45° off the vertical, in 2 segments; turned by 90° about the
+    #      hole's axis in 7 sectors, it sweeps the disc's lower quarter. The
+    #      centre node is on the axis: the cells touching it are triangles.
+    #      Then the thickness, in 2 layers.
+    centre = coords.add_node([LENGTH, 0.0, HEIGHT / 2.0])
+    s = HOLE_RADIUS / math.sqrt(2.0)
+    depart = coords.add_node([LENGTH - s, 0.0, HEIGHT / 2.0 - s])
+    rayon = pc.mesh.line(centre, depart, 2)
+    secteur = pc.mesh.revolve(
+        rayon, math.pi / 2.0, 7, [LENGTH, 0.0, HEIGHT / 2.0], [0.0, -1.0, 0.0]
+    )
+    appui = pc.mesh.extrude(secteur, [0.0, THICKNESS, 0.0], 2)
+    noeuds_appui = pc.mesh.consolidate(pc.mesh.to_poi1(appui))
 
-    elasticite = pc.model.elasticity(fes, "plane_stress")
-    contact = pc.model.contact(esclave, maitre, elasticite, ["u_x", "u_y"])
-    # ANCHOR_END: geometrie_contact
+    # FR — Sur l'appui : son axe, où s'applique le poids, et sa face
+    #      cylindrique, qui touche l'alésage.
+    # EN — On the support: its axis, where the weight is applied, and its
+    #      cylindrical face, which touches the bore.
+    axe = pc.mesh.consolidate(
+        pc.mesh.points_on_line(
+            noeuds_appui, [LENGTH, 0.0, HEIGHT / 2.0], [LENGTH, 1.0, HEIGHT / 2.0]
+        )
+    )
+    face_appui = pc.mesh.consolidate(
+        pc.mesh.points_on_cylinder(noeuds_appui, bas_axe, haut_axe, HOLE_RADIUS)
+    )
 
-    # ANCHOR: modele_contact
-    modele = pc.model.elasticity(fes, "plane_stress")
-    modele = modele | clamp(modele, bas + haut, "u_x")
-    modele = modele | clamp(modele, [bas[idx(i, 0)] for i in range(N + 1)], "u_y")
+    face_gauche.unit().face_color = ROUGE
+    demi_alesage.unit().face_color = ORANGE
+    for zone in appui:
+        zone.face_color = VERT
+    show(
+        peau | face_gauche | demi_alesage | appui,
+        "Encastrement, moitié basse de l'alésage, appui",
+        "contact-regions.svg",
+        wireframe=True,
+    )
+    # ANCHOR_END: appui
+
+    # ANCHOR: modele
+    # FR — Deux élasticités, une par pièce, réunies par `|`. La chape est
+    #      encastrée ; l'appui ne peut ni avancer ni s'écarter (u_x, u_y
+    #      bloqués), seulement monter ou descendre.
+    # EN — Two elasticities, one per part, joined by `|`. The lug is clamped;
+    #      the support can neither move forward nor sideways (u_x, u_y
+    #      blocked), only up or down.
+    chape = pc.model.elasticity(pc.FiniteElementSpace(volume), "full_3d")
+    piece_appui = pc.model.elasticity(pc.FiniteElementSpace(appui), "full_3d")
+    solides = chape | piece_appui
+    modele = (
+        solides
+        | pc.model.dirichlet(encastrement, chape, "u_x")
+        | pc.model.dirichlet(encastrement, chape, "u_y")
+        | pc.model.dirichlet(encastrement, chape, "u_z")
+        | pc.model.dirichlet(noeuds_appui, piece_appui, "u_x")
+        | pc.model.dirichlet(noeuds_appui, piece_appui, "u_y")
+    )
+
+    # FR — Le contact : les nœuds de la face de l'appui (esclaves) ne
+    #      traversent pas la moitié basse de l'alésage (maître), ses QUA8
+    #      telles quelles, courbes.
+    # EN — The contact: the nodes of the support's face (slaves) do not cross
+    #      the lower half of the bore (master), its QUA8 as they are, curved.
+    contact = pc.model.contact(face_appui, demi_alesage, solides, ["u_x", "u_y", "u_z"])
     modele = modele | contact
 
-    # ANCHOR_END: modele_contact
-
-    # ANCHOR: chargement_contact
-    bord_haut = bord_horizontal(mesh_haut, 2.0 + G0)
-    bord_haut_fes = pc.FiniteElementSpace(bord_haut)
-    modele = modele | pc.model.flux(bord_haut_fes, modele, "f_y")
+    # FR — Un matériau par pièce : chaque champ porte sur son modèle.
+    # EN — One material per part: each field covers its own model.
     materiaux = pc.element_field.material_field(
-        modele, [("E", E), ("nu", 0.0), ("phi_f_y", -S)]
+        chape, [("E", E), ("nu", NU)]
+    ) | pc.element_field.material_field(piece_appui, [("E", E_APPUI), ("nu", NU)])
+    # ANCHOR_END: modele
+
+    # ANCHOR: chargement
+    # FR — Le poids, partagé entre les nœuds de l'axe de l'appui, et monté de
+    #      0 à 1 sur le temps fictif, en 20 pas.
+    # EN — The weight, shared between the nodes of the support's axis, and
+    #      ramped from 0 to 1 over the fictitious time, in 20 steps.
+    poids = pc.NodeField(axe, ["f_z"])
+    for i in range(axe.cell_count):
+        poids[0].set_value(axe.node(0, i, 0), "f_z", -POIDS / axe.cell_count)
+    instants = []
+    for i in range(N_PAS + 1):
+        instants.append(i * T_FINAL / N_PAS)
+    donnees = {
+        "model": modele,
+        "times": instants,
+        "materials": materiaux,
+        "loads": pc.Evolution([(0.0, poids * 0.0), (T_FINAL, poids)]),
+    }
+    pc.stepping.step_by_step(donnees)
+    # ANCHOR_END: chargement
+
+    # ANCHOR: enfoncement
+    # FR — L'enfoncement de l'appui, pas après pas : u_z d'un nœud de son
+    #      axe, en mm.
+    # EN — The support's sinking, step after step: u_z of a node on its
+    #      axis, in mm.
+    noeud_axe = axe.node(0, 0, 0)
+    enfoncement = []
+    for resultat in donnees["results"]:
+        enfoncement.append(
+            (
+                resultat["time"],
+                resultat["displacement"].value(noeud_axe, "u_z") * 1000.0,
+            )
+        )
+    pc.SubEvolution(enfoncement).plot(
+        x_label="temps fictif",
+        y_label="u_z de l'appui (mm)",
+        title="Enfoncement de l'appui",
+        save=os.path.join(OUT, "contact-enfoncement.svg") if OUT else None,
     )
-    # The pressure and the contact's right-hand side −g₀: the gap is a load
-    # the contact carries, `external_forces` returns it with the others.
-    second_membre = pc.node_field.external_forces(modele, materiaux)
-    # ANCHOR_END: chargement_contact
+    # ANCHOR_END: enfoncement
 
-    # ANCHOR: resolution_contact
-    K = pc.matrix.stiffness(modele, materiaux)
-    solution = pc.solver.solve(K, second_membre)
-    # ANCHOR_END: resolution_contact
+    # ANCHOR: efforts
+    # FR — Les réactions du dernier pas. Sur les nœuds de l'alésage, que rien
+    #      d'autre ne tient, ce sont les efforts du contact sur la chape ; on
+    #      les sépare de part et d'autre du centre du trou, les nœuds juste
+    #      dessous comptés du côté de l'encastrement.
+    # EN — The last step's reactions. On the bore's nodes, which nothing else
+    #      holds, they are the contact's forces on the lug; they are split on
+    #      either side of the hole's centre, the nodes right below it counted
+    #      on the clamp's side.
+    dernier = donnees["results"][-1]
+    reactions = dernier["reactions"]
+    sur_l_encastrement = pc.node_field.restrict(reactions, encastrement)
+    sur_l_alesage = pc.node_field.restrict(reactions, demi_alesage)
+    x_alesage = pc.node_field.positions(demi_alesage, ["X"])
+    cote_encastrement = pc.node_field.restrict(
+        reactions, pc.mesh.select(x_alesage, le=LENGTH + TOL)
+    )
+    cote_bout_libre = pc.node_field.restrict(
+        reactions, pc.mesh.select(x_alesage, gt=LENGTH + TOL)
+    )
+    # ANCHOR_END: efforts
 
-    print(f"Pression appliquée : {S}")
-    for j in range(N + 1):
-        uy_bas = solution.value(bas[idx(0, j)], "u_y")
-        uy_haut = solution.value(haut[idx(0, j)], "u_y")
-        print(f"  y={j / N:.2f} : u_y(bas)={uy_bas:.6e}  u_y(haut)={uy_haut:.6e}")
+    # ANCHOR: deformee
+    deformee = coords.add_config("déformée ×50")
+    pc.coords.displace_from(dernier["displacement"] * AMPLIFICATION, 0, deformee)
+    with coords.in_config(deformee):
+        (volume | appui).plot(
+            view=VUE,
+            title="Contact — déformée ×50 au dernier pas, u_z (mm)",
+            field=dernier["displacement"] * 1000.0,
+            component="u_z",
+            cmap="viridis",
+            save=os.path.join(OUT, "contact-deformee.svg") if OUT else None,
+        )
+    # ANCHOR_END: deformee
 
-    # Réactions de contact : Σ(−λᵢ) doit reconstituer l'effort appliqué S.
-    maillage_mult = contact.multiplier_mesh()
-    lambdas = [
-        solution.value(maillage_mult.node(0, r, 0), "lambda") for r in range(N + 1)
-    ]
-    print(f"\nΣ(−λ) = {sum(-lam for lam in lambdas):.6f}  (attendu {S})")
-
-    out = os.environ.get("PYRUCAST_TUTORIEL_IMG_DIR", tempfile.gettempdir())
-    chemin = os.path.join(out, "contact.svg")
-    maillage_mult.plot(save=chemin, field=solution, component="lambda", cmap="viridis")
-    print(f"Contact reaction (λ) written to {chemin}")
+    iterations = []
+    for resultat in donnees["results"]:
+        iterations.append(resultat["iterations"])
+    print(f"appui : {appui.element_types()} {[z.cell_count for z in appui]} mailles")
+    print(
+        f"appui : {noeuds_appui.cell_count} nœuds, {axe.cell_count} sur l'axe, "
+        f"{face_appui.cell_count} sur la face"
+    )
+    print(f"itérations par pas {iterations[1:]}, {sum(iterations)} en tout")
+    print(
+        f"enfoncement de l'appui : {enfoncement[1][1]:.4f} mm au premier pas, "
+        f"{enfoncement[-1][1]:.4f} mm au dernier"
+    )
+    print(
+        f"contact sur la chape : f_x {sur_l_alesage.sum('f_x'):.1f} N, "
+        f"f_z {sur_l_alesage.sum('f_z'):.1f} N"
+    )
+    print(
+        f"  côté encastrement : f_z {cote_encastrement.sum('f_z'):.1f} N ; "
+        f"côté bout libre : f_z {cote_bout_libre.sum('f_z'):.1f} N"
+    )
+    print(
+        f"réactions de l'encastrement : f_x {sur_l_encastrement.sum('f_x'):.1f} N, "
+        f"f_y {sur_l_encastrement.sum('f_y'):.1f} N, "
+        f"f_z {sur_l_encastrement.sum('f_z'):.1f} N"
+    )
 
 
 if __name__ == "__main__":
     main()
+# ANCHOR_END: script

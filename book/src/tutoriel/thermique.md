@@ -354,7 +354,7 @@ précisément ce que l'union `|` ne fait pas.
 > sur un même maillage retombe sur le support `POI1` canonique de ce maillage,
 > donc `restrict(a, m) + restrict(b, m)` est bien une somme nœud à nœud (la page
 > [Champ](../field.md) détaille cette algèbre ; la page
-> [Calcul mécanique](mecanique.md) en donne un exemple avec `restrict_like`).
+> [Dilatation, matériau homogène](mecanique-dilatation.md) en donne un exemple avec `restrict_like`).
 
 ```python
 {{#include ../../../tutoriel/thermique.py:second_membre}}

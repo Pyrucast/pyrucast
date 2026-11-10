@@ -243,4 +243,4 @@ importé à la sauvegarde du calcul :
 {{#include ../../../tutoriel/thermique_non_lineaire.py:script}}
 ```
 
-Suite : [Calcul mécanique](mecanique.md).
+Suite : [Mécanique linéaire](mecanique-lineaire.md).

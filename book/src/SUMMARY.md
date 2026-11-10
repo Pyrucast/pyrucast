@@ -93,7 +93,7 @@
     - [Dilatation, matériau hétérogène](tutoriel/mecanique-heterogene.md)
   - [Mécanique non linéaire](tutoriel/mecanique-non-lineaire.md)
     - [Plasticité](tutoriel/plasticite.md)
-  - [Calcul mécanique](tutoriel/mecanique.md)
+    - [Contact](tutoriel/contact.md)
   - [Compléments](tutoriel/complements.md)
 
 - [Développer]()
