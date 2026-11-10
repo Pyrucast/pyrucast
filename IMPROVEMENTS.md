@@ -225,3 +225,18 @@ is the small sum of nodal reactions of ±15 kN, so it amplifies the error.
 Lead: one factor per relation, from the diagonal of the unknowns it touches.
 Reproduce with the scratch comparison of the contact chapter
 (`compare_contact_impo32.py`, `SOLVERS=1 PAIRS_FROM_CONTACT=1 LINEAR=1`).
+
+## Decide on smoothing the contact normals
+
+`model.contact` directs each relation along the normal of the master facet
+at the projection. Another choice smooths it: a normal at each vertex (the
+normalised sum of the unit normals of the facets around it), interpolated at
+the projection, the projection iterated along it. On flat facets cutting a
+curved edge, it brings back a direction close to the true one and removes
+the tie between two facets meeting at an angle. On the tutorial's lug cut
+into flat TRI3, it moves the clamp's horizontal reaction from 2 428 N to
+2 821 N (frozen pairing), 2 886 N once re-paired on the deformed geometry. On
+curved faces (TRI6, QUA8, QUA9) the facet normal is already the normal of
+the surface. To decide: keep the facet normal, offer the smoothing as an
+option, or smooth flat facets only. Measured with the scratch comparison of
+the contact chapter (`compare_contact_impo32.py`).
