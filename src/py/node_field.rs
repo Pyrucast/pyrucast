@@ -263,37 +263,6 @@ pub struct PyNodeField {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyNodeField {
-    /// The values of this field along `line`, one curve per component: the value
-    /// against the distance travelled along the line.
-    ///
-    /// `line` is a POI1 mesh, read in the order of its cells, zone after zone:
-    /// that order is the path. The abscissa of a point is the length of the
-    /// path up to it — the sum of the straight distances from one point to the
-    /// next —, `0` at the first point; its ordinate, the value of the
-    /// component at that node (a node the field does not define reads zero).
-    /// `components=None` takes every component of the field, in its order;
-    /// each gives one `SubEvolution` of the returned `Evolution`, its
-    /// `ordinate_type` the component's name. A field of another mesh, or a
-    /// field at the Gauss points, is brought onto the line's points first with
-    /// `pyrucast.node_field.project`.
-    ///
-    /// Raises when `line` is not POI1, when two consecutive points coincide,
-    /// for a component the field does not carry, and when the field and
-    /// `line` hang from different `Coords`.
-    #[pyo3(signature = (line, components=None))]
-    fn along(
-        &self,
-        line: PyRef<PyMesh>,
-        components: Option<Vec<String>>,
-    ) -> PyResult<crate::py::evolution::PyEvolution> {
-        let wanted =
-            components.unwrap_or_else(|| crate::containers::field::Field::components(&self.inner));
-        let refs: Vec<&str> = wanted.iter().map(String::as_str).collect();
-        Ok(crate::py::evolution::PyEvolution {
-            inner: self.inner.along(&line.inner, &refs)?,
-        })
-    }
-
     /// `NodeField(support, components)` — zero-initialized field. With a
     /// `Mesh` support: one `SubNodeField` per submesh, each on the
     /// distinct nodes of its zone. With a `SubMesh`: a single zone. A POI1

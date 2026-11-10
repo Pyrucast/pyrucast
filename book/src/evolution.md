@@ -197,7 +197,7 @@ chaque courbe garde la sienne, qui sert quand on l'interpole seule.
 
 ## Le long d'une ligne
 
-`pyrucast.Evolution.along(field, line, components=None)` (aussi
+`pyrucast.evolution.along(field, line, components=None)` (aussi
 `field.along(line)`) rend les valeurs d'un champ aux nœuds **le long d'une
 ligne** : une courbe par composante, la valeur en fonction de la **distance
 parcourue**. `line` est un maillage `POI1`, lu dans l'ordre de ses mailles :

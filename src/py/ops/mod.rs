@@ -13,6 +13,7 @@
 
 pub mod coords;
 pub mod element_field;
+pub mod evolution;
 pub mod export;
 pub mod field;
 pub mod matrix;

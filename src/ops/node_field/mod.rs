@@ -7,8 +7,10 @@
 //!   per-element field), [`restrict`](fn@restrict) /
 //!   [`restrict_like`](fn@restrict_like), [`merge`](fn@merge),
 //!   [`consolidate`](fn@consolidate), [`sum_to_nodes`](fn@sum_to_nodes) (a
-//!   one-value-per-cell field summed at the nodes), [`project`](fn@project) (a
-//!   field interpolated at the nodes of another mesh);
+//!   one-value-per-cell field summed at the nodes),
+//!   [`project_node`](fn@project_node) / [`project_element`](fn@project_element)
+//!   (a field read at the nodes of another mesh: interpolated, or fitted cell
+//!   by cell from the Gauss points);
 //! - *nodal assembly* — [`internal_forces`](fn@internal_forces) and
 //!   [`external_forces`](fn@external_forces), the two sides of the balance
 //!   `Σ f_int = Σ f_ext` whose gap is the residual. They are assemblies like
@@ -40,6 +42,6 @@ pub use internal_forces::internal_forces;
 pub use mask::{mask, mask_sub};
 pub use merge::merge;
 pub use positions::positions;
-pub use project::{project, project_element};
+pub use project::{project_element, project_node};
 pub use restrict::{restrict, restrict_like};
 pub use sum_to_nodes::sum_to_nodes;

@@ -31,13 +31,18 @@ impl NodeField {
         crate::ops::node_field::restrict_like(self, target)
     }
 
-    /// See [`node_field::project`](fn@crate::ops::node_field::project).
+    /// See [`node_field::project_node`](fn@crate::ops::node_field::project_node).
     pub fn project(&self, mesh: &Mesh, target: &Mesh, tol: f64) -> Result<NodeField> {
-        crate::ops::node_field::project(self, mesh, target, tol)
+        crate::ops::node_field::project_node(self, mesh, target, tol)
     }
 }
 
 impl ElementField {
+    /// See [`node_field::project_element`](fn@crate::ops::node_field::project_element).
+    pub fn project(&self, mesh: &Mesh, target: &Mesh, tol: f64) -> Result<NodeField> {
+        crate::ops::node_field::project_element(self, mesh, target, tol)
+    }
+
     /// See [`node_field::divergence`](fn@crate::ops::node_field::divergence).
     pub fn divergence(&self, prefix: &str) -> Result<NodeField> {
         crate::ops::node_field::divergence(self, prefix)

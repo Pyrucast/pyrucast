@@ -28,6 +28,14 @@ use crate::models::tensor::Kinematics;
 
 /// Hill's coefficients `[F, G, H, L, M, N]` that give von Mises: `½` on the
 /// normal differences, `3/2` on the shears.
+///
+/// ```
+/// use pyrucast::ops::element_field::VON_MISES;
+/// // Hill's form with these weights is √(3 J₂): in uniaxial tension σ along x,
+/// // σ_eq² = (G + H)·σ² = σ².
+/// let [_, g, h, ..] = VON_MISES;
+/// assert_eq!(g + h, 1.0);
+/// ```
 pub const VON_MISES: [f64; 6] = [0.5, 0.5, 0.5, 1.5, 1.5, 1.5];
 
 /// Name of the one component [`von_mises`] writes.

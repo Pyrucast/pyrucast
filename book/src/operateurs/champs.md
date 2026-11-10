@@ -379,9 +379,9 @@ La **contrainte équivalente** aux points de Gauss : von Mises par défaut, la
 forme anisotrope de Hill avec ses six coefficients `[F, G, H, L, M, N]` :
 
 \\[
-\sigma\_{eq}^2 = F(\sigma\_{yy}-\sigma\_{zz})^2 + G(\sigma\_{zz}-\sigma\_{xx})^2
-+ H(\sigma\_{xx}-\sigma\_{yy})^2 + 2L\\,\sigma\_{yz}^2 + 2M\\,\sigma\_{xz}^2
-+ 2N\\,\sigma\_{xy}^2
+\sigma\_{eq}^2 = F(\sigma\_{yy}-\sigma\_{zz})^2 + G(\sigma\_{zz}-\sigma\_{xx})^2 +
+H(\sigma\_{xx}-\sigma\_{yy})^2 + 2L\\,\sigma\_{yz}^2 + 2M\\,\sigma\_{xz}^2 +
+2N\\,\sigma\_{xy}^2
 \\]
 
 Avec \\( F = G = H = 1/2 \\) et \\( L = M = N = 3/2 \\), c'est von Mises,

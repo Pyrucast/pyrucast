@@ -27,6 +27,7 @@ __all__ = [
     "SubModel",
     "SubNodeField",
     "abs",
+    "along",
     "arc",
     "barycenter",
     "beam_deformation",
@@ -853,27 +854,6 @@ class Evolution:
     def out_of_range(self) -> builtins.str:
         r"""
         The stored out-of-range policy name.
-        """
-    @classmethod
-    def along(cls, field: NodeField, line: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Evolution:
-        r"""
-        The values of `field` along `line`, one curve per component: the value
-        against the distance travelled along the line.
-        
-        `line` is a POI1 mesh, read in the order of its cells, zone after zone:
-        that order is the path. The abscissa of a point is the length of the
-        path up to it — the sum of the straight distances from one point to the
-        next —, `0` at the first point; its ordinate, the value of the
-        component at that node (a node the field does not define reads zero).
-        `components=None` takes every component of the field, in its order;
-        each gives one `SubEvolution` of the returned `Evolution`, its
-        `ordinate_type` the component's name. A field of another mesh, or a
-        field at the Gauss points, is brought onto the line's points first with
-        `pyrucast.node_field.project`.
-        
-        Raises when `line` is not POI1, when two consecutive points coincide,
-        for a component the field does not carry, and when the field and
-        `line` hang from different `Coords`.
         """
     def shared_abscissas(self) -> builtins.list[builtins.float]:
         r"""
@@ -2572,26 +2552,6 @@ class NodeField:
         r"""
         Divide `component` by `scalar` on every zone that defines it.
         """
-    def along(self, line: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Evolution:
-        r"""
-        The values of this field along `line`, one curve per component: the value
-        against the distance travelled along the line.
-        
-        `line` is a POI1 mesh, read in the order of its cells, zone after zone:
-        that order is the path. The abscissa of a point is the length of the
-        path up to it — the sum of the straight distances from one point to the
-        next —, `0` at the first point; its ordinate, the value of the
-        component at that node (a node the field does not define reads zero).
-        `components=None` takes every component of the field, in its order;
-        each gives one `SubEvolution` of the returned `Evolution`, its
-        `ordinate_type` the component's name. A field of another mesh, or a
-        field at the Gauss points, is brought onto the line's points first with
-        `pyrucast.node_field.project`.
-        
-        Raises when `line` is not POI1, when two consecutive points coincide,
-        for a component the field does not carry, and when the field and
-        `line` hang from different `Coords`.
-        """
     def __new__(cls, support: typing.Any, components: typing.Sequence[builtins.str]) -> NodeField:
         r"""
         `NodeField(support, components)` — zero-initialized field. With a
@@ -2837,6 +2797,26 @@ class NodeField:
         (`f(ξ_g) = Σ_i f_i N_i(ξ_g)`), turning a per-node `NodeField` into a
         per-element `ElementField` with the same component names. Cast3M `CHAN`
         (nodes → Gauss).
+        """
+    def along(self, line: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Evolution:
+        r"""
+        The values of `field` along `line`, one curve per component: the value
+        against the distance travelled along the line.
+        
+        `line` is a POI1 mesh, read in the order of its cells, zone after zone:
+        that order is the path. The abscissa of a point is the length of the
+        path up to it — the sum of the straight distances from one point to the
+        next —, `0` at the first point; its ordinate, the value of the
+        component at that node (a node the field does not define reads zero).
+        `components=None` takes every component of the field, in its order;
+        each gives one `SubEvolution` of the returned `Evolution`, its
+        `ordinate_type` the component's name. A field of another mesh, or a
+        field at the Gauss points, is brought onto the line's points first with
+        `pyrucast.node_field.project`.
+        
+        Raises when `line` is not POI1, when two consecutive points coincide,
+        for a component the field does not carry, and when the field and
+        `line` hang from different `Coords`.
         """
     def abs(self) -> NodeField:
         r"""
@@ -4171,6 +4151,27 @@ class SubNodeField:
 def abs(field: typing.Any) -> typing.Any:
     r"""
     Element-wise absolute value of a field.
+    """
+
+def along(field: NodeField, line: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Evolution:
+    r"""
+    The values of `field` along `line`, one curve per component: the value
+    against the distance travelled along the line.
+    
+    `line` is a POI1 mesh, read in the order of its cells, zone after zone:
+    that order is the path. The abscissa of a point is the length of the
+    path up to it — the sum of the straight distances from one point to the
+    next —, `0` at the first point; its ordinate, the value of the
+    component at that node (a node the field does not define reads zero).
+    `components=None` takes every component of the field, in its order;
+    each gives one `SubEvolution` of the returned `Evolution`, its
+    `ordinate_type` the component's name. A field of another mesh, or a
+    field at the Gauss points, is brought onto the line's points first with
+    `pyrucast.node_field.project`.
+    
+    Raises when `line` is not POI1, when two consecutive points coincide,
+    for a component the field does not carry, and when the field and
+    `line` hang from different `Coords`.
     """
 
 def arc(a: Node, center: Node, b: Node, n_elems: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:

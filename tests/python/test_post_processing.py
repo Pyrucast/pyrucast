@@ -94,14 +94,14 @@ def test_along_gives_one_curve_per_component_against_the_distance():
         field[0].set_value(node, "T", t)
         field[0].set_value(node, "q", -t)
 
-    every = pc.Evolution.along(field, line)
+    every = pc.evolution.along(field, line)
     assert [sub.ordinate_type() for sub in every] == ["T", "q"]
     asked = field.along(line, ["q"])
     assert len(asked) == 1
     assert asked[0].abscissas() == pytest.approx([0.0, 3.0, 7.0], abs=1e-12)
     assert [asked[0].interpolate(s) for s in (0.0, 3.0, 7.0)] == [-10.0, -40.0, -80.0]
     with pytest.raises(Exception, match="POI1"):
-        pc.Evolution.along(field, pc.mesh.line(nodes[0], nodes[1], 2))
+        pc.evolution.along(field, pc.mesh.line(nodes[0], nodes[1], 2))
 
 
 def _bar_in_tension(kinematics="full_3d"):

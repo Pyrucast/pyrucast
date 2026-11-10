@@ -91,13 +91,13 @@ pub fn project(
     tol: f64,
 ) -> PyResult<PyNodeField> {
     if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
-        project_nodes(f, mesh, target, tol)
+        project_node(f, mesh, target, tol)
     } else if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
-        project_cells(f, mesh, target, tol)
+        project_element(f, mesh, target, tol)
     } else if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
-        project_sub_nodes(f, mesh, target, tol)
+        project_sub_node(f, mesh, target, tol)
     } else if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
-        project_sub_cells(f, mesh, target, tol)
+        project_sub_element(f, mesh, target, tol)
     } else {
         Err(PyTypeError::new_err(
             "project: expected a NodeField, SubNodeField, ElementField or SubElementField",
@@ -123,14 +123,14 @@ pub fn project(
 #[py_op(method_on = PyNodeField, name = "project")]
 #[pyfunction]
 #[pyo3(signature = (field, mesh, target, tol=1e-6))]
-pub fn project_nodes(
+pub fn project_node(
     field: PyRef<PyNodeField>,
     mesh: PyRef<PyMesh>,
     target: PyRef<PyMesh>,
     tol: f64,
 ) -> PyResult<PyNodeField> {
     Ok(PyNodeField {
-        inner: crate::ops::node_field::project(&field.inner, &mesh.inner, &target.inner, tol)?,
+        inner: crate::ops::node_field::project_node(&field.inner, &mesh.inner, &target.inner, tol)?,
     })
 }
 
@@ -139,7 +139,7 @@ pub fn project_nodes(
 #[py_op(method_on = PySubNodeField, name = "project")]
 #[pyfunction]
 #[pyo3(signature = (field, mesh, target, tol=1e-6))]
-pub fn project_sub_nodes(
+pub fn project_sub_node(
     field: PyRef<PySubNodeField>,
     mesh: PyRef<PyMesh>,
     target: PyRef<PyMesh>,
@@ -148,7 +148,7 @@ pub fn project_sub_nodes(
     let mut whole = crate::containers::node_field::NodeField::default();
     whole.add_sub(field.handle.clone())?;
     Ok(PyNodeField {
-        inner: crate::ops::node_field::project(&whole, &mesh.inner, &target.inner, tol)?,
+        inner: crate::ops::node_field::project_node(&whole, &mesh.inner, &target.inner, tol)?,
     })
 }
 
@@ -165,7 +165,7 @@ pub fn project_sub_nodes(
 #[py_op(method_on = PyElementField, name = "project")]
 #[pyfunction]
 #[pyo3(signature = (field, mesh, target, tol=1e-6))]
-pub fn project_cells(
+pub fn project_element(
     field: PyRef<PyElementField>,
     mesh: PyRef<PyMesh>,
     target: PyRef<PyMesh>,
@@ -186,7 +186,7 @@ pub fn project_cells(
 #[py_op(method_on = PySubElementField, name = "project")]
 #[pyfunction]
 #[pyo3(signature = (field, mesh, target, tol=1e-6))]
-pub fn project_sub_cells(
+pub fn project_sub_element(
     field: PyRef<PySubElementField>,
     mesh: PyRef<PyMesh>,
     target: PyRef<PyMesh>,

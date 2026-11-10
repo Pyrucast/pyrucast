@@ -107,12 +107,6 @@ plusieurs » de `CONVENTIONS.md`.
 « parent » géométrique qui la définirait. On compose ensuite les courbes par
 zone avec `|` (cf. [Évolution](../evolution.md)).
 
-Les valeurs d'un champ **le long d'une ligne** sont un constructeur de
-l'agrégat : `Evolution::along(field: &NodeField, line: &Mesh, components:
-&[&str]) -> Evolution` ↔ `pyrucast.Evolution.along(field, line,
-components=None)`, aussi méthode `field.along(line, components=None)` — une
-courbe par composante, `None` les prenant toutes.
-
 ## Fonctions ↔ fonctions
 
 Les fonctions `ops` prennent leurs conteneurs **par référence** et renvoient
@@ -199,8 +193,7 @@ Les mailleurs longs (`triangulate_surface`, `pave_surface`, `grid_surface`,
 | `positions(mesh: &Mesh, components: Option<Vec<String>>) -> NodeField` | `positions(mesh, components=None) -> NodeField` |
 | `divergence(field: &ElementField, prefix: &str) -> NodeField` | `divergence(field, prefix) -> NodeField` |
 | `restrict(field: &NodeField, mesh: &Mesh) -> NodeField` | `restrict(field, mesh) -> NodeField` |
-| `project(field: &NodeField, mesh: &Mesh, target: &Mesh, tol: f64) -> NodeField` | `project(field, mesh, target, tol=1e-6) -> NodeField`, aussi méthode `field.project(mesh, target, tol=1e-6)` (interpolé par les mailles de `mesh` aux nœuds de `target`, 0 hors de `mesh`) |
-| `project_element(field: &ElementField, mesh: &Mesh, target: &Mesh, tol: f64) -> NodeField` | `project(field, mesh, target, tol=1e-6) -> NodeField` avec un `ElementField` (ou `SubElementField`), aussi méthode `field.project(mesh, target)` (chaque point prend la valeur des points de Gauss de sa maille, rien n'est moyenné entre mailles) |
+| `project_node(field: &NodeField, mesh: &Mesh, target: &Mesh, tol: f64) -> NodeField` / `project_element(field: &ElementField, …) -> NodeField` | `project(field, mesh, target, tol=1e-6) -> NodeField` (dispatch par type, aussi méthode `field.project(mesh, target, tol=1e-6)` sur les quatre saveurs de champ ; un champ aux nœuds est interpolé par les mailles de `mesh`, un champ aux points de Gauss est lu par l'ajustement propre à chaque maille, rien n'est moyenné entre mailles ; 0 hors de `mesh`) |
 | `restrict_like(field: &NodeField, target: &NodeField) -> NodeField` | `restrict_like(field, target) -> NodeField` |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 | `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` |
@@ -246,6 +239,12 @@ par la sortie.
 | `material_field_per_sub_model(model: &Model, per_sub_model: &[&[(&str, f64)]]) -> ElementField` | `material_field_per_sub_model(model, components_and_values_per_sub_model) -> ElementField` |
 | `behavior::initial_state(model: &Model, materials: &ElementField) -> ElementField` | `initial_state(model, materials) -> ElementField` (l'état de repos, `prev` du premier pas) |
 | `behavior::integrate(model, deformation, prev: &ElementField, materials, dt: Option<f64>) -> ElementField` | `integrate_behavior(model, deformation, materials, prev, dt=None) -> ElementField` (`COMP`) |
+
+### `ops::evolution` — opérateurs produisant une évolution
+
+| Rust (`ops::evolution::…`) | Python (`pyrucast.evolution.…`) |
+|---|---|
+| `along(field: &NodeField, line: &Mesh, components: &[&str]) -> Evolution` | `along(field, line, components=None) -> Evolution`, aussi méthode `field.along(line, components=None)` (une courbe par composante le long d'une ligne `POI1`, abscisse = distance parcourue ; `None` prend toutes les composantes) |
 
 ### `ops::measure` — réductions à un nombre
 

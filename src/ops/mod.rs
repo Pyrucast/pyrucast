@@ -14,6 +14,8 @@
 //! - [`node_field`] — nodal derivations and nodal assembly.
 //! - [`element_field`] — kinematics, material data, constitutive law.
 //! - [`matrix`] — the assemblers proper (`stiffness`, `mass`, `tangent`, …).
+//! - [`evolution`] — curves computed from other containers (a field along a
+//!   line).
 //! - [`coords`] — the two operators that write back into the coordinates.
 //!
 //! A third case: the **generic** operator, whose product is a container —
@@ -49,15 +51,18 @@
 //! [`node_field::consolidate`](fn@node_field::consolidate) and [`element_field::consolidate`](fn@element_field::consolidate), rather
 //! than three suffixed functions in one place.
 //!
-//! Nothing here produces a `FiniteElementSpace` or an `Evolution`, and that
-//! is not an oversight: those are **declared** through named constructors on
-//! the type itself, never built by transformation. A `Model` is not in that
+//! Nothing here produces a `FiniteElementSpace`, and that is not an
+//! oversight: it is **declared** through named constructors on the type itself,
+//! never built by transformation. An `Evolution` is mostly declared the same
+//! way, from samples it is given; the few that are *computed* from other
+//! containers — a field read along a line — are operators, in [`evolution`]. A `Model` is not in that
 //! company: its declarations form a *catalogue* of physics — two dozen of
 //! them and growing — which is a module's job, not a type's surface. They
 //! live in [`model`], filed by product like every other operator.
 
 pub mod coords;
 pub mod element_field;
+pub mod evolution;
 pub mod export;
 pub mod field;
 pub mod geom;

@@ -232,7 +232,7 @@ ligne = pyrucast.mesh.poi1_from_nodes(trajet)
 releve = pyrucast.NodeField(ligne, ["T"])
 for noeud, t in zip(trajet, [20.0, 50.0, 90.0]):
     releve[0].set_value(noeud, "T", t)
-le_long = pyrucast.Evolution.along(releve, ligne)  # aussi releve.along(ligne)
+le_long = pyrucast.evolution.along(releve, ligne)  # aussi releve.along(ligne)
 print(le_long[0].abscissas())  # [0.0, 3.0, 7.0]
 # ANCHOR_END: le_long
 
