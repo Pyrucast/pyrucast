@@ -19,8 +19,8 @@ chargement réparti `flux`), [Comportement](comportement.md), [Solveur](solveur.
 |---|---|
 | `positions(mesh, components=None)` | un `NodeField` portant les coordonnées des nœuds (`"X"`, `"Y"`, `"Z"`), une zone par sous-maillage. `None` ⇒ tous les axes présents dans la dimension du `Coords`. |
 | `coords.set(field, components=None)` | **écrit** les coordonnées du `Coords` actif depuis un champ `"X"/"Y"/"Z"`. |
-| `displace(field, components=None)` | **ajoute** un champ de déplacement aux coordonnées (chaque nœud distinct traité **une seule fois**). |
-| `coords.displace_from(field, reference, target, components=None)` | **pose** la configuration `target` en `X + u`, en absolu à partir de la configuration `reference` : rappelée, elle repart de `X`, rien ne s'accumule. La configuration active ne change pas (Cast3M `FORM`). |
+| `displace(field, components=None)` | **ajoute** un champ de déplacement aux coordonnées (chaque nœud distinct traité **une seule fois**). Un nœud qui ne porte aucune des composantes, comme un nœud multiplicateur d'une solution, ne bouge pas. |
+| `coords.displace_from(field, reference, target, components=None)` | **pose** la configuration `target` en `X + u`, en absolu à partir de la configuration `reference` : rappelée, elle repart de `X`, rien ne s'accumule. La configuration active ne change pas (Cast3M `FORM`). Un nœud qui ne porte aucune des composantes reste à sa position de référence : la solution d'un `solve` se donne telle quelle. |
 | `Coords.in_config(config)` (méthode) | `with coords.in_config(i):` le bloc calcule sur la configuration `config` ; celle d'avant redevient active à la sortie, même après une exception. Voir [Coords](../coords.md#plusieurs-configurations). |
 
 `positions` est le pont géométrie → champ : on en tire un `NodeField` qu'on

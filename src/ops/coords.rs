@@ -94,13 +94,46 @@ fn per_node_values(field: &NodeField, comps: &[String]) -> Result<(Vec<NodeId>, 
             });
         });
     }
-    if !missing.is_empty() {
-        let view = field.view()?;
-        for (i, k) in missing {
-            values[i * comps.len() + k] = view.value(nodes[i], &comps[k])?;
+    if missing.is_empty() {
+        return Ok((nodes, values));
+    }
+    // A node that carries none of the components — a multiplier node of a
+    // solution — is not displaced at all: it stays where it is. A node that
+    // carries some of them only is an error: half a displacement is no
+    // displacement.
+    let view = field.view()?;
+    let mut undefined = vec![0usize; nodes.len()];
+    let mut first_gap: Vec<Option<usize>> = vec![None; nodes.len()];
+    for (i, k) in missing {
+        match view.value_opt(nodes[i], &comps[k]) {
+            Some(v) => values[i * comps.len() + k] = v,
+            None => {
+                undefined[i] += 1;
+                first_gap[i].get_or_insert(k);
+            }
         }
     }
-    Ok((nodes, values))
+    for (i, &n) in undefined.iter().enumerate() {
+        if n > 0 && n < comps.len() {
+            let k = first_gap[i].unwrap_or(0);
+            return Err(PyrucastError::Message(format!(
+                "no subfield defines (node {}, component {})",
+                nodes[i], comps[k]
+            )));
+        }
+    }
+    if undefined.iter().all(|&n| n == 0) {
+        return Ok((nodes, values));
+    }
+    let (mut kept_nodes, mut kept_values) = (Vec::with_capacity(nodes.len()), Vec::new());
+    kept_values.reserve(values.len());
+    for (i, node) in nodes.into_iter().enumerate() {
+        if undefined[i] < comps.len() {
+            kept_nodes.push(node);
+            kept_values.extend_from_slice(&values[i * comps.len()..(i + 1) * comps.len()]);
+        }
+    }
+    Ok((kept_nodes, kept_values))
 }
 
 /// **Set** node coordinates from `field` (absolute): for every distinct
@@ -218,7 +251,8 @@ pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()
 
 /// Lay configuration `target` at configuration `reference` displaced by
 /// `field` — `x = X + u`, in **absolute**: each node takes its `reference`
-/// position plus its value in `field`, a node the field does not define stays
+/// position plus its value in `field`, a node the field does not define, or
+/// that carries none of the components (a multiplier node of a solution), stays
 /// where the reference puts it. Called again with another `u`, it lands at
 /// `X + u` again: nothing accumulates, which a restarted substep or an
 /// accelerated iterate needs. The active configuration is left as it is.
@@ -446,6 +480,31 @@ mod tests {
         let c = coords.read();
         assert_eq!(c.position(a.id()).unwrap(), &[0.0, 0.0]);
         assert_eq!(c.position(b.id()).unwrap(), &[1.0, 1.0]);
+    }
+
+    #[test]
+    fn displace_from_leaves_a_node_carrying_no_component_in_place() {
+        // A solution field: `u_x`, `u_y` on `a`, and a multiplier node `m`
+        // carrying `lambda` only. `a` moves, `m` keeps its reference position.
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let m = Node::create_in(coords.clone(), &[5.0, 5.0]).unwrap();
+        let on_a = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+        let on_m = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&m)).unwrap());
+        let mut u = SubNodeField::from_poi1(&on_a, vec!["u_x".into(), "u_y".into()]).unwrap();
+        u.set_value(a.id(), "u_x", 1.0).unwrap();
+        u.set_value(a.id(), "u_y", 2.0).unwrap();
+        let mut lambda = SubNodeField::from_poi1(&on_m, vec!["lambda".into()]).unwrap();
+        lambda.set_value(m.id(), "lambda", 7.0).unwrap();
+        let mut f = NodeField::from_sub(lambda);
+        f.add_sub(Handle::new(u)).unwrap();
+
+        let deformed = coords.write().add_config("deformed");
+        displace_from(&f, 0, deformed, None).unwrap();
+        coords.write().select(deformed).unwrap();
+        let c = coords.read();
+        assert_eq!(c.position(a.id()).unwrap(), &[1.0, 2.0]);
+        assert_eq!(c.position(m.id()).unwrap(), &[5.0, 5.0]);
     }
 
     #[test]

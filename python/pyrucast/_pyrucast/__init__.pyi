@@ -4603,7 +4603,9 @@ def displace(field: NodeField, components: typing.Optional[typing.Sequence[built
     Displace nodes by `field` (incremental): `coord[a] += field.value(node,
     components[a])` on the active coordinate set. `components` lists one
     displacement-component name per spatial axis, in axis order; `None` →
-    `["u_x", "u_y", "u_z"][:dim]`. Mutates the field's `Coords` in place.
+    `["u_x", "u_y", "u_z"][:dim]`. Mutates the field's `Coords` in place. A
+    node carrying none of the components (a multiplier node of a solution)
+    does not move; one carrying some of them only is an error.
     """
 
 def displace_from(field: NodeField, reference: builtins.int, target: builtins.int, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
@@ -4611,8 +4613,9 @@ def displace_from(field: NodeField, reference: builtins.int, target: builtins.in
     Lay configuration `target` of the field's `Coords` at configuration
     `reference` displaced by `field`: `x = X + u`, in absolute — called again,
     it lands at `X + u` again, nothing accumulates. A node the field does not
-    define stays at its reference position; the active configuration is left as
-    it is. `components` names one displacement component per axis; `None` →
+    define, or that carries none of the components (a multiplier node of a
+    solution), stays at its reference position; the active configuration is
+    left as it is. `components` names one displacement component per axis; `None` →
     `["u_x", "u_y", "u_z"][:dim]`. Cast3M `FORM` with a displacement, without
     changing the active configuration.
     """
