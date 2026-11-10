@@ -89,6 +89,7 @@
   - [Thermique non linéaire](tutoriel/thermique-non-lineaire.md)
   - [Mécanique linéaire](tutoriel/mecanique-lineaire.md)
     - [Élasticité](tutoriel/mecanique-elastique.md)
+    - [Dilatation, matériau homogène](tutoriel/mecanique-dilatation.md)
   - [Calcul mécanique](tutoriel/mecanique.md)
   - [Compléments](tutoriel/complements.md)
 
