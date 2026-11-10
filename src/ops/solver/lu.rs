@@ -91,6 +91,7 @@ use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::Cancel;
 
+use super::scaling::RelationScaling;
 use super::SolveOptions;
 use faer::linalg::solvers::Solve;
 use faer::sparse::linalg::LltError;
@@ -512,6 +513,9 @@ pub(super) struct Factorization {
     /// life of a solve loop has no reason to hold its own eight bytes per DOF.
     vars: Arc<Vec<String>>,
     row_keys: Arc<Vec<DofKey>>,
+    /// The relations brought to the scale of the structure before factorizing
+    /// — `None` when the matrix holds none: it is then factorized as assembled.
+    scaling: Option<RelationScaling>,
 }
 
 impl Factorization {
@@ -519,8 +523,8 @@ impl Factorization {
     /// `options` names.
     pub(super) fn new(matrix: &Matrix, options: &SolveOptions) -> Result<Self> {
         let vars = matrix.dof_vars();
-        let row_keys = matrix.row_dof_keys()?;
-        let n_cols = matrix.col_dof_keys()?.len();
+        let (row_keys, col_keys) = matrix.dof_key_orders()?;
+        let n_cols = col_keys.len();
         if row_keys.len() != n_cols {
             return Err(PyrucastError::Message(format!(
                 "solve: matrix must be square; got {}×{}",
@@ -532,24 +536,48 @@ impl Factorization {
         // faer without ever being materialised in another form — and, when the
         // matrix declares itself symmetric, without even being turned around.
         let (offsets, cols, vals) = matrix.csr_arrays()?;
-        let factored = factorize_csr(
-            row_keys.len(),
-            offsets,
-            cols,
-            vals,
-            matrix.symmetric(),
-            options,
-        )?;
+        // A saddle-point is factorized with its relations at the structure's
+        // scale (see `scaling`): the values are then copied once, scaled.
+        let scaling = RelationScaling::of(&vars, &row_keys, &col_keys, offsets, cols, vals);
+        let factored = match &scaling {
+            Some(scale) => factorize_csr(
+                row_keys.len(),
+                offsets,
+                cols,
+                &scale.scale_csr(offsets, cols, vals),
+                matrix.symmetric() && scale.is_symmetric(),
+                options,
+            )?,
+            None => factorize_csr(
+                row_keys.len(),
+                offsets,
+                cols,
+                vals,
+                matrix.symmetric(),
+                options,
+            )?,
+        };
         Ok(Self {
             factored,
             vars,
             row_keys,
+            scaling,
         })
     }
 
-    /// Solve `A·x = b` for one right-hand side (descent/back-substitution only).
+    /// Solve `A·x = b` for one right-hand side (descent/back-substitution only;
+    /// a scaled saddle-point scales `b` on the way in and `x` on the way out).
     fn solve_vec(&self, b: &[f64]) -> Vec<f64> {
-        self.factored.solve_vec(b)
+        match &self.scaling {
+            Some(scale) => {
+                let mut x = b.to_vec();
+                scale.scale_rhs(&mut x);
+                self.factored.solve_in_place(&mut x);
+                scale.unscale_solution(&mut x);
+                x
+            }
+            None => self.factored.solve_vec(b),
+        }
     }
 
     /// Which factorization this one turned out to be — `"cholesky"` or `"lu"`.

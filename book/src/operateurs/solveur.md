@@ -134,6 +134,20 @@ l'ensemble actif factorise en LU quoi qu'on demande, parce que le système d'un
 statut n'est jamais symétrique (une relation inactive y devient la ligne
 `λ = 0`, sa colonne restant en place).
 
+**Les relations sont mises à l'échelle de la structure.** Par la voie des
+multiplicateurs, un système `[[K, Cᵀ], [C, 0]]` mêle deux ordres de grandeur :
+la raideur de la pièce (`E·h`, de l'ordre de 10⁹ pour de l'acier) et les
+coefficients des relations (1 pour un blocage). Factorisé tel quel, il perd
+de la précision justement sur les relations : les nœuds bloqués d'une pièce en
+acier gardaient quelques millionièmes du plus grand déplacement. Avant la
+factorisation, les lignes des relations (`imposed`) et les colonnes de leurs
+multiplicateurs (`lambda`) sont donc multipliées par la plus grande valeur
+diagonale du reste de la matrice, puis la solution est remise à l'échelle : la
+solution est la même, et les relations tiennent à l'arrondi près. La boucle de
+l'ensemble actif garde ses tolérances dans les unités d'origine (une réaction
+en newtons, un jeu en mètres). Cela coûte une copie des valeurs de la matrice,
+faite seulement quand elle porte des relations.
+
 ## Factorisation réutilisable (cache transparent)
 
 `solve` **factorise une fois, résout N fois**. Ce qui coûte est rangé **dans la

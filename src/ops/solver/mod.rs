@@ -69,6 +69,7 @@ mod eliminate;
 mod lu;
 pub mod methods;
 mod relations;
+mod scaling;
 mod unilateral;
 
 pub use lu::{SolveMethod, Verbosity};

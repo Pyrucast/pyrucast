@@ -53,6 +53,7 @@ use std::sync::Arc;
 
 use super::lu::{self, factorize_csc_arrays, lu_solve_vec, SparseLu};
 use super::relations::relation_rows;
+use super::scaling::RelationScaling;
 use super::SolveOptions;
 
 type NamedDof = (NodeId, String);
@@ -145,6 +146,12 @@ pub(super) struct Inequality {
     pub(super) term_cols: Vec<(usize, f64)>,
     /// `GreaterEqual` or `LessEqual` (equalities are not collected).
     pub(super) sense: RelationSense,
+    /// The factors the system scaled this relation by (see
+    /// [`super::scaling`]): its multiplier column's and its row's, `1` when the
+    /// system is unscaled. The sign tests read them to keep their tolerance in
+    /// the original units — a reaction in newtons, a gap in metres.
+    pub(super) lambda_scale: f64,
+    pub(super) row_scale: f64,
 }
 
 /// The Schur/Delassus artifacts cached across solves (matrix-invariant): the LU
@@ -221,8 +228,12 @@ struct ActiveSetState {
     /// [`Matrix::field_from_col_values`], which reads the column layout from
     /// the assembled matrix itself).
     row_dofs: Vec<NamedDof>,
-    /// The loop over the matrix's inequality relations.
+    /// The loop over the matrix's inequality relations — their coefficients
+    /// already scaled when `scaling` is set.
     set: ActiveSet,
+    /// The relations brought to the structure's scale (see
+    /// [`super::scaling`]); `None` when nothing is scaled.
+    scaling: Option<RelationScaling>,
 }
 
 /// The active-set path of [`super::solve`], for a matrix that carries
@@ -257,13 +268,22 @@ pub(super) fn solve(
     }
     cancel.check()?;
 
-    // ── Step 2 — full rhs (g at the constraint rows) + base CSC ────────
-    let b_full = rhs.gather(&state.row_dofs)?;
-    let csc = matrix.to_csc()?;
+    // ── Step 2 — full rhs (g at the constraint rows) + base CSC, both at
+    //    the structure's scale when the relations are scaled ────────────
+    let mut b_full = rhs.gather(&state.row_dofs)?;
+    let mut csc = matrix.to_csc()?;
+    if let Some(scale) = &state.scaling {
+        let (col_offsets, row_indices, values) = csc.csc_data_mut();
+        scale.scale_csc(col_offsets, row_indices, values);
+        scale.scale_rhs(&mut b_full);
+    }
 
     // ── Step 3 — the loop; the solution wrapped on the blocks' own column
     //    supports (`x` is in the assembled column order) ────────────────
-    let x = state.set.run(&csc, &b_full, options, cancel)?;
+    let mut x = state.set.run(&csc, &b_full, options, cancel)?;
+    if let Some(scale) = &state.scaling {
+        scale.unscale_solution(&mut x);
+    }
     matrix.field_from_col_values(&x)
 }
 
@@ -280,11 +300,13 @@ fn update_status(
     let mut changed = false;
     for (ineq, active) in inequalities.iter().zip(status.iter_mut()) {
         if *active {
-            // Active: the reaction must not pull. λ = −μ (see module doc).
+            // Active: the reaction must not pull. λ = −μ (see module doc). On a
+            // scaled system `x` holds λ / lambda_scale: the tolerance follows.
             let lambda = x[ineq.lambda_col];
+            let tol_lambda = tol / ineq.lambda_scale;
             let release = match ineq.sense {
-                RelationSense::GreaterEqual => lambda > tol,
-                RelationSense::LessEqual => lambda < -tol,
+                RelationSense::GreaterEqual => lambda > tol_lambda,
+                RelationSense::LessEqual => lambda < -tol_lambda,
                 RelationSense::Equality => unreachable!("equalities are not collected"),
             };
             if release {
@@ -293,11 +315,13 @@ fn update_status(
             }
         } else {
             // Inactive: the gap C·u − g must stay on the feasible side.
+            // On a scaled system the row, hence the gap, carries row_scale.
             let cu: f64 = ineq.term_cols.iter().map(|&(c, a)| a * x[c]).sum();
             let gap = cu - b_full[ineq.row];
+            let tol_gap = tol * ineq.row_scale;
             let violated = match ineq.sense {
-                RelationSense::GreaterEqual => gap < -tol,
-                RelationSense::LessEqual => gap > tol,
+                RelationSense::GreaterEqual => gap < -tol_gap,
+                RelationSense::LessEqual => gap > tol_gap,
                 RelationSense::Equality => unreachable!("equalities are not collected"),
             };
             if violated {
@@ -609,19 +633,37 @@ fn build_state(matrix: &Matrix) -> Result<ActiveSetState> {
             n_cols
         )));
     }
+    let vars = matrix.dof_vars();
+    let (row_keys, col_keys) = matrix.dof_key_orders()?;
+    let (offsets, cols, vals) = matrix.csr_arrays()?;
+    let scaling = RelationScaling::of(&vars, &row_keys, &col_keys, offsets, cols, vals);
+    // The coefficients of a relation follow the system they are read against:
+    // scaled with it, each test keeping its two factors.
+    let row_of = |r: usize| scaling.as_ref().map_or(1.0, |s| s.row(r));
+    let col_of = |c: usize| scaling.as_ref().map_or(1.0, |s| s.col(c));
     let inequalities = relation_rows(matrix)?
         .into_iter()
         .filter(|r| r.sense != RelationSense::Equality)
-        .map(|r| Inequality {
-            row: r.row,
-            lambda_col: r.lambda_col,
-            term_cols: r.terms,
-            sense: r.sense,
+        .map(|r| {
+            let row_scale = row_of(r.row);
+            Inequality {
+                row: r.row,
+                lambda_col: r.lambda_col,
+                term_cols: r
+                    .terms
+                    .into_iter()
+                    .map(|(c, a)| (c, row_scale * a * col_of(c)))
+                    .collect(),
+                sense: r.sense,
+                lambda_scale: col_of(r.lambda_col),
+                row_scale,
+            }
         })
         .collect();
     Ok(ActiveSetState {
         row_dofs,
         set: ActiveSet::new(inequalities),
+        scaling,
     })
 }
 
