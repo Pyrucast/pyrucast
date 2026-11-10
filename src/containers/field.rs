@@ -1140,20 +1140,21 @@ where
 
     /// Smallest value of `component` across the subs defining it — or, with
     /// `None`, the smallest value of the **whole** field, every component of
-    /// every zone pooled (see [`SubField::min`] for what pooling means).
+    /// every zone pooled (see [`SubField::min`] for what pooling means). A zone
+    /// with an empty support has no value to give and is passed over.
     ///
-    /// Errors if no sub defines the component; with `None`, if no zone holds
-    /// a single value.
+    /// Errors if no sub defines the component, or if every one that does is
+    /// empty; with `None`, if no zone holds a single value.
     fn min(&self, component: Option<&str>) -> Result<f64> {
         fold_subs(self, component, "min", f64::min)
     }
 
     /// Largest value of `component` across the subs defining it — or, with
     /// `None`, the largest value of the **whole** field (see
-    /// [`SubField::min`]).
+    /// [`SubField::min`]). A zone with an empty support is passed over.
     ///
-    /// Errors if no sub defines the component; with `None`, if no zone holds
-    /// a single value.
+    /// Errors if no sub defines the component, or if every one that does is
+    /// empty; with `None`, if no zone holds a single value.
     fn max(&self, component: Option<&str>) -> Result<f64> {
         fold_subs(self, component, "max", f64::max)
     }
@@ -1756,18 +1757,17 @@ where
     // ⇒ thread-count-independent.
     //
     // A zone that has nothing to say contributes `None` rather than an error:
-    // a zone that does not define the component, or — when every component is
-    // pooled — a zone with no value at all. The error is raised once, at the
-    // end, if *no* zone contributed.
+    // a zone that does not define the component, or a zone with no value at all
+    // — an empty support, which a selection leaves behind on the zones it did
+    // not reach. The error is raised once, at the end, if *no* zone
+    // contributed.
     let handles: Vec<&Handle<A::Sub>> = agg.iter().collect();
     let per_sub: Vec<Option<f64>> = handles
         .par_iter()
         .map(|h| -> Result<Option<f64>> {
             let s = h.read();
-            let silent = match component {
-                Some(name) => s.component_index(name).is_none(),
-                None => s.values().is_empty(),
-            };
+            let silent = s.values().is_empty()
+                || component.is_some_and(|name| s.component_index(name).is_none());
             if silent {
                 Ok(None)
             } else {
@@ -1778,6 +1778,9 @@ where
     let acc = per_sub.into_iter().flatten().reduce(op);
     acc.ok_or_else(|| {
         PyrucastError::Message(match component {
+            Some(name) if agg.iter().any(|h| h.read().component_index(name).is_some()) => {
+                format!("{op_name}: no value for component {name} (empty support)")
+            }
             Some(name) => format!("{}: no sub-field defines component {}", op_name, name),
             None => format!("{}: the field holds no value", op_name),
         })
@@ -3660,5 +3663,38 @@ mod tests {
             .to_string();
         assert!(err.contains("subspaces 0 and 1"), "{err}");
         assert!(ElementField::with(&fes_twice, &[vec!["E".into()], vec!["E".into()]]).is_err());
+    }
+
+    /// A zone on an empty support — what a selection leaves on the zones it
+    /// did not reach — has no value to give: `min` / `max` pass it over, and
+    /// only a field whose every defining zone is empty has no answer.
+    #[test]
+    fn min_and_max_pass_over_a_zone_with_an_empty_support() {
+        let full = make_node_field(&[3.0, -2.0, 7.0]);
+        let coords = full.support().read().coords();
+        let empty_support = Handle::new(SubMesh::new(coords, ElementType::POI1));
+        let empty = SubNodeField::from_poi1(&empty_support, vec!["T".into()]).unwrap();
+        let mut field = NodeField::default();
+        field.add_sub(Handle::new(empty)).unwrap();
+        field.add_sub(Handle::new(full)).unwrap();
+        assert_eq!(Field::max(&field, Some("T")).unwrap(), 7.0);
+        assert_eq!(Field::min(&field, Some("T")).unwrap(), -2.0);
+
+        let mut only_empty = NodeField::default();
+        only_empty
+            .add_sub(Handle::new(
+                SubNodeField::from_poi1(&empty_support, vec!["T".into()]).unwrap(),
+            ))
+            .unwrap();
+        let err = Field::max(&only_empty, Some("T")).unwrap_err();
+        assert!(
+            format!("{err}").contains("empty support"),
+            "unexpected: {err}"
+        );
+        let err = Field::max(&only_empty, Some("w")).unwrap_err();
+        assert!(
+            format!("{err}").contains("no sub-field"),
+            "unexpected: {err}"
+        );
     }
 }
