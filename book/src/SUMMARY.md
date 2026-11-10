@@ -91,6 +91,8 @@
     - [Élasticité](tutoriel/mecanique-elastique.md)
     - [Dilatation, matériau homogène](tutoriel/mecanique-dilatation.md)
     - [Dilatation, matériau hétérogène](tutoriel/mecanique-heterogene.md)
+  - [Mécanique non linéaire](tutoriel/mecanique-non-lineaire.md)
+    - [Plasticité](tutoriel/plasticite.md)
   - [Calcul mécanique](tutoriel/mecanique.md)
   - [Compléments](tutoriel/complements.md)
 
