@@ -43,6 +43,32 @@ plus proche (`ops::geom::project_points`), \\(\xi\\) ramené au domaine de
 référence : un nœud face à un bord se projette sur le bord. Il est ensuite
 figé : petits déplacements, petits glissements.
 
+> **Une surface maître courbe reste courbe.** La projection se fait sur la
+> facette elle-même, avec ses propres fonctions de forme : une facette `TRI6`,
+> `QUA8` ou `QUA9` est courbe, et le point apparié comme sa normale sont pris
+> sur cette surface courbe. Pour une pièce maillée en éléments quadratiques,
+> on donne donc comme surface maître les faces du maillage telles quelles : il
+> ne faut **pas** les découper en triangles plats `TRI3`.
+>
+> Un triangle plat tendu entre deux nœuds d'un bord courbe en suit la corde,
+> et la corde s'écarte du vrai bord. Dans un alésage, elle passe à l'intérieur
+> du trou : un nœud esclave posé sur le vrai bord se retrouve derrière la
+> facette, compté comme déjà enfoncé, et le solveur le repousse. L'axe entre
+> alors en force dans un trou devenu trop petit, et les deux pièces sont
+> chargées avant que le chargement commence. Sur une surface bombée vers
+> l'esclave, c'est l'inverse : un jeu qui n'existe pas, et un contact qui se
+> ferme trop tard.
+>
+> L'écart est la flèche de la corde, \\(r\\,(1 - \cos(\Delta\theta/2))\\) pour
+> un bord de rayon \\(r\\) dont la facette couvre l'angle \\(\Delta\theta\\).
+> Raffiner le maillage le réduit vite, puisqu'il se divise par quatre quand la
+> taille des mailles est divisée par deux ; mais un contact se joue sur de
+> petits déplacements, et cet écart s'y ajoute tel quel. Une face quadratique
+> passe aussi par les nœuds milieux et se courbe entre eux : elle reste bien
+> plus près du vrai bord. Dans un maillage linéaire, les faces `TRI3` et
+> `QUA4` sont plates de toute façon : la flèche est là, et seul le raffinement
+> du bord courbe la réduit.
+
 **Le jeu est un chargement que porte le contact.** Le second membre de chaque
 relation est \\(-g_0\\), une donnée géométrique : `external_forces` le rend, à
 la composante `imposed` de chaque nœud multiplicateur, avec les autres
