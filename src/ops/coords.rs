@@ -165,7 +165,7 @@ pub fn set(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
 /// `n`, `coord[a] += field.value(n, components[a])` on the active
 /// coordinate set — an interface node shared by several zones is displaced
 /// exactly once. `components` lists one displacement-component name per
-/// spatial axis, in axis order; `None` → `["ux", "uy", "uz"][..dim]`.
+/// spatial axis, in axis order; `None` → `["u_x", "u_y", "u_z"][..dim]`.
 /// In-place on the field's `Coords`.
 ///
 /// ```
@@ -199,9 +199,9 @@ pub fn set(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
 /// # }
 /// // Adds a displacement to the positions instead of replacing them — the
 /// // façon de passer en configuration déformée.
-/// // The default components here are `ux`, `uy`, `uz`.
-/// let u = champ(vec!["ux".into(), "uy".into()]);
-/// u.get(0)?.write().add_to_component("ux", 0.5)?;
+/// // The default components here are `u_x`, `u_y`, `u_z`.
+/// let u = champ(vec!["u_x".into(), "u_y".into()]);
+/// u.get(0)?.write().add_to_component("u_x", 0.5)?;
 /// ops_coords::displace(&u, None)?;
 /// assert_eq!(n[0].position()?, vec![0.5, 0.0]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -209,7 +209,7 @@ pub fn set(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
 pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
     let coords = field.coords()?;
     let dim = coords.read().dim() as usize;
-    let comps = resolve_axis_components(field, components, dim, &["ux", "uy", "uz"])?;
+    let comps = resolve_axis_components(field, components, dim, &["u_x", "u_y", "u_z"])?;
     let (nodes, increments) = per_node_values(field, &comps)?;
     coords
         .write()
@@ -223,7 +223,7 @@ pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()
 /// `X + u` again: nothing accumulates, which a restarted substep or an
 /// accelerated iterate needs. The active configuration is left as it is.
 /// `components` names one displacement component per axis; `None` →
-/// `["ux", "uy", "uz"][..dim]`, as for [`displace`](fn@displace).
+/// `["u_x", "u_y", "u_z"][..dim]`, as for [`displace`](fn@displace).
 ///
 /// Errors: as [`Coords::displace_from`](crate::coords::Coords::displace_from),
 /// and a component the field lacks.
@@ -262,7 +262,7 @@ pub fn displace_from(
 ) -> Result<()> {
     let coords = field.coords()?;
     let dim = coords.read().dim() as usize;
-    let comps = resolve_axis_components(field, components, dim, &["ux", "uy", "uz"])?;
+    let comps = resolve_axis_components(field, components, dim, &["u_x", "u_y", "u_z"])?;
     let (nodes, increments) = per_node_values(field, &comps)?;
     coords.write().displace_from(
         reference,
@@ -364,10 +364,10 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
         let support = Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
-        let mut d = SubNodeField::from_poi1(&support, vec!["ux".into(), "uy".into()]).unwrap();
-        d.set_value(a.id(), "ux", 5.0).unwrap();
-        d.set_value(a.id(), "uy", -1.0).unwrap();
-        d.set_value(b.id(), "ux", 2.0).unwrap();
+        let mut d = SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into()]).unwrap();
+        d.set_value(a.id(), "u_x", 5.0).unwrap();
+        d.set_value(a.id(), "u_y", -1.0).unwrap();
+        d.set_value(b.id(), "u_x", 2.0).unwrap();
 
         displace(&NodeField::from_sub(d), None).unwrap();
         {
@@ -388,12 +388,12 @@ mod tests {
             sm.add_cell(&[s.id()]).unwrap();
             mesh.add_sub(Handle::new(sm)).unwrap();
         }
-        let f = NodeField::new(&mesh, vec!["ux".into()]).unwrap();
+        let f = NodeField::new(&mesh, vec!["u_x".into()]).unwrap();
         for i in 0..2 {
             f.get(i)
                 .unwrap()
                 .write()
-                .set_value(s.id(), "ux", 0.5)
+                .set_value(s.id(), "u_x", 0.5)
                 .unwrap();
         }
 
@@ -403,18 +403,18 @@ mod tests {
 
     #[test]
     fn displace_reads_each_component_where_a_zone_holds_it() {
-        // One support, `ux` in one zone and `uy` in the other: each node moves
+        // One support, `u_x` in one zone and `u_y` in the other: each node moves
         // by both.
         let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
         let support = Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
-        let mut ux = SubNodeField::from_poi1(&support, vec!["ux".into()]).unwrap();
-        ux.set_value(a.id(), "ux", 1.0).unwrap();
-        ux.set_value(b.id(), "ux", 2.0).unwrap();
-        let mut uy = SubNodeField::from_poi1(&support, vec!["uy".into()]).unwrap();
-        uy.set_value(a.id(), "uy", 3.0).unwrap();
-        uy.set_value(b.id(), "uy", 4.0).unwrap();
+        let mut ux = SubNodeField::from_poi1(&support, vec!["u_x".into()]).unwrap();
+        ux.set_value(a.id(), "u_x", 1.0).unwrap();
+        ux.set_value(b.id(), "u_x", 2.0).unwrap();
+        let mut uy = SubNodeField::from_poi1(&support, vec!["u_y".into()]).unwrap();
+        uy.set_value(a.id(), "u_y", 3.0).unwrap();
+        uy.set_value(b.id(), "u_y", 4.0).unwrap();
         let mut f = NodeField::from_sub(ux);
         f.add_sub(Handle::new(uy)).unwrap();
 
@@ -426,23 +426,23 @@ mod tests {
 
     #[test]
     fn displace_refuses_a_node_lacking_a_component_and_moves_nothing() {
-        // `a` holds `ux` and `uy`, `b` only `ux`.
+        // `a` holds `u_x` and `u_y`, `b` only `u_x`.
         let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
         let both = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let alone = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&b)).unwrap());
         let mut f = NodeField::from_sub(
-            SubNodeField::from_poi1(&both, vec!["ux".into(), "uy".into()]).unwrap(),
+            SubNodeField::from_poi1(&both, vec!["u_x".into(), "u_y".into()]).unwrap(),
         );
         f.add_sub(Handle::new(
-            SubNodeField::from_poi1(&alone, vec!["ux".into()]).unwrap(),
+            SubNodeField::from_poi1(&alone, vec!["u_x".into()]).unwrap(),
         ))
         .unwrap();
-        f.add_to_component("ux", 1.0).unwrap();
+        f.add_to_component("u_x", 1.0).unwrap();
 
         let err = displace(&f, None).unwrap_err().to_string();
-        assert!(err.contains("component uy"), "{err}");
+        assert!(err.contains("component u_y"), "{err}");
         let c = coords.read();
         assert_eq!(c.position(a.id()).unwrap(), &[0.0, 0.0]);
         assert_eq!(c.position(b.id()).unwrap(), &[1.0, 1.0]);

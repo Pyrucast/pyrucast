@@ -40,6 +40,6 @@ pub use internal_forces::internal_forces;
 pub use mask::{mask, mask_sub};
 pub use merge::merge;
 pub use positions::positions;
-pub use project::project;
+pub use project::{project, project_element};
 pub use restrict::{restrict, restrict_like};
 pub use sum_to_nodes::sum_to_nodes;

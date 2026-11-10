@@ -1,8 +1,9 @@
 //! Python wrappers for [`crate::ops::node_field`] — the operators that
 //! produce a `NodeField`.
 
+use crate::aggregate::Aggregate;
 use crate::handle::Handle;
-use crate::py::element_field::PyElementField;
+use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::mesh::PyMesh;
 use crate::py::model::PyModel;
 use crate::py::node_field::PyNodeField;
@@ -53,27 +54,76 @@ pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNo
     })
 }
 
-/// `field` interpolated by the cells of `mesh` at the nodes of `target` —
-/// Cast3M `PROI` onto a geometry. A node of `target` inside a cell of `mesh`
-/// takes `Σ Nᵢ(ξ) f(nodeᵢ)`, the shape functions of that cell at the node
-/// (quadratic cells interpolate quadratically); every component is carried.
+/// `field` read at the nodes of `target`, through the cells of `mesh` — Cast3M
+/// `PROI` onto a geometry. `field` is a nodal field or a field at the Gauss
+/// points:
 ///
-/// A node of `target` outside `mesh` — farther than `tol` outside every cell's
-/// reference element — gets zero, as a nodal field reads a node it does not
-/// define: projecting a patch onto a larger mesh is a normal thing. `field` is
-/// read first zone first, a node of `mesh` it does not define reading zero.
-/// `mesh` and `target` may live in different `Coords` (a field moved onto a
-/// remeshed part), each read in its active configuration. One zone per submesh
-/// of `target`, like `positions`.
+/// - **nodal** (`NodeField`, `SubNodeField`): a node of `target` inside a cell
+///   of `mesh` takes `Σ Nᵢ(ξ) f(nodeᵢ)`, the shape functions of that cell at
+///   the node (quadratic cells interpolate quadratically). `field` is read
+///   first zone first, a node of `mesh` it does not define reading zero.
+///   `mesh` and `field` must share their `Coords`.
+/// - **at the Gauss points** (`ElementField`, `SubElementField`): the node
+///   takes the value that cell's **own** Gauss points give there — their
+///   least-squares fit on the cell, the one a plot colours the cell with.
+///   Nothing is averaged between cells: a line of points crossing from one
+///   cell to its neighbour shows the jump between them. A point on a face
+///   shared by two cells is read in one of them; to follow a field along a
+///   line, put the points between the nodes. `mesh` is the field's own cells:
+///   each of its submeshes must carry a zone of the field.
+///
+/// Every component is carried. A node of `target` outside `mesh` — farther
+/// than `tol` outside every cell's reference element — gets zero. `mesh` and
+/// `target` may live in different `Coords`, each read in its active
+/// configuration. One zone per submesh of `target`, like `positions`.
 ///
 /// An empty `field` or `target` gives an empty field; an empty `mesh` gives
-/// zero at every node of `target`. Errors: `field` and `mesh` on different
-/// `Coords`; `mesh` and `target` in different dimensions.
-#[py_op(method_on = PyNodeField)]
+/// zero at every node of `target`. Errors: `mesh` and `target` in different
+/// dimensions; for a nodal field, `field` and `mesh` on different `Coords`;
+/// for a field at the Gauss points, a submesh of `mesh` it has no zone on.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (field, mesh, target, tol=1e-6))]
 pub fn project(
+    field: &Bound<'_, PyAny>,
+    mesh: PyRef<PyMesh>,
+    target: PyRef<PyMesh>,
+    tol: f64,
+) -> PyResult<PyNodeField> {
+    if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
+        project_nodes(f, mesh, target, tol)
+    } else if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
+        project_cells(f, mesh, target, tol)
+    } else if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
+        project_sub_nodes(f, mesh, target, tol)
+    } else if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
+        project_sub_cells(f, mesh, target, tol)
+    } else {
+        Err(PyTypeError::new_err(
+            "project: expected a NodeField, SubNodeField, ElementField or SubElementField",
+        ))
+    }
+}
+
+// The four flavours of `project`, each documented for its sole receiver. Not
+// registered in the module — the free function above remains the polymorphic
+// entry point — they give `#[py_op]` the method of each flavour.
+// `#[pyfunction]` serves only to make valid the pyo3 signature that `#[py_op]`
+// copies.
+
+/// This nodal field interpolated by the cells of `mesh` at the nodes of
+/// `target`: a node of `target` inside a cell of `mesh` takes `Σ Nᵢ(ξ)
+/// f(nodeᵢ)`, the shape functions of that cell at the node (quadratic cells
+/// interpolate quadratically); every component is carried. A node of `target`
+/// outside `mesh` — farther than `tol` outside every cell's reference element
+/// — gets zero. Read first zone first, a node of `mesh` the field does not
+/// define reading zero. `mesh` and `target` may live in different `Coords`.
+/// One zone per submesh of `target`. Errors: the field and `mesh` on
+/// different `Coords`; `mesh` and `target` in different dimensions.
+#[py_op(method_on = PyNodeField, name = "project")]
+#[pyfunction]
+#[pyo3(signature = (field, mesh, target, tol=1e-6))]
+pub fn project_nodes(
     field: PyRef<PyNodeField>,
     mesh: PyRef<PyMesh>,
     target: PyRef<PyMesh>,
@@ -81,6 +131,71 @@ pub fn project(
 ) -> PyResult<PyNodeField> {
     Ok(PyNodeField {
         inner: crate::ops::node_field::project(&field.inner, &mesh.inner, &target.inner, tol)?,
+    })
+}
+
+/// This zone interpolated by the cells of `mesh` at the nodes of `target` —
+/// as `NodeField.project`, for a field of this one zone.
+#[py_op(method_on = PySubNodeField, name = "project")]
+#[pyfunction]
+#[pyo3(signature = (field, mesh, target, tol=1e-6))]
+pub fn project_sub_nodes(
+    field: PyRef<PySubNodeField>,
+    mesh: PyRef<PyMesh>,
+    target: PyRef<PyMesh>,
+    tol: f64,
+) -> PyResult<PyNodeField> {
+    let mut whole = crate::containers::node_field::NodeField::default();
+    whole.add_sub(field.handle.clone())?;
+    Ok(PyNodeField {
+        inner: crate::ops::node_field::project(&whole, &mesh.inner, &target.inner, tol)?,
+    })
+}
+
+/// This field at the Gauss points read at the nodes of `target`: a node of
+/// `target` inside a cell of `mesh` takes the value that cell's own Gauss
+/// points give there — their least-squares fit on the cell, the one a plot
+/// colours the cell with. Nothing is averaged between cells, so a line of
+/// points crossing from one cell to its neighbour shows the jump between
+/// them; a point on a shared face is read in one of the two. `mesh` is the
+/// field's own cells (each submesh must carry a zone of it). A node outside
+/// `mesh` gets zero. One zone per submesh of `target`. Errors: a submesh of
+/// `mesh` without a zone of the field; `mesh` and `target` in different
+/// dimensions.
+#[py_op(method_on = PyElementField, name = "project")]
+#[pyfunction]
+#[pyo3(signature = (field, mesh, target, tol=1e-6))]
+pub fn project_cells(
+    field: PyRef<PyElementField>,
+    mesh: PyRef<PyMesh>,
+    target: PyRef<PyMesh>,
+    tol: f64,
+) -> PyResult<PyNodeField> {
+    Ok(PyNodeField {
+        inner: crate::ops::node_field::project_element(
+            &field.inner,
+            &mesh.inner,
+            &target.inner,
+            tol,
+        )?,
+    })
+}
+
+/// This zone at the Gauss points read at the nodes of `target` — as
+/// `ElementField.project`, for a field of this one zone.
+#[py_op(method_on = PySubElementField, name = "project")]
+#[pyfunction]
+#[pyo3(signature = (field, mesh, target, tol=1e-6))]
+pub fn project_sub_cells(
+    field: PyRef<PySubElementField>,
+    mesh: PyRef<PyMesh>,
+    target: PyRef<PyMesh>,
+    tol: f64,
+) -> PyResult<PyNodeField> {
+    let mut whole = crate::containers::element_field::ElementField::empty();
+    whole.add_sub(field.handle.clone())?;
+    Ok(PyNodeField {
+        inner: crate::ops::node_field::project_element(&whole, &mesh.inner, &target.inner, tol)?,
     })
 }
 

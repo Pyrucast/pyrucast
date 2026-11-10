@@ -34,7 +34,8 @@ deux formes (`matrix.stiffness(model, mats)` / `model.stiffness_matrix(mats)`,
 `element_field.sub_material_field(sub, …)` / `sub_model.material_field(…)`),
 et les cinématiques (`deformation`, `beam_deformation`, `shell_deformation`,
 `thermal_strain`) n'ont **pas** de méthode : elles exigent des composantes
-nommées, elles n'auraient pas de sens sur un champ quelconque.
+nommées, elles n'auraient pas de sens sur un champ quelconque. `von_mises`
+non plus : elle ne s'applique qu'à des contraintes.
 `internal_forces`, elle, a sa méthode, sur son sujet le modèle :
 `model.internal_forces(state, solution, materials)`.
 
@@ -106,6 +107,12 @@ plusieurs » de `CONVENTIONS.md`.
 « parent » géométrique qui la définirait. On compose ensuite les courbes par
 zone avec `|` (cf. [Évolution](../evolution.md)).
 
+Les valeurs d'un champ **le long d'une ligne** sont un constructeur de
+l'agrégat : `Evolution::along(field: &NodeField, line: &Mesh, components:
+&[&str]) -> Evolution` ↔ `pyrucast.Evolution.along(field, line,
+components=None)`, aussi méthode `field.along(line, components=None)` — une
+courbe par composante, `None` les prenant toutes.
+
 ## Fonctions ↔ fonctions
 
 Les fonctions `ops` prennent leurs conteneurs **par référence** et renvoient
@@ -130,7 +137,7 @@ degré des lignes (`"QUA4"` entre deux `SEG2`, `"QUA8"` entre deux `SEG3`).
 | `transfinite(side1: &Mesh, side2: &Mesh, side3: &Mesh, side4: &Mesh, element_type: ElementType) -> Mesh` | `transfinite(side1, side2, side3, side4, element_type=None) -> Mesh` |
 | `sweep_solid(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Mesh` | `sweep_solid(mesh_a, mesh_b, n_layers) -> Mesh` |
 | `extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Mesh` | `extrude(mesh, direction, n_layers) -> Mesh` |
-| `revolve(mesh: &Mesh, angle: f64, n_layers: usize, center: &[f64], axis: Option<&[f64]>) -> Mesh` | `revolve(mesh, angle, n_layers, center, axis=None) -> Mesh` |
+| `revolve(mesh: &Mesh, angle: f64, n_layers: usize, center: &[f64], axis: Option<&[f64]>) -> Mesh` | `revolve(mesh, angle, n_layers, center, axis=None) -> Mesh` (une ligne qui touche l'axe s'y referme en `TRI3` / `TRI6`) |
 | `to_quadratic(mesh: &Mesh) -> Mesh` | `to_quadratic(mesh) -> Mesh` |
 | `convert(mesh: &Mesh, target: ElementType) -> Mesh` | `convert(mesh, element_type) -> Mesh` |
 | `copy(mesh: &Mesh, new_nodes: bool) -> Mesh` | `copy(mesh, new_nodes=True) -> Mesh` |
@@ -193,6 +200,7 @@ Les mailleurs longs (`triangulate_surface`, `pave_surface`, `grid_surface`,
 | `divergence(field: &ElementField, prefix: &str) -> NodeField` | `divergence(field, prefix) -> NodeField` |
 | `restrict(field: &NodeField, mesh: &Mesh) -> NodeField` | `restrict(field, mesh) -> NodeField` |
 | `project(field: &NodeField, mesh: &Mesh, target: &Mesh, tol: f64) -> NodeField` | `project(field, mesh, target, tol=1e-6) -> NodeField`, aussi méthode `field.project(mesh, target, tol=1e-6)` (interpolé par les mailles de `mesh` aux nœuds de `target`, 0 hors de `mesh`) |
+| `project_element(field: &ElementField, mesh: &Mesh, target: &Mesh, tol: f64) -> NodeField` | `project(field, mesh, target, tol=1e-6) -> NodeField` avec un `ElementField` (ou `SubElementField`), aussi méthode `field.project(mesh, target)` (chaque point prend la valeur des points de Gauss de sa maille, rien n'est moyenné entre mailles) |
 | `restrict_like(field: &NodeField, target: &NodeField) -> NodeField` | `restrict_like(field, target) -> NodeField` |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 | `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` |
@@ -224,6 +232,7 @@ par la sortie.
 | `thermal_strain(temperature: &ElementField, material: &ElementField, fespace: &FiniteElementSpace, t_ref: f64, measure: StrainMeasure) -> ElementField` | `thermal_strain(temperature, materials, fespace, t_ref, measure="linear") -> ElementField` (la dilatation exacte dans la mesure de la loi) |
 | `strain(model: &Model, solution: &NodeField, materials: &ElementField) -> ElementField` | `strain(model, solution, materials) -> ElementField` (`EPSI` : l'entrée de chaque loi ; aussi `model.strain(…)`) |
 | `elastic_stress(model: &Model, strain: &ElementField, materials: &ElementField) -> ElementField` | `elastic_stress(model, strain, materials) -> ElementField` (`σ = D:ε` ; aussi `model.elastic_stress(…)`) |
+| `von_mises(model: &Model, stress: &ElementField, coefficients: &[f64; 6]) -> ElementField` | `von_mises(model, stress, coefficients=[0.5, 0.5, 0.5, 1.5, 1.5, 1.5]) -> ElementField` (von Mises, ou Hill avec `[F, G, H, L, M, N]` ; défaut Rust : la constante `VON_MISES` ; pas de méthode) |
 | `elastic_strain(model: &Model, stress: &ElementField, materials: &ElementField) -> ElementField` | `elastic_strain(model, stress, materials) -> ElementField` (`ε = D⁻¹:σ` ; aussi `model.elastic_strain(…)`) |
 | `stress_measure(stress: &ElementField, gradient: &ElementField, target: StressMeasure) -> ElementField` | `stress_measure(stress, gradient, target) -> ElementField` (`StressMeasure` par son nom : `"cauchy"`, `"kirchhoff"`, `"pk1"`, `"pk2"`, `"hencky"` ; pas de méthode : elle exige une contrainte et un gradient nommés) |
 | `rotate_frame(field: &ElementField, gradient: &ElementField) -> ElementField` | `rotate_frame(field, gradient) -> ElementField` (axes `V1*`, `V2*` tournés par la rotation `R` de `F = R U` ; pas de méthode : elle exige des axes et un gradient nommés) |

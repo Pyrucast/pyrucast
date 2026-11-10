@@ -217,6 +217,36 @@ pub fn elastic_strain(
     Ok(PyElementField { inner: ef })
 }
 
+/// Equivalent stress of `stress` at the Gauss points of every continuum
+/// sub-model of `model`: von Mises by default, Hill's anisotropic form with
+/// `coefficients = [F, G, H, L, M, N]`:
+///
+/// `σ_eq² = F(σyy − σzz)² + G(σzz − σxx)² + H(σxx − σyy)² + 2Lσyz² + 2Mσxz² + 2Nσxy²`
+///
+/// The default `[0.5, 0.5, 0.5, 1.5, 1.5, 1.5]` is von Mises, `√(3 J₂)`.
+/// `stress` carries the stresses the laws write (`sigma_xx`, …; the state of
+/// `integrate_behavior` or the output of `elastic_stress` will do). The model
+/// says which components to read: the six in 3-D; `sigma_xx`, `sigma_yy`,
+/// `sigma_xy` in plane stress (`zz` is zero there); plus `sigma_zz` in plane
+/// strain and on a body of revolution. Returns one zone per continuum
+/// sub-model, with the single component `"von_mises"`.
+///
+/// Raises for coefficients that let the form go negative (each of `L`, `M`,
+/// `N`, `F + G`, `G + H`, `H + F`, `FG + GH + HF` must be `≥ 0`), and for a
+/// stress missing a component its kinematics reads — in plane strain, a
+/// stress without `sigma_zz`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (model, stress, coefficients=crate::ops::element_field::VON_MISES))]
+pub fn von_mises(
+    model: PyRef<PyModel>,
+    stress: PyRef<PyElementField>,
+    coefficients: [f64; 6],
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::element_field::von_mises(&model.inner, &stress.inner, &coefficients)?;
+    Ok(PyElementField { inner: ef })
+}
+
 /// The input of every law of `model`, produced from the nodal `solution` — the
 /// model's `B`, of which `internal_forces` is the transpose (Cast3M `EPSI`,
 /// extended to every physics).

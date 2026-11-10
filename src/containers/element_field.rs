@@ -1072,8 +1072,6 @@ pub(crate) type ElementFieldView = crate::containers::field::FieldView<SubElemen
 impl ElementFieldView {
     /// The zone supported on `submesh` (matched through the zone's FE
     /// subspace), or `None` if no zone lives on it.
-    // Consumed by the viz layer (feature-gated).
-    #[allow(dead_code)]
     pub(crate) fn zone_for_submesh(
         &self,
         submesh: &Handle<crate::containers::mesh::SubMesh>,

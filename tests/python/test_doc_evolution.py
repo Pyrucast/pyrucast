@@ -221,6 +221,25 @@ assert deux.out_of_range == "error"
 assert deux[0].out_of_range == "clamp"
 assert deux.interpolate(2.0, out_of_range="clamp") == [2.0, 4.0]
 
+# ── Le long d'une ligne ─────────────────────────────────────────────────────
+
+# ANCHOR: le_long
+# Une température relevée le long d'un trajet de trois points : la courbe porte
+# la valeur en fonction de la distance parcourue — 0, 3, puis 3 + 4 = 7.
+plan = pyrucast.Coords(2)
+trajet = [plan.add_node(p) for p in ([0.0, 0.0], [3.0, 0.0], [3.0, 4.0])]
+ligne = pyrucast.mesh.poi1_from_nodes(trajet)
+releve = pyrucast.NodeField(ligne, ["T"])
+for noeud, t in zip(trajet, [20.0, 50.0, 90.0]):
+    releve[0].set_value(noeud, "T", t)
+le_long = pyrucast.Evolution.along(releve, ligne)  # aussi releve.along(ligne)
+print(le_long[0].abscissas())  # [0.0, 3.0, 7.0]
+# ANCHOR_END: le_long
+
+assert le_long[0].abscissas() == [0.0, 3.0, 7.0]
+assert le_long[0].ordinate_type() == "T"
+assert releve.along(ligne)[0].interpolate(5.0) == 70.0
+
 # ── Tracer ──────────────────────────────────────────────────────────────────
 
 # ANCHOR: trace

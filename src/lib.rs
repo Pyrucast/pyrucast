@@ -287,6 +287,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::element_field::thermal_strain, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::elastic_stress, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::elastic_strain, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::von_mises, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::cell_integral, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::strain, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::stress_measure, m)?)?;

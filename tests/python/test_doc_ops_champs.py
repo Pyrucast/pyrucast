@@ -250,6 +250,26 @@ retour = pyrucast.element_field.elastic_strain(plasticite, sigma, materiaux)
 assert abs(sigma[0].value(0, 0, "sigma_xx") - 2e8) < 1e-3  # far beyond sigma_y
 assert abs(retour[0].value(0, 0, "eps_xx") - 1e-3) < 1e-15
 
+# ── contrainte équivalente ─────────────────────────────────
+
+contraintes = pyrucast.ElementField(fes, ["sigma_xx", "sigma_yy", "sigma_xy"])
+contraintes[0].set_uniform("sigma_xx", 120e6)
+contraintes[0].set_uniform("sigma_xy", 40e6)
+# ANCHOR: von_mises
+# von Mises at each Gauss point, from the stresses the law writes; the model
+# says which ones to read (here a plane stress: σzz = 0).
+vm = pyrucast.element_field.von_mises(plasticite, contraintes)
+# Hill's anisotropic form: the coefficients [F, G, H, L, M, N].
+hill = pyrucast.element_field.von_mises(
+    plasticite, contraintes, [0.6, 0.4, 0.5, 1.5, 1.5, 2.0]
+)
+# ANCHOR_END: von_mises
+# √(σxx² + 3 σxy²) in plane stress.
+assert abs(vm[0].value(0, 0, "von_mises") - math.sqrt(120e6**2 + 3 * 40e6**2)) < 1e-3
+# G σxx² + H σxx² + 2 N σxy² with σyy = σzz = 0.
+attendu = math.sqrt((0.4 + 0.5) * 120e6**2 + 2 * 2.0 * 40e6**2)
+assert abs(hill[0].value(0, 0, "von_mises") - attendu) < 1e-3
+
 # ── intégrale par maille, somme aux nœuds ──────────────────
 
 _, mesh, fes, n = _plaque()
@@ -332,3 +352,17 @@ assert portee.value(cibles[2], "T") == 0.0
 assert temperature.project(mesh, nuage).value(cibles[1], "T") == portee.value(
     cibles[1], "T"
 )
+
+# A field at the Gauss points: one value per cell, 1 on the left, 5 on the right.
+par_maille = pyrucast.ElementField(fes, ["s"])
+par_maille[0].set_cell_uniform(0, "s", 1.0)
+par_maille[0].set_cell_uniform(1, "s", 5.0)
+# ANCHOR: projection_gauss
+# A field at the Gauss points read at points: each point takes the value its
+# own cell's Gauss points give there — nothing averaged with the neighbour.
+de_part_et_d_autre = [autre.add_node(p) for p in ([0.9, 0.5], [1.1, 0.5])]
+deux_points = pyrucast.mesh.poi1_from_nodes(de_part_et_d_autre)
+lue = pyrucast.node_field.project(par_maille, mesh, deux_points)
+# ANCHOR_END: projection_gauss
+assert abs(lue.value(de_part_et_d_autre[0], "s") - 1.0) < 1e-12
+assert abs(lue.value(de_part_et_d_autre[1], "s") - 5.0) < 1e-12

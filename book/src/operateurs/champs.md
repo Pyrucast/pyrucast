@@ -74,6 +74,24 @@ comme `positions`. Les nœuds de `target` sont localisés une seule fois.
 {{#include ../../../tests/python/test_doc_ops_champs.py:projection}}
 ```
 
+**Un champ aux points de Gauss se projette aussi.** Avec un `ElementField`,
+chaque nœud de `target` reçoit la valeur que donnent **les seuls points de
+Gauss de la maille qui le contient** : leur ajustement aux moindres carrés sur
+cette maille — celui-là même qui colore la maille sur un tracé —, évalué au
+point. Rien n'est moyenné entre mailles : deux voisines peuvent donner deux
+valeurs différentes sur leur face commune, et une suite de points qui passe de
+l'une à l'autre montre ce saut. Un point posé exactement sur une face partagée
+est lu dans l'une des deux ; pour suivre un champ le long d'une ligne, on place
+les points entre les nœuds. `mesh` est alors le maillage du champ : chacun de
+ses sous-maillages doit porter une zone du champ.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_champs.py:projection_gauss}}
+```
+
+Les valeurs relevées sur un nuage de points se tracent ensuite le long de la
+ligne qu'ils forment : voir [Le long d'une ligne](../evolution.md#le-long-dune-ligne).
+
 ## Bande de valeurs (`ge` / `gt` / `le` / `lt`)
 
 `select` et `mask` partagent la même **bande de valeurs**, fixée par quatre
@@ -353,6 +371,42 @@ les deux sens ne font pas la même opération, et l'état que rend
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_champs.py:elastique}}
+```
+
+### `von_mises(model, stress, coefficients=[0.5, 0.5, 0.5, 1.5, 1.5, 1.5])` → `ElementField`
+
+La **contrainte équivalente** aux points de Gauss : von Mises par défaut, la
+forme anisotrope de Hill avec ses six coefficients `[F, G, H, L, M, N]` :
+
+\\[
+\sigma\_{eq}^2 = F(\sigma\_{yy}-\sigma\_{zz})^2 + G(\sigma\_{zz}-\sigma\_{xx})^2
++ H(\sigma\_{xx}-\sigma\_{yy})^2 + 2L\\,\sigma\_{yz}^2 + 2M\\,\sigma\_{xz}^2
++ 2N\\,\sigma\_{xy}^2
+\\]
+
+Avec \\( F = G = H = 1/2 \\) et \\( L = M = N = 3/2 \\), c'est von Mises,
+\\( \sqrt{3 J\_2} \\) — la valeur par défaut. `stress` porte les contraintes
+qu'écrivent les lois (`sigma_xx`, … : la sortie d'`elastic_stress` ou l'état
+d'`integrate_behavior` conviennent, quoi qu'ils portent d'autre). Le **modèle**
+dit lesquelles lire, car elles dépendent de la cinématique :
+
+| cinématique | composantes lues | prises nulles |
+|---|---|---|
+| `full_3d` | les six `sigma_*` | — |
+| `plane_stress` | `sigma_xx`, `sigma_yy`, `sigma_xy` | `zz`, `yz`, `xz` |
+| `plane_strain` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `yz`, `xz` |
+| `axisymmetric` | `sigma_xx`, `sigma_yy`, `sigma_zz` (orthoradiale), `sigma_xy` | `yz`, `xz` |
+
+Le résultat a une zone par sous-modèle continu, sur ses points de Gauss, et une
+seule composante, `von_mises`. Une erreur nomme ce qui manque : des
+coefficients qui laisseraient la forme devenir négative (chacun de `L`, `M`,
+`N`, `F + G`, `G + H`, `H + F` et `FG + GH + HF` doit être `≥ 0`), ou une
+contrainte sans `sigma_zz` en déformations planes — les lois plastiques le
+portent, une contrainte élastique non. Elle n'existe pas en méthode : elle ne
+s'applique qu'à un champ de contraintes.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_champs.py:von_mises}}
 ```
 
 ### `stress_measure(stress, gradient, target)` → `ElementField`

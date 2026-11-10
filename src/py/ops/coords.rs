@@ -22,7 +22,7 @@ pub fn set(field: PyRef<PyNodeField>, components: Option<Vec<String>>) -> PyResu
 /// Displace nodes by `field` (incremental): `coord[a] += field.value(node,
 /// components[a])` on the active coordinate set. `components` lists one
 /// displacement-component name per spatial axis, in axis order; `None` →
-/// `["ux", "uy", "uz"][:dim]`. Mutates the field's `Coords` in place.
+/// `["u_x", "u_y", "u_z"][:dim]`. Mutates the field's `Coords` in place.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (field, components=None))]
@@ -36,7 +36,7 @@ pub fn displace(field: PyRef<PyNodeField>, components: Option<Vec<String>>) -> P
 /// it lands at `X + u` again, nothing accumulates. A node the field does not
 /// define stays at its reference position; the active configuration is left as
 /// it is. `components` names one displacement component per axis; `None` →
-/// `["ux", "uy", "uz"][:dim]`. Cast3M `FORM` with a displacement, without
+/// `["u_x", "u_y", "u_z"][:dim]`. Cast3M `FORM` with a displacement, without
 /// changing the active configuration.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
