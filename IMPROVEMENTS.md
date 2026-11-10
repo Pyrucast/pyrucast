@@ -195,3 +195,15 @@ but no matching book.
   users read the site.
 
 Recommended: (ii) + (iii), on a branch of their own.
+
+## The active set can cycle on a contact near zero gap and zero reaction
+
+On the tutorial's lug pressed by a stiff support (24 slave nodes, the bore cut
+into 240 flat TRI3), the status loop of `solve` cycled at `t = 0.5` of a load
+ramp with the default `tol = 1e-10`, in `schur` and in `refactorize` alike (400
+iterations); it converged at `tol = 1e-6`. A node whose gap and reaction are
+both about zero flips between the two statuses at each pass. Leads: a
+tolerance relative to the scale of the reactions and of the gaps rather than
+absolute; or, on cycling, keeping the status that lowers the KKT violation
+instead of failing. Reproduce with the scratch comparison of the contact
+chapter (`compare_contact_tri3.py`, master dumped from the reference).
