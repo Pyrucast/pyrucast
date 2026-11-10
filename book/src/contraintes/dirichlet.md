@@ -34,7 +34,9 @@ Elle apporte deux blocs à la raideur, chacun de coefficient 1 :
   `(multiplicateur, lambda)`.
 
 À la solution, \\(\lambda\\) est la réaction : le flux ou la force qui tient la
-valeur imposée.
+valeur imposée, compté comme l'effort de la pièce sur le blocage. L'appui,
+lui, exerce \\(-\lambda\\) sur la pièce : une poutre encastrée qui porte un
+poids \\(P\\) vers le bas a des multiplicateurs `u_z` de somme \\(-P\\).
 
 Chaque relation a son **nœud multiplicateur**, créé par la contrainte à la
 position du nœud imposé, dans le même `Coords` ; `multiplier_mesh()` les

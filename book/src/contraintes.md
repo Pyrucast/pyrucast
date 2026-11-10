@@ -35,7 +35,10 @@ multiplicateur) et deux blocs **rectangulaires** dans la matrice :
   colonnes = primale contrainte de la cible) ;
 - le bloc **`Cᵀ`** réinjecte la **réaction** dans l'équation de la physique
   cible (la force qui maintient la contrainte) ;
-- à la solution, le multiplicateur `λ` **est** cette force de réaction.
+- à la solution, le multiplicateur `λ` **est** cette force de réaction,
+  comptée comme l'effort de la pièce sur la contrainte : la première ligne
+  donne `λ = f − K·u`. La force que la contrainte exerce sur la pièce, la
+  réaction au sens d'un appui, est son opposé, `−λ`.
 
 Chacun des blocs `C` et `Cᵀ` est, pris isolément, **non symétrique** ; seule
 leur union `C ∪ Cᵀ` l'est — c'est une propriété **globale** du système
