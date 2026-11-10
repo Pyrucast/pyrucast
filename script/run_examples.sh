@@ -18,8 +18,26 @@ trap 'rm -rf "$tmp"' EXIT
 export PYRUCAST_TUTORIEL_IMG_DIR="$tmp"
 export PYRUCAST_IMG_DIR="$tmp"
 
+# Le tutoriel tourne dans l'ordre de lecture : les scripts de mécanique
+# relisent le fichier qu'écrit thermique_non_lineaire.py.
+tutoriel=(premier_calcul maillage thermique thermique_transitoire
+          thermique_non_lineaire mecanique_elastique mecanique_dilatation
+          mecanique_heterogene plasticite contact complements)
+
 fail=0
-for f in examples/*.py tutoriel/*.py; do
+for f in tutoriel/*.py; do
+    name=$(basename "$f" .py)
+    if [[ " ${tutoriel[*]} " != *" $name "* ]]; then
+        printf '  FAIL %s : absent de la liste ordonnée du tutoriel\n' "$f"
+        fail=1
+    fi
+done
+
+scripts=(examples/*.py)
+for name in "${tutoriel[@]}"; do
+    scripts+=("tutoriel/$name.py")
+done
+for f in "${scripts[@]}"; do
     if python "$f" >"$tmp/out.log" 2>&1; then
         printf '  ok   %s\n' "$f"
     else

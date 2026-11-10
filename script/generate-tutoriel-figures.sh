@@ -30,7 +30,10 @@ python -c "import pyrucast" 2>/dev/null \
 export PYRUCAST_TUTORIEL_IMG_DIR="$ROOT/book/src/tutoriel/img"
 mkdir -p "$PYRUCAST_TUTORIEL_IMG_DIR"
 
-for f in premier_calcul maillage thermique thermique_transitoire thermique_non_lineaire mecanique plasticite contact; do
+# Dans l'ordre de lecture : les scripts de mécanique relisent le fichier
+# qu'écrit thermique_non_lineaire.py.
+for f in premier_calcul maillage thermique thermique_transitoire thermique_non_lineaire \
+         mecanique_elastique mecanique_dilatation mecanique_heterogene plasticite contact; do
     step "tutoriel/$f.py"
     "$PY" "$ROOT/tutoriel/$f.py"
 done
