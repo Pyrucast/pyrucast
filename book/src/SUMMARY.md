@@ -90,6 +90,7 @@
   - [Mécanique linéaire](tutoriel/mecanique-lineaire.md)
     - [Élasticité](tutoriel/mecanique-elastique.md)
     - [Dilatation, matériau homogène](tutoriel/mecanique-dilatation.md)
+    - [Dilatation, matériau hétérogène](tutoriel/mecanique-heterogene.md)
   - [Calcul mécanique](tutoriel/mecanique.md)
   - [Compléments](tutoriel/complements.md)
 
