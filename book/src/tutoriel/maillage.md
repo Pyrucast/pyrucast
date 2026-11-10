@@ -346,7 +346,15 @@ long de ce rayon.
 ![Couronne balayée, 120 QUA8](img/maillage-couronne.svg)
 
 Grille et couronne partageant les nœuds du bord droit `l1213`, l'union `|`
-suffit ensuite à en faire un maillage conforme — 200 + 120 = 320 `QUA8` :
+suffit ensuite à en faire un maillage conforme — 200 + 120 = 320 `QUA8`.
+
+**Une surface extrudée garde son sens de rotation.** La couronne, balayée de
+la boucle extérieure vers la boucle intérieure, tourne en sens inverse de la
+grille. Extrudée telle quelle, elle donnerait des hexaèdres retournés, dont les
+faces pointeraient vers l'intérieur de la matière. Une conduction n'y verrait
+rien ; une pression ou un contact, qui lisent la normale des faces, s'y
+inverseraient. `pyrucast.mesh.orient` met toutes les mailles dans le sens de
+la première, ici celui de la grille :
 
 ![Plaque structurée (QUA8)](img/maillage-structure.svg)
 
