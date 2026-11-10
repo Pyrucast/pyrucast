@@ -315,8 +315,12 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
         show(sh1, "Couronne balayée (QUA8)", "maillage-couronne.svg")
 
     # FR — Grille et couronne partagent les nœuds du bord droit : `|` suffit.
-    # EN — Grid and ring share the right edge's nodes: `|` is enough.
-    grid = sr1 | sh1
+    #      La couronne tourne dans l'autre sens que la grille : `orient` met
+    #      toutes les mailles dans le sens de la première, avant l'extrusion.
+    # EN — Grid and ring share the right edge's nodes: `|` is enough. The
+    #      ring turns the other way from the grid: `orient` turns every cell
+    #      the way the first one does, before the extrusion.
+    grid = pc.mesh.orient(sr1 | sh1)
     if plot:
         print(f"structured      : {grid.element_types()}, {grid.cell_count} mailles")
         show(grid, "Plaque structurée (QUA8)", "maillage-structure.svg")
