@@ -1,15 +1,19 @@
-//! A nodal field carried onto the nodes of another mesh, through the shape
-//! functions of the cells that interpolate it — Cast3M `PROI` onto a geometry.
+//! A field carried onto the nodes of another mesh: a nodal field through the
+//! shape functions of the cells that interpolate it ([`project_node`]) — Cast3M
+//! `PROI` onto a geometry —, a field at the Gauss points through each cell's own
+//! fit of its values ([`project_element`]).
 
 use std::collections::HashMap;
 
 use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
+use crate::containers::element_field::ElementField;
 use crate::containers::field::{Field, SubField};
 use crate::containers::mesh::Mesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::ops::element_field::fit::CellFit;
 use crate::ops::geom::{locate_points, Location};
 use crate::parallel::*;
 
@@ -65,50 +69,29 @@ use crate::parallel::*;
 /// let p: Vec<Node> = [[0.5, 0.5], [5.0, 5.0]]
 ///     .iter().map(|q| Node::create_in(other.clone(), q).unwrap()).collect();
 /// let points = mesh::poi1_from_nodes(&p)?;
-/// let carried = node_field::project(&t, &triangle, &points, 1e-6)?;
+/// let carried = node_field::project_node(&t, &triangle, &points, 1e-6)?;
 /// let z = carried.get(0)?.read();
 /// assert!((z.value(p[0].id(), "T")? - 20.0).abs() < 1e-12);
 /// assert_eq!(z.value(p[1].id(), "T")?, 0.0); // outside: zero, a patch
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn project(field: &NodeField, mesh: &Mesh, target: &Mesh, tol: f64) -> Result<NodeField> {
+pub fn project_node(field: &NodeField, mesh: &Mesh, target: &Mesh, tol: f64) -> Result<NodeField> {
     let components = Field::components(field);
     if components.is_empty() || target.is_empty() {
         return Ok(NodeField::default());
     }
-    let target_coords = target.coords()?;
     // A mesh without zones locates nothing: every node of `target` reads zero.
     if !mesh.is_empty() {
-        let mesh_coords = mesh.coords()?;
-        if !mesh_coords.same_object(&field.coords()?) {
+        if !mesh.coords()?.same_object(&field.coords()?) {
             return Err(PyrucastError::Message(
                 "project: `field` and `mesh` hang from different Coords — the cells of \
                  `mesh` interpolate the field from its own nodes"
                     .into(),
             ));
         }
-        let (dim, target_dim) = (mesh_coords.read().dim(), target_coords.read().dim());
-        if dim != target_dim {
-            return Err(PyrucastError::Message(format!(
-                "project: `mesh` is {dim}-D and `target` {target_dim}-D"
-            )));
-        }
+        same_dimension(mesh, target)?;
     }
-
-    // The distinct nodes of `target` and where they are, located once.
-    let mut index: HashMap<NodeId, usize> = HashMap::new();
-    let mut points: Vec<Vec<f64>> = Vec::new();
-    {
-        let c = target_coords.read();
-        for sm in target {
-            for &nid in sm.read().connectivity() {
-                if let std::collections::hash_map::Entry::Vacant(e) = index.entry(nid) {
-                    e.insert(points.len());
-                    points.push(c.position(nid)?.to_vec());
-                }
-            }
-        }
-    }
+    let (index, points) = distinct_points(target)?;
     let locations = locate_points(mesh, &points, tol)?;
 
     // The values at every distinct node, node-major: each slot written once.
@@ -131,10 +114,179 @@ pub fn project(field: &NodeField, mesh: &Mesh, target: &Mesh, tol: f64) -> Resul
                 }
             }
         });
+    on_target(target, &components, &index, &values)
+}
 
+/// A field at the Gauss points read at the nodes of `target`: a node of
+/// `target` that sits in a cell of `mesh` takes the value that cell's **own**
+/// Gauss points give there — their least-squares fit on the cell, the one a
+/// plot colours the cell with, evaluated at the node's reference coordinates
+/// `ξ`. Nothing is averaged between cells: where two neighbours disagree, a
+/// line of points crossing from one to the other shows the jump. A point on a
+/// face shared by two cells is read in the first one found; to follow a
+/// field along a line, put the points between the nodes.
+///
+/// `mesh` is the field's own cells: each of its submeshes must carry a zone
+/// of `field`. A zone lacking one of the field's components reads zero for it.
+/// A node of `target` outside `mesh` gets zero, every node of `target` once, as
+/// for [`project_node`]; the result has one zone per submesh of `target`.
+///
+/// Errors: a submesh of `mesh` with no zone of `field`; `mesh` and `target` in
+/// different dimensions.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{mesh, node_field};
+/// // Two squares side by side, a stress of 1 in the left one and 5 in the right.
+/// let coords = Handle::new(Coords::new(2)?);
+/// let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [0.0, 1.0], [1.0, 1.0], [2.0, 1.0]]
+///     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
+/// sm.add_cell(&[n[0].id(), n[1].id(), n[4].id(), n[3].id()])?;
+/// sm.add_cell(&[n[1].id(), n[2].id(), n[5].id(), n[4].id()])?;
+/// let squares = Mesh::from_submesh(sm);
+/// let fes = FiniteElementSpace::lagrange1(&squares)?;
+/// let s = ElementField::new(&fes, vec!["s".into()])?;
+/// s.get(0)?.write().set_cell_uniform(0, "s", 1.0)?;
+/// s.get(0)?.write().set_cell_uniform(1, "s", 5.0)?;
+/// // Read on either side of the shared edge: each side keeps its own value.
+/// let other = Handle::new(Coords::new(2)?);
+/// let p: Vec<Node> = [[0.9, 0.5], [1.1, 0.5]]
+///     .iter().map(|q| Node::create_in(other.clone(), q).unwrap()).collect();
+/// let read = node_field::project_element(&s, &squares, &mesh::poi1_from_nodes(&p)?, 1e-6)?;
+/// let z = read.get(0)?.read();
+/// assert!((z.value(p[0].id(), "s")? - 1.0).abs() < 1e-12);
+/// assert!((z.value(p[1].id(), "s")? - 5.0).abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn project_element(
+    field: &ElementField,
+    mesh: &Mesh,
+    target: &Mesh,
+    tol: f64,
+) -> Result<NodeField> {
+    let components = Field::components(field);
+    if components.is_empty() || target.is_empty() {
+        return Ok(NodeField::default());
+    }
+    if !mesh.is_empty() {
+        same_dimension(mesh, target)?;
+    }
+
+    // Per submesh of `mesh`: the zone living on it, the fit of its space, and
+    // where each of the field's components sits in it — all resolved once.
+    struct Host<'v> {
+        values: &'v [f64],
+        stride: usize,
+        n_gauss: usize,
+        fit: CellFit,
+        reads: Vec<(usize, usize)>,
+    }
+    let view = field.view()?;
+    let mut hosts = Vec::with_capacity(mesh.len());
+    for (s, sm) in mesh.into_iter().enumerate() {
+        let zone = view.zone_for_submesh(&sm).ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "project: submesh {s} of `mesh` carries no zone of the field — `mesh` must be \
+                 the cells the field lives on"
+            ))
+        })?;
+        let fit = CellFit::for_space(&zone.support().read())?;
+        let reads = components
+            .iter()
+            .enumerate()
+            .filter_map(|(k, c)| zone.component_index(c).map(|i| (k, i)))
+            .collect();
+        hosts.push(Host {
+            values: zone.values(),
+            stride: zone.components().len(),
+            n_gauss: zone.gauss_count(),
+            fit,
+            reads,
+        });
+    }
+
+    let (index, points) = distinct_points(target)?;
+    let locations = locate_points(mesh, &points, tol)?;
+    let n_comp = components.len();
+    let mut values = vec![0.0; points.len() * n_comp];
+    values
+        .par_chunks_mut(n_comp)
+        .zip(locations.par_iter())
+        .with_min_len(MIN_PARALLEL_LEN)
+        .for_each_init(
+            || (Vec::new(), Vec::new()),
+            |(gauss, nodal), (out, location)| {
+                if let Some(Location {
+                    submesh,
+                    cell,
+                    weights,
+                    ..
+                }) = location
+                {
+                    let host = &hosts[*submesh];
+                    gauss.resize(host.n_gauss, 0.0);
+                    nodal.resize(host.fit.nodes_per_cell(), 0.0);
+                    let first = cell * host.n_gauss * host.stride;
+                    for &(k, i) in &host.reads {
+                        for (g, slot) in gauss.iter_mut().enumerate() {
+                            *slot = host.values[first + g * host.stride + i];
+                        }
+                        host.fit.nodal_values_into(gauss, nodal);
+                        out[k] = weights.iter().zip(nodal.iter()).map(|(w, v)| w * v).sum();
+                    }
+                }
+            },
+        );
+    on_target(target, &components, &index, &values)
+}
+
+/// `target` must live in the dimension of `mesh`.
+fn same_dimension(mesh: &Mesh, target: &Mesh) -> Result<()> {
+    let (dim, target_dim) = (mesh.coords()?.read().dim(), target.coords()?.read().dim());
+    if dim != target_dim {
+        return Err(PyrucastError::Message(format!(
+            "project: `mesh` is {dim}-D and `target` {target_dim}-D"
+        )));
+    }
+    Ok(())
+}
+
+/// The distinct nodes of `target`, each with its slot, and where they are.
+fn distinct_points(target: &Mesh) -> Result<(HashMap<NodeId, usize>, Vec<Vec<f64>>)> {
+    let target_coords = target.coords()?;
+    let mut index: HashMap<NodeId, usize> = HashMap::new();
+    let mut points: Vec<Vec<f64>> = Vec::new();
+    let c = target_coords.read();
+    for sm in target {
+        for &nid in sm.read().connectivity() {
+            if let std::collections::hash_map::Entry::Vacant(e) = index.entry(nid) {
+                e.insert(points.len());
+                points.push(c.position(nid)?.to_vec());
+            }
+        }
+    }
+    Ok((index, points))
+}
+
+/// The node-major `values` laid on one zone per submesh of `target`.
+fn on_target(
+    target: &Mesh,
+    components: &[String],
+    index: &HashMap<NodeId, usize>,
+    values: &[f64],
+) -> Result<NodeField> {
+    let n_comp = components.len();
     let mut out = NodeField::default();
     for sm in target {
-        let mut sub = SubNodeField::from_support(sm, components.clone())?;
+        let mut sub = SubNodeField::from_support(sm, components.to_vec())?;
         let nodes = sub.node_ids();
         for (row, nid) in sub.values_mut().chunks_mut(n_comp).zip(&nodes) {
             let at = index[nid] * n_comp;
@@ -208,7 +360,7 @@ mod tests {
         let at = [[0.1, 0.2], [0.5, 0.5], [0.97, 0.33], [1.0, 1.0], [1.5, 0.5]];
         let (target, targets) = points(&at);
 
-        let carried = project(&field, &mesh, &target, 1e-6).unwrap();
+        let carried = project_node(&field, &mesh, &target, 1e-6).unwrap();
         let z = carried.get(0).unwrap().read();
         for (node, p) in targets.iter().zip(&at[..4]) {
             assert!((z.value(node.id(), "a").unwrap() - f(p[0], p[1])).abs() < 1e-12);
@@ -237,7 +389,7 @@ mod tests {
         let at = [[0.3, 0.4], [1.2, 0.5], [0.1, 1.7]];
         let (target, targets) = points(&at);
 
-        let carried = project(&field, &mesh, &target, 1e-6).unwrap();
+        let carried = project_node(&field, &mesh, &target, 1e-6).unwrap();
         let z = carried.get(0).unwrap().read();
         for (node, p) in targets.iter().zip(&at) {
             assert!((z.value(node.id(), "a").unwrap() - f(p[0], p[1])).abs() < 1e-12);
@@ -252,10 +404,10 @@ mod tests {
         let field = sampled(&mesh, &nodes, |x, _| 1.0 + x);
         // ξ = 2x − 1 = 1 + 4e-7 past the right edge.
         let (target, targets) = points(&[[1.0 + 2e-7, 0.5]]);
-        let caught = project(&field, &mesh, &target, 1e-6).unwrap();
+        let caught = project_node(&field, &mesh, &target, 1e-6).unwrap();
         let value = caught.get(0).unwrap().read().value(targets[0].id(), "a");
         assert!((value.unwrap() - 2.0).abs() < 1e-6);
-        let missed = project(&field, &mesh, &target, 1e-8).unwrap();
+        let missed = project_node(&field, &mesh, &target, 1e-8).unwrap();
         let value = missed.get(0).unwrap().read().value(targets[0].id(), "a");
         assert_eq!(value.unwrap(), 0.0);
     }
@@ -301,7 +453,7 @@ mod tests {
             target.add_sub(Handle::new(sm)).unwrap();
         }
 
-        let carried = project(&field, &mesh, &target, 1e-6).unwrap();
+        let carried = project_node(&field, &mesh, &target, 1e-6).unwrap();
         assert_eq!(carried.len(), 2);
         for zone in &carried {
             let z = zone.read();
@@ -309,7 +461,7 @@ mod tests {
         }
 
         // A node of `mesh` the field leaves out reads zero: the right side.
-        let carried = project(&threes, &mesh, &target, 1e-6).unwrap();
+        let carried = project_node(&threes, &mesh, &target, 1e-6).unwrap();
         let z = carried.get(0).unwrap().read();
         assert!((z.value(p[1].id(), "a").unwrap() - 1.5).abs() < 1e-12);
     }
@@ -321,16 +473,95 @@ mod tests {
         let (mesh, nodes) = square(1);
         let field = sampled(&mesh, &nodes, |x, _| 1.0 + x);
         let (target, targets) = points(&[[0.5, 0.5]]);
-        assert!(project(&NodeField::default(), &mesh, &target, 1e-6)
+        assert!(project_node(&NodeField::default(), &mesh, &target, 1e-6)
             .unwrap()
             .is_empty());
-        assert!(project(&field, &mesh, &Mesh::empty(), 1e-6)
+        assert!(project_node(&field, &mesh, &Mesh::empty(), 1e-6)
             .unwrap()
             .is_empty());
-        let carried = project(&field, &Mesh::empty(), &target, 1e-6).unwrap();
+        let carried = project_node(&field, &Mesh::empty(), &target, 1e-6).unwrap();
         let z = carried.get(0).unwrap().read();
         assert_eq!(z.value(targets[0].id(), "a").unwrap(), 0.0);
         assert_eq!(z.value(targets[0].id(), "b").unwrap(), 0.0);
+    }
+
+    /// The TRI6 of `quadratic_cells_interpolate_quadratically`, and its nodes.
+    fn tri6() -> (Mesh, Vec<Node>) {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let corners = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]];
+        let mids = [[1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+        let nodes: Vec<Node> = corners
+            .iter()
+            .chain(&mids)
+            .map(|p| Node::create_in(coords.clone(), p).unwrap())
+            .collect();
+        let mut sm = SubMesh::new(coords, ElementType::TRI6);
+        let ids: Vec<NodeId> = nodes.iter().map(Node::id).collect();
+        sm.add_cell(&ids).unwrap();
+        (Mesh::from_submesh(sm), nodes)
+    }
+
+    /// A quadratic field brought to the Gauss points comes back exactly: each
+    /// cell's fit reproduces what its own space can hold.
+    #[test]
+    fn a_field_of_the_space_comes_back_exactly_from_the_gauss_points() {
+        let (mesh, nodes) = tri6();
+        let f = |x: f64, y: f64| x * x + x * y - 3.0 * y * y + 1.0;
+        let nodal = sampled(&mesh, &nodes, f);
+        let fes =
+            crate::containers::finite_element_space::FiniteElementSpace::lagrange(&mesh).unwrap();
+        let at_gauss = crate::ops::element_field::interp_to_gauss(&nodal, &fes).unwrap();
+        let at = [[0.3, 0.4], [1.2, 0.5], [0.1, 1.7]];
+        let (target, targets) = points(&at);
+
+        let carried = project_element(&at_gauss, &mesh, &target, 1e-6).unwrap();
+        let z = carried.get(0).unwrap().read();
+        for (node, p) in targets.iter().zip(&at) {
+            assert!((z.value(node.id(), "a").unwrap() - f(p[0], p[1])).abs() < 1e-10);
+            assert!((z.value(node.id(), "b").unwrap() + f(p[0], p[1])).abs() < 1e-10);
+        }
+    }
+
+    /// A point outside the cells reads zero; a component a zone lacks reads
+    /// zero; a submesh of `mesh` without a zone of the field is refused.
+    #[test]
+    fn element_fields_read_zero_where_nothing_holds_them() {
+        let (mesh, _) = square(1);
+        let fes =
+            crate::containers::finite_element_space::FiniteElementSpace::lagrange(&mesh).unwrap();
+        let with_a = ElementField::new(&fes, vec!["a".into()]).unwrap();
+        with_a
+            .get(0)
+            .unwrap()
+            .write()
+            .set_uniform("a", 2.0)
+            .unwrap();
+        let (target, targets) = points(&[[0.5, 0.5], [3.0, 3.0]]);
+        let carried = project_element(&with_a, &mesh, &target, 1e-6).unwrap();
+        let z = carried.get(0).unwrap().read();
+        assert!((z.value(targets[0].id(), "a").unwrap() - 2.0).abs() < 1e-12);
+        assert_eq!(z.value(targets[1].id(), "a").unwrap(), 0.0);
+
+        // A field of two zones on the same cells, one component each.
+        let with_b = ElementField::new(&fes, vec!["b".into()]).unwrap();
+        with_b
+            .get(0)
+            .unwrap()
+            .write()
+            .set_uniform("b", 7.0)
+            .unwrap();
+        let mut both = ElementField::empty();
+        both.add_sub(with_a.get(0).unwrap()).unwrap();
+        both.add_sub(with_b.get(0).unwrap()).unwrap();
+        let carried = project_element(&both, &mesh, &target, 1e-6).unwrap();
+        let z = carried.get(0).unwrap().read();
+        // First zone on the cells wins, and it carries no "b".
+        assert!((z.value(targets[0].id(), "a").unwrap() - 2.0).abs() < 1e-12);
+        assert_eq!(z.value(targets[0].id(), "b").unwrap(), 0.0);
+
+        let (other, _) = square(1);
+        let err = project_element(&with_a, &other, &target, 1e-6).unwrap_err();
+        assert!(format!("{err}").contains("no zone"), "unexpected: {err}");
     }
 
     /// The field must hang from the `Coords` of `mesh`, and `target` live in
@@ -341,11 +572,11 @@ mod tests {
         let field = sampled(&mesh, &nodes, |x, _| x);
         let (other, _) = square(1);
         let (target, _) = points(&[[0.5, 0.5]]);
-        assert!(project(&field, &other, &target, 1e-6).is_err());
+        assert!(project_node(&field, &other, &target, 1e-6).is_err());
 
         let coords = Handle::new(Coords::new(3).unwrap());
         let n = Node::create_in(coords, &[0.5, 0.5, 0.0]).unwrap();
         let in_3d = poi1_from_nodes(&[n]).unwrap();
-        assert!(project(&field, &mesh, &in_3d, 1e-6).is_err());
+        assert!(project_node(&field, &mesh, &in_3d, 1e-6).is_err());
     }
 }

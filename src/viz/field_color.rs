@@ -27,11 +27,11 @@ use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::NodeFieldView;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::ops::element_field::fit::CellFit;
 use crate::viz::camera::Bbox3;
 use crate::viz::drawable::Drawable;
 use crate::viz::mesh_draw::{render_primitives, submesh_primitives_with_colors, Primitive};
 use crate::viz::View;
-use nalgebra as na;
 use plotters::coord::Shift;
 use plotters::prelude::*;
 
@@ -193,7 +193,7 @@ impl FieldData {
                          FE space does not cover this (sub)mesh"
                     ))
                 })?;
-                let fit = FitOperator::for_zone(zone)?;
+                let fit = CellFit::for_space(&zone.support().read())?;
                 Ok(SubmeshFieldCtx::Element { zone, fit })
             }
         }
@@ -205,7 +205,7 @@ pub(crate) enum SubmeshFieldCtx<'a> {
     Node(&'a NodeFieldView),
     Element {
         zone: &'a SubElementField,
-        fit: FitOperator,
+        fit: CellFit,
     },
 }
 
@@ -217,7 +217,7 @@ impl SubmeshFieldCtx<'_> {
     ///   the mean of the present ones (all missing → zeros), so the flat
     ///   per-cell mean matches the historical behaviour exactly.
     /// - Element field: least-squares fit local to the cell (see
-    ///   [`FitOperator`]) — values are private to this cell's rendering.
+    ///   `ops::element_field::fit`) — values are private to this cell's rendering.
     pub(crate) fn cell_node_values(
         &self,
         sm: &SubMesh,
@@ -251,78 +251,11 @@ impl SubmeshFieldCtx<'_> {
                 for g in 0..zone.gauss_count() {
                     gauss.push(zone.get(cell, g, ci)?);
                 }
-                Ok(fit.nodal_values(&gauss))
+                let mut nodal = vec![0.0; fit.nodes_per_cell()];
+                fit.nodal_values_into(&gauss, &mut nodal);
+                Ok(nodal)
             }
         }
-    }
-}
-
-/// Per-zone least-squares operator mapping a cell's `n_g` Gauss values to
-/// `npc` nodal values **for drawing that cell only** — never averaged with
-/// neighbouring cells, so inter-element discontinuities stay visible.
-///
-/// Solves `min Σ_g w_g (Σ_i N_i(ξ_g)·v_i − f_g)²`: with `A[g,i] = N_i(ξ_g)`
-/// and `W = diag(w_g)`, the normal equations are `(AᵀWA) v = AᵀW f`. The
-/// `npc×npc` factorization is shared by every cell of the zone (`A` only
-/// depends on the FE subspace).
-pub(crate) struct FitOperator {
-    /// `Some((lu(AᵀWA), AᵀW))`, or `None` when under-determined
-    /// (`n_g < npc`, e.g. one Gauss point) / singular → every nodal value
-    /// falls back to the mean of the Gauss values (constant per cell).
-    op: Option<(na::LU<f64, na::Dyn, na::Dyn>, na::DMatrix<f64>)>,
-    npc: usize,
-}
-
-impl FitOperator {
-    fn for_zone(zone: &SubElementField) -> Result<Self> {
-        let fespace = zone.support();
-        let s = fespace.read();
-        let npc = s.nodes_per_cell()?;
-        let n_g = s.gauss_count();
-        if n_g < npc {
-            return Ok(Self { op: None, npc });
-        }
-        let mut a = na::DMatrix::zeros(n_g, npc);
-        let mut atw = na::DMatrix::zeros(npc, n_g);
-        for g in 0..n_g {
-            // The **geometric** basis, deliberately: what is drawn for a cell is
-            // its geometry — a straight segment, a flat facet — and the colour
-            // has to vary along what is drawn. This is a picture, not a computed
-            // field value, so it stays defined even where a formulation owns its
-            // interpolation and refuses to interpolate for a computation.
-            let row = s.n_at_g(g)?;
-            let w = s.gauss_weight(g)?;
-            for i in 0..npc {
-                a[(g, i)] = row[i];
-                atw[(i, g)] = row[i] * w;
-            }
-        }
-        let k = &atw * &a;
-        let lu = k.lu();
-        if !lu.is_invertible() {
-            return Ok(Self { op: None, npc });
-        }
-        Ok(Self {
-            op: Some((lu, atw)),
-            npc,
-        })
-    }
-
-    /// Nodal values for one cell from its Gauss values.
-    fn nodal_values(&self, gauss_values: &[f64]) -> Vec<f64> {
-        let mean = if gauss_values.is_empty() {
-            0.0
-        } else {
-            gauss_values.iter().sum::<f64>() / gauss_values.len() as f64
-        };
-        if let Some((lu, atw)) = &self.op {
-            let f = na::DVector::from_column_slice(gauss_values);
-            let b = atw * f;
-            if let Some(v) = lu.solve(&b) {
-                return v.iter().copied().collect();
-            }
-        }
-        vec![mean; self.npc]
     }
 }
 
@@ -919,15 +852,6 @@ mod tests {
         for (v, t) in nodal.iter().zip(target) {
             assert!((v - t).abs() < 1e-10, "fit {nodal:?} ≠ target {target:?}");
         }
-    }
-
-    /// Under-determined fit (fewer Gauss points than nodes) falls back
-    /// to the Gauss mean — constant per element.
-    #[test]
-    fn element_fit_underdetermined_falls_back_to_gauss_mean() {
-        let fit = FitOperator { op: None, npc: 3 };
-        let nodal = fit.nodal_values(&[2.0, 4.0]);
-        assert_eq!(nodal, vec![3.0, 3.0, 3.0]);
     }
 
     /// Two neighbouring elements with different Gauss values keep their

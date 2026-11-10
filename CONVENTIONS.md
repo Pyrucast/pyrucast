@@ -90,6 +90,7 @@ bears its name.** An operation is filed by its **output**, never by its input:
 | `ops::node_field` | a `NodeField` |
 | `ops::element_field` | an `ElementField` |
 | `ops::matrix` | a `Matrix` |
+| `ops::evolution` | an `Evolution` computed from other containers |
 | `ops::coords` | writes into the store |
 
 Operators that produce **no** container escape the rule by construction; they

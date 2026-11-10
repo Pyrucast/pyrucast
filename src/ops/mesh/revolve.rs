@@ -19,8 +19,15 @@ use crate::error::Result;
 ///
 /// `|angle|` may not exceed a full turn; a full turn **closes** the ring —
 /// the last node layer is the first one again, so there is no seam and no
-/// duplicated node. No node may lie on the axis (it would collapse the cells
-/// touching it).
+/// duplicated node.
+///
+/// A **line** may touch the axis by one corner: that node stays put, and the
+/// cells touching it close into triangles — SEG2 → TRI3, SEG3 → TRI6 —, a
+/// submesh of their own after the quadrangles of their zone. A line from the
+/// axis to the rim thus revolves into a disc sector: a fan of triangles at the
+/// centre, a ring of quadrangles around it, a single node at the centre. A
+/// surface cell may not touch the axis (its prism would collapse), nor may a
+/// line lie along it.
 ///
 /// Nodes shared between cells of the source stay shared in the result. Source
 /// nodes are re-used (refcount incremented); the other layers are created.
@@ -238,13 +245,167 @@ mod tests {
         }
     }
 
+    /// Signed area of a planar polygon (shoelace), counterclockwise positive.
+    fn polygon_area(points: &[[f64; 2]]) -> f64 {
+        let n = points.len();
+        (0..n)
+            .map(|i| {
+                let (a, b) = (points[i], points[(i + 1) % n]);
+                a[0] * b[1] - b[0] * a[1]
+            })
+            .sum::<f64>()
+            / 2.0
+    }
+
+    /// Every cell of `mesh` as its corner polygon, 2-D.
+    fn cell_polygons(mesh: &Mesh) -> Vec<(ElementType, Vec<[f64; 2]>)> {
+        let coords = mesh.coords().unwrap();
+        let c = coords.read();
+        let mut out = Vec::new();
+        for sm in mesh {
+            let sm = sm.read();
+            let et = sm.element_type();
+            let (npc, corners) = (et.nodes_per_cell(), et.as_kind().corner_count());
+            for cell in sm.connectivity().chunks(npc) {
+                let poly = cell[..corners]
+                    .iter()
+                    .map(|&id| {
+                        let p = c.position(id).unwrap();
+                        [p[0], p[1]]
+                    })
+                    .collect();
+                out.push((et, poly));
+            }
+        }
+        out
+    }
+
+    /// A line of 2 SEG2 from the axis, turned by 90° in 7 sectors: 7
+    /// quadrangles around 7 triangles, one node at the centre, every cell
+    /// counterclockwise, and the area of the inscribed polygon.
     #[test]
-    fn revolve_rejects_nodes_on_the_axis() {
+    fn a_line_from_the_axis_revolves_into_a_fan_and_a_ring() {
         let coords = Handle::new(Coords::new(2).unwrap());
-        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
-        let b = Node::create_in(coords, &[1.0, 0.0]).unwrap();
-        let seg = line(&a, &b, 1, ElementType::SEG2).unwrap();
-        assert!(revolve(&seg, PI, 2, &[0.0, 0.0], None).is_err());
+        let centre = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let rim = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
+        let seg = line(&centre, &rim, 2, ElementType::SEG2).unwrap();
+        let sector = revolve(&seg, PI / 2.0, 7, &[0.0, 0.0], None).unwrap();
+
+        assert_eq!(sector.len(), 2);
+        let (ring, fan) = (sector.get(0).unwrap(), sector.get(1).unwrap());
+        assert_eq!(ring.read().element_type(), ElementType::QUA4);
+        assert_eq!(fan.read().element_type(), ElementType::TRI3);
+        assert_eq!((ring.read().cell_count(), fan.read().cell_count()), (7, 7));
+        let mut all: Vec<_> = ring.read().connectivity().to_vec();
+        all.extend_from_slice(fan.read().connectivity());
+        all.sort_unstable();
+        all.dedup();
+        assert_eq!(all.len(), 1 + 2 * 8);
+        // The centre node is the source's, shared by every triangle.
+        for cell in fan.read().connectivity().chunks(3) {
+            assert!(cell.contains(&centre.id()));
+        }
+        let polygons = cell_polygons(&sector);
+        assert!(polygons.iter().all(|(_, p)| polygon_area(p) > 0.0));
+        let area: f64 = polygons.iter().map(|(_, p)| polygon_area(p)).sum();
+        let expected = 7.0 * 0.5 * 4.0 * (PI / 14.0).sin();
+        assert!((area - expected).abs() < 1e-12, "{area} ≠ {expected}");
+    }
+
+    /// A full turn closes the fan too: no node twice, the centre once.
+    #[test]
+    fn a_full_turn_from_the_axis_doubles_no_node() {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let centre = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let rim = Node::create_in(coords, &[1.0, 0.0]).unwrap();
+        // From the rim to the centre: the axis is the second node.
+        let seg = line(&rim, &centre, 1, ElementType::SEG2).unwrap();
+        let disc = revolve(&seg, TAU, 4, &[0.0, 0.0], None).unwrap();
+        assert_eq!(disc.len(), 1);
+        assert_eq!(
+            disc.get(0).unwrap().read().element_type(),
+            ElementType::TRI3
+        );
+        assert_eq!(distinct_nodes(&disc), 1 + 4);
+        // A line running towards the centre sweeps clockwise cells, as its
+        // quadrangles would: every triangle turns the same way.
+        let polygons = cell_polygons(&disc);
+        assert!(polygons.iter().all(|(_, p)| polygon_area(p) < 0.0));
+    }
+
+    /// In quadratic, the fan is TRI6: the mid-node of the outer edge sits on
+    /// the arc, at the half angle.
+    #[test]
+    fn a_seg3_from_the_axis_gives_tri6_with_mid_nodes_on_the_arc() {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let centre = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let rim = Node::create_in(coords.clone(), &[3.0, 0.0]).unwrap();
+        let seg = line(&centre, &rim, 1, ElementType::SEG3).unwrap();
+        let fan = revolve(&seg, PI / 2.0, 3, &[0.0, 0.0], None).unwrap();
+        assert_eq!(fan.len(), 1);
+        let fan = fan.get(0).unwrap();
+        assert_eq!(fan.read().element_type(), ElementType::TRI6);
+        let c = coords.read();
+        for (k, cell) in fan.read().connectivity().chunks(6).enumerate() {
+            // [centre, rim at k, rim at k + 1, mid of the first radius,
+            //  mid of the arc, mid of the second radius]
+            assert_eq!(cell[0], centre.id());
+            let arc = c.position(cell[4]).unwrap();
+            assert!((arc[0].hypot(arc[1]) - 3.0).abs() < 1e-12);
+            let half = (k as f64 + 0.5) * PI / 6.0;
+            assert!((arc[1].atan2(arc[0]) - half).abs() < 1e-12);
+            for mid in [cell[3], cell[5]] {
+                let m = c.position(mid).unwrap();
+                assert!((m[0].hypot(m[1]) - 1.5).abs() < 1e-12);
+            }
+        }
+    }
+
+    /// A surface touching the axis, or a line lying along it, is refused.
+    #[test]
+    fn what_would_collapse_on_the_axis_is_refused() {
+        let coords = Handle::new(Coords::new(3).unwrap());
+        let n0 = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
+        let n1 = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
+        let n2 = Node::create_in(coords.clone(), &[1.0, 0.0, 1.0]).unwrap();
+        let mut tri = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+        tri.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
+        let err = revolve(&tri, PI, 2, &[0.0, 0.0, 0.0], Some(&[0.0, 0.0, 1.0])).unwrap_err();
+        assert!(
+            format!("{err}").contains("only a line"),
+            "unexpected: {err}"
+        );
+
+        let n3 = Node::create_in(coords.clone(), &[0.0, 0.0, 2.0]).unwrap();
+        // One segment along the axis, one off it.
+        let mut lines = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+        lines.add_cell(&[n0.id(), n3.id()]).unwrap();
+        lines.add_cell(&[n0.id(), n1.id()]).unwrap();
+        let err = revolve(&lines, PI, 2, &[0.0, 0.0, 0.0], Some(&[0.0, 0.0, 1.0])).unwrap_err();
+        assert!(
+            format!("{err}").contains("sweep nothing"),
+            "unexpected: {err}"
+        );
+    }
+
+    /// The fan and its ring extrude into prisms and hexahedra, sharing nodes.
+    #[test]
+    fn the_sector_extrudes_into_prisms_and_hexahedra() {
+        let coords = Handle::new(Coords::new(3).unwrap());
+        let centre = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
+        let rim = Node::create_in(coords, &[0.0, 0.0, -1.0]).unwrap();
+        let seg = line(&centre, &rim, 2, ElementType::SEG2).unwrap();
+        let sector = revolve(&seg, PI / 2.0, 7, &[0.0, 0.0, 0.0], Some(&[0.0, 1.0, 0.0])).unwrap();
+        let solid = crate::ops::mesh::extrude(&sector, &[0.0, 0.2, 0.0], 2).unwrap();
+        let types: Vec<ElementType> = solid.into_iter().map(|z| z.read().element_type()).collect();
+        assert_eq!(types, [ElementType::HEX8, ElementType::PENTA6]);
+        let mut all: Vec<_> = Vec::new();
+        for z in &solid {
+            all.extend_from_slice(z.read().connectivity());
+        }
+        all.sort_unstable();
+        all.dedup();
+        assert_eq!(all.len(), 17 * 3);
     }
 
     #[test]

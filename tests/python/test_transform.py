@@ -274,12 +274,18 @@ def test_revolve_rejects_bad_arguments():
     with pytest.raises(Exception, match="revolve"):
         pyrucast.mesh.revolve(seg, 3.0 * math.pi, 2, [0.0, 0.0])
 
-    # A node on the axis would collapse the cells touching it.
-    on_axis = pyrucast.mesh.line(
-        c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), 1, "SEG2"
+    # A line touching the axis closes into triangles there; a line lying on
+    # the axis would sweep nothing.
+    centre = c.add_node([0.0, 0.0])
+    from_axis = pyrucast.mesh.line(centre, c.add_node([1.0, 0.0]), 1, "SEG2")
+    fan = pyrucast.mesh.revolve(from_axis, math.pi, 2, [0.0, 0.0])
+    assert fan.element_types() == ["TRI3"]
+    c3d = pyrucast.Coords(3)
+    lying = pyrucast.mesh.line(
+        c3d.add_node([0.0, 0.0, 0.0]), c3d.add_node([0.0, 0.0, 1.0]), 1, "SEG2"
     )
     with pytest.raises(Exception, match="axis"):
-        pyrucast.mesh.revolve(on_axis, math.pi, 2, [0.0, 0.0])
+        pyrucast.mesh.revolve(lying, math.pi, 2, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
 
     # A 3-D revolution needs an axis.
     c3 = pyrucast.Coords(3)

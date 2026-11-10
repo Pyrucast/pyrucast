@@ -315,6 +315,19 @@ print(quart.element_types())  # ['HEX8']
 assert couronne.cell_count == 128
 assert quart.element_types() == ["HEX8"]
 
+# ANCHOR: revolve_axe
+# A radius from the centre to the rim, turned by 90° in 7 sectors: a fan of
+# triangles around the centre node, a ring of quadrangles around the fan.
+centre = c.add_node([0.0, 0.0])
+bord = c.add_node([0.0, -1.0])
+secteur = pyrucast.mesh.revolve(
+    pyrucast.mesh.line(centre, bord, 2), math.pi / 2, 7, [0.0, 0.0]
+)
+print(secteur.element_types())  # ['QUA4', 'TRI3']
+# ANCHOR_END: revolve_axe
+assert secteur.element_types() == ["QUA4", "TRI3"]
+assert [z.cell_count for z in secteur] == [7, 7]
+
 # ── Order raising, type change ──────────────────────────────────────────────
 
 

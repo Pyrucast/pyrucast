@@ -640,14 +640,21 @@ pub fn extrude(mesh: PyRef<PyMesh>, direction: Vec<f64>, n_layers: usize) -> PyR
 
 /// Revolve `mesh` by `n_layers` layers over a total `angle` (radians) — the
 /// rotational companion of `extrude`. SEG2 → QUA4, TRI3 → PENTA6,
-/// QUA4 → HEX8.
+/// QUA4 → HEX8, and in quadratic SEG3 → QUA8, TRI6 → PENTA15, QUA8 → HEX20
+/// (the mid-node of an edge along the sweep sits on the arc).
 ///
 /// In 2-D the revolution is about the point `center` (counterclockwise for a
 /// positive `angle`) and `axis` is ignored; in 3-D it is about the line
 /// through `center` directed by `axis` (right-handed), which is then
 /// required. `|angle|` may not exceed a full turn, and a full turn closes the
-/// ring: the last node layer is the first one again, so there is no seam. No
-/// node may lie on the axis — it would collapse the cells touching it.
+/// ring: the last node layer is the first one again, so there is no seam.
+///
+/// A **line** may touch the axis by one corner: that node stays put, and the
+/// cells touching it close into triangles — SEG2 → TRI3, SEG3 → TRI6 —, a
+/// submesh of their own after the quadrangles. A line from the axis to the rim
+/// thus revolves into a disc sector: a fan of triangles at the centre, a ring
+/// of quadrangles around it, one node at the centre. A surface cell may not
+/// touch the axis (its prism would collapse), nor may a line lie along it.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]

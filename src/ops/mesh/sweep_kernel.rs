@@ -356,11 +356,20 @@ fn swept_type(et: ElementType, op: &str) -> Result<ElementType> {
 ///
 /// — the mid-nodes in the edge order of the linear cell (`EDGES` of
 /// `qua4.rs`, `penta6.rs`, `hex8.rs`).
+///
+/// A **fixed** column (`fixed[col]`, a node on the rotation axis of a
+/// `revolve`) does not move: it is the same node at every level. Only a line
+/// cell may touch one, by one corner: its swept quadrangle closes on that
+/// node into a triangle — SEG2 → TRI3, SEG3 → TRI6 —, the repeated vertex
+/// dropped and the order kept. The triangles of a zone form a submesh of
+/// their own, after the zone's quadrangles. Errors: a surface cell, a cell
+/// with every corner fixed, or a fixed mid-node.
 fn layered(
     mesh: &Mesh,
     cols: &Columns,
     n_layers: usize,
     closed: bool,
+    fixed: &[bool],
     op: &str,
     place: impl Fn(&[f64], f64, &mut Vec<f64>),
 ) -> Result<Mesh> {
@@ -394,9 +403,29 @@ fn layered(
         swept.push((et, swept_et));
         let (npc, corners) = (et.nodes_per_cell(), et.as_kind().corner_count());
         for cell in s.connectivity().chunks(npc) {
+            let n_fixed = cell[..corners]
+                .iter()
+                .filter(|&&id| fixed[cols.of(id)])
+                .count();
+            if n_fixed > 0 && et.topological_dim() != 1 {
+                return Err(PyrucastError::Message(format!(
+                    "{op}: a node of a {et} cell lies on the rotation axis, which would collapse \
+                     the cell (only a line may touch the axis; move the source off it)"
+                )));
+            }
+            if n_fixed == corners {
+                return Err(PyrucastError::Message(format!(
+                    "{op}: a {et} cell lies on the rotation axis — it would sweep nothing"
+                )));
+            }
+            if cell[corners..].iter().any(|&id| fixed[cols.of(id)]) {
+                return Err(PyrucastError::Message(format!(
+                    "{op}: a mid-node of a {et} cell lies on the rotation axis"
+                )));
+            }
             for &id in &cell[..corners] {
                 let col = cols.of(id);
-                if corner_rank[col] == u32::MAX {
+                if corner_rank[col] == u32::MAX && !fixed[col] {
                     corner_rank[col] = n_corner_cols;
                     n_corner_cols += 1;
                 }
@@ -409,11 +438,22 @@ fn layered(
     // Whole levels 1..=last_created for every column, then the half levels
     // for the corner columns — laid out flat and created in one locked pass:
     // a swept solid is where a node-at-a-time creation costs the most.
+    // A fixed column gets no node of its own: its source node stands at every
+    // level. `free_rank` numbers the others, the ones a level creates.
+    let mut free_rank: Vec<u32> = vec![u32::MAX; n_cols];
+    let mut n_free: u32 = 0;
+    for (col, rank) in free_rank.iter_mut().enumerate() {
+        if !fixed[col] {
+            *rank = n_free;
+            n_free += 1;
+        }
+    }
+    let n_free = n_free as usize;
     let last_created = if closed { n_layers - 1 } else { n_layers };
-    let n_created = last_created * n_cols + n_half * n_corner_cols as usize;
+    let n_created = last_created * n_free + n_half * n_corner_cols as usize;
     let mut flat: Vec<f64> = Vec::with_capacity(n_created * dim);
     for k in 1..=last_created {
-        for c in 0..n_cols {
+        for c in (0..n_cols).filter(|&c| !fixed[c]) {
             place(&cols.positions[c], k as f64, &mut flat);
         }
     }
@@ -436,16 +476,26 @@ fn layered(
     // k + ½, for the corner columns.
     let mut whole: Vec<NodeId> = Vec::with_capacity((n_layers + 1) * n_cols);
     whole.extend_from_slice(&cols.ids);
-    whole.extend((0..last_created * n_cols).map(|i| NodeId(first + i as u32)));
+    for k in 0..last_created {
+        whole.extend((0..n_cols).map(|col| {
+            if fixed[col] {
+                cols.ids[col]
+            } else {
+                NodeId(first + (k * n_free) as u32 + free_rank[col])
+            }
+        }));
+    }
     if closed {
         whole.extend_from_slice(&cols.ids);
     }
-    let first_half = first + (last_created * n_cols) as u32;
+    let first_half = first + (last_created * n_free) as u32;
     let mut halves: Vec<NodeId> = vec![NodeId(u32::MAX); n_half * n_cols];
     for k in 0..n_half {
         for (col, &rank) in corner_rank.iter().enumerate() {
             if rank != u32::MAX {
                 halves[k * n_cols + col] = NodeId(first_half + k as u32 * n_corner_cols + rank);
+            } else if fixed[col] {
+                halves[k * n_cols + col] = cols.ids[col];
             }
         }
     }
@@ -455,15 +505,21 @@ fn layered(
         // Guard held for this zone's pass: what follows only reads.
         let s = sm_handle.read();
         let npc = et.nodes_per_cell();
-        let pattern = sweep_pattern(et);
-        // The zone's connectivity as column indices, looked up once rather
-        // than once per layer.
-        let conn_cols: Vec<usize> = s.connectivity().iter().map(|&id| cols.of(id)).collect();
-
-        let mut out: Vec<NodeId> =
-            Vec::with_capacity(n_layers * s.cell_count() * swept_et.nodes_per_cell());
-        for k in 0..n_layers {
-            let levels: [&[NodeId]; 3] = [
+        // The zone's cells as column indices, looked up once rather than once
+        // per layer, and sorted once by what they sweep into: a quadrangle, or
+        // a triangle closing on the axis at local node 0 or 1. The layer loop
+        // below then only indexes.
+        let mut regular: Vec<usize> = Vec::with_capacity(s.connectivity().len());
+        let mut on_axis: [Vec<usize>; 2] = [Vec::new(), Vec::new()];
+        for cell in s.connectivity().chunks(npc) {
+            let cell_cols = cell.iter().map(|&id| cols.of(id));
+            match (0..2).find(|&i| et.topological_dim() == 1 && fixed[cols.of(cell[i])]) {
+                Some(i) => on_axis[i].extend(cell_cols),
+                None => regular.extend(cell_cols),
+            }
+        }
+        let levels_of = |k: usize| -> [&[NodeId]; 3] {
+            [
                 &whole[k * n_cols..(k + 1) * n_cols],
                 &whole[(k + 1) * n_cols..(k + 2) * n_cols],
                 if quadratic {
@@ -471,17 +527,44 @@ fn layered(
                 } else {
                     &[]
                 },
-            ];
-            for cell in conn_cols.chunks(npc) {
+            ]
+        };
+
+        let pattern = sweep_pattern(et);
+        let mut out: Vec<NodeId> =
+            Vec::with_capacity(n_layers * regular.len() / npc * pattern.len());
+        for k in 0..n_layers {
+            let levels = levels_of(k);
+            for cell in regular.chunks(npc) {
                 out.extend(pattern.iter().map(|&(level, i)| levels[level][cell[i]]));
             }
         }
-
-        result.add_sub(Handle::new(SubMesh::from_connectivity(
-            coords.clone(),
-            swept_et,
-            out,
-        )?))?;
+        let n_triangles = (on_axis[0].len() + on_axis[1].len()) / npc;
+        if !out.is_empty() || n_triangles == 0 {
+            result.add_sub(Handle::new(SubMesh::from_connectivity(
+                coords.clone(),
+                swept_et,
+                out,
+            )?))?;
+        }
+        if n_triangles > 0 {
+            let (triangle, closed_on) = axis_patterns(et);
+            let mut out: Vec<NodeId> =
+                Vec::with_capacity(n_layers * n_triangles * triangle.nodes_per_cell());
+            for k in 0..n_layers {
+                let levels = levels_of(k);
+                for (cells, pattern) in on_axis.iter().zip(closed_on) {
+                    for cell in cells.chunks(npc) {
+                        out.extend(pattern.iter().map(|&(level, i)| levels[level][cell[i]]));
+                    }
+                }
+            }
+            result.add_sub(Handle::new(SubMesh::from_connectivity(
+                coords.clone(),
+                triangle,
+                out,
+            )?))?;
+        }
     }
 
     // The swept zones own the fresh nodes now; hand back the unit `add_nodes`
@@ -564,6 +647,36 @@ fn sweep_pattern(et: ElementType) -> &'static [(usize, usize)] {
     }
 }
 
+/// The triangle a line cell sweeps into when one of its corners stays on the
+/// rotation axis, and its pattern for each corner that can: the quadrangle of
+/// [`sweep_pattern`] with the repeated vertex dropped, its order kept.
+///
+/// - SEG2 → TRI3, from `bot[0], bot[1], top[1], top[0]`: node 0 fixed gives
+///   `bot[0], bot[1], top[1]`; node 1 fixed, `bot[0], bot[1], top[0]`;
+/// - SEG3 → TRI6, from the QUA8 `bot[0], bot[1], top[1], top[0], bot[2],
+///   v[1], top[2], v[0]`: the collapsed edge's mid-node goes with it — node 0
+///   fixed gives `bot[0], bot[1], top[1], bot[2], v[1], top[2]`; node 1 fixed,
+///   `bot[0], bot[1], top[0], bot[2], top[2], v[0]` (edges `0-1`, `1-2`, `2-0`).
+fn axis_patterns(et: ElementType) -> (ElementType, [&'static [(usize, usize)]; 2]) {
+    const B: usize = 0;
+    const T: usize = 1;
+    const H: usize = 2;
+    match et {
+        ElementType::SEG2 => (
+            ElementType::TRI3,
+            [&[(B, 0), (B, 1), (T, 1)], &[(B, 0), (B, 1), (T, 0)]],
+        ),
+        // SEG3, the other line `layered` lets touch the axis.
+        _ => (
+            ElementType::TRI6,
+            [
+                &[(B, 0), (B, 1), (T, 1), (B, 2), (H, 1), (T, 2)],
+                &[(B, 0), (B, 1), (T, 0), (B, 2), (T, 2), (H, 0)],
+            ],
+        ),
+    }
+}
+
 /// Extrude a mesh by `n_layers` layers along `direction`.
 ///
 /// `direction` is the **total** displacement vector; each intermediate
@@ -606,6 +719,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
         &cols,
         n_layers,
         false,
+        &vec![false; cols.ids.len()],
         "extrude",
         |base, level, out| {
             out.extend(base.iter().zip(step.iter()).map(|(&c, &s)| c + level * s));
@@ -634,8 +748,12 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
 /// the sweep — the last node layer is the first one again, so the ring has
 /// no seam and no duplicated nodes.
 ///
-/// No node may sit on the axis: it would collapse one edge of every cell
-/// touching it into a degenerate (zero-Jacobian) element.
+/// A **line** may touch the axis by one corner: that node stays put, and the
+/// cells touching it close into triangles — SEG2 → TRI3, SEG3 → TRI6 —, a
+/// submesh of their own after the quadrangles of their zone. A line from the
+/// axis to the rim thus revolves into a disc sector, fan at the centre, ring
+/// around it, one node at the centre. A surface cell may not touch the axis
+/// (its prism would collapse), nor may a line lie along it.
 ///
 /// Nodes shared between cells in the source mesh remain shared in the result.
 /// Source nodes are re-used (refcount incremented); the other layers are
@@ -731,13 +849,14 @@ pub fn revolve(
     };
     let radii: Vec<f64> = cols.positions.iter().map(|p| radius(p)).collect();
     let max_radius = radii.iter().cloned().fold(0.0, f64::max);
-    if max_radius == 0.0 || radii.iter().any(|&r| r <= 1e-10 * max_radius) {
+    if max_radius == 0.0 {
         return Err(PyrucastError::Message(
-            "revolve: some node lies on the rotation axis, which would collapse \
-             the cells touching it (move the source off the axis)"
-                .into(),
+            "revolve: the whole mesh lies on the rotation axis — it would sweep nothing".into(),
         ));
     }
+    // A node on the axis stays where it is; `layered` closes the line cells
+    // touching it into triangles, and refuses the rest.
+    let fixed: Vec<bool> = radii.iter().map(|&r| r <= 1e-10 * max_radius).collect();
 
     let step = angle / n_layers as f64;
     // The rotation is chosen once, outside the per-node placement.
@@ -747,6 +866,7 @@ pub fn revolve(
             &cols,
             n_layers,
             closed,
+            &fixed,
             "revolve",
             |base, level, out| {
                 let (sin, cos) = (step * level).sin_cos();
@@ -762,6 +882,7 @@ pub fn revolve(
             &cols,
             n_layers,
             closed,
+            &fixed,
             "revolve",
             |base, level, out| {
                 let (sin, cos) = (step * level).sin_cos();

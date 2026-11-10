@@ -13,7 +13,7 @@ Maillage - création;PAVE;Maille un pavé / bloc volumique structuré;—
 Maillage - création;MANU;Maillage manuel (élément défini nœud par nœud);Mesh(coords, type)
 Maillage - création;LIRE;Lit un maillage (et ses champs) depuis un fichier externe (gmsh .msh, ASCII/binaire ; MED via medcoupling), une session gmsh vivante ou des tableaux;read_gmsh / read_gmsh_str / from_gmsh / from_medcoupling / from_arrays
 Maillage - génération;TRAN;Translation/extrusion d'un maillage (engendre la dimension supérieure);extrude / translate (extrude garde le degré : SEG3 → QUA8, QUA8 → HEX20, TRI6 → PENTA15)
-Maillage - génération;ROTA;Rotation / révolution d'un maillage;rotate / revolve
+Maillage - génération;ROTA;Rotation / révolution d'un maillage;rotate / revolve (une ligne qui touche l'axe s'y referme en TRI3 / TRI6, comme ROTA suivi d'ELIM et REGE)
 Maillage - génération;VOLU;Volume engendré par déplacement d'une surface;sweep / sweep_solid / revolve / triangulate_volume / pave_volume
 Maillage - génération;GENE;Génère un maillage par balayage entre deux lignes;sweep
 Maillage - génération;SYME;Symétrie d'un maillage;symmetry_point / symmetry_line / symmetry_plane
@@ -56,6 +56,7 @@ Modèle et matériau;MATE;Définit le champ de propriétés matériau;material_f
 Modèle et matériau;CARA;Caractéristiques géométriques (sections de poutres/coques);material_field (composantes section)
 Modèle et matériau;COMP;Intègre la loi de comportement (déf -> contraintes);integrate_behavior
 Modèle et matériau;ELAS;Opérateur élastique : contraintes d'une déformation (D:ε) ou déformation d'une contrainte (D⁻¹:σ);elastic_stress / elastic_strain (D de la loi : Hooke de l'élasticité, D du prédicteur d'une plasticité, D non endommagé)
+Modèle et matériau;VMIS;Contrainte équivalente de von Mises aux points de Gauss;element_field.von_mises (aussi la forme de Hill, coefficients F, G, H, L, M, N)
 Assemblage matrices;RIGI;Matrice de rigidité;stiffness
 Assemblage matrices;MASS;Matrice de masse;mass
 Assemblage matrices;COND;Matrice de conductivité (thermique);stiffness (heat_conduction)
@@ -93,7 +94,7 @@ Champs - extraction;DEPL;Extrait le champ de déplacement;NodeField
 Champs - extraction;CHAN (CHAM);Change le support d'un champ (Gauss <-> nœuds);interp_to_gauss (nœuds -> Gauss) / divergence (Gauss -> nœuds) / node_field.consolidate
 Champs - extraction;ELNO;Passe un champ des points de Gauss aux nœuds;divergence (partiel)
 Champs - extraction;REDU;Restreint un champ à un sous-maillage;restrict
-Champs - extraction;PROI;Projette un champ aux nœuds d'une autre géométrie par les fonctions de forme;node_field.project (interpolé par les mailles de mesh aux nœuds de target, 0 hors de mesh, tol=1e-6 ; syntaxe GEO2 seule, ni modèle ni points d'intégration, ni 'MINI' ni 'POLY')
+Champs - extraction;PROI;Projette un champ aux nœuds d'une autre géométrie par les fonctions de forme;node_field.project (interpolé par les mailles de mesh aux nœuds de target, 0 hors de mesh, tol=1e-6 ; un champ aux points de Gauss est lu par l'ajustement propre à chaque maille, sans moyenne entre mailles ; syntaxe GEO2 seule, ni 'MINI' ni 'POLY')
 Champs - extraction;;Reprojette un champ sur le support et les composantes d'un champ cible (combinable par + - * /);restrict_like
 Champs - assemblage;NOMC;Renomme les composantes;rename_component
 Champs - assemblage;PLUS (chp);Fusionne / additionne des champs;merge / union (|)
@@ -127,7 +128,7 @@ Maths - fonctions;ATG;Arc tangente;—
 Visualisation;TRAC;Tracé d'un maillage ou d'un champ;plot (viz)
 Visualisation;SORT;Écrit un maillage/champ/évolution dans un format externe (VTK ASCII ou binaire, séries temporelles ; MED via medcoupling ; session gmsh ; tableaux);export_vtk / to_medcoupling / to_gmsh / to_arrays
 Visualisation;DEFO;Construit / trace la déformée;deformation + displace + viz
-Visualisation;EVOL;Crée une courbe d'évolution (X-Y);Evolution / SubEvolution (généralisé : valeur scalaire ou champ, interpolation linéaire)
+Visualisation;EVOL;Crée une courbe d'évolution (X-Y);Evolution / SubEvolution (généralisé : valeur scalaire ou champ, interpolation linéaire) ; EVOL 'CHPO' le long d'une ligne : evolution.along (ligne POI1, abscisse curviligne, une courbe par composante)
 Visualisation;DESS;Dessine une courbe d'évolution;Evolution.plot (courbe X-Y · champ + slider de valeur tabulée)
 Visualisation;OEIL;Définit le point de vue 3D;camera (viz)
 Visualisation;ZOOM;Cadrage / zoom du tracé;viz (caméra)

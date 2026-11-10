@@ -15,7 +15,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `circle(center, normal, radius, n_elems, element_type="SEG2")` | un cercle fermé (`SEG2` ou `SEG3`, plan défini par `normal`) ; en `SEG3`, le nœud milieu est **sur le cercle** |
 | `arc(a, center, b, n_elems, element_type="SEG2")` | un arc de `a` à `b` sur le cercle de centre `center` passant par les deux (le plus court des deux arcs) ; en `SEG3`, le nœud milieu est **sur l'arc** |
 | `extrude(mesh, direction, n_layers)` | extrude un maillage le long de `direction` (SEG2→QUA4, TRI3→PENTA6, QUA4→HEX8, et en quadratique SEG3→QUA8, TRI6→PENTA15, QUA8→HEX20) |
-| `revolve(mesh, angle, n_layers, center, axis=None)` | **compagnon rotatif** d'`extrude` : balaye un maillage de `angle` (rad) autour de `center` (axe `axis` en 3D), mêmes types qu'`extrude` ; un tour complet **referme** l'anneau (voir plus bas) |
+| `revolve(mesh, angle, n_layers, center, axis=None)` | **compagnon rotatif** d'`extrude` : balaye un maillage de `angle` (rad) autour de `center` (axe `axis` en 3D), mêmes types qu'`extrude` ; un tour complet **referme** l'anneau ; une ligne qui touche l'axe s'y referme en triangles (`TRI3`, `TRI6`) (voir plus bas) |
 | `sweep(mesh_a, mesh_b, n_layers, element_type=None)` | tisse une surface entre deux lignes : `QUA4` (défaut), `TRI3`, `QUA8`, `QUA9`, `TRI6` entre deux `SEG2` ; `QUA8` (défaut) ou `QUA9` entre deux `SEG3` ; deux boucles fermées donnent un anneau fermé (voir plus bas) |
 | `transfinite(side1, side2, side3, side4, element_type="QUA4")` | **généralisation de `sweep` à 4 côtés** (l'équivalent Cast3M de `DALL`) : interpolation transfinie (patch de Coons) entre quatre lignes `SEG2` formant un contour fermé (voir plus bas) |
 | `sweep_solid(mesh_a, mesh_b, n_layers)` | **compagnon 3D** de `sweep` : tisse un solide entre deux surfaces (TRI3→PENTA6, QUA4→HEX8) |
@@ -315,11 +315,21 @@ nœuds *est* la première : le tore/cylindre engendré n'a ni couture ni nœuds 
 double, et rien à souder après coup (pas de `merge_nodes`). Au-delà d'un tour,
 la révolution se recouvrirait elle-même : c'est une erreur.
 
-**Aucun nœud sur l'axe.** Un nœud posé sur l'axe ne bouge pas : toutes les
-cellules qui s'y appuient s'écraseraient en éléments dégénérés (jacobien nul).
-L'opérateur le refuse plutôt que de produire un maillage incalculable — il
-faut décaler la source de l'axe (le trou central d'un disque, l'alésage d'un
-tube).
+**Une ligne qui touche l'axe s'y referme en triangles.** Un nœud posé sur
+l'axe ne bouge pas : il reste le même nœud à chaque couche. Une maille de
+ligne qui s'y appuie par un sommet ne balaie donc pas un quadrangle mais un
+**triangle** — `SEG2 → TRI3`, `SEG3 → TRI6` —, son sommet répété retiré et
+son ordre gardé. Les triangles d'une zone forment un sous-maillage à part,
+après ses quadrangles. Un rayon du centre au bord devient ainsi un **secteur
+de disque** : un éventail de triangles autour du nœud central, un anneau de
+quadrangles autour de l'éventail ; extrudé, il donne des prismes au centre et
+des hexaèdres autour. Une maille de surface ne peut pas toucher l'axe — son
+prisme s'écraserait —, et une ligne couchée sur l'axe ne balaierait rien :
+les deux sont refusées.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_maillage.py:revolve_axe}}
+```
 
 **Angle négatif.** Il balaye dans l'autre sens et retourne les cellules,
 exactement comme un `extrude` à contre-normale : passez par `orient` sur le

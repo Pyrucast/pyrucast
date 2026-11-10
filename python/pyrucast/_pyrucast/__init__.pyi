@@ -27,6 +27,7 @@ __all__ = [
     "SubModel",
     "SubNodeField",
     "abs",
+    "along",
     "arc",
     "barycenter",
     "beam_deformation",
@@ -168,6 +169,7 @@ __all__ = [
     "update_contact",
     "viscoplasticity_chaboche",
     "viscoplasticity_lemaitre_chaboche",
+    "von_mises",
     "xtx",
     "xty",
 ]
@@ -798,6 +800,19 @@ class ElementField:
         list tests **only** those components, and only on the zones carrying
         **all** of them — a zone missing any listed component is skipped (no
         submesh). Errors if no bound is given, or the lower one exceeds the upper.
+        """
+    def project(self, mesh: Mesh, target: Mesh, tol: builtins.float = 1e-06) -> NodeField:
+        r"""
+        This field at the Gauss points read at the nodes of `target`: a node of
+        `target` inside a cell of `mesh` takes the value that cell's own Gauss
+        points give there — their least-squares fit on the cell, the one a plot
+        colours the cell with. Nothing is averaged between cells, so a line of
+        points crossing from one cell to its neighbour shows the jump between
+        them; a point on a shared face is read in one of the two. `mesh` is the
+        field's own cells (each submesh must carry a zone of it). A node outside
+        `mesh` gets zero. One zone per submesh of `target`. Errors: a submesh of
+        `mesh` without a zone of the field; `mesh` and `target` in different
+        dimensions.
         """
     def divergence(self, prefix: builtins.str) -> NodeField:
         r"""
@@ -1724,14 +1739,21 @@ class Mesh:
         r"""
         Revolve `mesh` by `n_layers` layers over a total `angle` (radians) — the
         rotational companion of `extrude`. SEG2 → QUA4, TRI3 → PENTA6,
-        QUA4 → HEX8.
+        QUA4 → HEX8, and in quadratic SEG3 → QUA8, TRI6 → PENTA15, QUA8 → HEX20
+        (the mid-node of an edge along the sweep sits on the arc).
         
         In 2-D the revolution is about the point `center` (counterclockwise for a
         positive `angle`) and `axis` is ignored; in 3-D it is about the line
         through `center` directed by `axis` (right-handed), which is then
         required. `|angle|` may not exceed a full turn, and a full turn closes the
-        ring: the last node layer is the first one again, so there is no seam. No
-        node may lie on the axis — it would collapse the cells touching it.
+        ring: the last node layer is the first one again, so there is no seam.
+        
+        A **line** may touch the axis by one corner: that node stays put, and the
+        cells touching it close into triangles — SEG2 → TRI3, SEG3 → TRI6 —, a
+        submesh of their own after the quadrangles. A line from the axis to the rim
+        thus revolves into a disc sector: a fan of triangles at the centre, a ring
+        of quadrangles around it, one node at the centre. A surface cell may not
+        touch the axis (its prism would collapse), nor may a line lie along it.
         """
     def sweep_solid(self, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
         r"""
@@ -2776,6 +2798,26 @@ class NodeField:
         per-element `ElementField` with the same component names. Cast3M `CHAN`
         (nodes → Gauss).
         """
+    def along(self, line: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Evolution:
+        r"""
+        The values of `field` along `line`, one curve per component: the value
+        against the distance travelled along the line.
+        
+        `line` is a POI1 mesh, read in the order of its cells, zone after zone:
+        that order is the path. The abscissa of a point is the length of the
+        path up to it — the sum of the straight distances from one point to the
+        next —, `0` at the first point; its ordinate, the value of the
+        component at that node (a node the field does not define reads zero).
+        `components=None` takes every component of the field, in its order;
+        each gives one `SubEvolution` of the returned `Evolution`, its
+        `ordinate_type` the component's name. A field of another mesh, or a
+        field at the Gauss points, is brought onto the line's points first with
+        `pyrucast.node_field.project`.
+        
+        Raises when `line` is not POI1, when two consecutive points coincide,
+        for a component the field does not carry, and when the field and
+        `line` hang from different `Coords`.
+        """
     def abs(self) -> NodeField:
         r"""
         Element-wise absolute value of a field.
@@ -2859,22 +2901,15 @@ class NodeField:
         """
     def project(self, mesh: Mesh, target: Mesh, tol: builtins.float = 1e-06) -> NodeField:
         r"""
-        `field` interpolated by the cells of `mesh` at the nodes of `target` —
-        Cast3M `PROI` onto a geometry. A node of `target` inside a cell of `mesh`
-        takes `Σ Nᵢ(ξ) f(nodeᵢ)`, the shape functions of that cell at the node
-        (quadratic cells interpolate quadratically); every component is carried.
-        
-        A node of `target` outside `mesh` — farther than `tol` outside every cell's
-        reference element — gets zero, as a nodal field reads a node it does not
-        define: projecting a patch onto a larger mesh is a normal thing. `field` is
-        read first zone first, a node of `mesh` it does not define reading zero.
-        `mesh` and `target` may live in different `Coords` (a field moved onto a
-        remeshed part), each read in its active configuration. One zone per submesh
-        of `target`, like `positions`.
-        
-        An empty `field` or `target` gives an empty field; an empty `mesh` gives
-        zero at every node of `target`. Errors: `field` and `mesh` on different
-        `Coords`; `mesh` and `target` in different dimensions.
+        This nodal field interpolated by the cells of `mesh` at the nodes of
+        `target`: a node of `target` inside a cell of `mesh` takes `Σ Nᵢ(ξ)
+        f(nodeᵢ)`, the shape functions of that cell at the node (quadratic cells
+        interpolate quadratically); every component is carried. A node of `target`
+        outside `mesh` — farther than `tol` outside every cell's reference element
+        — gets zero. Read first zone first, a node of `mesh` the field does not
+        define reading zero. `mesh` and `target` may live in different `Coords`.
+        One zone per submesh of `target`. Errors: the field and `mesh` on
+        different `Coords`; `mesh` and `target` in different dimensions.
         """
     def restrict_like(self, target: NodeField) -> NodeField:
         r"""
@@ -3229,6 +3264,11 @@ class SubElementField:
         **only** those components; if the sub-field lacks any of them, nothing is
         tested and the result is an **empty** `Mesh`. Errors if no bound is given,
         or the lower one exceeds the upper.
+        """
+    def project(self, mesh: Mesh, target: Mesh, tol: builtins.float = 1e-06) -> NodeField:
+        r"""
+        This zone at the Gauss points read at the nodes of `target` — as
+        `ElementField.project`, for a field of this one zone.
         """
 
 @typing.final
@@ -4084,6 +4124,11 @@ class SubNodeField:
         tested and the result is an **empty** `Mesh`. Errors if no bound is given,
         or the lower one exceeds the upper.
         """
+    def project(self, mesh: Mesh, target: Mesh, tol: builtins.float = 1e-06) -> NodeField:
+        r"""
+        This zone interpolated by the cells of `mesh` at the nodes of `target` —
+        as `NodeField.project`, for a field of this one zone.
+        """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubNodeField:
         r"""
         Per-component 0/1 **mask** of this sub-field against a value band — same
@@ -4106,6 +4151,27 @@ class SubNodeField:
 def abs(field: typing.Any) -> typing.Any:
     r"""
     Element-wise absolute value of a field.
+    """
+
+def along(field: NodeField, line: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Evolution:
+    r"""
+    The values of `field` along `line`, one curve per component: the value
+    against the distance travelled along the line.
+    
+    `line` is a POI1 mesh, read in the order of its cells, zone after zone:
+    that order is the path. The abscissa of a point is the length of the
+    path up to it — the sum of the straight distances from one point to the
+    next —, `0` at the first point; its ordinate, the value of the
+    component at that node (a node the field does not define reads zero).
+    `components=None` takes every component of the field, in its order;
+    each gives one `SubEvolution` of the returned `Evolution`, its
+    `ordinate_type` the component's name. A field of another mesh, or a
+    field at the Gauss points, is brought onto the line's points first with
+    `pyrucast.node_field.project`.
+    
+    Raises when `line` is not POI1, when two consecutive points coincide,
+    for a component the field does not carry, and when the field and
+    `line` hang from different `Coords`.
     """
 
 def arc(a: Node, center: Node, b: Node, n_elems: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
@@ -4537,7 +4603,7 @@ def displace(field: NodeField, components: typing.Optional[typing.Sequence[built
     Displace nodes by `field` (incremental): `coord[a] += field.value(node,
     components[a])` on the active coordinate set. `components` lists one
     displacement-component name per spatial axis, in axis order; `None` →
-    `["ux", "uy", "uz"][:dim]`. Mutates the field's `Coords` in place.
+    `["u_x", "u_y", "u_z"][:dim]`. Mutates the field's `Coords` in place.
     """
 
 def displace_from(field: NodeField, reference: builtins.int, target: builtins.int, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
@@ -4547,7 +4613,7 @@ def displace_from(field: NodeField, reference: builtins.int, target: builtins.in
     it lands at `X + u` again, nothing accumulates. A node the field does not
     define stays at its reference position; the active configuration is left as
     it is. `components` names one displacement component per axis; `None` →
-    `["ux", "uy", "uz"][:dim]`. Cast3M `FORM` with a displacement, without
+    `["u_x", "u_y", "u_z"][:dim]`. Cast3M `FORM` with a displacement, without
     changing the active configuration.
     """
 
@@ -5479,24 +5545,35 @@ def positions(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins.s
     `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D).
     """
 
-def project(field: NodeField, mesh: Mesh, target: Mesh, tol: builtins.float = 1e-06) -> NodeField:
+def project(field: typing.Any, mesh: Mesh, target: Mesh, tol: builtins.float = 1e-06) -> NodeField:
     r"""
-    `field` interpolated by the cells of `mesh` at the nodes of `target` —
-    Cast3M `PROI` onto a geometry. A node of `target` inside a cell of `mesh`
-    takes `Σ Nᵢ(ξ) f(nodeᵢ)`, the shape functions of that cell at the node
-    (quadratic cells interpolate quadratically); every component is carried.
+    `field` read at the nodes of `target`, through the cells of `mesh` — Cast3M
+    `PROI` onto a geometry. `field` is a nodal field or a field at the Gauss
+    points:
     
-    A node of `target` outside `mesh` — farther than `tol` outside every cell's
-    reference element — gets zero, as a nodal field reads a node it does not
-    define: projecting a patch onto a larger mesh is a normal thing. `field` is
-    read first zone first, a node of `mesh` it does not define reading zero.
-    `mesh` and `target` may live in different `Coords` (a field moved onto a
-    remeshed part), each read in its active configuration. One zone per submesh
-    of `target`, like `positions`.
+    - **nodal** (`NodeField`, `SubNodeField`): a node of `target` inside a cell
+      of `mesh` takes `Σ Nᵢ(ξ) f(nodeᵢ)`, the shape functions of that cell at
+      the node (quadratic cells interpolate quadratically). `field` is read
+      first zone first, a node of `mesh` it does not define reading zero.
+      `mesh` and `field` must share their `Coords`.
+    - **at the Gauss points** (`ElementField`, `SubElementField`): the node
+      takes the value that cell's **own** Gauss points give there — their
+      least-squares fit on the cell, the one a plot colours the cell with.
+      Nothing is averaged between cells: a line of points crossing from one
+      cell to its neighbour shows the jump between them. A point on a face
+      shared by two cells is read in one of them; to follow a field along a
+      line, put the points between the nodes. `mesh` is the field's own cells:
+      each of its submeshes must carry a zone of the field.
+    
+    Every component is carried. A node of `target` outside `mesh` — farther
+    than `tol` outside every cell's reference element — gets zero. `mesh` and
+    `target` may live in different `Coords`, each read in its active
+    configuration. One zone per submesh of `target`, like `positions`.
     
     An empty `field` or `target` gives an empty field; an empty `mesh` gives
-    zero at every node of `target`. Errors: `field` and `mesh` on different
-    `Coords`; `mesh` and `target` in different dimensions.
+    zero at every node of `target`. Errors: `mesh` and `target` in different
+    dimensions; for a nodal field, `field` and `mesh` on different `Coords`;
+    for a field at the Gauss points, a submesh of `mesh` it has no zone on.
     """
 
 def project_on_sphere(mesh: Mesh, center: typing.Sequence[builtins.float], radius: builtins.float) -> Mesh:
@@ -5642,14 +5719,21 @@ def revolve(mesh: Mesh, angle: builtins.float, n_layers: builtins.int, center: t
     r"""
     Revolve `mesh` by `n_layers` layers over a total `angle` (radians) — the
     rotational companion of `extrude`. SEG2 → QUA4, TRI3 → PENTA6,
-    QUA4 → HEX8.
+    QUA4 → HEX8, and in quadratic SEG3 → QUA8, TRI6 → PENTA15, QUA8 → HEX20
+    (the mid-node of an edge along the sweep sits on the arc).
     
     In 2-D the revolution is about the point `center` (counterclockwise for a
     positive `angle`) and `axis` is ignored; in 3-D it is about the line
     through `center` directed by `axis` (right-handed), which is then
     required. `|angle|` may not exceed a full turn, and a full turn closes the
-    ring: the last node layer is the first one again, so there is no seam. No
-    node may lie on the axis — it would collapse the cells touching it.
+    ring: the last node layer is the first one again, so there is no seam.
+    
+    A **line** may touch the axis by one corner: that node stays put, and the
+    cells touching it close into triangles — SEG2 → TRI3, SEG3 → TRI6 —, a
+    submesh of their own after the quadrangles. A line from the axis to the rim
+    thus revolves into a disc sector: a fan of triangles at the centre, a ring
+    of quadrangles around it, one node at the centre. A surface cell may not
+    touch the axis (its prism would collapse), nor may a line lie along it.
     """
 
 def rotate(mesh: Mesh, angle: builtins.float, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:
@@ -6230,6 +6314,28 @@ def viscoplasticity_lemaitre_chaboche(fespace: FiniteElementSpace, kinematics: b
     
     
     `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    """
+
+def von_mises(model: Model, stress: ElementField, coefficients: typing.Sequence[builtins.float] = [0.5, 0.5, 0.5, 1.5, 1.5, 1.5]) -> ElementField:
+    r"""
+    Equivalent stress of `stress` at the Gauss points of every continuum
+    sub-model of `model`: von Mises by default, Hill's anisotropic form with
+    `coefficients = [F, G, H, L, M, N]`:
+    
+    `σ_eq² = F(σyy − σzz)² + G(σzz − σxx)² + H(σxx − σyy)² + 2Lσyz² + 2Mσxz² + 2Nσxy²`
+    
+    The default `[0.5, 0.5, 0.5, 1.5, 1.5, 1.5]` is von Mises, `√(3 J₂)`.
+    `stress` carries the stresses the laws write (`sigma_xx`, …; the state of
+    `integrate_behavior` or the output of `elastic_stress` will do). The model
+    says which components to read: the six in 3-D; `sigma_xx`, `sigma_yy`,
+    `sigma_xy` in plane stress (`zz` is zero there); plus `sigma_zz` in plane
+    strain and on a body of revolution. Returns one zone per continuum
+    sub-model, with the single component `"von_mises"`.
+    
+    Raises for coefficients that let the form go negative (each of `L`, `M`,
+    `N`, `F + G`, `G + H`, `H + F`, `FG + GH + HF` must be `≥ 0`), and for a
+    stress missing a component its kinematics reads — in plane strain, a
+    stress without `sigma_zz`.
     """
 
 def xtx(x: typing.Any, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:

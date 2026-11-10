@@ -17,9 +17,8 @@ import importlib.util
 import pathlib
 import sys
 
-import pytest
-
 import pyrucast
+import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -51,7 +50,8 @@ def tables(element, quadrature):
         quadrature=quadrature,
     )[0]
     return canonical(
-        (tuple(space.gauss_xi(g)), space.gauss_weight(g)) for g in range(space.gauss_count)
+        (tuple(space.gauss_xi(g)), space.gauss_weight(g))
+        for g in range(space.gauss_count)
     )
 
 

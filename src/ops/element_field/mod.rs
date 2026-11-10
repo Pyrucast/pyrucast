@@ -13,6 +13,8 @@
 //!   model, each from its own producer above (Cast3M `EPSI`);
 //! - *elastic operator* — [`elastic_stress`](fn@elastic_stress) `σ = D:ε` and
 //!   its inverse [`elastic_strain`](fn@elastic_strain) (Cast3M `ELAS`);
+//! - *equivalent stress* — [`von_mises`](fn@von_mises), von Mises or Hill's
+//!   anisotropic form;
 //! - *material data* — [`material_field`](fn@material_field) & co., the
 //!   per-zone coefficients the assemblers read, and
 //!   [`rotate_frame`](fn@rotate_frame), their axes turned with the part;
@@ -29,6 +31,7 @@ pub mod cell_integral;
 pub mod consolidate;
 pub mod deformation;
 pub mod elastic;
+pub(crate) mod fit;
 pub mod gradient;
 pub mod interp_to_gauss;
 pub mod mask;
@@ -39,6 +42,7 @@ pub mod shell_deformation;
 pub mod strain;
 pub mod stress_measure;
 pub mod thermal_strain;
+pub mod von_mises;
 
 pub use beam_deformation::beam_deformation;
 pub use behavior::initial_state;
@@ -55,3 +59,4 @@ pub use shell_deformation::shell_deformation;
 pub use strain::strain;
 pub use stress_measure::{stress_measure, StressMeasure};
 pub use thermal_strain::thermal_strain;
+pub use von_mises::{von_mises, VON_MISES};

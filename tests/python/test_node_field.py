@@ -329,11 +329,11 @@ def test_displace_adds_displacement():
     mesh.unit().add_cell([a])
     mesh.unit().add_cell([b])
 
-    d = pyrucast.NodeField(mesh, ["ux", "uy"])
-    d[0][a, "ux"] = 5.0
-    d[0][a, "uy"] = -1.0
-    d[0][b, "ux"] = 2.0
-    pyrucast.coords.displace(d)  # default components ["ux", "uy"]
+    d = pyrucast.NodeField(mesh, ["u_x", "u_y"])
+    d[0][a, "u_x"] = 5.0
+    d[0][a, "u_y"] = -1.0
+    d[0][b, "u_x"] = 2.0
+    pyrucast.coords.displace(d)  # default components ["u_x", "u_y"]
     assert a.position() == [5.0, -1.0]
     assert b.position() == [3.0, 1.0]
 
@@ -890,9 +890,9 @@ def test_project_carries_a_field_onto_another_mesh():
         x, y = n.position()
         field[0].set_value(n, "T", 1.0 + 2.0 * x - y)
     finer, fine_nodes = _square(5)
-    shift = pyrucast.NodeField(finer, ["ux", "uy"])
+    shift = pyrucast.NodeField(finer, ["u_x", "u_y"])
     for n in fine_nodes:
-        shift[0].set_value(n, "ux", 0.5)
+        shift[0].set_value(n, "u_x", 0.5)
     pyrucast.coords.displace(shift)
 
     carried = pyrucast.node_field.project(field, mesh, finer)

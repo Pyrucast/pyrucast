@@ -195,6 +195,27 @@ chaque courbe garde la sienne, qui sert quand on l'interpole seule.
 {{#include ../../tests/python/test_doc_evolution.py:composer}}
 ```
 
+## Le long d'une ligne
+
+`pyrucast.evolution.along(field, line, components=None)` (aussi
+`field.along(line)`) rend les valeurs d'un champ aux nœuds **le long d'une
+ligne** : une courbe par composante, la valeur en fonction de la **distance
+parcourue**. `line` est un maillage `POI1`, lu dans l'ordre de ses mailles :
+cet ordre est le trajet. L'abscisse d'un point est la longueur du trajet
+jusqu'à lui — la somme des distances en ligne droite d'un point au suivant —,
+`0` au premier point ; son ordonnée, la valeur de la composante en ce nœud.
+`components=None` prend toutes les composantes du champ, dans son ordre ;
+chacune donne une courbe, dont l'`ordinate_type` est son nom.
+
+Un champ d'un autre maillage, ou un champ aux points de Gauss, se porte
+d'abord sur les points de la ligne par
+[`pyrucast.node_field.project`](operateurs/champs.md#projection-sur-un-autre-maillage).
+Deux points consécutifs confondus sont refusés : l'abscisse se répéterait.
+
+```python
+{{#include ../../tests/python/test_doc_evolution.py:le_long}}
+```
+
 ## Tracer
 
 `plot()` dessine une évolution de nombres en courbe, une ligne par zone, et

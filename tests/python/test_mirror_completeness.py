@@ -76,6 +76,8 @@ RUST_ONLY = {
     "damage": "unfolded into one Python function per law (`mazars`, `damage_tc`…)",
     "select_cells": "dispatched by type inside `mesh.select`",
     "select_nodes": "dispatched by type inside `mesh.select`",
+    "project_node": "dispatched by type inside `node_field.project`",
+    "project_element": "dispatched by type inside `node_field.project`",
     "integral_element": "dispatched by type inside `measure.integral`",
     "consolidate": "exposed under the short name in its own Python sub-module",
     # Idiomatic in each language: Rust takes the block as a closure, and needs
@@ -170,6 +172,7 @@ PYTHON_ONLY = {
     "consolidate_element": "flat name of `element_field.consolidate`",
     "set_positions": "flat name of `coords.set`",
     "select": "dispatched by type onto `mesh::select_nodes` / `select_cells`",
+    "project": "dispatched by type onto `node_field::project_node` / `project_element`",
     "integral": "dispatched by type onto `measure::integral` / `integral_element`",
     "integrate_behavior": "qualified name of `element_field::behavior::integrate`",
     "export_vtk": "qualified name of `export::vtk::write`",

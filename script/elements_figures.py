@@ -72,7 +72,9 @@ def parse_number(text: str) -> float:
     t = text.strip().replace(" ", "")
     sign = -1.0 if t.startswith("-") else 1.0
     t = t.lstrip("+-")
-    m = re.fullmatch(r"\\tfrac(\d)(\d)", t) or re.fullmatch(r"\\tfrac\{(\d+)\}\{(\d+)\}", t)
+    m = re.fullmatch(r"\\tfrac(\d)(\d)", t) or re.fullmatch(
+        r"\\tfrac\{(\d+)\}\{(\d+)\}", t
+    )
     if m:
         return sign * int(m.group(1)) / int(m.group(2))
     return sign * float(t)
@@ -104,7 +106,9 @@ def read_nodes(page: Path) -> list[tuple[float, ...]]:
                 coords = coords[1:-1]
             nodes[int(cells[a])] = tuple(parse_number(c) for c in coords.split(","))
     if not nodes or sorted(nodes) != list(range(len(nodes))):
-        raise SystemExit(f"{page}: node table not found or not numbered 0..n-1 ({sorted(nodes)})")
+        raise SystemExit(
+            f"{page}: node table not found or not numbered 0..n-1 ({sorted(nodes)})"
+        )
     return [nodes[i] for i in range(len(nodes))]
 
 
@@ -134,7 +138,10 @@ def prism(tri: Rule, line) -> Rule:
 
 def dunavant6() -> Rule:
     out = []
-    for b, w in [(0.445948490915965, 0.111690794839005), (0.091576213509771, 0.054975871827661)]:
+    for b, w in [
+        (0.445948490915965, 0.111690794839005),
+        (0.091576213509771, 0.054975871827661),
+    ]:
         a = 1 - 2 * b
         out += [((b, b), w), ((a, b), w), ((b, a), w)]
     return out
@@ -146,7 +153,12 @@ def hammer3() -> Rule:
 
 def hammer4() -> Rule:
     a, b = (5 - math.sqrt(5)) / 20, (5 + 3 * math.sqrt(5)) / 20
-    return [((a, a, a), 1 / 24), ((b, a, a), 1 / 24), ((a, b, a), 1 / 24), ((a, a, b), 1 / 24)]
+    return [
+        ((a, a, a), 1 / 24),
+        ((b, a, a), 1 / 24),
+        ((a, b, a), 1 / 24),
+        ((a, a, b), 1 / 24),
+    ]
 
 
 def distinct_permutations(t: tuple) -> list[tuple]:
@@ -159,7 +171,10 @@ def keast11() -> Rule:
     """Barycentric families (L0, L1, L2, L3); the point is (L1, L2, L3)."""
     d, c = 0.399403576166799, 0.100596423833201
     out: Rule = [((0.25, 0.25, 0.25), -74 / 5625)]
-    out += [(L[1:], 343 / 45000) for L in distinct_permutations((11 / 14, 1 / 14, 1 / 14, 1 / 14))]
+    out += [
+        (L[1:], 343 / 45000)
+        for L in distinct_permutations((11 / 14, 1 / 14, 1 / 14, 1 / 14))
+    ]
     out += [(L[1:], 56 / 2250) for L in distinct_permutations((d, d, c, c))]
     return out
 
@@ -197,7 +212,9 @@ class Element:
     @property
     def quadratic(self) -> bool:
         """Has nodes beyond the vertices (the interpolation is `"LAGRANGE2"`)."""
-        return any(self.role(i) not in ("sommet", "extrémité") for i in range(len(self.nodes)))
+        return any(
+            self.role(i) not in ("sommet", "extrémité") for i in range(len(self.nodes))
+        )
 
     def viewer(self) -> tuple[float, float, float]:
         """Direction from the scene towards the viewer, in reference coordinates."""
@@ -219,7 +236,14 @@ class Element:
         return "centre de face"
 
 
-HEX_FACES = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]]
+HEX_FACES = [
+    [0, 3, 2, 1],
+    [4, 5, 6, 7],
+    [0, 1, 5, 4],
+    [1, 2, 6, 5],
+    [2, 3, 7, 6],
+    [3, 0, 4, 7],
+]
 TET_FACES = [[0, 2, 1], [0, 1, 3], [1, 2, 3], [0, 3, 2]]
 PYRA_FACES = [[0, 3, 2, 1], [0, 1, 4], [1, 2, 4], [2, 3, 4], [3, 0, 4]]
 PRISM_FACES = [[0, 2, 1], [3, 4, 5], [0, 1, 4, 3], [1, 2, 5, 4], [2, 0, 3, 5]]
@@ -229,40 +253,157 @@ TET_VIEW = (0.9, 35.0)
 PRISM_VIEW = (0.9, 150.0)
 
 ELEMENTS = [
-    Element("seg2", "SEG2 — segment linéaire", 1, 150.0,
-            tensor(1, GL2), ((0.0,), 2.0), axis_len=1.35),
-    Element("tri3", "TRI3 — triangle linéaire", 2, 220.0,
-            hammer3(), ((1 / 3, 1 / 3), 0.5), n_vertices=3, outline=[0, 1, 2], axis_len=1.25),
-    Element("qua4", "QUA4 — quadrangle bilinéaire", 2, 105.0,
-            tensor(2, GL2), ((0.0, 0.0), 4.0), outline=[0, 1, 2, 3], axis_len=1.5),
-    Element("tet4", "TET4 — tétraèdre linéaire", 3, 170.0,
-            hammer4(), ((0.25, 0.25, 0.25), 1 / 6), n_vertices=4, faces=TET_FACES, oblique=TET_VIEW),
-    Element("pyra5", "PYRA5 — pyramide linéaire", 3, 92.0,
-            pyramid_conic8(), ((0.0, 0.0, 0.25), 4 / 3), n_vertices=5, faces=PYRA_FACES),
-    Element("penta6", "PENTA6 — prisme linéaire", 3, 150.0,
-            prism(hammer3(), GL2), ((1 / 3, 1 / 3, 0.5), 0.5), n_vertices=6,
-            faces=PRISM_FACES, oblique=PRISM_VIEW),
-    Element("hex8", "HEX8 — hexaèdre trilinéaire", 3, 78.0,
-            tensor(3, GL2), ((0.0, 0.0, 0.0), 8.0), faces=HEX_FACES),
-    Element("seg3", "SEG3 — segment quadratique", 1, 150.0,
-            tensor(1), ((0.0,), 2.0), axis_len=1.35),
-    Element("tri6", "TRI6 — triangle quadratique", 2, 220.0,
-            dunavant6(), ((1 / 3, 1 / 3), 0.5),
-            n_vertices=3, outline=[0, 1, 2], axis_len=1.25),
-    Element("qua8", "QUA8 — quadrangle sérendipité", 2, 105.0,
-            tensor(2), ((0.0, 0.0), 4.0), outline=[0, 1, 2, 3], axis_len=1.5),
-    Element("qua9", "QUA9 — quadrangle biquadratique", 2, 105.0,
-            tensor(2), ((0.0, 0.0), 4.0), outline=[0, 1, 2, 3], axis_len=1.5),
-    Element("tet10", "TET10 — tétraèdre quadratique", 3, 190.0,
-            keast11(), ((0.25, 0.25, 0.25), 1 / 6), n_vertices=4, faces=TET_FACES,
-            oblique=TET_VIEW),
-    Element("penta15", "PENTA15 — prisme sérendipité", 3, 170.0,
-            prism(dunavant6(), GL3), ((1 / 3, 1 / 3, 0.5), 0.5), n_vertices=6,
-            faces=PRISM_FACES, oblique=PRISM_VIEW),
-    Element("hex20", "HEX20 — hexaèdre sérendipité", 3, 78.0,
-            tensor(3), ((0.0, 0.0, 0.0), 8.0), faces=HEX_FACES),
-    Element("hex27", "HEX27 — hexaèdre triquadratique", 3, 88.0,
-            tensor(3), ((0.0, 0.0, 0.0), 8.0), faces=HEX_FACES),
+    Element(
+        "seg2",
+        "SEG2 — segment linéaire",
+        1,
+        150.0,
+        tensor(1, GL2),
+        ((0.0,), 2.0),
+        axis_len=1.35,
+    ),
+    Element(
+        "tri3",
+        "TRI3 — triangle linéaire",
+        2,
+        220.0,
+        hammer3(),
+        ((1 / 3, 1 / 3), 0.5),
+        n_vertices=3,
+        outline=[0, 1, 2],
+        axis_len=1.25,
+    ),
+    Element(
+        "qua4",
+        "QUA4 — quadrangle bilinéaire",
+        2,
+        105.0,
+        tensor(2, GL2),
+        ((0.0, 0.0), 4.0),
+        outline=[0, 1, 2, 3],
+        axis_len=1.5,
+    ),
+    Element(
+        "tet4",
+        "TET4 — tétraèdre linéaire",
+        3,
+        170.0,
+        hammer4(),
+        ((0.25, 0.25, 0.25), 1 / 6),
+        n_vertices=4,
+        faces=TET_FACES,
+        oblique=TET_VIEW,
+    ),
+    Element(
+        "pyra5",
+        "PYRA5 — pyramide linéaire",
+        3,
+        92.0,
+        pyramid_conic8(),
+        ((0.0, 0.0, 0.25), 4 / 3),
+        n_vertices=5,
+        faces=PYRA_FACES,
+    ),
+    Element(
+        "penta6",
+        "PENTA6 — prisme linéaire",
+        3,
+        150.0,
+        prism(hammer3(), GL2),
+        ((1 / 3, 1 / 3, 0.5), 0.5),
+        n_vertices=6,
+        faces=PRISM_FACES,
+        oblique=PRISM_VIEW,
+    ),
+    Element(
+        "hex8",
+        "HEX8 — hexaèdre trilinéaire",
+        3,
+        78.0,
+        tensor(3, GL2),
+        ((0.0, 0.0, 0.0), 8.0),
+        faces=HEX_FACES,
+    ),
+    Element(
+        "seg3",
+        "SEG3 — segment quadratique",
+        1,
+        150.0,
+        tensor(1),
+        ((0.0,), 2.0),
+        axis_len=1.35,
+    ),
+    Element(
+        "tri6",
+        "TRI6 — triangle quadratique",
+        2,
+        220.0,
+        dunavant6(),
+        ((1 / 3, 1 / 3), 0.5),
+        n_vertices=3,
+        outline=[0, 1, 2],
+        axis_len=1.25,
+    ),
+    Element(
+        "qua8",
+        "QUA8 — quadrangle sérendipité",
+        2,
+        105.0,
+        tensor(2),
+        ((0.0, 0.0), 4.0),
+        outline=[0, 1, 2, 3],
+        axis_len=1.5,
+    ),
+    Element(
+        "qua9",
+        "QUA9 — quadrangle biquadratique",
+        2,
+        105.0,
+        tensor(2),
+        ((0.0, 0.0), 4.0),
+        outline=[0, 1, 2, 3],
+        axis_len=1.5,
+    ),
+    Element(
+        "tet10",
+        "TET10 — tétraèdre quadratique",
+        3,
+        190.0,
+        keast11(),
+        ((0.25, 0.25, 0.25), 1 / 6),
+        n_vertices=4,
+        faces=TET_FACES,
+        oblique=TET_VIEW,
+    ),
+    Element(
+        "penta15",
+        "PENTA15 — prisme sérendipité",
+        3,
+        170.0,
+        prism(dunavant6(), GL3),
+        ((1 / 3, 1 / 3, 0.5), 0.5),
+        n_vertices=6,
+        faces=PRISM_FACES,
+        oblique=PRISM_VIEW,
+    ),
+    Element(
+        "hex20",
+        "HEX20 — hexaèdre sérendipité",
+        3,
+        78.0,
+        tensor(3),
+        ((0.0, 0.0, 0.0), 8.0),
+        faces=HEX_FACES,
+    ),
+    Element(
+        "hex27",
+        "HEX27 — hexaèdre triquadratique",
+        3,
+        88.0,
+        tensor(3),
+        ((0.0, 0.0, 0.0), 8.0),
+        faces=HEX_FACES,
+    ),
 ]
 
 # ── SVG plumbing ────────────────────────────────────────────────────────────
@@ -292,7 +433,11 @@ def sub(a, b):
 
 
 def cross(a, b):
-    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+    return (
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    )
 
 
 @dataclass
@@ -322,7 +467,11 @@ def analyse_3d(el: Element) -> Geometry:
     visible = [dot(n, el.viewer()) > 1e-9 for n in normals]
 
     def faces_of(p) -> list[int]:
-        return [k for k in range(len(el.faces)) if abs(dot(normals[k], sub(p, planes[k]))) < 1e-9]
+        return [
+            k
+            for k in range(len(el.faces))
+            if abs(dot(normals[k], sub(p, planes[k]))) < 1e-9
+        ]
 
     seen, edges = set(), []
     for k, face in enumerate(el.faces):
@@ -331,7 +480,9 @@ def analyse_3d(el: Element) -> Geometry:
             if key in seen:
                 continue
             seen.add(key)
-            adjacent = [j for j, other in enumerate(el.faces) if a in other and b in other]
+            adjacent = [
+                j for j, other in enumerate(el.faces) if a in other and b in other
+            ]
             edges.append((a, b, not any(visible[j] for j in adjacent)))
     node_faces = [faces_of(p) for p in el.nodes]
     return Geometry(
@@ -345,20 +496,29 @@ def analyse_3d(el: Element) -> Geometry:
 
 def svg_open(w: float, h: float, title: str, desc: str) -> list[str]:
     return [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{f(w)}" height="{f(h)}" '
-        f'viewBox="0 0 {f(w)} {f(h)}" role="img" font-family="{FONT}">',
+        (
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{f(w)}" height="{f(h)}" '
+            f'viewBox="0 0 {f(w)} {f(h)}" role="img" font-family="{FONT}">'
+        ),
         f"<title>{title}</title>",
         f"<desc>{desc}</desc>",
-        "<defs>"
-        f'<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" '
-        f'orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{MUTED}"/></marker>'
-        "</defs>",
-        f'<rect x="0.5" y="0.5" width="{f(w - 1)}" height="{f(h - 1)}" rx="8" fill="#ffffff" '
-        'stroke="#d5dbe3"/>',
+        (
+            "<defs>"
+            f'<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" '
+            f'markerHeight="7" orient="auto-start-reverse">'
+            f'<path d="M0,0 L10,5 L0,10 z" fill="{MUTED}"/></marker>'
+            "</defs>"
+        ),
+        (
+            f'<rect x="0.5" y="0.5" width="{f(w - 1)}" height="{f(h - 1)}" rx="8" fill="#ffffff" '
+            'stroke="#d5dbe3"/>'
+        ),
     ]
 
 
-def text(x, y, s, size=13, anchor="middle", color=INK, weight="normal", style="normal") -> str:
+def text(
+    x, y, s, size=13, anchor="middle", color=INK, weight="normal", style="normal"
+) -> str:
     return (
         f'<text x="{f(x)}" y="{f(y)}" font-size="{size}" text-anchor="{anchor}" fill="{color}" '
         f'font-weight="{weight}" font-style="{style}">{s}</text>'
@@ -377,7 +537,7 @@ def outline_svg(el: Element, geo: Geometry | None, faint: bool = False) -> list[
     out = []
     stroke = "#9aa7b6" if faint else INK
     width = 1.2 if faint else 1.6
-    pt = lambda i: proj(el, el.nodes[i])  # noqa: E731
+    pt = lambda i: proj(el, el.nodes[i])
     if el.dim == 1:
         xs = [pt(i)[0] for i in range(len(el.nodes))]
         out.append(
@@ -397,7 +557,9 @@ def outline_svg(el: Element, geo: Geometry | None, faint: bool = False) -> list[
         n = geo.face_normals[k]
         tint = FACE_TINT[max(range(3), key=lambda a: abs(n[a]))]
         d = " ".join(f"{f(pt(i)[0])},{f(pt(i)[1])}" for i in el.faces[k])
-        out.append(f'<polygon points="{d}" fill="{"#f6f9fc" if faint else tint}" stroke="none"/>')
+        out.append(
+            f'<polygon points="{d}" fill="{"#f6f9fc" if faint else tint}" stroke="none"/>'
+        )
     for hidden in (True, False):
         for a, b, h in geo.edges:
             if h != hidden:
@@ -413,18 +575,31 @@ def outline_svg(el: Element, geo: Geometry | None, faint: bool = False) -> list[
 
 def nodes_svg(el: Element, geo: Geometry | None) -> list[str]:
     out = []
-    order = sorted(range(len(el.nodes)), key=lambda i: bool(geo and not geo.node_hidden[i]))
+    order = sorted(
+        range(len(el.nodes)), key=lambda i: bool(geo and not geo.node_hidden[i])
+    )
     for i in order:  # hidden nodes first, so a visible one never sits under them
         x, y = proj(el, el.nodes[i])
         color = ROLE_COLOR[el.role(i)]
         hidden = bool(geo and geo.node_hidden[i])
         inner = bool(geo and geo.node_inner[i])
-        extra = ' stroke-dasharray="3 2" stroke-opacity=".65"' if hidden or inner else ""
+        extra = (
+            ' stroke-dasharray="3 2" stroke-opacity=".65"' if hidden or inner else ""
+        )
         out.append(
             f'<circle cx="{f(x)}" cy="{f(y)}" r="10" fill="#ffffff" stroke="{color}" '
             f'stroke-width="2.4"{extra}/>'
         )
-        out.append(text(x, y + 3.8, str(i), size=11, color=MUTED if hidden else INK, weight="bold"))
+        out.append(
+            text(
+                x,
+                y + 3.8,
+                str(i),
+                size=11,
+                color=MUTED if hidden else INK,
+                weight="bold",
+            )
+        )
     return out
 
 
@@ -477,7 +652,9 @@ def legend(roles: list[str], x: float, y: float) -> list[str]:
 
 
 def alt_reference(el: Element) -> str:
-    roles = ", ".join(r for r in ROLE_COLOR if any(el.role(i) == r for i in range(len(el.nodes))))
+    roles = ", ".join(
+        r for r in ROLE_COLOR if any(el.role(i) == r for i in range(len(el.nodes)))
+    )
     n = len(el.nodes)
     numbered = "numérotés 0 et 1" if n == 2 else f"numérotés de 0 à {n - 1}"
     axes = {1: "axe ξ", 2: "axes ξ, η", 3: "axes ξ, η, ζ"}[el.dim]
@@ -488,13 +665,19 @@ def figure_reference(el: Element) -> str:
     geo = analyse_3d(el) if el.dim == 3 else None
     pts = [proj(el, p) for p in el.nodes]
     if el.dim >= 2:
-        pts += [(el.axis_len * el.scale + 22, 0), (0, -el.axis_len * el.scale - 22), (-6, 6)]
+        pts += [
+            (el.axis_len * el.scale + 22, 0),
+            (0, -el.axis_len * el.scale - 22),
+            (-6, 6),
+        ]
     if el.dim == 1:
         pts += [(el.axis_len * el.scale + 22, 0), (0, -34), (0, 34)]
     x0, y0, x1, y1 = bbox(pts)
     margin = 26
     left = margin + (100 if el.dim == 3 else 0)
-    roles = [r for r in ROLE_COLOR if any(el.role(i) == r for i in range(len(el.nodes)))]
+    roles = [
+        r for r in ROLE_COLOR if any(el.role(i) == r for i in range(len(el.nodes)))
+    ]
     legend_w = sum(15 + 6.6 * len(r) + 18 for r in roles) - 18
     width = max(x1 - x0 + left + margin, legend_w + 2 * margin)
     height = y1 - y0 + 2 * margin + 30
@@ -516,26 +699,36 @@ def figure_reference(el: Element) -> str:
 # ── Quadrature figure ───────────────────────────────────────────────────────
 
 
-def panel_quadrature(el: Element, geo, points, title, subtitle, disc: bool) -> tuple[list[str], tuple]:
+def panel_quadrature(
+    el: Element, geo, points, title, subtitle, disc: bool
+) -> tuple[list[str], tuple]:
     """One panel drawn around the origin; returns its svg and bounding box."""
     out = outline_svg(el, geo, faint=True)
     for i, p in enumerate(el.nodes):  # nodes as small ticks, unnumbered
         x, y = proj(el, p)
-        out.append(f'<rect x="{f(x - 2.5)}" y="{f(y - 2.5)}" width="5" height="5" fill="#ffffff" '
-                   f'stroke="#9aa7b6" stroke-width="1"/>')
+        out.append(
+            f'<rect x="{f(x - 2.5)}" y="{f(y - 2.5)}" width="5" height="5" fill="#ffffff" '
+            f'stroke="#9aa7b6" stroke-width="1"/>'
+        )
     wmax = max(abs(w) for _, w in points)
-    far_first = sorted(points, key=lambda pw: dot(pw[0], el.viewer()) if el.dim == 3 else 0.0)
+    far_first = sorted(
+        points, key=lambda pw: dot(pw[0], el.viewer()) if el.dim == 3 else 0.0
+    )
     rmax = 9.5 if el.dim == 2 else 7.0
     for p, w in far_first:
         x, y = proj(el, p)
         if disc:
             r = rmax * math.sqrt(abs(w) / wmax)
             if w < 0:  # Keast's centre weight: a ring, not a disc
-                out.append(f'<circle cx="{f(x)}" cy="{f(y)}" r="{f(r)}" fill="#ffffff" '
-                           f'stroke="{GAUSS_COLOR}" stroke-width="2.4"/>')
+                out.append(
+                    f'<circle cx="{f(x)}" cy="{f(y)}" r="{f(r)}" fill="#ffffff" '
+                    f'stroke="{GAUSS_COLOR}" stroke-width="2.4"/>'
+                )
             else:
-                out.append(f'<circle cx="{f(x)}" cy="{f(y)}" r="{f(r)}" fill="{GAUSS_COLOR}" '
-                           f'fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>')
+                out.append(
+                    f'<circle cx="{f(x)}" cy="{f(y)}" r="{f(r)}" fill="{GAUSS_COLOR}" '
+                    f'fill-opacity=".85" stroke="#ffffff" stroke-width="1.2"/>'
+                )
         else:
             d = 8
             out.append(
@@ -552,8 +745,8 @@ def figure_quadrature(el: Element) -> str:
     geo = analyse_3d(el) if el.dim == 3 else None
     short = el.title.split(" ")[0]
     panels = [
-        (el.gauss, f'"GAUSS"', f"{len(el.gauss)} points", True),
-        ([el.reduced], f'"REDUCED"', "1 point", False),
+        (el.gauss, '"GAUSS"', f"{len(el.gauss)} points", True),
+        ([el.reduced], '"REDUCED"', "1 point", False),
     ]
     drawn = [panel_quadrature(el, geo, *pn[:1], pn[1], pn[2], pn[3]) for pn in panels]
     boxes = [b for _, b in drawn]
@@ -562,8 +755,10 @@ def figure_quadrature(el: Element) -> str:
     ph = max(b[3] - b[1] for b in boxes) + 2 * pad
     width = 2 * pw + gap
     height = head + ph + foot
-    desc = (f"Règles d'intégration du {short} : {len(el.gauss)} points de Gauss "
-            f"(disques d'aire proportionnelle au poids) et le point unique de la règle réduite.")
+    desc = (
+        f"Règles d'intégration du {short} : {len(el.gauss)} points de Gauss "
+        f"(disques d'aire proportionnelle au poids) et le point unique de la règle réduite."
+    )
     out = svg_open(width, height, f"{short} — quadrature", desc)
     for k, ((svg, (x0, y0, x1, y1)), pn) in enumerate(zip(drawn, panels)):
         cx = k * (pw + gap) + pw / 2
@@ -576,8 +771,15 @@ def figure_quadrature(el: Element) -> str:
     note = "disque : aire proportionnelle au poids"
     if any(w < 0 for _, w in el.gauss):
         note += " · cercle : poids négatif"
-    out.append(text(width / 2, height - 16, note + " · carré : nœud de l'élément",
-                    size=12, color=MUTED))
+    out.append(
+        text(
+            width / 2,
+            height - 16,
+            note + " · carré : nœud de l'élément",
+            size=12,
+            color=MUTED,
+        )
+    )
     out.append("</svg>")
     return "\n".join(out) + "\n"
 
@@ -589,7 +791,12 @@ def figure_thumb(el: Element, box: float = 104.0) -> str:
     """The element alone: outline and unnumbered nodes, no axes, no legend."""
     unit = Element(**{**el.__dict__, "scale": 1.0})
     x0, y0, x1, y1 = bbox([proj(unit, p) for p in el.nodes])
-    el = Element(**{**el.__dict__, "scale": (box - 24) / max(x1 - x0, y1 - y0, 0.5 if el.dim == 1 else 1e-9)})
+    el = Element(
+        **{
+            **el.__dict__,
+            "scale": (box - 24) / max(x1 - x0, y1 - y0, 0.5 if el.dim == 1 else 1e-9),
+        }
+    )
     geo = analyse_3d(el) if el.dim == 3 else None
     x0, y0, x1, y1 = bbox([proj(el, p) for p in el.nodes])
     width, height = box, box * 0.8 if el.dim == 1 else box
@@ -601,7 +808,9 @@ def figure_thumb(el: Element, box: float = 104.0) -> str:
         x, y = proj(el, p)
         hidden = bool(geo and geo.node_hidden[i])
         extra = ' fill-opacity=".45"' if hidden else ""
-        out.append(f'<circle cx="{f(x)}" cy="{f(y)}" r="3.6" fill="{ROLE_COLOR[el.role(i)]}"{extra}/>')
+        out.append(
+            f'<circle cx="{f(x)}" cy="{f(y)}" r="3.6" fill="{ROLE_COLOR[el.role(i)]}"{extra}/>'
+        )
     out.append("</g></svg>")
     return "\n".join(out) + "\n"
 
@@ -626,10 +835,17 @@ def render_all() -> dict[str, str]:
 def main(argv: list[str]) -> int:
     files = render_all()
     if "--check" in argv:
-        stale = [n for n, s in files.items()
-                 if not (OUT / n).exists() or (OUT / n).read_text(encoding="utf-8") != s]
+        stale = [
+            n
+            for n, s in files.items()
+            if not (OUT / n).exists() or (OUT / n).read_text(encoding="utf-8") != s
+        ]
         if stale:
-            print("stale figures (run `python script/elements_figures.py`):", *stale, sep="\n  ")
+            print(
+                "stale figures (run `python script/elements_figures.py`):",
+                *stale,
+                sep="\n  ",
+            )
             return 1
         print(f"OK : {len(files)} element figures up to date.")
         return 0
