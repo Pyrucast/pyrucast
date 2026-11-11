@@ -160,7 +160,7 @@ fn tangent_matches_fd_plane_stress() -> Result<()> {
 /// `2πr` measure (which multiplies both sides, so it must be consistent).
 #[test]
 fn tangent_matches_fd_axisymmetric() -> Result<()> {
-    let coords = Handle::new(Coords::axisymmetric()?);
+    let coords = Handle::new(Coords::axisymmetric());
     // Away from the axis, so the element is well away from r = 0.
     let corners = [(1.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0)];
     let nodes: Vec<Node> = corners

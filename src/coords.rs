@@ -93,7 +93,7 @@ use std::fmt;
 /// // changes the integration measure dΩ, hence stiffness, mass, distributed
 /// // flux, volumes and internal forces all at once.
 /// assert_eq!(Coords::new(2)?.frame(), CoordinateFrame::Cartesian);
-/// let axi = Coords::axisymmetric()?;
+/// let axi = Coords::axisymmetric();
 /// assert_eq!(axi.frame(), CoordinateFrame::Axisymmetric);
 /// assert!(axi.is_axisymmetric());
 /// assert_eq!(axi.dim(), 2); // `x = r`, `y = z`
@@ -229,15 +229,21 @@ impl Coords {
     /// ```
     /// use pyrucast::coords::Coords;
     ///
-    /// let c = Coords::axisymmetric().unwrap();
+    /// let c = Coords::axisymmetric();
     /// assert_eq!(c.dim(), 2);
     /// assert!(c.is_axisymmetric());
     /// ```
-    pub fn axisymmetric() -> Result<Self> {
-        Ok(Self {
+    pub fn axisymmetric() -> Self {
+        Self {
+            dim: 2,
             frame: CoordinateFrame::Axisymmetric,
-            ..Self::new(2)?
-        })
+            configs: vec![Vec::new()],
+            config_names: vec!["default".into()],
+            active: 0,
+            alive: Vec::new(),
+            refcount: Vec::new(),
+            permutation: None,
+        }
     }
 
     /// Geometric dimension.
@@ -256,7 +262,7 @@ impl Coords {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::coords::CoordinateFrame;
     /// assert_eq!(Coords::new(2).unwrap().frame(), CoordinateFrame::Cartesian);
-    /// assert_eq!(Coords::axisymmetric().unwrap().frame(), CoordinateFrame::Axisymmetric);
+    /// assert_eq!(Coords::axisymmetric().frame(), CoordinateFrame::Axisymmetric);
     /// ```
     pub fn frame(&self) -> CoordinateFrame {
         self.frame
@@ -268,7 +274,7 @@ impl Coords {
     /// ```
     /// # use pyrucast::coords::Coords;
     /// assert!(!Coords::new(2).unwrap().is_axisymmetric());
-    /// assert!(Coords::axisymmetric().unwrap().is_axisymmetric());
+    /// assert!(Coords::axisymmetric().is_axisymmetric());
     /// ```
     pub fn is_axisymmetric(&self) -> bool {
         self.frame.is_axisymmetric()
@@ -278,13 +284,42 @@ impl Coords {
     /// `what` names the calling operation.
     fn check_radius(&self, what: &str, coords: &[f64]) -> Result<()> {
         if self.frame.is_axisymmetric() && coords[0] < 0.0 {
-            return Err(PyrucastError::Message(format!(
-                "{what}: negative radius x = {} in an axisymmetric Coords \
-                 (x = r ≥ 0, y = z along the axis of revolution)",
-                coords[0]
-            )));
+            return Err(Self::negative_radius(what, coords[0]));
         }
         Ok(())
+    }
+
+    /// The same test over the points of a flat buffer, `dim` values each: the
+    /// frame tested once, the points only on a body of revolution.
+    fn check_radii(&self, what: &str, flat: &[f64]) -> Result<()> {
+        if !self.frame.is_axisymmetric() {
+            return Ok(());
+        }
+        match flat.chunks_exact(self.dim as usize).find(|p| p[0] < 0.0) {
+            Some(p) => Err(Self::negative_radius(what, p[0])),
+            None => Ok(()),
+        }
+    }
+
+    fn negative_radius(what: &str, x: f64) -> PyrucastError {
+        PyrucastError::Message(format!(
+            "{what}: negative radius x = {x} in an axisymmetric Coords \
+             (x = r ≥ 0, y = z along the axis of revolution)"
+        ))
+    }
+
+    /// The bulk writers' common checks, made once before anything is written:
+    /// `values` holds `dim` values per id, and every id is live.
+    fn check_bulk(&self, what: &str, ids: &[NodeId], values: &[f64]) -> Result<()> {
+        let d = self.dim as usize;
+        if values.len() != ids.len() * d {
+            return Err(PyrucastError::Message(format!(
+                "{what}: {} value(s) for {} node(s) in dimension {d}",
+                values.len(),
+                ids.len()
+            )));
+        }
+        self.ensure_all_alive(ids)
     }
 
     /// Number of live (not collected) nodes.
@@ -396,9 +431,7 @@ impl Coords {
         }
         // Checked over the whole buffer before anything is written, so a
         // rejected call adds no node at all.
-        for p in flat.chunks(d) {
-            self.check_radius("add_nodes", p)?;
-        }
+        self.check_radii("add_nodes", flat)?;
 
         let start = self.alive.len() as u32;
         let n = flat.len() / d;
@@ -704,6 +737,35 @@ impl Coords {
         Ok(())
     }
 
+    /// Set the positions of `ids` in the active configuration, `dim` values
+    /// per node in `positions` — the bulk form of
+    /// [`set_position`](Self::set_position). All or nothing: the ids, the
+    /// length and the radii are checked before the first write.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2)?;
+    /// let a = c.add_node(&[0.0, 0.0])?;
+    /// let b = c.add_node(&[1.0, 0.0])?;
+    /// c.set_positions(&[a, b], &[3.0, 4.0, 5.0, 6.0])?;
+    /// assert_eq!(c.position(b)?, &[5.0, 6.0]);
+    /// // One value short: refused, and nothing moved.
+    /// assert!(c.set_positions(&[a, b], &[0.0, 0.0, 0.0]).is_err());
+    /// assert_eq!(c.position(a)?, &[3.0, 4.0]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn set_positions(&mut self, ids: &[NodeId], positions: &[f64]) -> Result<()> {
+        self.check_bulk("set_positions", ids, positions)?;
+        self.check_radii("set_positions", positions)?;
+        let d = self.dim as usize;
+        let set = &mut self.configs[self.active];
+        for (&id, x) in ids.iter().zip(positions.chunks_exact(d)) {
+            let s = id.0 as usize * d;
+            set[s..s + d].copy_from_slice(x);
+        }
+        Ok(())
+    }
+
     fn ensure_alive(&self, id: NodeId) -> Result<()> {
         if !self.is_alive(id) {
             return Err(PyrucastError::Message(format!(
@@ -777,12 +839,16 @@ impl Coords {
     /// Lay configuration `target` at configuration `reference` displaced by
     /// `increments` — `x = X + u`, in **absolute**: every node takes its
     /// `reference` position, plus its increment when it has one (a node
-    /// absent from `increments` does not move). Repeated, it lands in the same
-    /// place, whatever was in `target` before: no increment accumulates.
-    /// Neither configuration needs to be the active one.
+    /// absent from `ids` does not move). `increments` holds `dim` values per
+    /// id. Repeated, it lands in the same place, whatever was in `target`
+    /// before: no increment accumulates. Neither configuration needs to be the
+    /// active one.
+    ///
+    /// All or nothing: the configurations, the ids, the length and the radii
+    /// are checked before the first write.
     ///
     /// Errors: an index out of range, `target == reference` (the reference
-    /// would be lost), a collected node, an increment of the wrong length, a
+    /// would be lost), a collected node, a length that is not `dim` per id, a
     /// negative radius on a body of revolution.
     ///
     /// ```
@@ -790,19 +856,20 @@ impl Coords {
     /// let mut c = Coords::new(2).unwrap();
     /// let id = c.add_node(&[1.0, 2.0]).unwrap();
     /// let current = c.add_config("current");
-    /// c.displace_from(0, current, [(id, &[0.5, 0.0][..])]).unwrap();
-    /// c.displace_from(0, current, [(id, &[0.5, 0.0][..])]).unwrap();
+    /// c.displace_from(0, current, &[id], &[0.5, 0.0]).unwrap();
+    /// c.displace_from(0, current, &[id], &[0.5, 0.0]).unwrap();
     /// // Laid from the reference both times: the increment counts once.
     /// c.select(current).unwrap();
     /// assert_eq!(c.position(id).unwrap(), &[1.5, 2.0]);
     /// c.select(0).unwrap();
     /// assert_eq!(c.position(id).unwrap(), &[1.0, 2.0]);
     /// ```
-    pub fn displace_from<'a>(
+    pub fn displace_from(
         &mut self,
         reference: usize,
         target: usize,
-        increments: impl IntoIterator<Item = (NodeId, &'a [f64])>,
+        ids: &[NodeId],
+        increments: &[f64],
     ) -> Result<()> {
         let n_configs = self.configs.len();
         if reference >= n_configs || target >= n_configs {
@@ -816,6 +883,8 @@ impl Coords {
                  add a configuration (add_config) to lay the displaced one in"
             )));
         }
+        self.check_bulk("displace_from", ids, increments)?;
+        self.check_moved_radii("displace_from", reference, ids, increments)?;
         let d = self.dim as usize;
         // Copied in place: the two sets are distinct, borrowed apart.
         let (src, dst) = if reference < target {
@@ -826,61 +895,72 @@ impl Coords {
             (&high[0], &mut low[target])
         };
         dst.copy_from_slice(src);
-        for (id, inc) in increments {
-            self.ensure_alive(id)?;
-            if inc.len() != d {
-                return Err(PyrucastError::Message(format!(
-                    "displace_from: expected {d} increment(s), got {}",
-                    inc.len()
-                )));
-            }
+        for (&id, inc) in ids.iter().zip(increments.chunks_exact(d)) {
             let s = id.0 as usize * d;
-            for (x, du) in self.configs[target][s..s + d].iter_mut().zip(inc) {
+            for (x, du) in dst[s..s + d].iter_mut().zip(inc) {
                 *x += du;
             }
-            self.check_radius("displace_from", &self.configs[target][s..s + d])?;
         }
         Ok(())
     }
 
     /// Displace the active configuration by `increments`, **in place**: each
-    /// listed node moves by its increment, the others stay put. The
+    /// node of `ids` moves by its `dim` values, the others stay put. The
     /// incremental twin of [`displace_from`](Self::displace_from).
     ///
-    /// Errors: a collected node, an increment of the wrong length, a negative
-    /// radius on a body of revolution. The nodes listed before the culprit have
-    /// moved; the culprit has not.
+    /// All or nothing: the ids, the length and the radii are checked before
+    /// the first node moves.
+    ///
+    /// Errors: a collected node, a length that is not `dim` per id, a
+    /// negative radius on a body of revolution.
     ///
     /// ```
     /// # use pyrucast::coords::Coords;
     /// let mut c = Coords::new(2).unwrap();
     /// let id = c.add_node(&[1.0, 2.0]).unwrap();
-    /// c.displace([(id, &[0.5, 0.0][..])]).unwrap();
-    /// c.displace([(id, &[0.5, 0.0][..])]).unwrap();
+    /// c.displace(&[id], &[0.5, 0.0]).unwrap();
+    /// c.displace(&[id], &[0.5, 0.0]).unwrap();
     /// // In place: the increments add up.
     /// assert_eq!(c.position(id).unwrap(), &[2.0, 2.0]);
     /// ```
-    pub fn displace<'a>(
-        &mut self,
-        increments: impl IntoIterator<Item = (NodeId, &'a [f64])>,
-    ) -> Result<()> {
-        let (d, active) = (self.dim as usize, self.active);
-        for (id, inc) in increments {
-            self.ensure_alive(id)?;
-            if inc.len() != d {
-                return Err(PyrucastError::Message(format!(
-                    "displace: expected {d} increment(s), got {}",
-                    inc.len()
-                )));
-            }
+    pub fn displace(&mut self, ids: &[NodeId], increments: &[f64]) -> Result<()> {
+        self.check_bulk("displace", ids, increments)?;
+        self.check_moved_radii("displace", self.active, ids, increments)?;
+        let d = self.dim as usize;
+        let set = &mut self.configs[self.active];
+        for (&id, inc) in ids.iter().zip(increments.chunks_exact(d)) {
             let s = id.0 as usize * d;
-            // The radius alone, checked before the node moves.
-            self.check_radius("displace", &[self.configs[active][s] + inc[0]])?;
-            for (x, du) in self.configs[active][s..s + d].iter_mut().zip(inc) {
+            for (x, du) in set[s..s + d].iter_mut().zip(inc) {
                 *x += du;
             }
         }
         Ok(())
+    }
+
+    /// On a body of revolution, refuse an increment that would carry a node
+    /// of `ids`, from configuration `from`, to a negative radius — tested
+    /// before anything moves, and not at all in a Cartesian frame.
+    fn check_moved_radii(
+        &self,
+        what: &str,
+        from: usize,
+        ids: &[NodeId],
+        increments: &[f64],
+    ) -> Result<()> {
+        if !self.frame.is_axisymmetric() {
+            return Ok(());
+        }
+        let d = self.dim as usize;
+        let set = &self.configs[from];
+        let negative = ids
+            .iter()
+            .zip(increments.chunks_exact(d))
+            .map(|(&id, inc)| set[id.0 as usize * d] + inc[0])
+            .find(|&r| r < 0.0);
+        match negative {
+            Some(r) => Err(Self::negative_radius(what, r)),
+            None => Ok(()),
+        }
     }
 
     /// Index of the active configuration.
@@ -1088,7 +1168,7 @@ mod tests {
     #[test]
     fn cartesian_by_default_axisymmetric_on_demand() {
         assert!(!Coords::new(2).unwrap().is_axisymmetric());
-        let c = Coords::axisymmetric().unwrap();
+        let c = Coords::axisymmetric();
         assert_eq!(c.dim(), 2);
         assert_eq!(c.frame(), CoordinateFrame::Axisymmetric);
         assert!(c.is_axisymmetric());
@@ -1101,7 +1181,7 @@ mod tests {
     /// door rather than as a negative `|J|` deep in an integral.
     #[test]
     fn axisymmetric_rejects_a_negative_radius() {
-        let mut c = Coords::axisymmetric().unwrap();
+        let mut c = Coords::axisymmetric();
         let err = c.add_node(&[-1.0, 0.0]).unwrap_err();
         assert!(format!("{err}").contains("negative radius"));
         // On the axis (r = 0) is legitimate.
@@ -1113,20 +1193,21 @@ mod tests {
     }
 
     #[test]
-    fn displace_refuses_a_negative_radius_before_moving_the_node() {
-        let mut c = Coords::axisymmetric().unwrap();
+    fn displace_refuses_a_negative_radius_before_any_node_moves() {
+        let mut c = Coords::axisymmetric();
         let a = c.add_node(&[1.0, 0.0]).unwrap();
         let b = c.add_node(&[0.5, 0.0]).unwrap();
-        // `a` moves, then `b` would cross the axis: refused, `b` stays put.
-        let err = c
-            .displace([(a, &[1.0, 1.0][..]), (b, &[-1.0, 0.0][..])])
-            .unwrap_err();
+        // `b` would cross the axis: refused, and neither node moves.
+        let err = c.displace(&[a, b], &[1.0, 1.0, -1.0, 0.0]).unwrap_err();
         assert!(format!("{err}").contains("negative radius"));
-        assert_eq!(c.position(a).unwrap(), &[2.0, 1.0]);
+        assert_eq!(c.position(a).unwrap(), &[1.0, 0.0]);
         assert_eq!(c.position(b).unwrap(), &[0.5, 0.0]);
         // One increment per axis.
-        assert!(c.displace([(a, &[1.0][..])]).is_err());
-        assert_eq!(c.position(a).unwrap(), &[2.0, 1.0]);
+        assert!(c.displace(&[a], &[1.0]).is_err());
+        assert_eq!(c.position(a).unwrap(), &[1.0, 0.0]);
+        // The same refusal laying another configuration.
+        let current = c.add_config("current");
+        assert!(c.displace_from(0, current, &[b], &[-1.0, 0.0]).is_err());
     }
 
     #[test]

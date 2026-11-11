@@ -149,7 +149,7 @@ fn peau_opaque_ou_fil_de_fer() -> Result<()> {
 /// An axisymmetric section: revolution only makes sense on one.
 fn section_axisymetrique() -> Result<(common::TempDir, Mesh)> {
     let dossier = common::TempDir::new("pyrucast_rev");
-    let coords = Handle::new(Coords::axisymmetric()?);
+    let coords = Handle::new(Coords::axisymmetric());
     let n: Vec<Node> = [[1.0, 0.0], [2.0, 0.0], [1.0, 1.0]]
         .iter()
         .map(|p| Node::create_in(coords.clone(), p).unwrap())

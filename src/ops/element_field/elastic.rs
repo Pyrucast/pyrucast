@@ -298,7 +298,7 @@ mod tests {
 
     fn tri3(dim: usize, axisymmetric: bool) -> FiniteElementSpace {
         let coords = if axisymmetric {
-            Handle::new(Coords::axisymmetric().unwrap())
+            Handle::new(Coords::axisymmetric())
         } else {
             Handle::new(Coords::new(dim as u8).unwrap())
         };

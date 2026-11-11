@@ -527,7 +527,7 @@ mod tests {
         axisymmetric: bool,
     ) -> (NodeField, FiniteElementSpace) {
         let coords = Handle::new(if axisymmetric {
-            Coords::axisymmetric().unwrap()
+            Coords::axisymmetric()
         } else {
             Coords::new(dim as u8).unwrap()
         });

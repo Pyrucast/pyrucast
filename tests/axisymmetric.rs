@@ -46,7 +46,7 @@ fn annulus(
     nr: usize,
     nz: usize,
 ) -> Result<(Vec<Node>, Mesh, FiniteElementSpace)> {
-    let coords = Handle::new(Coords::axisymmetric()?);
+    let coords = Handle::new(Coords::axisymmetric());
     let idx = |i: usize, j: usize| j * (nr + 1) + i;
     let mut grid: Vec<Node> = Vec::new();
     for j in 0..=nz {
@@ -263,7 +263,7 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
     const B: f64 = 2.0;
     const H: f64 = 0.5;
 
-    let coords = Handle::new(Coords::axisymmetric()?);
+    let coords = Handle::new(Coords::axisymmetric());
     let idx = |i: usize, j: usize| j * (nr + 1) + i;
     let mut grid: Vec<Node> = Vec::new();
     for j in 0..=1 {
@@ -620,7 +620,7 @@ fn model_and_geometry_must_agree() -> Result<()> {
 fn a_boundary_mesh_is_not_a_solid() -> Result<()> {
     for axisymmetric in [true, false] {
         let coords = Handle::new(if axisymmetric {
-            Coords::axisymmetric()?
+            Coords::axisymmetric()
         } else {
             Coords::new(2)?
         });
@@ -664,7 +664,7 @@ fn nonlinear_cell(
     axisymmetric: bool,
 ) -> Result<(Model, ElementField, FiniteElementSpace)> {
     let (mesh, model_kind) = if axisymmetric {
-        let coords = Handle::new(Coords::axisymmetric()?);
+        let coords = Handle::new(Coords::axisymmetric());
         let n: Vec<Node> = [(1.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0)]
             .iter()
             .map(|&(r, z)| Node::create_in(coords.clone(), &[r, z]))

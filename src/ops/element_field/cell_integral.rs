@@ -114,7 +114,7 @@ mod tests {
 
     fn quads(axisymmetric: bool) -> Mesh {
         let coords = Handle::new(if axisymmetric {
-            Coords::axisymmetric().unwrap()
+            Coords::axisymmetric()
         } else {
             Coords::new(2).unwrap()
         });

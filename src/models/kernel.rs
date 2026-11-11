@@ -836,7 +836,7 @@ impl<'a> CellGeom<'a> {
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::models::kernel::assemble_block;
     /// // The radius only makes sense on a **revolution** frame.
-    /// let coords = Handle::new(Coords::axisymmetric()?);
+    /// let coords = Handle::new(Coords::axisymmetric());
     /// # let n: Vec<Node> = [[1.0, 0.0], [3.0, 0.0], [1.0, 2.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
@@ -3117,7 +3117,7 @@ mod tests {
     /// One QUA4 spanning `r ∈ [r0, r1]`, `z ∈ [0, 1]`, in the requested frame.
     fn one_quad(r0: f64, r1: f64, axisymmetric: bool) -> Handle<SubFiniteElementSpace> {
         let coords = Handle::new(if axisymmetric {
-            Coords::axisymmetric().unwrap()
+            Coords::axisymmetric()
         } else {
             Coords::new(2).unwrap()
         });

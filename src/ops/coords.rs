@@ -13,7 +13,7 @@
 
 use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
-use crate::containers::field::{Field, SubField};
+use crate::containers::field::SubField;
 use crate::containers::node_field::{first_rows, NodeField, SubNodeField};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
@@ -43,60 +43,65 @@ fn axis_components(
     Ok(comps)
 }
 
-/// The values of `comps` at every distinct node of `field`, first-seen order,
-/// `comps.len()` per node, read through the aggregate (first zone defining
-/// the pair wins), so interface nodes appear exactly once. A pair no zone
-/// defines reads 0, and `undefined[i]` counts those of node `i`.
+/// The values of `comps` at the distinct nodes of `field` that carry at least
+/// one of them, first-seen order, `comps.len()` per node, read through the
+/// aggregate (first zone defining the pair wins), so interface nodes appear
+/// exactly once. A zone carrying none of `comps` — the multiplier zone of a
+/// solution — is not read at all. A pair no zone defines reads 0, and
+/// `undefined` counts those pairs.
 struct AxisValues {
     nodes: Vec<NodeId>,
     values: Vec<f64>,
-    undefined: Vec<usize>,
+    undefined: usize,
 }
 
 fn axis_values(field: &NodeField, comps: &[String]) -> Result<AxisValues> {
+    let width = comps.len();
     let (mut nodes, mut values) = (Vec::new(), Vec::new());
     // (node, component) the first zone holding the node lacks: some later zone
     // may hold it.
     let mut missing: Vec<(usize, usize)> = Vec::new();
     {
         let guards: Vec<ReadGuard<SubNodeField>> = field.iter().map(|h| h.read()).collect();
-        let zones: Vec<&SubNodeField> = guards.iter().map(|g| &**g).collect();
+        let zones: Vec<&SubNodeField> = guards
+            .iter()
+            .map(|g| &**g)
+            .filter(|z| comps.iter().any(|c| z.component_index(c).is_some()))
+            .collect();
         first_rows(&zones, |z, rows| {
-            let (held, width) = (zones[z].values(), zones[z].component_count());
-            let cols: Vec<Option<usize>> =
-                comps.iter().map(|c| zones[z].component_index(c)).collect();
+            let (held, stride) = (zones[z].values(), zones[z].component_count());
+            // Per zone, once: where each carried component sits in a row, and
+            // which ones the zone lacks.
+            let mut present: Vec<(usize, usize)> = Vec::with_capacity(width);
+            let mut absent: Vec<usize> = Vec::new();
+            for (k, c) in comps.iter().enumerate() {
+                match zones[z].component_index(c) {
+                    Some(at) => present.push((k, at)),
+                    None => absent.push(k),
+                }
+            }
             // At most the zone's rows are new: one growth per zone.
             nodes.reserve(zones[z].node_count());
-            values.reserve(zones[z].node_count() * comps.len());
-            if let Some(cols) = cols.iter().copied().collect::<Option<Vec<usize>>>() {
-                rows.for_each(|row, p| {
-                    let r = &held[row * width..(row + 1) * width];
-                    nodes.push(p);
-                    values.extend(cols.iter().map(|&c| r[c]));
-                });
-                return;
-            }
+            values.reserve(zones[z].node_count() * width);
             rows.for_each(|row, p| {
-                for (k, col) in cols.iter().enumerate() {
-                    match col {
-                        Some(c) => values.push(held[row * width + c]),
-                        None => {
-                            missing.push((nodes.len(), k));
-                            values.push(0.0);
-                        }
-                    }
+                let r = &held[row * stride..(row + 1) * stride];
+                let base = values.len();
+                values.resize(base + width, 0.0);
+                for &(k, at) in &present {
+                    values[base + k] = r[at];
                 }
+                missing.extend(absent.iter().map(|&k| (nodes.len(), k)));
                 nodes.push(p);
             });
         });
     }
-    let mut undefined = vec![0usize; nodes.len()];
+    let mut undefined = 0;
     if !missing.is_empty() {
         let view = field.view()?;
         for (i, k) in missing {
             match view.value_opt(nodes[i], &comps[k]) {
-                Some(v) => values[i * comps.len() + k] = v,
-                None => undefined[i] += 1,
+                Some(v) => values[i * width + k] = v,
+                None => undefined += 1,
             }
         }
     }
@@ -111,10 +116,10 @@ fn axis_values(field: &NodeField, comps: &[String]) -> Result<AxisValues> {
 /// component — a coordinate the field does not give has no value to take.
 fn positions_to_set(field: &NodeField, comps: &[String]) -> Result<(Vec<NodeId>, Vec<f64>)> {
     let found = axis_values(field, comps)?;
-    if let Some(i) = found.undefined.iter().position(|&n| n > 0) {
+    if found.undefined > 0 {
         return Err(PyrucastError::Message(format!(
-            "set: node {} lacks one of the components {comps:?}",
-            found.nodes[i]
+            "set: {} node coordinate(s) missing — every node must carry {comps:?}",
+            found.undefined
         )));
     }
     Ok((found.nodes, found.values))
@@ -123,22 +128,10 @@ fn positions_to_set(field: &NodeField, comps: &[String]) -> Result<(Vec<NodeId>,
 /// The displacements `displace` and `displace_from` apply: what the field
 /// carries, and nothing else. A component a node lacks moves it by 0 along
 /// that axis; a node carrying none of them — a multiplier node of a
-/// solution — is left out, so it does not move at all.
+/// solution — is not read, so it does not move at all.
 fn increments(field: &NodeField, comps: &[String]) -> Result<(Vec<NodeId>, Vec<f64>)> {
     let found = axis_values(field, comps)?;
-    let width = comps.len();
-    if found.undefined.iter().all(|&n| n < width) {
-        return Ok((found.nodes, found.values));
-    }
-    let mut nodes = Vec::with_capacity(found.nodes.len());
-    let mut values = Vec::with_capacity(found.values.len());
-    for (i, node) in found.nodes.into_iter().enumerate() {
-        if found.undefined[i] < width {
-            nodes.push(node);
-            values.extend_from_slice(&found.values[i * width..(i + 1) * width]);
-        }
-    }
-    Ok((nodes, values))
+    Ok((found.nodes, found.values))
 }
 
 /// **Set** node coordinates from `field` (absolute): for every distinct
@@ -192,11 +185,7 @@ pub fn set(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
     let dim = coords.read().dim() as usize;
     let comps = axis_components(components, dim, &["X", "Y", "Z"])?;
     let (nodes, targets) = positions_to_set(field, &comps)?;
-    let mut c = coords.write();
-    for (&nid, coord) in nodes.iter().zip(targets.chunks_exact(dim)) {
-        c.set_position(nid, coord)?;
-    }
-    Ok(())
+    coords.write().set_positions(&nodes, &targets)
 }
 
 /// **Displace** nodes by `field` (incremental): for every distinct node
@@ -252,9 +241,7 @@ pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()
     let dim = coords.read().dim() as usize;
     let comps = axis_components(components, dim, &["u_x", "u_y", "u_z"])?;
     let (nodes, increments) = increments(field, &comps)?;
-    coords
-        .write()
-        .displace(nodes.iter().copied().zip(increments.chunks_exact(dim)))
+    coords.write().displace(&nodes, &increments)
 }
 
 /// Lay configuration `target` at configuration `reference` displaced by
@@ -307,11 +294,9 @@ pub fn displace_from(
     let dim = coords.read().dim() as usize;
     let comps = axis_components(components, dim, &["u_x", "u_y", "u_z"])?;
     let (nodes, increments) = increments(field, &comps)?;
-    coords.write().displace_from(
-        reference,
-        target,
-        nodes.iter().copied().zip(increments.chunks_exact(dim)),
-    )
+    coords
+        .write()
+        .displace_from(reference, target, &nodes, &increments)
 }
 
 /// Run `f` with configuration `config` of `coords` active, then make the
@@ -370,6 +355,7 @@ mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
     use crate::atoms::{ElementType, Node};
+    use crate::containers::field::Field;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
@@ -517,7 +503,7 @@ mod tests {
         let support = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let f = NodeField::from_sub(SubNodeField::from_poi1(&support, vec!["X".into()]).unwrap());
         let err = set(&f, None).unwrap_err().to_string();
-        assert!(err.contains("lacks one of the components"), "{err}");
+        assert!(err.contains("coordinate(s) missing"), "{err}");
         assert_eq!(coords.read().position(a.id()).unwrap(), &[0.0, 0.0]);
     }
 

@@ -18,7 +18,7 @@ fn le_repere_se_choisit_a_la_construction() {
     assert!(!plan.is_axisymmetric());
 
     // Revolution: the dimension is necessarily 2, hence no argument.
-    let axi = Coords::axisymmetric().unwrap();
+    let axi = Coords::axisymmetric();
     assert_eq!(axi.dim(), 2);
     assert!(axi.is_axisymmetric());
 }

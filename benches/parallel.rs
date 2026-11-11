@@ -84,7 +84,7 @@ struct Grid {
 /// case nothing and makes the two directly comparable.
 fn elasticity_grid_with(n: usize, model_kind: Kinematics) -> Grid {
     let coords = Handle::new(if model_kind.is_axisymmetric() {
-        Coords::axisymmetric().unwrap()
+        Coords::axisymmetric()
     } else {
         Coords::new(2).unwrap()
     });
