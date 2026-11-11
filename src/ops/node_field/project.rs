@@ -192,7 +192,7 @@ pub fn project_element(
     let view = field.view()?;
     let mut hosts = Vec::with_capacity(mesh.len());
     for (s, sm) in mesh.into_iter().enumerate() {
-        let zone = view.zone_for_submesh(&sm).ok_or_else(|| {
+        let zone = view.zone_for_submesh(sm).ok_or_else(|| {
             PyrucastError::Message(format!(
                 "project: submesh {s} of `mesh` carries no zone of the field — `mesh` must be \
                  the cells the field lives on"
@@ -268,6 +268,7 @@ fn same_dimension(mesh: &Mesh, target: &Mesh) -> Result<()> {
 }
 
 /// The distinct nodes of `target`, each with its slot, and where they are.
+#[allow(clippy::type_complexity)]
 fn distinct_points(target: &Mesh) -> Result<(HashMap<NodeId, usize>, Vec<Vec<f64>>)> {
     let target_coords = target.coords()?;
     let mut index: HashMap<NodeId, usize> = HashMap::new();
