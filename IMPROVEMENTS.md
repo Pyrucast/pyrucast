@@ -225,3 +225,45 @@ curved faces (TRI6, QUA8, QUA9) the facet normal is already the normal of
 the surface. To decide: keep the facet normal, offer the smoothing as an
 option, or smooth flat facets only. Measured with the scratch comparison of
 the contact chapter (`compare_contact_impo32.py`).
+
+## The material laws make every iteration about four times dearer
+
+`tutoriel/plasticite.py` runs the same perfectly plastic lug twice through
+`pyrucast.stepping.step_by_step` (HEX20, 640 cells, 20 steps):
+
+| run | `step_by_step` | iterations | per iteration |
+|---|---|---|---|
+| `sigma_y` constant, a component of the material field | 4.1 s | 83 | 0.049 s |
+| `sigma_y(T)` through `material_laws` (an 11-point table) | 18.6 s | 98 | 0.19 s |
+| `material_laws` with a **flat** table, `sigma_y = 250 MPa` at every `T` | 17.9 s | 83 | 0.22 s |
+
+The flat table gives the constant run's physics exactly — the same 83
+iterations, the same results to every printed digit — and still costs 4.4
+times as much. So the cost is in the path the laws take, not in a yield stress
+that varies.
+
+What is known:
+- `materials_at` (`python/pyrucast/stepping/materials.py`) builds the
+  materials once per mechanical step (`mechanics.py`, the call at the top of
+  the step), not per iteration: the laws' interpolation itself
+  (`problem.laws.interpolate`) is not repeated.
+- With laws, the materials it returns are
+  `consolidate(base.filter_components(kept) | varied)`: the base materials
+  fused, the law outputs removed, and the laws' per-Gauss-point zone joined.
+  Without laws, it returns the base field as given.
+- So every iteration reads a material field of another shape. Suspects:
+  a field stored per Gauss point for every component, where the constant run
+  reads a uniform value; zones that no longer line up one-to-one with the
+  model's subspaces, so that each `integrate_behavior` / `internal_forces`
+  call re-aligns or resolves components; a slower kernel path for a
+  non-uniform material.
+
+How to measure: wrap `pyrucast.stepping.step_by_step` with a timer (the
+scratch `timed_run.py` of the mechanics tutorial did) and run
+`tutoriel/plasticite.py` (it needs `/tmp/thermique.pyr`, written by
+`tutoriel/thermique_non_lineaire.py`); for the flat-table variant, pass
+`material_laws=pc.Evolution([(0.0, SIGMA_Y), (300.0, SIGMA_Y)],
+abscissa_type="T", ordinate_type="sigma_y", out_of_range="clamp")`. Then
+compare, for the two material fields, their zones (`len`, supports,
+components) and time one `integrate_behavior` and one `internal_forces`
+each: the slow one is the lead.
