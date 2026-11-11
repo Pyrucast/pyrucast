@@ -303,8 +303,11 @@ pub fn sum_to_nodes(field: PyRef<PyElementField>) -> PyResult<PyNodeField> {
 ///
 /// `solution` is the current one, multipliers included: a term that is linear in
 /// `u` reads it directly — a boundary transfer's `∫ h·a·N` has no law to go
-/// through — and a constraint draws its reaction `Cᵀ λ` from it, spread over the
-/// constrained nodes by the relation's coefficients.
+/// through — and a constraint draws its force `Cᵀ λ` from it, spread over the
+/// constrained nodes by the relation's coefficients. That force is the
+/// opposite of the **reaction**: the reaction of a model's constraints is
+/// `−internal_forces(model.filter("constraint"), …)`, whichever way `solve`
+/// treated the relations.
 #[py_op(method_on = PyModel)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]

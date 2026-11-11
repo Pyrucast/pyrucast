@@ -1326,14 +1326,15 @@ class Matrix:
         `relations` says how the constraint relations are enforced:
         
         - `"lagrange"` (default) — by their multipliers, the saddle-point solved as
-          assembled; the multipliers come back in the solution as the reactions.
+          assembled; the multipliers come back in the solution at their nodes.
           As soon as the matrix carries an inequality, the **active-set** loop
           decides which relations are saturated: an active relation holds as an
           equation (its `lambda` is `<= 0` for `>=`, `>= 0` for `<=`), an inactive
           one reports `lambda = 0`;
         - `"eliminate"` — each equality relation eliminates one unknown, and the
-          smaller system left, without multipliers, is solved; each eliminated
-          unknown's reaction is returned in its dual row. An inequality is not
+          smaller system left, without multipliers, is solved; each relation's
+          multiplier is recovered from its eliminated unknown's row and returned at
+          its node — the very solution the multipliers give. An inequality is not
           eliminated: it stays on the reduced system, resolved by the same
           active-set loop, its `lambda` returned at its multiplier node. Scope:
           non-chained, disjoint slaves.
@@ -2446,8 +2447,11 @@ class Model:
         
         `solution` is the current one, multipliers included: a term that is linear in
         `u` reads it directly — a boundary transfer's `∫ h·a·N` has no law to go
-        through — and a constraint draws its reaction `Cᵀ λ` from it, spread over the
-        constrained nodes by the relation's coefficients.
+        through — and a constraint draws its force `Cᵀ λ` from it, spread over the
+        constrained nodes by the relation's coefficients. That force is the
+        opposite of the **reaction**: the reaction of a model's constraints is
+        `−internal_forces(model.filter("constraint"), …)`, whichever way `solve`
+        treated the relations.
         """
     def external_forces(self, materials: ElementField) -> NodeField:
         r"""
@@ -5100,8 +5104,11 @@ def internal_forces(model: Model, state: ElementField, solution: NodeField, mate
     
     `solution` is the current one, multipliers included: a term that is linear in
     `u` reads it directly — a boundary transfer's `∫ h·a·N` has no law to go
-    through — and a constraint draws its reaction `Cᵀ λ` from it, spread over the
-    constrained nodes by the relation's coefficients.
+    through — and a constraint draws its force `Cᵀ λ` from it, spread over the
+    constrained nodes by the relation's coefficients. That force is the
+    opposite of the **reaction**: the reaction of a model's constraints is
+    `−internal_forces(model.filter("constraint"), …)`, whichever way `solve`
+    treated the relations.
     """
 
 def interp_to_gauss(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
@@ -5916,14 +5923,15 @@ def solve(matrix: Matrix, rhs: NodeField, method: builtins.str = 'lu', relations
     `relations` says how the constraint relations are enforced:
     
     - `"lagrange"` (default) — by their multipliers, the saddle-point solved as
-      assembled; the multipliers come back in the solution as the reactions.
+      assembled; the multipliers come back in the solution at their nodes.
       As soon as the matrix carries an inequality, the **active-set** loop
       decides which relations are saturated: an active relation holds as an
       equation (its `lambda` is `<= 0` for `>=`, `>= 0` for `<=`), an inactive
       one reports `lambda = 0`;
     - `"eliminate"` — each equality relation eliminates one unknown, and the
-      smaller system left, without multipliers, is solved; each eliminated
-      unknown's reaction is returned in its dual row. An inequality is not
+      smaller system left, without multipliers, is solved; each relation's
+      multiplier is recovered from its eliminated unknown's row and returned at
+      its node — the very solution the multipliers give. An inequality is not
       eliminated: it stays on the reduced system, resolved by the same
       active-set loop, its `lambda` returned at its multiplier node. Scope:
       non-chained, disjoint slaves.

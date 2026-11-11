@@ -131,8 +131,8 @@ Une **contrainte** impose ses relations par multiplicateurs de Lagrange (voir
 [Contraintes](contraintes.md)). À sa construction, elle crée dans le même
 `Coords` un nœud par relation, le **nœud-multiplicateur**, à la position d'un
 nœud de la relation : le nœud imposé d'un Dirichlet, le nœud esclave d'un
-contact. Ce nœud porte l'inconnue `lambda`, dont la valeur à la solution est
-la réaction, et la duale `imposed`, la ligne où s'écrit la valeur imposée.
+contact. Ce nœud porte l'inconnue `lambda`, le multiplicateur, dont l'opposé
+est la réaction, et la duale `imposed`, la ligne où s'écrit la valeur imposée.
 Toutes les contraintes emploient ces deux noms sans se mélanger, puisque
 chacune a ses propres nœuds. `multiplier_mesh()` rend ces nœuds, en zones
 POI1.

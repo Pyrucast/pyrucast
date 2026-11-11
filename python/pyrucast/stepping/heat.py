@@ -156,10 +156,10 @@ def _system(problem, loads, evaluated, behaviour, constrained, materials, extra=
     multipliers = _multipliers(problem, constrained)
     if multipliers is None or problem.heat_constraints is None:
         return system, system
-    reactions = node_field.internal_forces(
+    constraint_forces = node_field.internal_forces(
         problem.heat_constraints, behaviour, multipliers, materials
     )
-    return system, system - node_field.restrict_like(reactions, system)
+    return system, system - node_field.restrict_like(constraint_forces, system)
 
 
 def _operator(problem, materials, temperature, weight, capacity_over_dt, prev):

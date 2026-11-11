@@ -33,12 +33,17 @@ multiplicateur) et deux blocs **rectangulaires** dans la matrice :
 
 - le bloc **`C`** porte la relation de contrainte (lignes = duale propre,
   colonnes = primale contrainte de la cible) ;
-- le bloc **`Cᵀ`** réinjecte la **réaction** dans l'équation de la physique
-  cible (la force qui maintient la contrainte) ;
-- à la solution, le multiplicateur `λ` **est** cette force de réaction,
-  comptée comme l'effort de la pièce sur la contrainte : la première ligne
-  donne `λ = f − K·u`. La force que la contrainte exerce sur la pièce, la
-  réaction au sens d'un appui, est son opposé, `−λ`.
+- le bloc **`Cᵀ`** réinjecte l'effort du multiplicateur dans l'équation de la
+  physique cible ;
+- à la solution, le multiplicateur `λ` est l'**effort de la pièce sur la
+  contrainte** : la première ligne donne `Cᵀλ = f − K·u`.
+
+La **réaction** est la force que la contrainte exerce sur la pièce : le champ
+`−Cᵀλ`, aux nœuds contraints. Elle se lit par
+`−internal_forces(modele.filter("constraint"), …)`, que `solve` ait gardé les
+multiplicateurs ou éliminé les relations : `internal_forces` d'une contrainte
+rend `Cᵀλ`. Le [pas à pas](pas-a-pas.md) la range dans ses résultats, sous
+`"reactions"`.
 
 Chacun des blocs `C` et `Cᵀ` est, pris isolément, **non symétrique** ; seule
 leur union `C ∪ Cᵀ` l'est — c'est une propriété **globale** du système
@@ -70,9 +75,11 @@ u_s = \frac{1}{a_s}\Big(g - \sum_{k \neq s} a_k\\, u_k\Big),
 d'où une transformation globale `u = T·û + u₀` (`û` = DOFs retenus). Le système
 se réduit à `K̂ û = f̂` avec `K̂ = Tᵀ K T`, `f̂ = Tᵀ(f − K·u₀)`, résolu par la
 **même** factorisation, LU ou Cholesky, mais sur une matrice **plus petite et
-définie**, sans inconnue multiplicateur. La solution est prolongée `u = T·û + u₀` ; la **réaction**
-(équivalent du multiplicateur) est récupérée en post-traitement, `−(K·u − f)` à
-la ligne duale de chaque esclave (`= aₛ·λ`).
+définie**, sans inconnue multiplicateur. La solution est prolongée
+`u = T·û + u₀`, et le **multiplicateur** de chaque relation est récupéré en
+post-traitement, `aₛ·λ = f − K·u` à la ligne de son esclave, puis rendu à son
+nœud multiplicateur : la solution est celle de la voie Lagrange, mêmes
+inconnues sur les mêmes supports.
 
 Les deux voies lisent la **même** description méthode-neutre des contraintes
 (`Constraint::relations()`) et acceptent le **même** chargement (le second membre
@@ -96,8 +103,8 @@ unilatéral, une liaison à jeu est une MPC unilatérale :
 ```
 
 Une relation unilatérale obéit aux conditions de **complémentarité** (KKT) : ou
-bien elle est **active** (l'égalité tient et le multiplicateur porte la
-réaction), ou bien elle est **inactive** (le jeu `C·u − g` est du côté
+bien elle est **active** (l'égalité tient, et sa réaction pousse), ou bien
+elle est **inactive** (le jeu `C·u − g` est du côté
 admissible et `λ = 0`). Avec la convention des blocs assemblés
 (`K·u + Cᵀ·λ = f`), le signe admissible du multiplicateur est `λ ≤ 0` pour une
 relation `≥` active, `λ ≥ 0` pour une `≤` active.

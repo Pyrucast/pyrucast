@@ -88,7 +88,7 @@ def _commit(problem, state, instant, heat, mechanics, temperature):
         state.solution = mechanics.solution
         state.behaviour = mechanics.behaviour
         state.materials = mechanics.materials
-        state.reactions = mechanics.reactions
+        state.constraint_forces = mechanics.constraint_forces
         state.velocity = (
             mechanics.velocity if mechanics.velocity is not None else state.velocity
         )

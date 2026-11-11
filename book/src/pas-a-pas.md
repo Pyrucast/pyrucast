@@ -114,8 +114,8 @@ linéarisé à la température extrapolée au milieu du pas.
 
 L'inconnue `x` porte le déplacement **et** les multiplicateurs des
 contraintes. Chaque résolution rend une correction de déplacement et les
-multiplicateurs **en total** — les réactions courantes, dont le solveur
-unilatéral teste le signe :
+multiplicateurs **en total**, dont le solveur unilatéral teste le signe ; la
+réaction est `−Cᵀλ` :
 
 \\[
 \begin{bmatrix} K & C^\mathsf{T} \\\\ C & 0 \end{bmatrix}

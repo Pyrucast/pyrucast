@@ -38,7 +38,8 @@
 //!   `SubNodeField` (on the multiplier node).
 //!
 //! Each term's variable is a primal of the target model, whose dual — the row
-//! into which the reaction `aₖ·λ` is added — is read from it.
+//! into which the force `aₖ·λ` is added, the opposite of the reaction — is
+//! read from it.
 
 use crate::aggregate::Aggregate;
 use crate::atoms::ElementType;
@@ -247,8 +248,9 @@ impl SubModelKind for Mpc {
         vec![IMPOSED.to_string()]
     }
 
-    /// Its relations, applied to the solution: the reaction `Cᵀ λ` on the
-    /// constrained nodes, and `C·u` on its own row.
+    /// Its relations, applied to the solution: the force `Cᵀ λ` on the
+    /// constrained nodes (the opposite of the reaction), and `C·u` on its own
+    /// row.
     fn internal_force_contribution(&self) -> Vec<crate::models::ResidualContribution> {
         vec![crate::models::ResidualContribution::Relations]
     }

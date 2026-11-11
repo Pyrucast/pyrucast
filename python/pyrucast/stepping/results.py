@@ -27,7 +27,9 @@ def store_step(data, problem, state, options, initial=False):
         not state.converged or not _close(state.time, options.save_times)
     ):
         return
-    reactions = state.reactions * -1.0 if state.reactions is not None else None
+    reactions = (
+        state.constraint_forces * -1.0 if state.constraint_forces is not None else None
+    )
     record = {
         "time": state.time,
         "displacement": part(state.solution, problem.displacement_names),

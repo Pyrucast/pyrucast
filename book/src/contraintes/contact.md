@@ -35,8 +35,9 @@ Une seule relation scalaire par nœud esclave : la normale couple les
 composantes, avec les coefficients \\(+n_c\\) sur l'esclave et
 \\(-N_i\\,n_c\\) sur chaque nœud maître. `solve` y trouve des inégalités et lance
 l'ensemble actif (voir [Contraintes](../contraintes.md#relations-unilatérales-inégalités)) :
-le multiplicateur \\(\lambda \le 0\\) porte la réaction de contact, et vaut
-exactement 0 quand la paire est décollée.
+le multiplicateur vaut \\(\lambda \le 0\\) tant que la paire touche, et
+exactement 0 quand elle est décollée : la réaction de contact, \\(-C^{\mathsf
+T}\lambda\\), ne fait que pousser.
 
 L'appariement est calculé **à la construction**, par projection au point le
 plus proche (`ops::geom::project_points`), \\(\xi\\) ramené au domaine de
@@ -96,7 +97,7 @@ met ses contacts à jour chaque fois qu'il reconstruit son opérateur.
 
 | | |
 |---|---|
-| primale | `lambda`, la réaction de contact |
+| primale | `lambda`, le multiplicateur de contact (la réaction est \\(-C^{\mathsf T}\lambda\\)) |
 | duale | `imposed` |
 | ce qu'il contraint | les déplacements `variables`, aux nœuds esclaves et maîtres |
 | matériau, comportement | aucun |

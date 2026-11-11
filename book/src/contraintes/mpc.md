@@ -36,7 +36,8 @@ Chaque terme apporte une paire de blocs de coefficient \\(a_k\\) :
 \\(C^{\mathsf T}\\), ligne `(n_k, duale de v_k)`, colonne
 `(multiplicateur, lambda)`. Tous les termes d'une relation partagent son nœud
 multiplicateur et sa ligne `imposed`, ce qui les additionne en une équation.
-La réaction est \\(a_k\\,\lambda\\) au nœud de chaque terme.
+La réaction, la force que la relation exerce sur la pièce, est
+\\(-a_k\\,\lambda\\) au nœud de chaque terme.
 
 Le nœud multiplicateur de chaque relation est créé à la position du nœud de
 son premier terme. Le second membre \\(g\\) s'écrit au chargement, à la

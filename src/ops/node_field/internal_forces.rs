@@ -110,7 +110,7 @@ pub fn internal_forces(
                         zones.push(field);
                     }
                     ResidualContribution::Relations => {
-                        zones.push(reaction(kind, solution)?);
+                        zones.push(constraint_force(kind, solution)?);
                     }
                     ResidualContribution::Computed(layout) => {
                         // The operator resolves what the term reads, exactly as
@@ -177,17 +177,21 @@ pub fn internal_forces(
     out.summed()
 }
 
-/// A constraint's reaction, `Cᵀ λ`, spread over the constrained nodes: term `k`
-/// of a relation carries `aₖ · λ` into the dual row of its own variable.
+/// A constraint's force on the constrained nodes, `Cᵀ λ` — the opposite of
+/// its **reaction**, the force it exerts on the part: term `k` of a relation
+/// carries `aₖ · λ` into the dual row of its own variable.
 ///
 /// This is the thing the multiplier alone does not give. For a Dirichlet with a
-/// single term of coefficient 1, λ *is* the nodal reaction — which is why
-/// nothing ever seemed to be missing. For a relation with several terms, λ is
-/// **one scalar** and the reaction is `aₖ·λ`, node by node.
-fn reaction(kind: &dyn crate::models::SubModelKind, solution: &NodeField) -> Result<NodeField> {
+/// single term of coefficient 1, λ *is* the nodal force — which is why nothing
+/// ever seemed to be missing. For a relation with several terms, λ is **one
+/// scalar** and the force is `aₖ·λ`, node by node.
+fn constraint_force(
+    kind: &dyn crate::models::SubModelKind,
+    solution: &NodeField,
+) -> Result<NodeField> {
     let constraint = kind.as_constraint().ok_or_else(|| {
         PyrucastError::Message(format!(
-            "{}: declares a reaction but imposes no relation",
+            "{}: declares a constraint force but imposes no relation",
             kind.label()
         ))
     })?;

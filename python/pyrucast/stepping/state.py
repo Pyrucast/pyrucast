@@ -19,7 +19,7 @@ class State:
     """Everything the next step starts from.
 
     ``solution`` is the full mechanical unknown — displacement **and** the
-    constraints' multipliers, the multipliers being the current reactions;
+    constraints' multipliers, in total;
     ``behaviour`` the converged output of the laws (stresses, internal
     variables, strains), the laws' rest state before the first step;
     ``temperature`` likewise for the heat problem, with the previous one kept
@@ -34,8 +34,8 @@ class State:
     temperature_before: object | None = None
     velocity: object | None = None
     acceleration: object | None = None
-    # Cᵀλ: the forces the constraints apply, at the last converged step.
-    reactions: object | None = None
+    # Cᵀλ, the opposite of the reactions, at the last converged step.
+    constraint_forces: object | None = None
     heat_behaviour: object | None = None
     # The iteration operator, kept while it stays valid (Cast3M RRRR): the
     # materials it was built from and, in dynamics, the time step.

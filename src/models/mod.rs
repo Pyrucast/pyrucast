@@ -402,8 +402,9 @@ pub enum ResidualContribution {
     /// of [`Contribution::Literal`].
     Literal(NodeField),
     /// The terms of a **constraint**: apply its [`Constraint::relations`] to the
-    /// current solution. On the internal side that is the reaction `Cᵀ λ`,
-    /// spread over the constrained nodes — term `k` carrying `aₖ·λ` into the
+    /// current solution. On the internal side that is the force `Cᵀ λ`, the
+    /// opposite of the reaction, spread over the constrained nodes — term `k`
+    /// carrying `aₖ·λ` into the
     /// dual row of its own variable — plus `C·u` on the constraint's own row.
     ///
     /// It is a variant rather than a `Literal` because the declaration is total:
@@ -1215,8 +1216,9 @@ pub trait Constraint {
 }
 
 /// One term of a linear constraint relation, carried **method-neutrally**:
-/// `coefficient · u(node, variable)`. Its reaction `coefficient · λ` lands in
-/// `target_dual`, the dual (residual) row of `variable` in its physics.
+/// `coefficient · u(node, variable)`. Its force `coefficient · λ`, the
+/// opposite of its reaction, lands in `target_dual`, the dual (residual) row
+/// of `variable` in its physics.
 ///
 /// ```
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -1308,9 +1310,11 @@ pub enum RelationSense {
     /// `Σₖ aₖ·uₖ = g` — always enforced (both solve paths).
     #[default]
     Equality,
-    /// `Σₖ aₖ·uₖ ≥ g` — enforced only while active (reaction `λ ≥ 0`).
+    /// `Σₖ aₖ·uₖ ≥ g` — enforced only while active (multiplier `λ ≤ 0`, so
+    /// that the reaction `−λ` pushes).
     GreaterEqual,
-    /// `Σₖ aₖ·uₖ ≤ g` — enforced only while active (reaction `λ ≤ 0`).
+    /// `Σₖ aₖ·uₖ ≤ g` — enforced only while active (multiplier `λ ≥ 0`, so
+    /// that the reaction `−λ` pushes).
     LessEqual,
 }
 
@@ -1371,7 +1375,8 @@ pub const IMPOSED: &str = "imposed";
 
 /// One linear constraint relation `Σₖ coeffₖ · u(nodeₖ, varₖ) ⋈ g` (`⋈` is the
 /// [`sense`](Self::sense) — `=` by default), enforced by a fresh
-/// `multiplier_node` whose solved value is the reaction. The right-hand
+/// `multiplier_node` whose solved value is the multiplier `λ` — the
+/// relation's reaction is `−λ` times its coefficients. The right-hand
 /// side `g` is supplied by the user in the load field at the multiplier node's
 /// [`IMPOSED`] component, so it is **not** carried here.
 ///

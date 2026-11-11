@@ -33,10 +33,12 @@ Elle apporte deux blocs à la raideur, chacun de coefficient 1 :
 - le bloc \\(C^{\mathsf T}\\) : ligne `(n, duale de la variable)`, colonne
   `(multiplicateur, lambda)`.
 
-À la solution, \\(\lambda\\) est la réaction : le flux ou la force qui tient la
-valeur imposée, compté comme l'effort de la pièce sur le blocage. L'appui,
-lui, exerce \\(-\lambda\\) sur la pièce : une poutre encastrée qui porte un
-poids \\(P\\) vers le bas a des multiplicateurs `u_z` de somme \\(-P\\).
+À la solution, \\(\lambda\\) est l'effort de la pièce sur le blocage : le flux
+ou la force qui tient la valeur imposée, vu de la pièce. La **réaction**, ce
+que le blocage exerce sur la pièce, est \\(-\lambda\\) : une poutre encastrée
+qui porte un poids \\(P\\) vers le bas a des multiplicateurs `u_z` de somme
+\\(-P\\), et une réaction \\(P\\) vers le haut (voir
+[Contraintes](../contraintes.md)).
 
 Chaque relation a son **nœud multiplicateur**, créé par la contrainte à la
 position du nœud imposé, dans le même `Coords` ; `multiplier_mesh()` les

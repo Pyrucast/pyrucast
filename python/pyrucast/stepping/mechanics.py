@@ -3,7 +3,8 @@
 The unknown is the full solution — displacement and the constraints'
 multipliers — and every linear solve returns a displacement **correction**
 with the multipliers in **total**: the multipliers are then the current
-reactions, which is what lets a unilateral constraint test their sign.
+ones, which is what lets a unilateral constraint test their sign. The
+constraints' force on the body is ``Cᵀλ``; the reaction is its opposite.
 
 In large displacements — laws reading a large-transformation measure — the
 body stays on the reference configuration: its internal forces are those of
@@ -149,13 +150,14 @@ class Balance:
     ``system`` is the right-hand side the operator is solved against —
     ``F_ext − F_int`` on the displacement rows, ``u_imp − C u`` on the
     constraint rows — so that the solve returns the multipliers in total.
-    ``out_of_balance`` subtracts the current reactions ``Cᵀλ`` from it: the
-    true residual, zero at equilibrium. ``reactions`` is ``Cᵀλ`` itself.
+    ``out_of_balance`` subtracts the constraints' current force ``Cᵀλ`` from
+    it: the true residual, zero at equilibrium. ``constraint_forces`` is ``Cᵀλ``
+    itself, the opposite of the reactions.
     """
 
     system: object
     out_of_balance: object
-    reactions: object | None
+    constraint_forces: object | None
 
 
 def balance(problem, mechanics, solution, behaviour, step, inertia=None):
@@ -194,13 +196,13 @@ def balance(problem, mechanics, solution, behaviour, step, inertia=None):
     multipliers = part(solution, problem.multiplier_names)
     if multipliers is None:
         return Balance(system, system, None)
-    reactions = node_field.restrict_like(
+    constraint_forces = node_field.restrict_like(
         node_field.internal_forces(
             mechanics.filter("constraint"), behaviour, multipliers, step.materials
         ),
         internal,
     )
-    return Balance(system, system - reactions, reactions)
+    return Balance(system, system - constraint_forces, constraint_forces)
 
 
 def mechanics_at(problem, solution):
@@ -739,11 +741,13 @@ def equilibrium_iterations(
                     inertia(solution) if inertia else None,
                 )
 
-        # How much the reactions moved: from none, all of them. Each evaluation
+        # How much the constraint forces moved: from none, all of them. Each evaluation
         # builds its own support, so align before subtracting.
-        change = current.reactions
-        if change is not None and previous.reactions is not None:
-            change = change - node_field.restrict_like(previous.reactions, change)
+        change = current.constraint_forces
+        if change is not None and previous.constraint_forces is not None:
+            change = change - node_field.restrict_like(
+                previous.constraint_forces, change
+            )
         reaction_change = infinity_norm(change, problem.force_names)
         names = [n for n in carried(strain) if n.startswith(STRAIN_PREFIXES)]
         measures = {
@@ -841,7 +845,7 @@ class MechanicalOutcome:
     behaviour: object
     strain: object
     materials: object
-    reactions: object | None
+    constraint_forces: object | None
     iterations: int
     accelerations: int
     substeps: int
@@ -997,7 +1001,7 @@ def mechanical_step(data, problem, state, t_end, temperature, options):
             )
         if predicted is not None:
             system = first.system + node_field.restrict_like(predicted, first.system)
-            first = Balance(system, first.out_of_balance, first.reactions)
+            first = Balance(system, first.out_of_balance, first.constraint_forces)
         here = start
 
         def retarget(fraction, here=here):
@@ -1052,7 +1056,7 @@ def mechanical_step(data, problem, state, t_end, temperature, options):
                 result.behaviour,
                 result.strain,
                 result.step.materials,
-                result.balance.reactions,
+                result.balance.constraint_forces,
                 iterations,
                 accelerations,
                 substep,
@@ -1082,7 +1086,7 @@ def mechanical_step(data, problem, state, t_end, temperature, options):
         result.behaviour,
         result.strain,
         result.step.materials,
-        result.balance.reactions,
+        result.balance.constraint_forces,
         iterations,
         accelerations,
         options.max_substeps,

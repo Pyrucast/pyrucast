@@ -14,8 +14,8 @@
 //! ```
 //!
 //! i.e. one **unilateral relation** `Σ coeffs·u ≥ −g₀` per slave node, whose
-//! multiplier `λ ≤ 0` carries the contact reaction (the force in the solution
-//! field is `−λ·n` on the slave, spread as `+λ·Nᵢ·n` on the master facet). The
+//! multiplier is `λ ≤ 0`; the contact's **reaction**, `−Cᵀλ`, is `−λ·n` on
+//! the slave, spread as `+λ·Nᵢ·n` on the master facet. The
 //! model is solved by the active-set operator
 //! [`solve`](crate::ops::solver::solve).
 //!
@@ -35,8 +35,9 @@
 //! One relation per slave node, each on a multiplier node of its own, with the
 //! variable pair of every constraint relation:
 //!
-//! - [`MULTIPLIER`] — the primal on the multiplier node: the contact reaction
-//!   intensity (`≤ 0` while touching, `0` when separated);
+//! - [`MULTIPLIER`] — the primal on the multiplier node: the contact
+//!   multiplier (`≤ 0` while touching, `0` when separated), whose opposite is
+//!   the reaction's intensity;
 //! - [`IMPOSED`] — the dual: the constraint row and the slot for the
 //!   right-hand side `−g₀`.
 //!
@@ -420,8 +421,9 @@ impl SubModelKind for Contact {
         vec![IMPOSED.to_string()]
     }
 
-    /// Its relations, applied to the solution: the reaction `Cᵀ λ` on the
-    /// constrained nodes, and `C·u` on its own row.
+    /// Its relations, applied to the solution: the force `Cᵀ λ` on the
+    /// constrained nodes (the opposite of the reaction), and `C·u` on its own
+    /// row.
     fn internal_force_contribution(&self) -> Vec<crate::models::ResidualContribution> {
         vec![crate::models::ResidualContribution::Relations]
     }

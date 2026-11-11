@@ -54,8 +54,9 @@ et c'est celui-ci que pyrucast résout :
    \begin{Bmatrix} T \\\\ \mu \end{Bmatrix} =
    \begin{Bmatrix} P \\\\ T\_{\text{imp}} \end{Bmatrix} \\]
 
-Les \\( \\{\mu\\} \\) sont les **réactions** : les flux qu'il faut injecter aux
-nœuds bloqués pour les tenir à 250 °C.
+Les \\( \\{\mu\\} \\) sont les **multiplicateurs**, et leur opposé est la
+**réaction** : \\( -[A]^T\\{\mu\\} \\), les flux qu'il faut injecter aux nœuds
+bloqués pour les tenir à 250 °C.
 
 **Le second membre se vérifie par sa somme.** Les fonctions de forme valent 1
 à elles toutes en chaque point, si bien que la somme des lignes de
@@ -206,7 +207,7 @@ propres nœuds : la contrainte les **crée elle-même**, un par nœud bloqué et
 la même position, et `blocage_T.multiplier_mesh()` rend le maillage qui les
 porte. Deux jeux de nœuds distincts, donc deux jeux d'inconnues : la solution
 renvoyée contient les deux, la température « T » et les multiplicateurs
-« lambda », qui sont les **réactions**.
+« lambda », dont l'opposé est la **réaction**.
 
 Le flux imposé, lui, est un **terme du modèle** : `pc.model.flux` le déclare sur
 l'espace éléments finis de la face gauche, et `|` le réunit au reste.
