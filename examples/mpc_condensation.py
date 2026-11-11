@@ -13,8 +13,9 @@ Two paths to the same result
 --------------------------------
 `solve(K, rhs)` solves the system augmented by Lagrange multipliers;
 `solve(K, rhs, relations="eliminate")` condenses the constraints. Both produce the
-**same** field. The elimination recovers, as a bonus, the *reaction* (the
-multiplier's equivalent) in each slave's dual row.
+**same** solution: the field, and each relation's multiplier at its node, which
+the elimination recovers from its slave's row. The reactions, the forces the
+constraints exert, are `−internal_forces` of the constraints, whichever path.
 
 Mise en donnée
 --------------
@@ -81,10 +82,21 @@ def main():
     t4 = elimination.value(nodes[4], "T")
     print(f"\nrelation : 2·T(node4) − T(node2) = {2.0 * t4 - t2:.4f}  (attendu 1.5)")
 
-    # Reactions (the multipliers' equivalent), read at the slaves' dual row at the
-    # constrained nodes.
-    print(f"réaction node0 (Dirichlet) : {elimination.value(nodes[0], dual):+.4f}")
-    print(f"réaction node4 (MPC)       : {elimination.value(nodes[4], dual):+.4f}")
+    # The multipliers, at their nodes, whichever path; the reactions, −Cᵀλ, the
+    # opposite of the constraints' internal forces, spread over the constrained
+    # nodes (the MPC's on node4 and node2).
+    for name, constraint in (("Dirichlet", dirichlet), ("MPC", mpc)):
+        m = constraint.multiplier_mesh().node(0, 0, 0)
+        print(
+            f"λ {name:9s} : Lagrange {lagrange.value(m, 'lambda'):+.4f}, "
+            f"élimination {elimination.value(m, 'lambda'):+.4f}"
+        )
+    state = pyrucast.element_field.initial_state(model, materials)
+    forces = pyrucast.node_field.internal_forces(
+        model.filter("constraint"), state, elimination, materials
+    )
+    for i in (0, 2, 4):
+        print(f"réaction node{i} : {-forces.value(nodes[i], dual):+.4f}")
 
 
 if __name__ == "__main__":
