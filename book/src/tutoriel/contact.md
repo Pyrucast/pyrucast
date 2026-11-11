@@ -119,9 +119,9 @@ du trou, et l'appui démarrerait enfoncé dans la chape. La page
 Le poids est partagé à parts égales entre les 3 nœuds de l'axe de l'appui, et
 il monte de 0 à 1 fois lui-même sur le temps fictif. `step_by_step` reçoit le
 même genre de dictionnaire qu'à la page [Plasticité](plasticite.md), sans
-température. Le script affiche 3 itérations aux trois premiers pas, puis 2,
-soit 43 en tout : les deux matériaux restent élastiques, et peu de corrections
-suffisent à chaque pas.
+température. Le script affiche 2 itérations à chaque pas, 40 en tout : les
+deux matériaux restent élastiques, et peu de corrections suffisent à chaque
+pas.
 
 ## L'enfoncement
 
