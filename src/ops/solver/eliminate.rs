@@ -21,8 +21,10 @@
 //!
 //! solved by the same sparse LU back-end as the Lagrange path (on a *smaller*,
 //! definite matrix — no multiplier DOFs), then prolonged back `u = T·û + u₀`.
-//! The multiplier-equivalent **reaction** is recovered in post-processing as the
-//! residual `−(K·u − f)` at each slave's dual row (`= aₛ·λ`).
+//! The **multiplier** of each eliminated relation is recovered in
+//! post-processing from the residual at its slave's row, `aₛ·λ = f − K·u`,
+//! and returned at its multiplier node: the solution carries the very DOFs
+//! the Lagrange path returns — the matrix columns — whatever the method.
 //!
 //! # Input
 //!
@@ -30,7 +32,7 @@
 //! are its rows named `imposed` ([`relation_rows`]), and the physics stiffness
 //! `K` is its physics×physics sub-block (the multiplier nodes are minted fresh,
 //! so they never coincide with a physics node — the DOF partition is exact).
-//! The reaction of each slave is returned in the dual row conjugate to it.
+//! The solution is laid out on the matrix columns, as by multipliers.
 //!
 //! # Inequalities
 //!
@@ -47,8 +49,9 @@
 //! — the equality multipliers have vanished (`C_E·T = 0`), the inequality ones
 //! remain — and the active-set loop of the Lagrange path
 //! ([`ActiveSet`]) decides which are saturated. Each inequality's `λ` is
-//! returned at its multiplier node, as by multipliers; each slave's reaction is
-//! its own share, the inequalities' `C_Iᵀλ` taken out.
+//! returned at its multiplier node, as by multipliers; each eliminated
+//! relation's `λ` is its slave's own share, the inequalities' `C_Iᵀλ` taken
+//! out.
 //!
 //! # v1 scope: non-chained, disjoint slaves
 //!
@@ -71,22 +74,21 @@ use std::sync::Arc;
 
 use super::lu::{self, factorize_csr, Factored, SolveMethod};
 use super::relations::{relation_rows, RelationRow};
-use super::unilateral::{ActiveSet, Inequality};
+use super::unilateral::{release_pivot, ActiveSet, Inequality};
 use super::SolveOptions;
 
 /// One eliminated slave DOF and the data needed to build `u₀` and recover its
-/// reaction. The masters are folded into `T` at build time, so they are not kept.
+/// relation's multiplier. The masters are folded into `T` at build time, so
+/// they are not kept.
 struct SlaveInfo {
     /// Physics-DOF index (shared row/column index) of the slave.
     phys_idx: usize,
-    /// The slave's constrained node (for the reaction output).
-    slave_node: NodeId,
-    /// The slave's dual variable — the row that carries its reaction.
-    target_dual: String,
     /// The slave coefficient `aₛ`.
     a_s: f64,
     /// Multiplier node whose `IMPOSED` load slot holds this relation's `g`.
     multiplier_node: NodeId,
+    /// The matrix column of that node's `lambda`: where `λ` is returned.
+    lambda_col: usize,
 }
 
 /// The condensation of a matrix's relations — the expensive artifact cached
@@ -107,6 +109,10 @@ pub(super) struct Condensation {
     phys_row_keys: Vec<DofKey>,
     /// Physics primal (col) DOFs, in shared physics-index order — the output `u`.
     phys_col_keys: Vec<DofKey>,
+    /// The matrix column of each physics index: where `u` is returned.
+    phys_to_col: Vec<usize>,
+    /// The matrix's column count: the length of the returned solution.
+    n_cols: usize,
     /// One entry per eliminated slave.
     slaves: Vec<SlaveInfo>,
 }
@@ -127,9 +133,11 @@ struct ReducedInequalities {
     /// `C_I` in physics numbering, one row per inequality — for
     /// `g_I − C_I·u₀` and for the inequalities' share `C_Iᵀλ` of the reactions.
     rows: Vec<Vec<(usize, f64)>>,
-    /// Each inequality's multiplier node: where its `g` is read and its `λ`
-    /// returned.
+    /// Each inequality's multiplier node: where its `g` is read.
     multipliers: Vec<NodeId>,
+    /// The matrix column of each inequality's `lambda`: where its `λ` is
+    /// returned.
+    lambda_cols: Vec<usize>,
     /// The loop over `saddle`, with its warm start.
     set: ActiveSet,
 }
@@ -233,8 +241,8 @@ pub(super) fn solve(
     let u_phys = &cond.t * &DVector::from_vec(u_hat) + &u0;
     cancel.check()?;
 
-    // ── Step 5 — reactions: −(K·u + C_Iᵀλ − f) at each slave's dual row,
-    //    the kept inequalities' own share taken out ──────────────────────
+    // ── Step 5 — each eliminated relation's multiplier, from its slave's row:
+    //    aₛ·λ = f − K·u − C_Iᵀλ_I, the kept inequalities' own share taken out ──
     let mut resid = &cond.k_phys * &u_phys - &f_phys;
     if let Reduced::Unilateral(kept) = &cond.reduced {
         for (row, &lambda) in kept.rows.iter().zip(&lambdas) {
@@ -244,38 +252,21 @@ pub(super) fn solve(
         }
     }
 
-    // ── Step 6 — assemble the solution NodeField ───────────────────────
-    // Primal u at every physics node, plus each slave's reaction in its dual row
-    // (same shape as the Lagrange solution: primal field + a dual reaction).
-    //
-    // Unlike `lu`/`unilateral`, this output cannot be wrapped by
-    // `Matrix::field_from_col_values`: its DOF set is not the matrix columns
-    // (multiplier columns are condensed out, and the reactions land on **dual**
-    // variables at the slave nodes — row-flavoured DOFs). Keep the explicit
-    // materialised support here.
-    let mut out_dofs: Vec<(NodeId, String)> = cond
-        .phys_col_keys
-        .iter()
-        .map(|&k| {
-            (
-                dof_node(k),
-                cond.vars[crate::containers::matrix::dof_var(k) as usize].clone(),
-            )
-        })
-        .collect();
-    let mut out_vals: Vec<f64> = u_phys.iter().copied().collect();
-    for s in &cond.slaves {
-        out_dofs.push((s.slave_node, s.target_dual.clone()));
-        out_vals.push(-resid[s.phys_idx]);
+    // ── Step 6 — the solution on the matrix columns, as by multipliers: `u`
+    //    at each physics column, `λ` at each relation's `lambda` column ──────
+    let mut x = vec![0.0; cond.n_cols];
+    for (&col, &u) in cond.phys_to_col.iter().zip(u_phys.iter()) {
+        x[col] = u;
     }
-    // Each kept inequality's multiplier, where the Lagrange path puts it.
+    for s in &cond.slaves {
+        x[s.lambda_col] = -resid[s.phys_idx] / s.a_s;
+    }
     if let Reduced::Unilateral(kept) = &cond.reduced {
-        for (&m, &lambda) in kept.multipliers.iter().zip(&lambdas) {
-            out_dofs.push((m, MULTIPLIER.to_string()));
-            out_vals.push(lambda);
+        for (&col, &lambda) in kept.lambda_cols.iter().zip(&lambdas) {
+            x[col] = lambda;
         }
     }
-    NodeField::from_dof_values(rhs.coords()?, &out_dofs, &out_vals)
+    matrix.field_from_col_values(&x)
 }
 
 /// Build the [`Condensation`]: partition physics vs multiplier DOFs, extract the
@@ -318,6 +309,29 @@ fn build_condensation(
         }
     }
     let n_phys = phys_col_keys.len();
+    let phys_to_col: Vec<usize> = full_col_to_phys
+        .iter()
+        .enumerate()
+        .filter(|&(_, &p)| p != usize::MAX)
+        .map(|(j, _)| j)
+        .collect();
+    // The `lambda` column of each multiplier node: where its `λ` is returned.
+    let lambda_var = vars.iter().position(|v| v == MULTIPLIER);
+    let lambda_col_of: std::collections::HashMap<NodeId, usize> = full_col
+        .iter()
+        .enumerate()
+        .filter(|&(_, &key)| {
+            lambda_var == Some(dof_var(key) as usize) && mult_nodes.contains(&dof_node(key))
+        })
+        .map(|(j, &key)| (dof_node(key), j))
+        .collect();
+    let lambda_col = |m: NodeId| -> Result<usize> {
+        lambda_col_of.get(&m).copied().ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "elimination: multiplier node {m:?} has no `{MULTIPLIER}` column"
+            ))
+        })
+    };
     if phys_row_keys.len() != n_phys {
         return Err(PyrucastError::Message(format!(
             "elimination: physics block is not square ({} dual rows vs {} primal cols)",
@@ -528,6 +542,7 @@ fn build_condensation(
             kept.push(Inequality {
                 row: n_free + i,
                 lambda_col: n_free + i,
+                release_pivot: release_pivot(&term_cols),
                 term_cols,
                 sense: rel.sense,
                 // The reduced system is built here, unscaled.
@@ -539,23 +554,25 @@ fn build_condensation(
             saddle: CscMatrix::from(&saddle),
             rows,
             multipliers: inequalities.iter().map(|r| r.multiplier).collect(),
+            lambda_cols: inequalities
+                .iter()
+                .map(|r| lambda_col(r.multiplier))
+                .collect::<Result<_>>()?,
             set: ActiveSet::new(kept),
         })
     };
 
-    // The slave's node, and the dual row its reaction lands in: the physics
-    // rows and columns are conjugate-aligned (checked above), so the row of the
-    // same physics index is the slave's dual.
     let slaves = records
         .into_iter()
-        .map(|r| SlaveInfo {
-            phys_idx: r.s_idx,
-            slave_node: dof_node(phys_col_keys[r.s_idx]),
-            target_dual: vars[dof_var(phys_row_keys[r.s_idx]) as usize].clone(),
-            a_s: r.a_s,
-            multiplier_node: r.multiplier_node,
+        .map(|r| {
+            Ok(SlaveInfo {
+                phys_idx: r.s_idx,
+                a_s: r.a_s,
+                multiplier_node: r.multiplier_node,
+                lambda_col: lambda_col(r.multiplier_node)?,
+            })
         })
-        .collect();
+        .collect::<Result<_>>()?;
 
     Ok(Condensation {
         t,
@@ -565,6 +582,8 @@ fn build_condensation(
         vars,
         phys_row_keys,
         phys_col_keys,
+        phys_to_col,
+        n_cols: full_col.len(),
         slaves,
     })
 }

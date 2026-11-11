@@ -25,8 +25,8 @@ reconstruit — ces supports sont créés une fois à la construction des
 sous-modèles et réutilisés d'assemblage en assemblage). Elle est donc
 `same_support` avec tout champ posé sur ces supports, et deux résolutions
 successives partagent les mêmes supports : leur arithmétique (`a - b`, …)
-s'aligne zone à zone. Sur un modèle contraint (Lagrange), une zone porte les
-multiplicateurs — les réactions s'y lisent directement.
+s'aligne zone à zone. Sur un modèle contraint, une zone porte les
+multiplicateurs `lambda`, que les relations aient été gardées ou éliminées.
 
 Pour poser un **autre** champ sur ces mêmes supports (p. ex. projeter les
 forces externes avant de calculer un résidu `f_ext − K·u`), la matrice expose
@@ -140,13 +140,30 @@ la raideur de la pièce (`E·h`, de l'ordre de 10⁹ pour de l'acier) et les
 coefficients des relations (1 pour un blocage). Factorisé tel quel, il perd
 de la précision justement sur les relations : les nœuds bloqués d'une pièce en
 acier gardaient quelques millionièmes du plus grand déplacement. Avant la
-factorisation, les lignes des relations (`imposed`) et les colonnes de leurs
-multiplicateurs (`lambda`) sont donc multipliées par la plus grande valeur
-diagonale du reste de la matrice, puis la solution est remise à l'échelle : la
-solution est la même, et les relations tiennent à l'arrondi près. La boucle de
-l'ensemble actif garde ses tolérances dans les unités d'origine (une réaction
-en newtons, un jeu en mètres). Cela coûte une copie des valeurs de la matrice,
+factorisation, chaque relation est donc ramenée à l'échelle des inconnues
+qu'elle lie : sa ligne (`imposed`) et la colonne de son multiplicateur
+(`lambda`) sont multipliées par
+
+\\[ s\_r = 1{,}5\\, \frac{\max\_k |K|\_k}{\max\_k |a\_{rk}|}, \\]
+
+où \\( k \\) parcourt les inconnues de la relation, \\( a\_{rk} \\) ses
+coefficients, et \\( |K|\_k \\) la plus grande valeur, en valeur absolue, de la
+colonne de l'inconnue \\( k \\) hors des relations. Une inconnue sans rien à
+mesurer retombe sur la plus grande valeur de la matrice. Un facteur par
+relation, et non un seul pour toutes : une relation posée sur une pièce
+souple, à côté d'une pièce mille fois plus raide, est ramenée à l'échelle de sa
+pièce, non de l'autre. La solution est ensuite remise à l'échelle : c'est la
+même, et les relations tiennent à l'arrondi près. La boucle de l'ensemble
+actif garde ses tolérances dans les unités d'origine (un multiplicateur en
+newtons, un jeu en mètres). Cela coûte une copie des valeurs de la matrice,
 faite seulement quand elle porte des relations.
+
+**Une relation relâchée tient à l'arrondi près.** Dans l'ensemble actif, la
+ligne d'une relation inactive devient \\( d\_r\\,\lambda\_r = 0 \\), avec un pivot
+\\( d\_r \\) de la taille des coefficients de la relation mis à l'échelle. Un pivot
+de 1 à côté de coefficients de \\( 10^{12} \\) laissait \\( \lambda\_r \\) à l'arrondi
+de la résolution, quelques newtons, qui poussaient la pièce par
+\\( C^{\mathsf T} \\). Le \\( \lambda\_r \\) rendu vaut ensuite exactement 0.
 
 ## Factorisation réutilisable (cache transparent)
 
@@ -180,8 +197,10 @@ définie, sans degré multiplicateur), puis prolongé `u = T·û + u₀`.
 
 - les relations sont lues dans la matrice, comme ci-dessus ; le `K` physique est
   son bloc point-selle sans les nœuds multiplicateurs ;
-- récupère en post-traitement la **réaction** (équivalent du multiplicateur),
-  `−(K·u − f)` à la ligne duale de chaque esclave (`= aₛ·λ`) ;
+- récupère en post-traitement le **multiplicateur** de chaque relation,
+  `aₛ·λ = f − K·u` à la ligne de son esclave, et le rend à son nœud : la
+  solution est celle de la voie Lagrange, mêmes inconnues sur les mêmes
+  supports ;
 - met en cache la **condensation** (`T`, `K̂` factorisé) sur la matrice, comme la
   factorisation ;
 - une matrice **sans relation** retombe sur la factorisation simple.
@@ -199,8 +218,8 @@ inconnues libres, avec son multiplicateur :
 Les multiplicateurs des égalités ont disparu (`C_E·T = 0`) ; ceux des
 inégalités restent, et la même boucle d'[ensemble actif](#les-relations-unilatérales--lensemble-actif)
 décide lesquelles sont saturées. Le `λ` de chaque inégalité revient à son nœud
-multiplicateur, comme par la voie Lagrange ; la réaction de chaque esclave est
-sa part propre, celle des inégalités (`C_Iᵀλ`) ôtée.
+multiplicateur, comme par la voie Lagrange ; celui de chaque égalité éliminée
+est la part propre de son esclave, celle des inégalités (`C_Iᵀλ`) ôtée.
 
 **Périmètre** : non chaîné, esclaves disjoints — chaque égalité élimine un
 esclave distinct, jamais réutilisé comme maître ni esclave ailleurs (couvre la
@@ -219,14 +238,15 @@ Voir l'exemple `examples/mpc_condensation.py` et la page
 Dès que la matrice porte une relation **unilatérale** (contrainte construite
 avec `sense=">="` / `"<="`, ou un [contact](../contraintes/contact.md)),
 `solve` la résout par la méthode **actif/inactif** (méthode du statut) : chaque
-relation est soit *active* (imposée en égalité, `λ` = la réaction), soit
+relation est soit *active* (imposée en égalité, son multiplicateur `λ` du
+signe d'une poussée), soit
 *inactive* (`λ = 0`, le jeu reste du côté admissible).
 
 ### Conditions KKT et boucle de statut
 
 Une relation unilatérale `Cᵣ·u ≥ gᵣ` (ou `≤`) n'obéit pas à une équation mais
 aux **conditions de complémentarité** de Karush–Kuhn–Tucker : soit elle est
-active (`Cᵣ·u = gᵣ`, le multiplicateur `λᵣ` porte la réaction), soit inactive
+active (`Cᵣ·u = gᵣ`, le multiplicateur `λᵣ` non nul), soit inactive
 (le jeu `Cᵣ·u − gᵣ` est du côté admissible et `λᵣ = 0`). Les deux ne peuvent
 être violées à la fois. On ne sait pas *a priori* quelles relations sont
 actives ; la méthode du statut itère dessus :
@@ -430,7 +450,7 @@ tolérances numériques usuelles.
 ## Exemples complets
 
 La résolution de bout en bout (assemblage + contraintes + lecture de la
-solution **et** des multiplicateurs de réaction) est déroulée sur des cas à
+solution **et** des multiplicateurs) est déroulée sur des cas à
 solution analytique :
 
 - [Dirichlet](../contraintes/dirichlet.md) — Poisson 1-D `-u'' = 0`,

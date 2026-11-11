@@ -8,7 +8,7 @@
 use pyrucast::aggregate::Aggregate;
 use pyrucast::atoms::{ElementType, Node};
 use pyrucast::containers::element_field::{ElementField, SubElementField};
-use pyrucast::containers::field::SubField;
+use pyrucast::containers::field::{Field, SubField};
 use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use pyrucast::containers::matrix::Matrix;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -403,12 +403,12 @@ fn single_term_mpc_elimination_equals_dirichlet() -> Result<()> {
     Ok(())
 }
 
-/// Elimination recovers the multiplier-equivalent **reaction** in post-processing:
-/// on `-u'' = 0` with `T(0) = 0`, `T(1) = 1`, the reaction at each constrained
-/// node (its dual `"q"` row, with `a_s = 1`) equals the Lagrange multiplier
-/// `+1` at x=0, `-1` at x=1.
+/// Elimination recovers each relation's multiplier in post-processing: on
+/// `-u'' = 0` with `T(0) = 0`, `T(1) = 1`, the `lambda` at each multiplier
+/// node equals the Lagrange one, `+1` at x=0, `-1` at x=1 — and the whole
+/// solution is the Lagrange one, the same DOFs on the same supports.
 #[test]
-fn elimination_recovers_reaction_equals_multiplier() -> Result<()> {
+fn elimination_recovers_the_multipliers() -> Result<()> {
     let (nodes, coords, mut model, materials) = heat_bar()?;
     let left = poi1(&nodes[0])?;
     let right = poi1(&nodes[N_ELEMS])?;
@@ -437,18 +437,17 @@ fn elimination_recovers_reaction_equals_multiplier() -> Result<()> {
     assert!((lambda_l - 1.0).abs() < TOL);
     assert!((lambda_r + 1.0).abs() < TOL);
 
-    // Elimination reactions land in the slaves' own dual row "q" at the
-    // constrained physics nodes; with a_s = 1 they equal the multipliers.
-    let react_l = elim.value(nodes[0].id(), "q")?;
-    let react_r = elim.value(nodes[N_ELEMS].id(), "q")?;
-    assert!(
-        (react_l - lambda_l).abs() < TOL,
-        "left reaction {react_l} vs λ {lambda_l}"
-    );
-    assert!(
-        (react_r - lambda_r).abs() < TOL,
-        "right reaction {react_r} vs λ {lambda_r}"
-    );
+    // The elimination returns them where the Lagrange path does: at the
+    // multiplier nodes, nothing in the dual rows.
+    for (m, lambda) in [(nl, lambda_l), (nr, lambda_r)] {
+        let eliminated = elim.value(m, "lambda")?;
+        assert!(
+            (eliminated - lambda).abs() < TOL,
+            "{eliminated} vs λ {lambda}"
+        );
+    }
+    assert_eq!(Field::components(&elim), Field::components(&lagrange));
+    assert!(elim.value_opt(nodes[0].id(), "q").is_none());
     Ok(())
 }
 

@@ -108,23 +108,27 @@ pub use unilateral::ActiveSetMethod;
 /// # charge.get(0)?.write().add_to_component("imposed", 100.0)?;
 /// assert_eq!(RelationMethod::default(), RelationMethod::Lagrange);
 /// assert_eq!(RelationMethod::parse("eliminate")?, RelationMethod::Eliminate);
-/// // By elimination, the multiplier is gone from the solution: the reaction is
-/// // read in the dual row of the eliminated unknown instead.
+/// // Either way, the same solution: the unknowns, and each relation's
+/// // multiplier at its node.
+/// let lagrange = solver::solve(&k, &charge)?;
 /// let elimine = solver::solve_with_options(&k, &charge, &SolveOptions {
 ///     relations: RelationMethod::Eliminate, ..Default::default() })?;
-/// assert!(elimine.value(n[0].id(), "q").is_ok());
+/// let m = modele.multiplier_mesh()?.get(0)?.read().connectivity()[0];
+/// assert!((elimine.value(m, "lambda")? - lagrange.value(m, "lambda")?).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum RelationMethod {
     /// Lagrange multipliers: the saddle-point is solved as assembled, the
-    /// multipliers come back in the solution as the reactions.
+    /// multipliers come back in the solution at their nodes.
     #[default]
     Lagrange,
     /// Master/slave elimination: each equality relation expresses one unknown
     /// from the others, and the reduced system — smaller, without multipliers,
-    /// usually positive definite — is solved. Each slave's reaction is returned
-    /// in its dual row. An inequality is not eliminated: it stays on the
+    /// usually positive definite — is solved. Each eliminated relation's
+    /// multiplier is recovered from its slave's row and returned at its node:
+    /// the solution is the Lagrange one, the same DOFs on the same supports.
+    /// An inequality is not eliminated: it stays on the
     /// reduced system with its multiplier, for the active-set loop. Scope:
     /// non-chained, disjoint slaves.
     Eliminate,
@@ -202,8 +206,8 @@ impl Default for SolveOptions {
 /// relation lives at its multiplier node, component `imposed`. A relation is
 /// enforced by its multiplier, and an inequality relation (`≥`, `≤`) by the
 /// active-set loop: an active relation holds as an equation and its multiplier
-/// carries the reaction (`λ ≤ 0` for `≥`, `λ ≥ 0` for `≤`), an inactive one
-/// reports `λ = 0`.
+/// has the sign of a push (`λ ≤ 0` for `≥`, `λ ≥ 0` for `≤`: the reaction is
+/// `−Cᵀλ`), an inactive one reports `λ = 0`.
 ///
 /// The solution has one zone per distinct column support of the matrix's
 /// blocks, each sharing that block's POI1 support — the multipliers included.

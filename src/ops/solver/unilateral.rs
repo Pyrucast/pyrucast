@@ -12,7 +12,8 @@
 //! 1. start from a trial active set (every inequality active, or the previous
 //!    converged status when cached — a *warm start*);
 //! 2. solve the saddle-point system with the **inactive** constraint rows
-//!    replaced by `λ_r = 0` (the matrix keeps its size; only values change);
+//!    replaced by `d_r·λ_r = 0` (the matrix keeps its size; only values
+//!    change), `d_r` the size of the relation's own coefficients;
 //! 3. check the signs: an active relation whose `λ` pulls (sign infeasible for
 //!    its sense) is released; an inactive relation whose gap penetrates is
 //!    activated;
@@ -29,8 +30,11 @@
 //! - `GreaterEqual` — an active relation has `λ ≤ 0`; released when `λ > tol`;
 //! - `LessEqual` — an active relation has `λ ≥ 0`; released when `λ < −tol`.
 //!
-//! An inactive relation reports `λ = 0` exactly (its row is the identity on the
-//! multiplier DOF).
+//! An inactive relation reports `λ = 0` exactly. Its row is `d_r·λ_r = 0`,
+//! with a pivot `d_r` of the size of the relation's coefficients: a `1` among
+//! coefficients of `10¹²` would leave `λ_r` at the round-off of the solve, and
+//! that round-off, times `Cᵀ`, would push the structure. The `λ_r` the solve
+//! returns is then set to `0`.
 //!
 //! # Input
 //!
@@ -152,6 +156,33 @@ pub(super) struct Inequality {
     /// the original units — a reaction in newtons, a gap in metres.
     pub(super) lambda_scale: f64,
     pub(super) row_scale: f64,
+    /// The pivot that stands for the relation's row while it is released,
+    /// `d·λ = 0`: the size of the relation's own (scaled) coefficients, so that
+    /// `λ = 0` is solved as accurately as the rest. A `1` next to coefficients
+    /// of `10¹²` leaves `λ` at the round-off of the solve, and that round-off,
+    /// times `Cᵀ`, pushes the structure.
+    pub(super) release_pivot: f64,
+}
+
+/// The release pivot of a relation of coefficients `term_cols`: their largest
+/// magnitude, `1` for a relation with none.
+pub(super) fn release_pivot(term_cols: &[(usize, f64)]) -> f64 {
+    let largest = term_cols.iter().fold(0.0_f64, |m, &(_, a)| m.max(a.abs()));
+    if largest > 0.0 {
+        largest
+    } else {
+        1.0
+    }
+}
+
+/// Report `λ = 0` exactly for every released relation of `status`: its row
+/// solved `d·λ = 0` to round-off only.
+fn zero_released(inequalities: &[Inequality], status: &[bool], x: &mut [f64]) {
+    for (ineq, &active) in inequalities.iter().zip(status) {
+        if !active {
+            x[ineq.lambda_col] = 0.0;
+        }
+    }
 }
 
 /// The Schur/Delassus artifacts cached across solves (matrix-invariant): the LU
@@ -288,7 +319,8 @@ pub(super) fn solve(
 }
 
 /// The KKT sign test on one status's solution `x`: release every active relation
-/// whose reaction `λ` pulls, activate every inactive one whose gap penetrates.
+/// whose multiplier `λ` would make its reaction `−λ` pull, activate every
+/// inactive one whose gap penetrates.
 /// Returns whether the status changed. Shared by both active-set methods.
 fn update_status(
     inequalities: &[Inequality],
@@ -300,7 +332,7 @@ fn update_status(
     let mut changed = false;
     for (ineq, active) in inequalities.iter().zip(status.iter_mut()) {
         if *active {
-            // Active: the reaction must not pull. λ = −μ (see module doc). On a
+            // Active: the reaction −λ must not pull. λ = −μ (see module doc). On a
             // scaled system `x` holds λ / lambda_scale: the tolerance follows.
             let lambda = x[ineq.lambda_col];
             let tol_lambda = tol / ineq.lambda_scale;
@@ -366,7 +398,7 @@ fn solve_refactorize(
                 b[ineq.row] = 0.0;
             }
         }
-        let x = lu_solve_vec(&lu, &b);
+        let mut x = lu_solve_vec(&lu, &b);
         if x.iter().any(|v| !v.is_finite()) {
             return Err(PyrucastError::Message(
                 "solve: LU failed (matrix is singular — check that the \
@@ -377,6 +409,7 @@ fn solve_refactorize(
         cancel.check()?;
 
         if !update_status(&state.inequalities, &mut status, &x, b_full, options.tol) {
+            zero_released(&state.inequalities, &status, &mut x);
             // Converged: remember the status + factors for the next warm start.
             if options.cache {
                 *state.last.lock() = Some((status, lu));
@@ -450,7 +483,7 @@ fn solve_schur(
     for _iter in 0..options.max_iter {
         cancel.check()?;
 
-        let Some(x) = schur_status_solve(
+        let Some(mut x) = schur_status_solve(
             &base,
             &mut cache.columns,
             &state.inequalities,
@@ -464,6 +497,7 @@ fn solve_schur(
         cancel.check()?;
 
         if !update_status(&state.inequalities, &mut status, &x, b_full, options.tol) {
+            zero_released(&state.inequalities, &status, &mut x);
             if options.cache {
                 cache.warm = Some(status);
             }
@@ -479,7 +513,8 @@ fn solve_schur(
 }
 
 /// `A·x`, where `A` is the released base: the assembled matrix `csc` with every
-/// inequality row replaced by the identity on its multiplier column (`λᵣ = 0`).
+/// inequality row replaced by its release pivot on its multiplier column
+/// (`dᵣ·λᵣ = 0`).
 fn base_matvec(
     csc: &nalgebra_sparse::CscMatrix<f64>,
     inequalities: &[Inequality],
@@ -497,9 +532,9 @@ fn base_matvec(
             }
         }
     }
-    // The base row of every inequality is the identity at its λ column.
+    // The base row of every inequality is its release pivot at its λ column.
     for ineq in inequalities {
-        y[ineq.row] = x[ineq.lambda_col];
+        y[ineq.row] = ineq.release_pivot * x[ineq.lambda_col];
     }
     y
 }
@@ -538,8 +573,9 @@ fn schur_column(
 }
 
 /// Solve one status's saddle-point system by the Woodbury identity around the
-/// released base `A`. In `A` a released relation carries the identity row
-/// `λᵣ = 0` (a `1` at its multiplier column `λcol`); activating it restores the
+/// released base `A`. In `A` a released relation carries the row
+/// `dᵣ·λᵣ = 0` (its release pivot at its multiplier column `λcol`); activating
+/// it restores the
 /// real constraint row `Cᵣ`. That is a rank-`k` row update
 /// `A + Σ e_row(r)·(Cᵣ − e_λcol(r))ᵀ`, so
 ///
@@ -547,8 +583,8 @@ fn schur_column(
 /// x = A⁻¹·b − X·(I + Vᵀ X)⁻¹·(Vᵀ A⁻¹ b)
 /// ```
 ///
-/// with `X = [A⁻¹·e_row(r)]` (cached columns) and `Vᵣ = Cᵣ − e_λcol(r)` (so
-/// `Vᵣᵀ v = Cᵣ·v − v[λcol]`). The `k×k` system (`I + Vᵀ X` — the active
+/// with `X = [A⁻¹·e_row(r)]` (cached columns) and `Vᵣ = Cᵣ − dᵣ·e_λcol(r)` (so
+/// `Vᵣᵀ v = Cᵣ·v − dᵣ·v[λcol]`). The `k×k` system (`I + Vᵀ X` — the active
 /// Delassus operator) is dense.
 ///
 /// Returns `None` when a solve is non-finite (⇒ the caller falls back).
@@ -587,17 +623,18 @@ fn schur_status_solve(
         return None;
     }
 
-    // Dense G = I + Vᵀ X and small rhs = Vᵀ y0, with Vᵢ = Cᵢ − e_row(i).
+    // Dense G = I + Vᵀ X and small rhs = Vᵀ y0, with Vᵢ = Cᵢ − dᵢ·e_λcol(i).
     let mut g = DMatrix::<f64>::zeros(k, k);
     let mut rhs_small = DVector::<f64>::zeros(k);
     for (i, &ai) in active.iter().enumerate() {
         let ineq_i = &inequalities[ai];
-        // Vᵢᵀ v = Cᵢ·v − v[λcolᵢ] (the identity the base carries at λcolᵢ).
+        let d_i = ineq_i.release_pivot;
+        // Vᵢᵀ v = Cᵢ·v − dᵢ·v[λcolᵢ] (the pivot the base carries at λcolᵢ).
         let ci_y0: f64 = ineq_i.term_cols.iter().map(|&(c, a)| a * y0[c]).sum();
-        rhs_small[i] = ci_y0 - y0[ineq_i.lambda_col];
+        rhs_small[i] = ci_y0 - d_i * y0[ineq_i.lambda_col];
         for (j, xj) in xs.iter().enumerate() {
             let ci_xj: f64 = ineq_i.term_cols.iter().map(|&(c, a)| a * xj[c]).sum();
-            let mut v = ci_xj - xj[ineq_i.lambda_col];
+            let mut v = ci_xj - d_i * xj[ineq_i.lambda_col];
             if i == j {
                 v += 1.0;
             }
@@ -646,14 +683,16 @@ fn build_state(matrix: &Matrix) -> Result<ActiveSetState> {
         .filter(|r| r.sense != RelationSense::Equality)
         .map(|r| {
             let row_scale = row_of(r.row);
+            let term_cols: Vec<(usize, f64)> = r
+                .terms
+                .into_iter()
+                .map(|(c, a)| (c, row_scale * a * col_of(c)))
+                .collect();
             Inequality {
                 row: r.row,
                 lambda_col: r.lambda_col,
-                term_cols: r
-                    .terms
-                    .into_iter()
-                    .map(|(c, a)| (c, row_scale * a * col_of(c)))
-                    .collect(),
+                release_pivot: release_pivot(&term_cols),
+                term_cols,
                 sense: r.sense,
                 lambda_scale: col_of(r.lambda_col),
                 row_scale,
@@ -675,9 +714,10 @@ pub(crate) static FACTORIZE_CALLS: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
 /// Factorize the system of one status: the base saddle-point with, for every
-/// **inactive** inequality, its constraint row replaced by the identity on the
-/// multiplier DOF (`λ_r = 0`). The `Cᵀ` column needs no clearing — `λ_r = 0`
-/// zeroes its contribution exactly.
+/// **inactive** inequality, its constraint row replaced by its release pivot on
+/// the multiplier DOF (`d_r·λ_r = 0`). The `Cᵀ` column needs no clearing —
+/// `λ_r = 0` zeroes its contribution, and the pivot `d_r`, of the size of the
+/// column, keeps the solve from leaving round-off there.
 fn factorize_status(
     csc: &nalgebra_sparse::CscMatrix<f64>,
     inequalities: &[Inequality],
@@ -687,18 +727,18 @@ fn factorize_status(
     FACTORIZE_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let n = csc.nrows();
     // Rows to blank: the constraint rows of the inactive inequalities — and,
-    // for each, the identity entry that replaces that row.
+    // for each, the release pivot that replaces that row.
     let mut blanked = vec![false; n];
-    let mut inserted: Vec<(usize, usize)> = Vec::new();
+    let mut inserted: Vec<(usize, usize, f64)> = Vec::new();
     for (ineq, &active) in inequalities.iter().zip(status) {
         if !active {
             blanked[ineq.row] = true;
-            inserted.push((ineq.lambda_col, ineq.row));
+            inserted.push((ineq.lambda_col, ineq.row, ineq.release_pivot));
         }
     }
     // By column then row: each column then meets its own in the order a CSC
     // column wants them.
-    inserted.sort_unstable();
+    inserted.sort_unstable_by_key(|&(col, row, _)| (col, row));
 
     let col_offsets = csc.col_offsets();
     let row_indices = csc.row_indices();
@@ -716,7 +756,7 @@ fn factorize_status(
             .filter(|&k| !blanked[row_indices[k]])
             .count();
     }
-    for &(col, _) in &inserted {
+    for &(col, _, _) in &inserted {
         col_ptr[col + 1] += 1;
     }
     for col in 0..n {
@@ -742,7 +782,7 @@ fn factorize_status(
             // can never collide with a survivor — only precede it.
             while ins < seen && inserted[ins].1 < row {
                 row_idx[w] = inserted[ins].1;
-                vals[w] = 1.0;
+                vals[w] = inserted[ins].2;
                 w += 1;
                 ins += 1;
             }
@@ -752,7 +792,7 @@ fn factorize_status(
         }
         while ins < seen {
             row_idx[w] = inserted[ins].1;
-            vals[w] = 1.0;
+            vals[w] = inserted[ins].2;
             w += 1;
             ins += 1;
         }

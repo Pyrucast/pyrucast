@@ -24,14 +24,15 @@ use pyrucast_macros::py_op;
 /// `relations` says how the constraint relations are enforced:
 ///
 /// - `"lagrange"` (default) — by their multipliers, the saddle-point solved as
-///   assembled; the multipliers come back in the solution as the reactions.
+///   assembled; the multipliers come back in the solution at their nodes.
 ///   As soon as the matrix carries an inequality, the **active-set** loop
 ///   decides which relations are saturated: an active relation holds as an
 ///   equation (its `lambda` is `<= 0` for `>=`, `>= 0` for `<=`), an inactive
 ///   one reports `lambda = 0`;
 /// - `"eliminate"` — each equality relation eliminates one unknown, and the
-///   smaller system left, without multipliers, is solved; each eliminated
-///   unknown's reaction is returned in its dual row. An inequality is not
+///   smaller system left, without multipliers, is solved; each relation's
+///   multiplier is recovered from its eliminated unknown's row and returned at
+///   its node — the very solution the multipliers give. An inequality is not
 ///   eliminated: it stays on the reduced system, resolved by the same
 ///   active-set loop, its `lambda` returned at its multiplier node. Scope:
 ///   non-chained, disjoint slaves.

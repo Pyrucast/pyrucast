@@ -324,11 +324,12 @@ fn the_sense_survives_a_sum() -> Result<()> {
     check(&setup, &solution, 2.0, -1.0)
 }
 
-/// A saturated bound on an eliminated unknown: its reaction lands in the same
+/// A saturated bound on an eliminated unknown: its multiplier acts in the same
 /// dual row as the slave's, and the elimination must hand back the slave's own
 /// share. `T(0) = 0`, the MPC `T(¼) − ½·T(½) = 0` (slave `T(¼)`), and
-/// `T(¼) ≥ 1` under a weak flux, so the bound holds: the tie's reaction in the
-/// row `q` of `T(¼)` must be its multiplier, the bound's taken out.
+/// `T(¼) ≥ 1` under a weak flux, so the bound holds: the tie's multiplier,
+/// recovered from the row `q` of `T(¼)`, must be the Lagrange one, the bound's
+/// share taken out.
 #[test]
 fn a_bound_on_an_eliminated_unknown_keeps_its_own_reaction() -> Result<()> {
     let (nodes, coords, mut model, materials) = heat_bar()?;
@@ -375,13 +376,29 @@ fn a_bound_on_an_eliminated_unknown_keeps_its_own_reaction() -> Result<()> {
         assert!((a - b).abs() < TOL);
     }
     assert!((elimination.value(bound_mult, "lambda")? - bound_lambda).abs() < TOL);
-    let tie_reaction = elimination.value(nodes[1].id(), "q")?;
+    assert_same_solution(&lagrange, &elimination);
+    let tie_eliminated = elimination.value(tie_mult, "lambda")?;
     let tie_lambda = lagrange.value(tie_mult, "lambda")?;
     assert!(
-        (tie_reaction - tie_lambda).abs() < TOL,
-        "the tie's own reaction {tie_reaction} vs λ {tie_lambda}"
+        (tie_eliminated - tie_lambda).abs() < TOL,
+        "the tie's multiplier {tie_eliminated} vs λ {tie_lambda}"
     );
     Ok(())
+}
+
+/// The two relation methods return the same solution: the same zones on the
+/// same supports, the same components, the same values to round-off — the
+/// physics unknowns and every relation's `lambda`, eliminated or not.
+fn assert_same_solution(lagrange: &NodeField, elimination: &NodeField) {
+    assert_eq!(lagrange.len(), elimination.len(), "zone count");
+    for (a, b) in lagrange.iter().zip(elimination.iter()) {
+        let (a, b) = (a.read(), b.read());
+        assert!(Handle::same_object(&a.support(), &b.support()), "support");
+        assert_eq!(a.components(), b.components());
+        for (x, y) in a.values().iter().zip(b.values()) {
+            assert!((x - y).abs() < TOL, "{x} vs {y}");
+        }
+    }
 }
 
 /// When the inequality-free base is **singular** (a structure that only holds
@@ -450,8 +467,8 @@ fn all_equality_model_falls_back_to_plain_solve() -> Result<()> {
 
 /// The elimination keeps the inequalities on the reduced system and runs the
 /// same active-set loop: it must give the field and the multipliers of the
-/// Lagrange path, and each equation's reaction in the dual row of its slave
-/// (`a_s = 1`: the reaction is the multiplier). Two equations are eliminated,
+/// Lagrange path, each eliminated equation's multiplier recovered from the
+/// dual row of its slave, its own share only. Two equations are eliminated,
 /// `T(0) = 0` and the MPC `T(¼) − ½·T(½) = 0`, whose slave is `T(¼)`; two
 /// bounds stay: `T(1) ≥ 2`, saturated under `q = 1`, and `T(¼) ≥ −10` — on the
 /// eliminated unknown itself, reached through `T` — loose.
@@ -505,6 +522,7 @@ fn elimination_keeps_the_inequalities() -> Result<()> {
         ..Default::default()
     };
     let elimination = solver::solve_with_options(&k, &rhs, &eliminate)?;
+    assert_same_solution(&lagrange, &elimination);
 
     for (i, node) in nodes.iter().enumerate() {
         let (a, b) = (
@@ -526,10 +544,13 @@ fn elimination_keeps_the_inequalities() -> Result<()> {
     assert!((elimination.value(floor_mult, "lambda")? - floor_lambda).abs() < TOL);
     assert_eq!(lagrange.value(loose_mult, "lambda")?, 0.0);
     assert_eq!(elimination.value(loose_mult, "lambda")?, 0.0);
-    // Each eliminated equation's reaction, its own share only.
-    let clamp_reaction = elimination.value(nodes[0].id(), "q")?;
-    assert!((clamp_reaction - lagrange.value(clamp_mult, "lambda")?).abs() < TOL);
-    let tie_reaction = elimination.value(nodes[1].id(), "q")?;
-    assert!((tie_reaction - lagrange.value(tie_mult, "lambda")?).abs() < TOL);
+    // Each eliminated equation's multiplier, its own share only.
+    for m in [clamp_mult, tie_mult] {
+        let (a, b) = (
+            lagrange.value(m, "lambda")?,
+            elimination.value(m, "lambda")?,
+        );
+        assert!((b - a).abs() < TOL, "λ at {m:?}: {b} vs {a}");
+    }
     Ok(())
 }

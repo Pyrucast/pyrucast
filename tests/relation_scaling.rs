@@ -16,6 +16,7 @@ use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::models::RelationSense;
 use pyrucast::ops::element_field::{material_field, StrainMeasure};
+use pyrucast::ops::solver::{RelationMethod, SolveOptions};
 use pyrucast::ops::{matrix, mesh, model, solver};
 
 /// A bar 1 × 0.1 × 0.1 of 20 × 2 × 2 HEX8, clamped on x = 0 and pulled down at
@@ -89,4 +90,87 @@ fn a_clamp_holds_on_a_steel_bar_as_on_a_soft_one() {
         steel_clamp <= 1e-14 * steel_tip,
         "steel: {steel_clamp:e} on the clamp"
     );
+}
+
+/// A steel bar clamped on x = 0 and pulled down at x = 1, with a **released**
+/// bound `u_z ≥ −1` on every node of its free end — far from touching, so each
+/// bound's multiplier is 0 and the solution is the bar's alone. A released
+/// row once solved `1·λ = 0` next to coefficients of 10¹²: λ came back at the
+/// round-off of the solve, some newtons, and pushed the bar.
+#[test]
+fn released_bounds_push_nothing_and_both_methods_agree() {
+    let young = 200e9;
+    let coords = Handle::new(Coords::new(3).unwrap());
+    let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
+    let b = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
+    let edge = mesh::line(&a, &b, 20, ElementType::SEG2).unwrap();
+    let face = mesh::extrude(&edge, &[0.0, 0.1, 0.0], 2).unwrap();
+    let bar = mesh::extrude(&face, &[0.0, 0.0, 0.1], 2).unwrap();
+    let fes = FiniteElementSpace::lagrange(&bar).unwrap();
+    let mut solid = model::elasticity(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )
+    .unwrap();
+    let clamp = mesh::consolidate(
+        &mesh::points_on_plane(&bar, &[0.0, 0.0, 0.0], &[1.0, 0.0, 0.0], None).unwrap(),
+    )
+    .unwrap();
+    let tip = mesh::consolidate(
+        &mesh::points_on_plane(&bar, &[1.0, 0.0, 0.0], &[1.0, 0.0, 0.0], None).unwrap(),
+    )
+    .unwrap();
+    for variable in ["u_x", "u_y", "u_z"] {
+        let blocked = model::dirichlet(&clamp, &solid, variable, RelationSense::Equality).unwrap();
+        solid = solid.union(&blocked).unwrap();
+    }
+    let bound = model::dirichlet(&tip, &solid, "u_z", RelationSense::GreaterEqual).unwrap();
+    let bound_multipliers = bound.multiplier_mesh().unwrap();
+    solid = solid.union(&bound).unwrap();
+    let materials = material_field(&solid, &[("E", young), ("nu", 0.3)]).unwrap();
+    let k = matrix::stiffness(&solid, &materials).unwrap();
+
+    // The load at the tip, and the bounds' right-hand side −1 (metres).
+    let force = NodeField::new(&tip, vec!["f_z".into()]).unwrap();
+    force
+        .get(0)
+        .unwrap()
+        .write()
+        .set_uniform("f_z", -1000.0)
+        .unwrap();
+    let gaps = NodeField::new(&bound_multipliers, vec!["imposed".into()]).unwrap();
+    gaps.get(0)
+        .unwrap()
+        .write()
+        .set_uniform("imposed", -1.0)
+        .unwrap();
+    let rhs = force.union(&gaps).unwrap();
+
+    let lagrange = solver::solve(&k, &rhs).unwrap();
+    let eliminate = SolveOptions {
+        relations: RelationMethod::Eliminate,
+        ..Default::default()
+    };
+    let elimination = solver::solve_with_options(&k, &rhs, &eliminate).unwrap();
+
+    let mut tip_scale = 0.0_f64;
+    let mut worst = 0.0_f64;
+    for &node in tip.get(0).unwrap().read().connectivity() {
+        let (l, e) = (
+            lagrange.value(node, "u_z").unwrap(),
+            elimination.value(node, "u_z").unwrap(),
+        );
+        tip_scale = tip_scale.max(l.abs());
+        worst = worst.max((l - e).abs());
+    }
+    assert!(
+        worst <= 1e-12 * tip_scale,
+        "u_z: {worst:e} apart, of {tip_scale:e}"
+    );
+    for &m in bound_multipliers.get(0).unwrap().read().connectivity() {
+        assert_eq!(lagrange.value(m, "lambda").unwrap(), 0.0);
+        assert_eq!(elimination.value(m, "lambda").unwrap(), 0.0);
+    }
 }

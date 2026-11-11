@@ -198,33 +198,18 @@ Recommended: (ii) + (iii), on a branch of their own.
 
 ## The active set can cycle on a contact near zero gap and zero reaction
 
-On the tutorial's lug pressed by a stiff support (24 slave nodes, the bore cut
-into 240 flat TRI3), the status loop of `solve` cycled at `t = 0.5` of a load
-ramp with the default `tol = 1e-10`, in `schur` and in `refactorize` alike (400
-iterations); it converged at `tol = 1e-6`. A node whose gap and reaction are
-both about zero flips between the two statuses at each pass. Leads: a
-tolerance relative to the scale of the reactions and of the gaps rather than
-absolute; or, on cycling, keeping the status that lowers the KKT violation
-instead of failing. Reproduce with the scratch comparison of the contact
-chapter (`compare_contact_tri3.py`, master dumped from the reference).
-
-## One scale for every relation loses digits next to a much stiffer part
-
-`RelationScaling` (`src/ops/solver/scaling.rs`) multiplies every relation row
-and multiplier column by one factor, the largest diagonal entry of the
-structure. On the tutorial's lug (HEX8, steel) pressed by a support 1 000 times
-stiffer, held by 102 Dirichlet relations and touching through 24 contact
-relations, that factor comes from the support: the relations on the lug are
-over-scaled a thousandfold. The Lagrange solve then depends on the ordering of
-the unknowns: the same system (coefficients and right-hand side equal to
-1e-14), assembled once by `model.contact` and once as 24 unilateral `mpc`,
-gives a pin displacement of −6.00461e-4 and −6.00419e-4, and a clamp
-reaction FX of 2 370 N and 2 415 N; `relations="eliminate"` gives
-−6.0045647333e-4 and 2 428.45 N for both, to ten digits. The clamp reaction
-is the small sum of nodal reactions of ±15 kN, so it amplifies the error.
-Lead: one factor per relation, from the diagonal of the unknowns it touches.
-Reproduce with the scratch comparison of the contact chapter
-(`compare_contact_impo32.py`, `SOLVERS=1 PAIRS_FROM_CONTACT=1 LINEAR=1`).
+On the tutorial's lug, meshed in HEX8 and pressed by a stiff support with no
+load at all (24 slave nodes, the bore cut into 80 flat TRI3 that overlap the
+support by up to 1.7e-4 m), the status loop of `solve` cycles with the
+default `tol = 1e-10`, in `schur` and in `refactorize` alike; it converges at
+`tol = 1e-6`. A node whose gap and multiplier are both about zero flips
+between the two statuses at each pass. (The HEX20 case that cycled at
+`t = 0.5` no longer does since a released relation's pivot has the size of its
+coefficients.) Leads: a tolerance relative to the scale of the multipliers and
+of the gaps rather than absolute; or, on cycling, keeping the status that
+lowers the KKT violation instead of failing. Reproduce with the scratch
+comparison of the contact chapter (`compare_contact_tri3.py ... zero`, linear
+lug).
 
 ## Decide on smoothing the contact normals
 
