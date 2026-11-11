@@ -441,19 +441,19 @@ fn layered(
     // A fixed column gets no node of its own: its source node stands at every
     // level. `free_rank` numbers the others, the ones a level creates.
     let mut free_rank: Vec<u32> = vec![u32::MAX; n_cols];
-    let mut n_free: u32 = 0;
+    let mut free_cols: Vec<usize> = Vec::with_capacity(n_cols);
     for (col, rank) in free_rank.iter_mut().enumerate() {
         if !fixed[col] {
-            *rank = n_free;
-            n_free += 1;
+            *rank = free_cols.len() as u32;
+            free_cols.push(col);
         }
     }
-    let n_free = n_free as usize;
+    let n_free = free_cols.len();
     let last_created = if closed { n_layers - 1 } else { n_layers };
     let n_created = last_created * n_free + n_half * n_corner_cols as usize;
     let mut flat: Vec<f64> = Vec::with_capacity(n_created * dim);
     for k in 1..=last_created {
-        for c in (0..n_cols).filter(|&c| !fixed[c]) {
+        for &c in &free_cols {
             place(&cols.positions[c], k as f64, &mut flat);
         }
     }
@@ -474,30 +474,58 @@ fn layered(
     // loop below only indexes: `whole` at the whole levels 0..=n_layers (a
     // closed sweep's last level is its first), `halves` at the half levels
     // k + ½, for the corner columns.
+    // Each column's node at a level is `base + level · step`, decided once per
+    // column: a fixed column's source node at every level (step 0), a free
+    // one's created node. The level loops below only add.
+    let first_half = first + (last_created * n_free) as u32;
+    let whole_base: Vec<u32> = (0..n_cols)
+        .map(|col| {
+            if fixed[col] {
+                cols.ids[col].0
+            } else {
+                first + free_rank[col]
+            }
+        })
+        .collect();
+    let whole_step: Vec<u32> = fixed
+        .iter()
+        .map(|&f| if f { 0 } else { n_free as u32 })
+        .collect();
+    // Half levels: the corner columns' created nodes, a fixed column's source
+    // node, and no node for a mid-node column (never read).
+    let half_base: Vec<u32> = (0..n_cols)
+        .map(|col| match (corner_rank[col], fixed[col]) {
+            (rank, _) if rank != u32::MAX => first_half + rank,
+            (_, true) => cols.ids[col].0,
+            _ => u32::MAX,
+        })
+        .collect();
+    let half_step: Vec<u32> = corner_rank
+        .iter()
+        .map(|&rank| if rank != u32::MAX { n_corner_cols } else { 0 })
+        .collect();
+
     let mut whole: Vec<NodeId> = Vec::with_capacity((n_layers + 1) * n_cols);
     whole.extend_from_slice(&cols.ids);
-    for k in 0..last_created {
-        whole.extend((0..n_cols).map(|col| {
-            if fixed[col] {
-                cols.ids[col]
-            } else {
-                NodeId(first + (k * n_free) as u32 + free_rank[col])
-            }
-        }));
+    for k in 0..last_created as u32 {
+        whole.extend(
+            whole_base
+                .iter()
+                .zip(&whole_step)
+                .map(|(&base, &step)| NodeId(base + k * step)),
+        );
     }
     if closed {
         whole.extend_from_slice(&cols.ids);
     }
-    let first_half = first + (last_created * n_free) as u32;
-    let mut halves: Vec<NodeId> = vec![NodeId(u32::MAX); n_half * n_cols];
-    for k in 0..n_half {
-        for (col, &rank) in corner_rank.iter().enumerate() {
-            if rank != u32::MAX {
-                halves[k * n_cols + col] = NodeId(first_half + k as u32 * n_corner_cols + rank);
-            } else if fixed[col] {
-                halves[k * n_cols + col] = cols.ids[col];
-            }
-        }
+    let mut halves: Vec<NodeId> = Vec::with_capacity(n_half * n_cols);
+    for k in 0..n_half as u32 {
+        halves.extend(
+            half_base
+                .iter()
+                .zip(&half_step)
+                .map(|(&base, &step)| NodeId(base + k * step)),
+        );
     }
 
     let mut result = Mesh::empty();

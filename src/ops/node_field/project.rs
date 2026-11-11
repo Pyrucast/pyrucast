@@ -216,14 +216,22 @@ pub fn project_element(
     let (index, points) = distinct_points(target)?;
     let locations = locate_points(mesh, &points, tol)?;
     let n_comp = components.len();
+    // Buffers sized once, to the largest zone: a point only takes its slice.
+    let max_gauss = hosts.iter().map(|h| h.n_gauss).max().unwrap_or(0);
+    let max_nodes = hosts
+        .iter()
+        .map(|h| h.fit.nodes_per_cell())
+        .max()
+        .unwrap_or(0);
     let mut values = vec![0.0; points.len() * n_comp];
     values
         .par_chunks_mut(n_comp)
         .zip(locations.par_iter())
         .with_min_len(MIN_PARALLEL_LEN)
         .for_each_init(
-            || (Vec::new(), Vec::new()),
-            |(gauss, nodal), (out, location)| {
+            || (vec![0.0; max_gauss], vec![0.0; max_nodes]),
+            |(gauss_buffer, nodal_buffer), (out, location)| {
+                // A point outside `mesh` keeps its 0s.
                 if let Some(Location {
                     submesh,
                     cell,
@@ -232,8 +240,8 @@ pub fn project_element(
                 }) = location
                 {
                     let host = &hosts[*submesh];
-                    gauss.resize(host.n_gauss, 0.0);
-                    nodal.resize(host.fit.nodes_per_cell(), 0.0);
+                    let gauss = &mut gauss_buffer[..host.n_gauss];
+                    let nodal = &mut nodal_buffer[..host.fit.nodes_per_cell()];
                     let first = cell * host.n_gauss * host.stride;
                     for &(k, i) in &host.reads {
                         for (g, slot) in gauss.iter_mut().enumerate() {

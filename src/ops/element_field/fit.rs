@@ -24,13 +24,12 @@ use nalgebra::DMatrix;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::error::Result;
 
-/// The fit of one FE space: `M`, or the Gauss mean when the fit is
-/// under-determined (fewer Gauss points than nodes) or singular.
+/// The fit of one FE space: `M`, `nodes_per_cell × gauss_count`. When the
+/// fit is under-determined (fewer Gauss points than nodes) or singular, `M`
+/// is the Gauss mean — every row `1 / gauss_count`, a constant over the cell —
+/// which is a linear map too: the cell loop applies `M` and never branches.
 pub(crate) struct CellFit {
-    /// `M`, `nodes_per_cell × gauss_count`; `None` → every nodal value is the
-    /// mean of the cell's Gauss values (a constant over the cell).
-    map: Option<DMatrix<f64>>,
-    nodes_per_cell: usize,
+    map: DMatrix<f64>,
 }
 
 impl CellFit {
@@ -39,10 +38,7 @@ impl CellFit {
         let nodes_per_cell = fespace.nodes_per_cell()?;
         let n_gauss = fespace.gauss_count();
         if n_gauss < nodes_per_cell {
-            return Ok(Self {
-                map: None,
-                nodes_per_cell,
-            });
+            return Ok(Self::mean(nodes_per_cell, n_gauss));
         }
         let mut a = DMatrix::zeros(n_gauss, nodes_per_cell);
         let mut atw = DMatrix::zeros(nodes_per_cell, n_gauss);
@@ -54,38 +50,41 @@ impl CellFit {
                 atw[(i, g)] = row[i] * w;
             }
         }
-        let lu = (&atw * &a).lu();
-        let map = lu.solve(&atw);
-        Ok(Self {
-            map,
-            nodes_per_cell,
+        Ok(match (&atw * &a).lu().solve(&atw) {
+            Some(map) => Self { map },
+            None => Self::mean(nodes_per_cell, n_gauss),
         })
+    }
+
+    /// The Gauss mean at every node; no Gauss point at all reads 0.
+    fn mean(nodes_per_cell: usize, n_gauss: usize) -> Self {
+        let weight = if n_gauss == 0 {
+            0.0
+        } else {
+            1.0 / n_gauss as f64
+        };
+        Self {
+            map: DMatrix::from_element(nodes_per_cell, n_gauss, weight),
+        }
     }
 
     /// Nodes per cell of the space: the length [`nodal_values_into`] writes.
     ///
     /// [`nodal_values_into`]: Self::nodal_values_into
     pub(crate) fn nodes_per_cell(&self) -> usize {
-        self.nodes_per_cell
+        self.map.nrows()
     }
 
-    /// The cell's nodal values from its Gauss values, written into `out`
-    /// (length [`nodes_per_cell`](Self::nodes_per_cell)) — no allocation.
+    /// The cell's nodal values from its Gauss values, `M f`, written into
+    /// `out` (length [`nodes_per_cell`](Self::nodes_per_cell)) — no allocation,
+    /// no branch.
     pub(crate) fn nodal_values_into(&self, gauss: &[f64], out: &mut [f64]) {
-        match &self.map {
-            Some(m) => {
-                for (i, slot) in out.iter_mut().enumerate() {
-                    *slot = gauss.iter().enumerate().map(|(g, f)| m[(i, g)] * f).sum();
-                }
-            }
-            None => {
-                let mean = if gauss.is_empty() {
-                    0.0
-                } else {
-                    gauss.iter().sum::<f64>() / gauss.len() as f64
-                };
-                out.fill(mean);
-            }
+        for (i, slot) in out.iter_mut().enumerate() {
+            *slot = gauss
+                .iter()
+                .enumerate()
+                .map(|(g, f)| self.map[(i, g)] * f)
+                .sum();
         }
     }
 }
@@ -135,12 +134,12 @@ mod tests {
     /// Fewer Gauss points than nodes: the Gauss mean, constant over the cell.
     #[test]
     fn an_under_determined_fit_falls_back_to_the_mean() {
-        let fit = CellFit {
-            map: None,
-            nodes_per_cell: 3,
-        };
+        let fit = CellFit::mean(3, 2);
         let mut out = [0.0; 3];
         fit.nodal_values_into(&[2.0, 4.0], &mut out);
         assert_eq!(out, [3.0, 3.0, 3.0]);
+        // No Gauss point at all: 0.
+        CellFit::mean(3, 0).nodal_values_into(&[], &mut out);
+        assert_eq!(out, [0.0, 0.0, 0.0]);
     }
 }
