@@ -19,11 +19,10 @@ use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::handle::{Handle, ReadGuard};
 
-/// Resolve the per-axis component names: one name per spatial axis, in axis
-/// order. `None` falls back to `default[..dim]`. Errors if the count does
-/// not match `dim` or if a name is absent from `field` (union of zones).
-fn resolve_axis_components(
-    field: &NodeField,
+/// The per-axis component names: one name per spatial axis, in axis order.
+/// `None` falls back to `default[..dim]`. Errors if the count does not match
+/// `dim`.
+fn axis_components(
     components: Option<Vec<String>>,
     dim: usize,
     default: &[&str],
@@ -41,23 +40,20 @@ fn resolve_axis_components(
             comps.len()
         )));
     }
-    let have = Field::components(field);
-    for name in &comps {
-        if !have.iter().any(|c| c == name) {
-            return Err(PyrucastError::Message(format!(
-                "component '{name}' not in field (has: [{}])",
-                have.join(", ")
-            )));
-        }
-    }
     Ok(comps)
 }
 
-/// Every distinct node of `field`, first-seen order, and its values of
-/// `comps`, `comps.len()` per node — read through the aggregate (first zone
-/// wins), so interface nodes appear exactly once. Errors if a node lacks one
-/// of the components.
-fn per_node_values(field: &NodeField, comps: &[String]) -> Result<(Vec<NodeId>, Vec<f64>)> {
+/// The values of `comps` at every distinct node of `field`, first-seen order,
+/// `comps.len()` per node, read through the aggregate (first zone defining
+/// the pair wins), so interface nodes appear exactly once. A pair no zone
+/// defines reads 0, and `undefined[i]` counts those of node `i`.
+struct AxisValues {
+    nodes: Vec<NodeId>,
+    values: Vec<f64>,
+    undefined: Vec<usize>,
+}
+
+fn axis_values(field: &NodeField, comps: &[String]) -> Result<AxisValues> {
     let (mut nodes, mut values) = (Vec::new(), Vec::new());
     // (node, component) the first zone holding the node lacks: some later zone
     // may hold it.
@@ -94,46 +90,55 @@ fn per_node_values(field: &NodeField, comps: &[String]) -> Result<(Vec<NodeId>, 
             });
         });
     }
-    if missing.is_empty() {
-        return Ok((nodes, values));
-    }
-    // A node that carries none of the components — a multiplier node of a
-    // solution — is not displaced at all: it stays where it is. A node that
-    // carries some of them only is an error: half a displacement is no
-    // displacement.
-    let view = field.view()?;
     let mut undefined = vec![0usize; nodes.len()];
-    let mut first_gap: Vec<Option<usize>> = vec![None; nodes.len()];
-    for (i, k) in missing {
-        match view.value_opt(nodes[i], &comps[k]) {
-            Some(v) => values[i * comps.len() + k] = v,
-            None => {
-                undefined[i] += 1;
-                first_gap[i].get_or_insert(k);
+    if !missing.is_empty() {
+        let view = field.view()?;
+        for (i, k) in missing {
+            match view.value_opt(nodes[i], &comps[k]) {
+                Some(v) => values[i * comps.len() + k] = v,
+                None => undefined[i] += 1,
             }
         }
     }
-    for (i, &n) in undefined.iter().enumerate() {
-        if n > 0 && n < comps.len() {
-            let k = first_gap[i].unwrap_or(0);
-            return Err(PyrucastError::Message(format!(
-                "no subfield defines (node {}, component {})",
-                nodes[i], comps[k]
-            )));
+    Ok(AxisValues {
+        nodes,
+        values,
+        undefined,
+    })
+}
+
+/// The positions `set` writes: every node of `field` must carry every
+/// component — a coordinate the field does not give has no value to take.
+fn positions_to_set(field: &NodeField, comps: &[String]) -> Result<(Vec<NodeId>, Vec<f64>)> {
+    let found = axis_values(field, comps)?;
+    if let Some(i) = found.undefined.iter().position(|&n| n > 0) {
+        return Err(PyrucastError::Message(format!(
+            "set: node {} lacks one of the components {comps:?}",
+            found.nodes[i]
+        )));
+    }
+    Ok((found.nodes, found.values))
+}
+
+/// The displacements `displace` and `displace_from` apply: what the field
+/// carries, and nothing else. A component a node lacks moves it by 0 along
+/// that axis; a node carrying none of them — a multiplier node of a
+/// solution — is left out, so it does not move at all.
+fn increments(field: &NodeField, comps: &[String]) -> Result<(Vec<NodeId>, Vec<f64>)> {
+    let found = axis_values(field, comps)?;
+    let width = comps.len();
+    if found.undefined.iter().all(|&n| n < width) {
+        return Ok((found.nodes, found.values));
+    }
+    let mut nodes = Vec::with_capacity(found.nodes.len());
+    let mut values = Vec::with_capacity(found.values.len());
+    for (i, node) in found.nodes.into_iter().enumerate() {
+        if found.undefined[i] < width {
+            nodes.push(node);
+            values.extend_from_slice(&found.values[i * width..(i + 1) * width]);
         }
     }
-    if undefined.iter().all(|&n| n == 0) {
-        return Ok((nodes, values));
-    }
-    let (mut kept_nodes, mut kept_values) = (Vec::with_capacity(nodes.len()), Vec::new());
-    kept_values.reserve(values.len());
-    for (i, node) in nodes.into_iter().enumerate() {
-        if undefined[i] < comps.len() {
-            kept_nodes.push(node);
-            kept_values.extend_from_slice(&values[i * comps.len()..(i + 1) * comps.len()]);
-        }
-    }
-    Ok((kept_nodes, kept_values))
+    Ok((nodes, values))
 }
 
 /// **Set** node coordinates from `field` (absolute): for every distinct
@@ -185,8 +190,8 @@ fn per_node_values(field: &NodeField, comps: &[String]) -> Result<(Vec<NodeId>, 
 pub fn set(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
     let coords = field.coords()?;
     let dim = coords.read().dim() as usize;
-    let comps = resolve_axis_components(field, components, dim, &["X", "Y", "Z"])?;
-    let (nodes, targets) = per_node_values(field, &comps)?;
+    let comps = axis_components(components, dim, &["X", "Y", "Z"])?;
+    let (nodes, targets) = positions_to_set(field, &comps)?;
     let mut c = coords.write();
     for (&nid, coord) in nodes.iter().zip(targets.chunks_exact(dim)) {
         c.set_position(nid, coord)?;
@@ -199,7 +204,10 @@ pub fn set(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
 /// coordinate set — an interface node shared by several zones is displaced
 /// exactly once. `components` lists one displacement-component name per
 /// spatial axis, in axis order; `None` → `["u_x", "u_y", "u_z"][..dim]`.
-/// In-place on the field's `Coords`.
+/// In-place on the field's `Coords`. What the field carries is applied, and
+/// nothing else: a node it does not define, or that carries none of the
+/// components (a multiplier node of a solution), does not move; a component
+/// a node lacks moves it by 0 along that axis.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -242,8 +250,8 @@ pub fn set(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
 pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
     let coords = field.coords()?;
     let dim = coords.read().dim() as usize;
-    let comps = resolve_axis_components(field, components, dim, &["u_x", "u_y", "u_z"])?;
-    let (nodes, increments) = per_node_values(field, &comps)?;
+    let comps = axis_components(components, dim, &["u_x", "u_y", "u_z"])?;
+    let (nodes, increments) = increments(field, &comps)?;
     coords
         .write()
         .displace(nodes.iter().copied().zip(increments.chunks_exact(dim)))
@@ -251,16 +259,17 @@ pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()
 
 /// Lay configuration `target` at configuration `reference` displaced by
 /// `field` — `x = X + u`, in **absolute**: each node takes its `reference`
-/// position plus its value in `field`, a node the field does not define, or
-/// that carries none of the components (a multiplier node of a solution), stays
-/// where the reference puts it. Called again with another `u`, it lands at
+/// position plus its value in `field`. What the field carries is applied, and
+/// nothing else: a node the field does not define, or that carries none of the
+/// components (a multiplier node of a solution), stays where the reference
+/// puts it, and a component a node lacks counts as 0. Called again with another `u`, it lands at
 /// `X + u` again: nothing accumulates, which a restarted substep or an
 /// accelerated iterate needs. The active configuration is left as it is.
 /// `components` names one displacement component per axis; `None` →
 /// `["u_x", "u_y", "u_z"][..dim]`, as for [`displace`](fn@displace).
 ///
 /// Errors: as [`Coords::displace_from`](crate::coords::Coords::displace_from),
-/// and a component the field lacks.
+/// and a `components` list whose length is not the dimension.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -296,8 +305,8 @@ pub fn displace_from(
 ) -> Result<()> {
     let coords = field.coords()?;
     let dim = coords.read().dim() as usize;
-    let comps = resolve_axis_components(field, components, dim, &["u_x", "u_y", "u_z"])?;
-    let (nodes, increments) = per_node_values(field, &comps)?;
+    let comps = axis_components(components, dim, &["u_x", "u_y", "u_z"])?;
+    let (nodes, increments) = increments(field, &comps)?;
     coords.write().displace_from(
         reference,
         target,
@@ -459,8 +468,8 @@ mod tests {
     }
 
     #[test]
-    fn displace_refuses_a_node_lacking_a_component_and_moves_nothing() {
-        // `a` holds `u_x` and `u_y`, `b` only `u_x`.
+    fn displace_moves_a_node_along_the_components_it_carries() {
+        // `a` holds `u_x` and `u_y`, `b` only `u_x`: `b` moves along x only.
         let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
@@ -474,12 +483,42 @@ mod tests {
         ))
         .unwrap();
         f.add_to_component("u_x", 1.0).unwrap();
+        f.add_to_component("u_y", 2.0).unwrap();
 
-        let err = displace(&f, None).unwrap_err().to_string();
-        assert!(err.contains("component u_y"), "{err}");
+        displace(&f, None).unwrap();
         let c = coords.read();
-        assert_eq!(c.position(a.id()).unwrap(), &[0.0, 0.0]);
-        assert_eq!(c.position(b.id()).unwrap(), &[1.0, 1.0]);
+        assert_eq!(c.position(a.id()).unwrap(), &[1.0, 2.0]);
+        assert_eq!(c.position(b.id()).unwrap(), &[2.0, 1.0]);
+    }
+
+    #[test]
+    fn displace_applies_a_field_lacking_a_whole_component() {
+        // A 3-D field carrying `u_z` only: every node moves along z.
+        let coords = Handle::new(Coords::new(3).unwrap());
+        let a = Node::create_in(coords.clone(), &[1.0, 2.0, 3.0]).unwrap();
+        let support = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+        let mut uz = SubNodeField::from_poi1(&support, vec!["u_z".into()]).unwrap();
+        uz.set_value(a.id(), "u_z", 0.5).unwrap();
+        let f = NodeField::from_sub(uz);
+
+        let deformed = coords.write().add_config("deformed");
+        displace_from(&f, 0, deformed, None).unwrap();
+        displace(&f, None).unwrap();
+        let c = coords.read();
+        assert_eq!(c.position(a.id()).unwrap(), &[1.0, 2.0, 3.5]);
+    }
+
+    #[test]
+    fn set_refuses_a_node_lacking_a_coordinate() {
+        // `set` writes positions: a coordinate the field does not give has no
+        // value to take.
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let support = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+        let f = NodeField::from_sub(SubNodeField::from_poi1(&support, vec!["X".into()]).unwrap());
+        let err = set(&f, None).unwrap_err().to_string();
+        assert!(err.contains("lacks one of the components"), "{err}");
+        assert_eq!(coords.read().position(a.id()).unwrap(), &[0.0, 0.0]);
     }
 
     #[test]
