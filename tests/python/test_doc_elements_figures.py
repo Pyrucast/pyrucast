@@ -29,6 +29,7 @@ figures = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = figures  # @dataclass looks its module up there
 spec.loader.exec_module(figures)
 
+
 @pytest.mark.skip
 def test_figures_are_up_to_date():
     stale = [
