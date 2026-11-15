@@ -277,13 +277,13 @@ assert abs(hill[0].value(0, 0, "von_mises") - attendu) < 1e-3
 _, mesh, fes, n = _plaque()
 un = pyrucast.ElementField(fes, ["un"])
 un[0].set_uniform("un", 1.0)
-# ANCHOR: par_maille
+# ANCHOR: node_field-sum_to_nodes
 # One point per cell, at its centroid: where per-cell values live.
 centres = pyrucast.FiniteElementSpace(mesh, quadrature="REDUCED")
 aires = pyrucast.element_field.cell_integral(un, centres)  # ∫ 1 = the cell's area
 # Each node receives the sum over the cells around it.
 volumes = pyrucast.node_field.sum_to_nodes(aires)
-# ANCHOR_END: par_maille
+# ANCHOR_END: node_field-sum_to_nodes
 assert abs(aires[0].value(1, 0, "un") - 1.0) < 1e-12
 assert abs(volumes.value(n[1], "un") - 2.0) < 1e-12  # shared by both cells
 assert abs(volumes.value(n[0], "un") - 1.0) < 1e-12
@@ -335,17 +335,16 @@ temperature = _champ_nodal(
     mesh, n, ["T"], [[t] for t in (10.0, 50.0, 90.0, 30.0, 70.0, 100.0)]
 )
 
-# ANCHOR: projection
-# La température de la plaque portée aux nœuds d'un autre maillage — ici d'un
-# autre Coords, comme une pièce remaillée — par les fonctions de forme des
-# mailles de la plaque. Un nœud hors de la plaque reçoit 0 : on projette aussi
-# un patch sur un maillage plus grand.
+# ANCHOR: node_field-project
+# The temperature of the plate carried to the nodes of another mesh — here in
+# another Coords, as a remeshed part — by the shape functions of the plate's
+# cells. A node outside the plate gets 0: a patch projects onto a larger mesh.
 autre = pyrucast.Coords(2)
 cibles = [autre.add_node(p) for p in ([0.5, 0.5], [1.5, 0.25], [3.0, 0.5])]
 nuage = pyrucast.mesh.poi1_from_nodes(cibles)
 portee = pyrucast.node_field.project(temperature, mesh, nuage)  # tol=1e-6
-# La même, en méthode : temperature.project(mesh, nuage)
-# ANCHOR_END: projection
+# The same, as a method: temperature.project(mesh, nuage)
+# ANCHOR_END: node_field-project
 # Bilinear in each cell: the middle of the first is the mean of its corners,
 # (10 + 50 + 70 + 30) / 4; in the second, 70 + ¼ (85 − 70) at y = ¼.
 assert abs(portee.value(cibles[0], "T") - 40.0) < 1e-12

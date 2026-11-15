@@ -210,21 +210,19 @@ materials = pyrucast.element_field.material_field(model, [("E", 210.0), ("nu", 0
 support = pyrucast.mesh.poi1_from_nodes(n)
 solution = pyrucast.NodeField(support, ["u_x", "u_y"])
 f_ext = pyrucast.NodeField(support, ["f_x", "f_y"])
-# ANCHOR: forces_internes
+# ANCHOR: node_field-internal_forces
 # Solution already obtained from the solver.
 eps = pyrucast.element_field.deformation(solution, fes)  # ε = B·u
 repos = pyrucast.element_field.initial_state(
     model, materials
-)  # l'état de départ de la loi
-sig = pyrucast.element_field.integrate_behavior(
-    model, eps, materials, repos
-)  # COMP : σ
+)  # the starting state of the law
+sig = pyrucast.element_field.integrate_behavior(model, eps, materials, repos)  # σ
 f_int = pyrucast.node_field.internal_forces(model, sig, solution, materials)
-# L'autre côté du bilan. L'élasticité seule n'a aucun terme donné : le champ
+# The other side of the balance. Elasticity alone has no given term: the field
 # comes back empty, and everything external comes from the hand-built loading.
 f_ext_modele = pyrucast.node_field.external_forces(model, materials)
 residu = f_ext - f_int  # Σ f_ext − Σ f_int
-# ANCHOR_END: forces_internes
+# ANCHOR_END: node_field-internal_forces
 assert residu.node_count > 0
 assert f_ext_modele.node_count == 0
 

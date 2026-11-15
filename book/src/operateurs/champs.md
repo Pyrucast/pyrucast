@@ -18,7 +18,7 @@ Les autres thèmes d'opérateurs ont leur propre page : construction du matéria
 
 | Python | Effet |
 |---|---|
-| `positions(mesh, components=None)` | un `NodeField` portant les coordonnées des nœuds (`"X"`, `"Y"`, `"Z"`), une zone par sous-maillage. `None` ⇒ tous les axes présents dans la dimension du `Coords`. |
+| [`node_field.positions(mesh, …)`](../reference/node_field.md#node_field-positions) | un `NodeField` portant les coordonnées des nœuds (`"X"`, `"Y"`, `"Z"`), une zone par sous-maillage. |
 | [`coords.set(field, …)`](../reference/coords.md#coords-set) | **écrit** les coordonnées de la configuration active depuis un champ `"X"/"Y"/"Z"`. |
 | [`coords.displace(field, …)`](../reference/coords.md#coords-displace) | **ajoute** un champ de déplacement aux coordonnées de la configuration active. |
 | [`coords.displace_from(field, reference, target, …)`](../reference/coords.md#coords-displace_from) | **pose** la configuration `target` en `X + u`, en absolu à partir de la configuration `reference` : rappelée, elle repart de `X`, rien ne s'accumule. |
@@ -35,10 +35,10 @@ actif le temps d'un calcul par `in_config` : voir
 
 | Python | Effet |
 |---|---|
-| `restrict(field, mesh)` | restreint un `NodeField` aux nœuds de `mesh` (une zone par sous-maillage cible). Le support est le **nuage POI1 canonique** du sous-maillage (`to_poi1`, matérialisé une fois et **mis en cache**) : deux restrictions sur le **même** `mesh` partagent le support ⇒ `restrict(a,mesh) - restrict(b,mesh)` se soustrait directement, et s'aligne avec `K·restrict(f,mesh)` / `solve(K,f)`. Pour les ops élément (`gradient`, `integral`, …), repasser `mesh` à côté. `0.0` pour les nœuds non couverts ; nœuds hors de `mesh` abandonnés. Erreur si `mesh` n'est pas sur le même `Coords`. |
-| `restrict_like(field, target)` | reprojette `field` sur le support **et** les composantes de `target`, zone par zone (mêmes slots que `target`) ⇒ le résultat se combine directement avec `target` par les opérateurs `+ - * /`. Nœuds/composantes de `field` absents de `target` abandonnés ; `0.0` si non couverts. Typiquement pour replier un incrément de `solve` (qui porte aussi les multiplicateurs) dans une solution courante. Erreur si `Coords` différents. |
-| `merge(a, b)` | union structurelle de deux `NodeField`, consolidée — c'est l'**alias nommé** de `a \| b`. |
-| `node_field.consolidate(field)` | fusionne les zones de **même support** (handle identique) en vérifiant la cohérence des valeurs partagées. |
+| [`node_field.restrict(field, mesh)`](../reference/node_field.md#node_field-restrict) | restreint un `NodeField` aux nœuds de `mesh`, sur un support que partagent toutes les restrictions au même `mesh`. |
+| [`node_field.restrict_like(field, target)`](../reference/node_field.md#node_field-restrict_like) | relit `field` sur le support **et** les composantes de `target`, pour le combiner directement avec lui. |
+| [`node_field.merge(a, b)`](../reference/node_field.md#node_field-merge) | union de deux `NodeField`, consolidée — c'est le nom de `a \| b`. |
+| [`node_field.consolidate(field)`](../reference/node_field.md#node_field-consolidate) | fusionne les zones de **même support** en vérifiant la cohérence des valeurs partagées. |
 | `element_field.consolidate(field)` | fusionne les zones d'une même `FiniteElementSpace` (union des composantes) — le pendant de `|`, qui les laisse côte à côte. |
 
 La consolidation d'un `NodeField` est exactement la **finalisation** de l'union
@@ -54,6 +54,8 @@ physique sur une fespace partagée (`k` thermique + `E`/`nu`/`alpha` mécanique)
 un champ matériau unique lu par chaque physique.
 
 ## Projection sur un autre maillage
+
+{{#pyalgo node_field.project}}
 
 `project(field, mesh, target, tol=1e-6)` (aussi `field.project(mesh, target)`)
 porte un champ nodal aux nœuds de `target` en l'interpolant par les **mailles
@@ -72,7 +74,7 @@ maillage plus grand. Le résultat a une zone par sous-maillage de `target`,
 comme `positions`. Les nœuds de `target` sont localisés une seule fois.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:projection}}
+{{#include ../../../tests/python/test_doc_ops_champs.py:node_field-project}}
 ```
 
 **Un champ aux points de Gauss se projette aussi.** Avec un `ElementField`,
@@ -150,7 +152,7 @@ Gauss.
 
 | Python | Effet |
 |---|---|
-| `mask(field, ge=None, gt=None, le=None, lt=None, components=None)` | champ `0/1` de même structure que l'entrée. |
+| [`node_field.mask(field, …)`](../reference/node_field.md#node_field-mask), `element_field.mask(field, …)` | champ `0/1` de même structure que l'entrée. |
 
 - **Pas de ET entre composantes** (contrairement à `select`) : chaque valeur est
   testée pour elle-même.
@@ -442,6 +444,8 @@ déformée. Pas de méthode : elle exige des axes et un gradient nommés. Exempl
 
 ### `divergence(field)` → `NodeField`
 
+{{#pyalgo node_field.divergence}}
+
 Divergence **faible** (consistante) d'un champ vectoriel par éléments — l'adjoint
 de `gradient` :
 
@@ -451,15 +455,13 @@ d_i = \int_\Omega \nabla N_i \cdot F\\, d\Omega
 \\]
 
 accumulé par nœud. C'est l'opérateur `Bᵀ`, transposé du gradient : il vérifie
-`⟨∇f, F⟩ = ⟨f, div F⟩`. Un tenseur se lit à ses noms : symétrique
-(`A_xx, A_xy, A_yy`), ou **plein** s'il porte aussi `A_yx` — comme la
-contrainte nominale `P` des grandes transformations. Le champ d'entrée doit porter exactement `space_dim`
-composantes (`F_x, F_y, F_z`) ; la sortie porte une composante `"div"`, et un
-nœud partagé par plusieurs sous-espaces reçoit la **somme** de leurs
-contributions. Ce sont des **quantités intégrées**, pas les valeurs
-ponctuelles de `∇·F` (pas de projection L²).
+`⟨∇f, F⟩ = ⟨f, div F⟩`. Ce sont des **quantités intégrées**, pas les valeurs
+ponctuelles de `∇·F` (pas de projection L²). Le rang de la grandeur se lit à
+ses noms : voir [`node_field.divergence`](../reference/node_field.md#node_field-divergence).
 
 ### `cell_integral(field, target)` → `ElementField` et `sum_to_nodes(field)` → `NodeField`
+
+{{#pyalgo node_field.sum_to_nodes}}
 
 Deux briques par maille (Cast3M `INTG 'ELEM'` et `CHAN 'CHPO' 'SOMM'`) :
 
@@ -479,7 +481,7 @@ mettre ses résidus à une échelle comparable (l'accélération d'Anderson pond
 par `(Σ_e |Ω_e|)^{-1/2}`).
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:par_maille}}
+{{#include ../../../tests/python/test_doc_ops_champs.py:node_field-sum_to_nodes}}
 ```
 
 ### `beam_deformation(field, fespace, material)` → `ElementField`

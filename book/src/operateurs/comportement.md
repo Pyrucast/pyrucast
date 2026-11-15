@@ -116,6 +116,8 @@ variables internes (`VAR0` → `VAR1`), voir
 
 ## `internal_forces(model, state)` → `NodeField`
 
+{{#pyalgo node_field.internal_forces}}
+
 Les **forces internes** `f = ∫ Bᵀ σ dΩ` (le `BSIG` de cast3m) sont la
 **transposée** de l'opérateur de déformation `B` : là où
 [`strain`](champs.md#le-b-du-modèle--strainmodel-solution-materials--elementfield)
@@ -125,8 +127,7 @@ nœuds. C'est la **généralisation mécanique** de [`divergence`](champs.md) (q
 est exactement `Bᵀ q` pour un transport scalaire) : une composante de sortie par
 DDL dual.
 
-`state` est le champ d'état matériau renvoyé par `integrate_behavior`. Chaque
-sous-modèle porteur d'un comportement applique **son propre** `Bᵀ` — c'est
+Chaque sous-modèle porteur d'un comportement applique **son propre** `Bᵀ` — c'est
 pourquoi l'opérateur prend un **modèle** et pas un simple espace EF : un même
 `SEG2` peut être une barre (`Bᵀ` axial, DDL déplacement) ou une poutre (`Bᵀ` à
 deux quadratures flexion + cisaillement, DDL `w, θ`), et seul le modèle tranche.
@@ -148,10 +149,12 @@ demande son terme de `r`. Un sous-modèle qui n'a pas de terme de ce côté n'en
 déclare aucun et n'apparaît pas dans le résultat.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_physiques.py:forces_internes}}
+{{#include ../../../tests/python/test_doc_ops_physiques.py:node_field-internal_forces}}
 ```
 
 ## `external_forces(model)` → `NodeField`
+
+{{#pyalgo node_field.external_forces}}
 
 L'autre côté du bilan : la **donnée** de chaque terme, à droite du signe égal.
 Une physique dont le terme n'est qu'une réponse à `u` — élasticité, conduction,

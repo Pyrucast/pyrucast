@@ -113,11 +113,3 @@ model.truss
 model.update_contact
 model.viscoplasticity_chaboche
 model.viscoplasticity_lemaitre_chaboche
-node_field.consolidate
-node_field.divergence
-node_field.mask
-node_field.merge
-node_field.positions
-node_field.project
-node_field.restrict_like
-node_field.sum_to_nodes
