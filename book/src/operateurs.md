@@ -1,49 +1,210 @@
-# Détail des opérateurs
+# Sommaire des opérateurs
 
 Les **opérateurs** sont les fonctions libres de pyrucast : elles **croisent
 des conteneurs** (maillage + champ, espace EF + champ…) ou appartiennent à une
 famille d'opérateurs, par opposition aux **méthodes** qui restent sur un seul
-conteneur (cf. [Conventions](conventions.md)). Côté Rust elles vivent sous
-`src/ops/<module>`, où le module porte le nom du **conteneur produit** ; côté
-Python elles sont exposées dans le sous-module de même nom
-(`pyrucast.node_field.positions`, `pyrucast.matrix.stiffness`, …).
+conteneur (cf. [Conventions](conventions.md)). Chacune vit dans le module qui
+porte le nom du **conteneur qu'elle rend** : `pyrucast.matrix.stiffness` rend
+une matrice, `pyrucast.node_field.positions` un champ aux nœuds.
 
-Les chapitres qui suivent sont organisés **par sujet**, ce qui ne recoupe pas
-toujours le module d'implémentation — la colonne de gauche donne la
-correspondance.
+Cette page les range **par thème**, ce qui ne recoupe pas toujours le module.
+Chaque ligne donne le prototype abrégé — les arguments obligatoires, `…` s'il
+en existe de facultatifs — et la première phrase de la documentation de la
+fonction. Le prototype mène à la **référence**, où se trouvent le prototype
+complet, la description de chaque argument et un exemple.
 
-| Module Rust | Chapitre | Contenu |
-|---|---|---|
-| `ops::mesh` | [Maillage](operateurs/maillage.md) | `line`, `circle`, `arc`, `extrude`, `revolve`, `sweep`, `transfinite` (DALL), `sweep_solid`, `copy`, `translate`, `rotate`, `symmetry_point`, `symmetry_line`, `symmetry_plane`, `project_on_sphere`, `triangulate_surface`, `pave_surface`, `grid_surface`, `grid_surface2`, `triangulate_volume`, `pave_volume`, `regularize`, `cleanup`, `merge_triangles`, `border`, `skin`, `orient`, `invert`, `chain`, `elements_on`, sélection de nœuds par région (`points_in_sphere`, `points_on_plane`, `points_in_cylinder`, `points_on_cone`, `points_on_torus`…), `merge_nodes`, `read_gmsh`, `from_gmsh`, `from_medcoupling`, `from_arrays`, `poi1_from_nodes`, `from_live_nodes`, `to_poi1`, `to_quadratic`, `convert`, `barycenter`, `mesh.consolidate`… |
-| `ops::model` | [Modèle](model.md) | les déclarations de physique : `heat_conduction`, `fick`, `radiation`, `boundary_transfer`, `interface_transfer`, `elasticity`, `plasticity_perfect` et les lois d'écoulement, `mazars` et les lois d'endommagement, `truss`, `bernoulli`, `timoshenko`, `shell`, et les contraintes `dirichlet`, `mpc`, `embedded`, `contact` |
-| `ops::element_field` | [Construction](operateurs/construction.md) | champs matériau (`material_field`…) |
-| `ops::coords` | [Champs](operateurs/champs.md) | `set`, `displace`, `displace_from` (configuration `X + u` posée en absolu, `FORM`) — les trois seuls opérateurs qui écrivent la géométrie ; `in_config` (calculer le temps d'un bloc dans une autre configuration) |
-| `ops::evolution` | [Évolution](evolution.md#le-long-dune-ligne) | `along` (un champ relevé le long d'une ligne de points, une courbe par composante) |
-| `ops::measure` | [Champs](operateurs/champs.md) | `integral` / `integral_element` (`∫ f dΩ`), `xtx` / `xty` (produits scalaires globaux) |
-| `ops::geom` | [Géométrie](operateurs/geometrie.md) | `locate_points` (mapping inverse, baignage), `project_points` (projection sur surface, contact) — internes, pas exposées à Python |
-| `ops::node_field`, `ops::element_field`, `ops::field` | [Champs](operateurs/champs.md) | `positions`, `gradient`, `divergence`, `deformation` (ε, F, Green–Lagrange, Cauchy-Green, Hencky, Almansi, `J = det F`), `beam_deformation`, `shell_deformation`, `interp_to_gauss` (nœuds → Gauss), `strain` (le `B` du modèle : l'entrée de chaque loi, `EPSI`), `thermal_strain` (déformation thermique `EPTH`), `elastic_stress` / `elastic_strain` (opérateur élastique `ELAS`, `D:ε` et `D⁻¹:σ`), `von_mises` (contrainte équivalente, von Mises ou Hill, `VMIS`), `stress_measure` (Cauchy, Kirchhoff, Piola–Kirchhoff 1 et 2 l'une vers l'autre, `CONF` pour les contraintes), `rotate_frame` (axes matériau tournés avec la pièce, `R` de `F = R U`), `cell_integral` (intégrale par maille, `INTG 'ELEM'`), `sum_to_nodes` (somme aux nœuds d'un champ par maille, `CHAN 'CHPO' 'SOMM'`), `restrict`, `restrict_like` (reprojection sur le support d'un champ cible), `project` (interpolation aux nœuds d'un autre maillage, `PROI` ; d'un champ aux points de Gauss par l'ajustement de chaque maille), `select`, `mask`, `filter_components` / `rename_component` (extraction et renommage de composantes, `EXCO`), `merge`, `node_field.consolidate` / `element_field.consolidate`, `integral` / `integral_element` (intégrale `∫ f dΩ`), `xty` / `xtx` (produits scalaires globaux) / `psca` (produit scalaire nœud par nœud), maths élément par élément (`abs`, `sqrt`, `exp`, `cos`…)… |
-| `ops::matrix` | [Assemblage](operateurs/assemblage.md) | `stiffness`, `mass`, rigidité géométrique `geometric`, tangente cohérente `tangent`, concentration `lump`, composition `assemble` (assemble des blocs réunis sans leurs valeurs, sans `Model`), et les deux côtés du bilan `Σ f_int = Σ f_ext` — `internal_forces` (le `BSIG`, `∫ Bᵀ σ` ; sans modèle c'est `node_field.divergence(field, "sigma")`) et `external_forces`, d'où sort tout terme donné : l'ambiant d'un transfert de bord, la densité d'une charge répartie |
-| `ops::element_field::behavior` | [Comportement](operateurs/comportement.md) | `initial_state` (l'état de repos, l'état de A du premier pas), `integrate_behavior` (le `COMP`) |
-| `ops::solver` | [Solveur](operateurs/solveur.md) | `solve` : multiplicateurs (LU creux), élimination (`relations="eliminate"`), ensemble actif dès qu'une relation est unilatérale |
-| `ops::export` | [Visualisation](visualization.md) | `export_vtk` (maillage / champ / évolution → VTK ASCII ou binaire pour ParaView), `to_arrays`, `to_gmsh`, `to_medcoupling` |
-| `archive` | [Sauvegarde et relecture](sauvegarde.md) | `save` / `load` (graphe d'objets, partage préservé) — au niveau racine, hors `ops` |
-| `src/viz` | [Visualisation](visualization.md) | tracé des maillages, coloration par champ |
+La référence est écrite en anglais : elle est **fabriquée à partir de la
+documentation embarquée dans pyrucast**, celle que montrent `help()` et
+l'éditeur. Elle ne peut donc pas s'en écarter.
 
-Le découpage est **par conteneur produit** : `gradient(field, fespace)` rend un
-`ElementField`, il vit donc dans `ops::element_field` à côté de `deformation`,
-et non avec `divergence` (qui rend un champ nodal). Une opération se range par
-sa sortie, jamais par son entrée. Le binding Python reste un miroir 1:1 — voir
-[Correspondance Rust ↔ Python](developper/correspondance-rust-python.md).
-
-La **fonction libre est la forme canonique** : c'est elle qui est documentée
-dans les chapitres qui suivent. La plupart de ces opérations sont **aussi**
-des méthodes de leur sujet, pour permettre le chaînage —
-`maillage.border().consolidate()` plutôt que
-`mesh.consolidate(mesh.border(maillage))`. La règle qui décide lesquelles, et
-ses exclusions, tient dans les trois conditions de
+La plupart de ces opérations sont **aussi** des méthodes de leur sujet, pour
+permettre le chaînage — `maillage.border().consolidate()` plutôt que
+`mesh.consolidate(mesh.border(maillage))`. La référence le signale sous chaque
+fonction ; la règle qui décide lesquelles tient dans les trois conditions de
 [Conventions](conventions.md#le-verbe-exposé-aussi-en-méthode).
 
-La **chaîne typique** d'un calcul enchaîne ces opérateurs :
+## Maillage
+
+### Lignes et courbes
+
+{{#pysummary mesh.line mesh.arc mesh.circle}}
+
+### Surfaces et volumes réglés
+
+{{#pysummary
+mesh.transfinite mesh.sweep mesh.sweep_solid mesh.extrude mesh.revolve}}
+
+### Mailleurs automatiques
+
+{{#pysummary
+mesh.triangulate_surface mesh.pave_surface mesh.grid_surface mesh.grid_surface2
+mesh.triangulate_volume mesh.pave_volume}}
+
+Voir aussi [Mailler une géométrie](mailler.md).
+
+### Améliorer un maillage
+
+{{#pysummary mesh.regularize mesh.cleanup mesh.merge_triangles mesh.merge_nodes}}
+
+### Déplacer et copier
+
+{{#pysummary
+mesh.copy mesh.translate mesh.rotate
+mesh.symmetry_point mesh.symmetry_line mesh.symmetry_plane
+mesh.project_on_sphere}}
+
+### Changer d'élément
+
+{{#pysummary mesh.convert mesh.to_quadratic mesh.to_poi1}}
+
+### Extraire une partie
+
+{{#pysummary
+mesh.border mesh.skin mesh.elements_on mesh.barycenter
+mesh.poi1_from_nodes mesh.from_live_nodes mesh.select}}
+
+### Ordonner et regrouper
+
+{{#pysummary mesh.orient mesh.invert mesh.chain mesh.consolidate}}
+
+### Choisir des nœuds par région
+
+{{#pysummary
+mesh.points_on_line
+mesh.points_on_plane mesh.points_below_plane
+mesh.points_on_sphere mesh.points_in_sphere
+mesh.points_on_cylinder mesh.points_in_cylinder
+mesh.points_on_cone mesh.points_in_cone
+mesh.points_on_torus mesh.points_in_torus}}
+
+## Physique
+
+Les pages [Détails des physiques](physiques.md) donnent les équations de
+chaque modèle.
+
+### Thermique et diffusion
+
+{{#pysummary model.heat_conduction model.fick}}
+
+### Échanges et chargements
+
+{{#pysummary
+model.flux model.boundary_transfer model.interface_transfer model.radiation}}
+
+### Milieux continus
+
+{{#pysummary
+model.elasticity
+model.plasticity_perfect model.plasticity_isotropic
+model.drucker_prager model.ottosen model.gurson
+model.creep_norton model.creep_lemaitre model.creep_blackburn
+model.viscoplasticity_chaboche model.viscoplasticity_lemaitre_chaboche
+model.mazars model.damage_tc model.damage_sic_sic}}
+
+### Barres, poutres et coques
+
+{{#pysummary model.truss model.bernoulli model.timoshenko model.shell}}
+
+### Contraintes
+
+{{#pysummary
+model.dirichlet model.mpc model.embedded model.contact model.update_contact}}
+
+## Champs
+
+### Matériau
+
+{{#pysummary
+element_field.material_field element_field.material_field_per_sub_model
+element_field.sub_material_field}}
+
+### Géométrie et configurations
+
+{{#pysummary
+node_field.positions coords.set coords.displace coords.displace_from}}
+
+### Dériver et interpoler
+
+{{#pysummary
+element_field.gradient node_field.divergence element_field.interp_to_gauss}}
+
+### Déformations
+
+{{#pysummary
+element_field.deformation element_field.strain element_field.thermal_strain
+element_field.beam_deformation element_field.shell_deformation}}
+
+### Contraintes et comportement
+
+{{#pysummary
+element_field.initial_state element_field.integrate_behavior
+element_field.elastic_stress element_field.elastic_strain
+element_field.von_mises element_field.stress_measure
+element_field.rotate_frame}}
+
+### Restreindre, projeter, réunir
+
+{{#pysummary
+node_field.restrict node_field.restrict_like node_field.project
+node_field.merge node_field.consolidate element_field.consolidate
+node_field.mask element_field.mask
+node_field.sum_to_nodes}}
+
+### Mesurer
+
+{{#pysummary
+measure.integral element_field.cell_integral
+measure.xtx measure.xty field.psca
+evolution.along}}
+
+### Fonctions mathématiques
+
+{{#pysummary
+field.abs field.sqrt field.exp field.log field.log10
+field.cos field.sin field.tan field.cosh field.sinh field.tanh}}
+
+## Assemblage et résolution
+
+### Matrices
+
+{{#pysummary
+matrix.stiffness matrix.mass matrix.geometric matrix.tangent matrix.lump}}
+
+### Seconds membres
+
+{{#pysummary node_field.internal_forces node_field.external_forces}}
+
+### Résolution
+
+{{#pysummary solver.solve}}
+
+## Échanges avec l'extérieur
+
+### Lire un maillage
+
+{{#pysummary
+mesh.read_gmsh mesh.read_gmsh_str mesh.from_gmsh mesh.from_medcoupling
+mesh.from_arrays}}
+
+### Écrire un maillage et ses champs
+
+{{#pysummary
+export.export_vtk export.to_gmsh export.to_medcoupling export.to_arrays}}
+
+Voir aussi [Visualisation](visualization.md).
+
+### Correspondances avec un autre code
+
+{{#pysummary
+mesh.element_type_from_gmsh mesh.gauss_to_external mesh.match_gauss}}
+
+### Sauvegarder et relire
+
+{{#pysummary save load spill_stats}}
+
+Voir aussi [Sauvegarde et relecture](sauvegarde.md).
+
+## La chaîne typique d'un calcul
 
 ```text
 mesh ──► (Mesh) ──► FiniteElementSpace

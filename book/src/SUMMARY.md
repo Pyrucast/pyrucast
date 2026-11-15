@@ -62,7 +62,7 @@
   - [HEX27 — hexaèdre triquadratique](elements/hex27.md)
 
 - [Détail des opérateurs]()
-  - [Vue d'ensemble](operateurs.md)
+  - [Sommaire par thème](operateurs.md)
   - [Référence]()
     - [pyrucast.mesh](reference/mesh.md)
     - [pyrucast.model](reference/model.md)
