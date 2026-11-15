@@ -167,7 +167,7 @@ imposées, portées par les nœuds-multiplicateurs.
 ```
 
 Les opérateurs sont détaillés dans [`pyrucast.matrix`](reference/matrix.md) et
-[Solveur](operateurs/solveur.md). Des exemples complets à solution analytique
+[`pyrucast.solver`](reference/solver.md). Des exemples complets à solution analytique
 sont déroulés dans [Dirichlet](contraintes/dirichlet.md) (Poisson 1-D),
 [Conduction thermique](thermique.md) et [Mécanique](mecanique.md).
 

@@ -13,53 +13,69 @@ use pyrucast_macros::py_op;
 
 /// Solve the linear system `A·x = b` for `x` (sparse direct, faer).
 ///
-/// `matrix` is the assembled system `A`; `rhs` is the right-hand side `b` as a
-/// `NodeField`, read at every row DOF of the matrix (a DOF no zone defines
-/// reads zero). The imposed value of a constraint relation lives at its
-/// multiplier node, component `imposed`. The matrix carries everything the
-/// solve needs: its relation rows, their coefficients and their sense (`=`,
-/// `>=`, `<=`), declared by the constraints that built them — no model is
-/// passed alongside.
+/// The matrix carries everything the solve needs: its relation rows, their
+/// coefficients and their sense (`=`, `>=`, `<=`), declared by the constraints
+/// that built them — no model is passed alongside. As soon as it carries an
+/// inequality, an active-set loop decides which relations are saturated: an
+/// active relation holds as an equation (its `lambda` is `<= 0` for `>=`, `>= 0`
+/// for `<=`), an inactive one reports `lambda = 0`.
 ///
-/// `relations` says how the constraint relations are enforced:
+/// # Parameters
 ///
-/// - `"lagrange"` (default) — by their multipliers, the saddle-point solved as
-///   assembled; the multipliers come back in the solution at their nodes.
-///   As soon as the matrix carries an inequality, the **active-set** loop
-///   decides which relations are saturated: an active relation holds as an
-///   equation (its `lambda` is `<= 0` for `>=`, `>= 0` for `<=`), an inactive
-///   one reports `lambda = 0`;
-/// - `"eliminate"` — each equality relation eliminates one unknown, and the
-///   smaller system left, without multipliers, is solved; each relation's
-///   multiplier is recovered from its eliminated unknown's row and returned at
-///   its node — the very solution the multipliers give. An inequality is not
-///   eliminated: it stays on the reduced system, resolved by the same
-///   active-set loop, its `lambda` returned at its multiplier node. Scope:
-///   non-chained, disjoint slaves.
+/// - `matrix`: the assembled system `A`.
+/// - `rhs`: the right-hand side `b`, read at every row of `matrix`; a row no zone
+///   of `rhs` defines reads zero. The imposed value of a constraint relation
+///   lives at its multiplier node, component `imposed`.
+/// - `method`: the factorization. `"lu"` works on any square matrix;
+///   `"cholesky"` asks that the system be symmetric **and** positive definite —
+///   never a system with multipliers, usually one reduced by elimination. The
+///   active-set loop factorizes by LU whatever is asked.
+/// - `relations`: how the constraint relations are enforced. `"lagrange"`: by
+///   their multipliers, the system solved as assembled. `"eliminate"`: each
+///   equality relation eliminates one unknown and the smaller system left,
+///   without multipliers, is solved; an inequality is not eliminated, it stays
+///   on the reduced system and is resolved by the same active-set loop. Scope of
+///   `"eliminate"`: each relation eliminates an unknown of its own, which
+///   appears in no other equality relation.
+/// - `active_set`: how each status of the active-set loop is factorized, read
+///   only when `matrix` carries an inequality. `"schur"` factorizes the
+///   inequality-free base once and updates it per status, falling back on
+///   `"refactorize"` when that base is singular; `"refactorize"` factorizes the
+///   full system at each status change.
+/// - `cache`: reuse what a previous solve stored on `matrix` — the
+///   factorization, the condensation, the active-set state and its last status —
+///   and store what this one computes. The store is cleared when the matrix
+///   changes. A matrix keeps one of them at a time, and a factorization serves
+///   the `method` it was made with only: another `relations` or `method`
+///   computes afresh and replaces it. `False` neither reads nor fills it.
+/// - `max_iter`: the bound of the active-set loop, in status changes.
+/// - `tol`: the sign tolerance of the active-set loop, on the multiplier and on
+///   the gap.
+/// - `verbosity`: how much the solve reports on stdout: `"silent"`, `"brief"` or
+///   `"detailed"`.
 ///
-/// `method` selects the factorization: `"lu"` (default) works on any square
-/// matrix, `"cholesky"` asks that the system be symmetric **and** positive
-/// definite — never a Lagrange saddle-point, usually a system reduced by
-/// elimination. The active-set loop factorizes by LU whatever is asked.
+/// # Returns
 ///
-/// `active_set` selects how each status of the active-set loop is factorized:
-/// `"schur"` (default) factorizes the inequality-free base once and updates it
-/// per status (falling back when that base is singular), `"refactorize"`
-/// refactorizes the full system at each status change. `max_iter` (default
-/// `100`) bounds the status loop; `tol` (default `1e-10`) is its sign
-/// tolerance on the multiplier and on the gap.
+/// The solution, read at the columns of `matrix`: one zone per column support of
+/// its blocks, each on the support of the block itself. Two solves of the same
+/// model therefore share their supports, and their fields combine zone by zone.
+/// The multiplier of every relation comes back at its node, component `lambda`,
+/// whether the relations were kept or eliminated.
 ///
-/// `cache` (default `True`) reuses what is stored transparently on the matrix —
-/// the factorization, the condensation, the active-set state and its last
-/// status — cleared automatically when the matrix changes. A matrix keeps one
-/// of them at a time, and a factorization serves the `method` it was made
-/// with only: another `relations` or `method` computes afresh and replaces it. `verbosity` says
-/// how much the solve reports on stdout: `"silent"` (default), `"brief"` or
-/// `"detailed"`.
+/// # Raises
 ///
-/// A `Ctrl+C` is honoured at the solver's phase boundaries and at each status
-/// iteration; a factorization itself is a single library call and is not
-/// interrupted mid-way.
+/// `RuntimeError` if `matrix` has no assembled values, if the LU meets a singular
+/// matrix (boundary conditions forgotten, typically), if `"cholesky"` meets a
+/// matrix that is not positive definite, if a relation is out of the scope of
+/// `"eliminate"`, or if the active-set loop has not converged after `max_iter`
+/// status changes. `ValueError` for an unknown `method`, `relations`,
+/// `active_set` or `verbosity`. `KeyboardInterrupt` on `Ctrl+C`.
+///
+/// # Notes
+///
+/// `Ctrl+C` is honoured between the phases of the solve and at each status
+/// change; a factorization is a single library call and is not interrupted
+/// mid-way.
 #[py_op(method_on = PyMatrix)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]

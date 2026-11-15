@@ -64,7 +64,7 @@ le nœud immergé pour le baignage, le nœud esclave pour le contact).
 ## Imposition par élimination (condensation)
 
 Voie **alternative** aux multiplicateurs, sélectionnée au moment de la résolution
-par [`solve(…, relations="eliminate")`](operateurs/solveur.md). Plutôt que
+par [`solve(…, relations="eliminate")`](reference/solver.md#solver-solve). Plutôt que
 d'agrandir le système, on **élimine** chaque relation : un terme *esclave* `s`
 est exprimé par les *maîtres*,
 
@@ -110,7 +110,7 @@ admissible et `λ = 0`). Avec la convention des blocs assemblés
 relation `≥` active, `λ ≥ 0` pour une `≤` active.
 
 Comme l'ensemble actif n'est pas connu d'avance, la résolution est itérative —
-la **méthode du statut** (*active-set*), que [`solve`](operateurs/solveur.md)
+la **méthode du statut** (*active-set*), que [`solve`](algorithmes/solveur.md)
 lance dès que la matrice porte une inégalité :
 
 1. statut initial : toutes les inégalités actives (ou le statut convergé

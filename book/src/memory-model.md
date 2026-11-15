@@ -60,7 +60,7 @@ premier appel le construit, les suivants s'en servent.
 | une zone de maillage | la table « nœud → ligne » | lire ou écrire la valeur d'un nœud sans le chercher — [Maillage](mesh.md#ce-quune-zone-garde-en-cache) |
 | un sous-espace éléments finis | la coloration des mailles | assembler et accumuler aux nœuds en parallèle, sans conflit d'écriture — [Espace éléments finis](fe-space.md#ce-qui-est-mis-en-cache) |
 | un modèle | le motif de chaque genre de matrice | réassembler (une itération de Newton) sans reconstruire la structure de la matrice — [Modèle](model.md#ce-qui-est-mis-en-cache) |
-| une matrice | sa factorisation | résoudre d'autres seconds membres sans refactoriser — [Solveur](operateurs/solveur.md#factorisation-réutilisable-cache-transparent) |
+| une matrice | sa factorisation | résoudre d'autres seconds membres sans refactoriser — [Solveur](algorithmes/solveur.md#factorisation-réutilisable-cache-transparent) |
 
 Les matrices d'un même genre assemblées sur un même modèle partagent en plus
 leur structure (quels termes existent, et où) : chacune ne garde en propre que
@@ -81,7 +81,7 @@ des fichiers que le système écrit sur disque quand la mémoire manque : un swa
 sans droit root. On l'active avant de lancer Python par la variable
 d'environnement `PYRUCAST_SPILL_DIR`, et `pyrucast.spill_stats()` dit ce qui a
 débordé. Voir [Calculs plus gros que la
-RAM](operateurs/solveur.md#calculs-plus-gros-que-la-ram).
+RAM](algorithmes/solveur.md#calculs-plus-gros-que-la-ram).
 
 ## Côté Rust
 

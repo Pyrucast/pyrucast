@@ -12,7 +12,7 @@ par composante, elle, reste **sur les types de champ** (cf. [Champ](../field.md)
 Les autres thèmes d'opérateurs ont leur propre page : construction du matériau
 ([Construction](construction.md)), l'assemblage
 ([`pyrucast.matrix`](../reference/matrix.md)), le chargement réparti
-([Flux imposé](../echanges.md#flux-imposé)), [Comportement](comportement.md), [Solveur](solveur.md).
+([Flux imposé](../echanges.md#flux-imposé)), [Comportement](comportement.md), [Résolution](../algorithmes/solveur.md).
 
 ## Coordonnées et déplacement
 

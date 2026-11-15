@@ -191,7 +191,8 @@ de la matrice transposée.
 
 `K.solve(second_membre)` est `pyrucast.solver.solve(K, second_membre)`. La
 matrice porte tout ce qu'il faut : les lignes des relations, leurs coefficients
-et leur sens. Les options sont décrites dans [Solveur](operateurs/solveur.md).
+et leur sens. Les options sont décrites dans
+[`solver.solve`](reference/solver.md#solver-solve).
 
 ```python
 {{#include ../../tests/python/test_doc_matrice.py:resoudre}}
@@ -207,7 +208,7 @@ transitoire à pas de temps constant, des itérations qui ne changent pas la
 matrice.
 
 La matrice n'a qu'**une case** pour cela. Son contenu dépend de la voie du
-solveur (voir [Solveur](operateurs/solveur.md#les-voies-de-la-résolution)) :
+solveur (voir [Résolution](algorithmes/solveur.md#les-voies-de-la-résolution)) :
 
 - **une factorisation** de la matrice, LU ou Cholesky, quand on résout avec
   les multiplicateurs sans inégalité, ou par élimination une matrice sans
@@ -248,7 +249,7 @@ dans chacune. L'estimation apparaît dans l'affichage (`~296 B` plus haut).
 La factorisation n'est pas comptée, alors qu'elle est en général bien plus
 grosse que la matrice : faer, la bibliothèque qui la calcule, ne donne pas la
 taille de ses facteurs. Pour la mémoire d'un `solve`, voir
-[Calculs plus gros que la RAM](operateurs/solveur.md#calculs-plus-gros-que-la-ram).
+[Calculs plus gros que la RAM](algorithmes/solveur.md#calculs-plus-gros-que-la-ram).
 
 ## Sauvegarde
 

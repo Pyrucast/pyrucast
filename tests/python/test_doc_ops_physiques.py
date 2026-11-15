@@ -1,8 +1,9 @@
 """Source of the Python examples of the operator and physics pages.
 
-Couvre `operateurs/{solveur,comportement,construction}.md`, `thermique.md`,
-`diffusion.md` et `echanges.md`. Voir
-`book/src/developper/documentation-et-tests.md`.
+Covers `algorithmes/solveur.md`, `operateurs/{comportement,construction}.md`,
+`thermique.md`, `diffusion.md` and `echanges.md`. An anchor named
+`module-function` (`solver-solve`) is the example the generated reference
+shows under that function. See `book/src/developper/documentation-et-tests.md`.
 
 **The code lives at module level, not inside test functions**: mdbook does not
 strip the indentation of an included excerpt, so a block anchored inside a
@@ -66,17 +67,16 @@ materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 rhs = _chargement(mult_mesh, mult_node, 1.0)
 autre_rhs = _chargement(mult_mesh, mult_node, 2.0)
 some_node = noeuds[0]
-# ANCHOR: solve
+# ANCHOR: solver-solve
 K = pyrucast.matrix.stiffness(model, materials)
-solution = pyrucast.solver.solve(K, rhs)  # factorise puis résout
+solution = pyrucast.solver.solve(K, rhs)  # factorizes, then solves
 T = solution.value(some_node, "T")
 
 # Later solves on the SAME matrix: the factorization is reused.
-sol2 = pyrucast.solver.solve(K, autre_rhs)  # descente/remontée seulement
-sol3 = pyrucast.solver.solve(
-    K, autre_rhs, cache=False
-)  # refactorizes, without touching the cache
-# ANCHOR_END: solve
+sol2 = pyrucast.solver.solve(K, autre_rhs)  # forward and back substitution only
+# Factorizes again, without reading or filling the cache.
+sol3 = pyrucast.solver.solve(K, autre_rhs, cache=False)
+# ANCHOR_END: solver-solve
 assert abs(T - 1.0) < 1e-9
 assert abs(sol2.value(some_node, "T") - sol3.value(some_node, "T")) < 1e-12
 

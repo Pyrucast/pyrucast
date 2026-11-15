@@ -82,7 +82,7 @@
   - [Géométrie](operateurs/geometrie.md)
   - [Champs](operateurs/champs.md)
   - [Comportement](operateurs/comportement.md)
-  - [Solveur](operateurs/solveur.md)
+  - [Résolution d'un système linéaire](algorithmes/solveur.md)
   - [Sauvegarde et relecture](sauvegarde.md)
   - [Visualisation](visualization.md)
   - [Mailler une géométrie](mailler.md)
