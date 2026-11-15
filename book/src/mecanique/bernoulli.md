@@ -109,7 +109,7 @@ Une console de longueur 2 dans le plan, encastrée, chargée en bout. La flèche
 est exacte, \\(F\\,L^3/(3 E I)\\) :
 
 ```python
-{{#include ../../../tests/python/test_doc_mecanique.py:bernoulli}}
+{{#include ../../../tests/python/test_doc_mecanique.py:model-bernoulli}}
 ```
 
 ## Côté Rust

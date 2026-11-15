@@ -105,7 +105,7 @@ La console de la page [Euler-Bernoulli](bernoulli.md#exemple), avec une aire
 de cisaillement : la flèche gagne \\(F\\,L/(G A_s)\\).
 
 ```python
-{{#include ../../../tests/python/test_doc_mecanique.py:timoshenko}}
+{{#include ../../../tests/python/test_doc_mecanique.py:model-timoshenko}}
 ```
 
 ## Côté Rust

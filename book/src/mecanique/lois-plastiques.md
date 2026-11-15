@@ -159,7 +159,7 @@ La sortie du comportement est la contrainte, suivie de l'état :
 La tangente de Drucker-Prager, assemblée sur une maille plastifiée :
 
 ```python
-{{#include ../../../tests/python/test_doc_mecanique.py:drucker_prager}}
+{{#include ../../../tests/python/test_doc_mecanique.py:model-drucker_prager}}
 ```
 
 ## Côté Rust

@@ -139,7 +139,7 @@ facultatif pour les trois lois : `rho`, `alpha`.
 Une maille en traction sous Damage TC : seule la variable de traction croît.
 
 ```python
-{{#include ../../../tests/python/test_doc_mecanique.py:damage_tc}}
+{{#include ../../../tests/python/test_doc_mecanique.py:model-damage_tc}}
 ```
 
 ## Côté Rust

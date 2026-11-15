@@ -92,7 +92,7 @@ noms ; la cible est nommée par la contrainte qu'on veut :
 | `"hencky"` (`T`) | `T_*` | `S̃_ab / θ_ab` | `H = ½ ln C` (Hencky) |
 
 ```python
-{{#include ../../../tests/python/test_doc_grandes_transformations.py:cauchy}}
+{{#include ../../../tests/python/test_doc_grandes_transformations.py:element_field-stress_measure}}
 ```
 
 **Hencky.** La duale `T` de `H = ½ ln C` se ramène à `S` par `S = T : ∂H/∂E`.
@@ -133,7 +133,7 @@ la courante active le temps d'un bloc, puis rétablit celle d'avant, même si le
 bloc échoue :
 
 ```python
-{{#include ../../../tests/python/test_doc_grandes_transformations.py:configuration_courante}}
+{{#include ../../../tests/python/test_doc_grandes_transformations.py:coords-displace_from}}
 ```
 
 [`displace_from`](../operateurs/champs.md) pose la
@@ -245,7 +245,7 @@ L'étirement `U` ne touche ni les axes ni les valeurs. `rotate_frame` tourne les
 axes d'un champ de matériau, avec `F` calculé **sur la référence** :
 
 ```python
-{{#include ../../../tests/python/test_doc_grandes_transformations.py:axes}}
+{{#include ../../../tests/python/test_doc_grandes_transformations.py:element_field-rotate_frame}}
 ```
 
 La **capacité** seule reste sur la référence : la masse se conserve,

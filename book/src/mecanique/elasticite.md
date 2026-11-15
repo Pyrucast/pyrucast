@@ -145,7 +145,7 @@ son bord droit. La solution est exacte : \\(u_x = S\\,x/E\\),
 \\(u_y = -\nu\\,S\\,y/E\\) :
 
 ```python
-{{#include ../../../tests/python/test_doc_mecanique.py:elasticite}}
+{{#include ../../../tests/python/test_doc_mecanique.py:model-elasticity}}
 ```
 
 ## Côté Rust

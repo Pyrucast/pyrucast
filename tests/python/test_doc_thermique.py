@@ -14,10 +14,10 @@ Voir `book/src/developper/documentation-et-tests.md`.
 
 # ── Conduction : une barre chauffée ─────────────────────────────────────────
 
-# ANCHOR: conduction
+# ANCHOR: model-heat_conduction
 import pyrucast
 
-# Une barre [0, 1] de quatre SEG2 : un flux Q = 10 entre à gauche, T = 20 à droite.
+# A bar [0, 1] of four SEG2: a flux Q = 10 enters on the left, T = 20 on the right.
 c = pyrucast.Coords(1)
 gauche = c.add_node([0.0])
 droite = c.add_node([1.0])
@@ -33,7 +33,7 @@ materiaux = pyrucast.element_field.material_field(
     modele, [("k", 2.0), ("rho", 1.0), ("cp", 3.0)]
 )
 
-source = pyrucast.NodeField(barre, ["q"])  # sur les nœuds de la barre
+source = pyrucast.NodeField(barre, ["q"])  # on the nodes of the bar
 source.unit().set_value(gauche, "q", 10.0)
 second_membre = source | appui.constraint_rhs([(droite, 20.0)])
 
@@ -41,7 +41,7 @@ K = pyrucast.matrix.stiffness(modele, materiaux)
 T = K.solve(second_membre)
 print(T.value(gauche, "T"))  # 25.0 = 20 + Q·L/k
 print(T.value(droite, "T"))  # 20.0
-# ANCHOR_END: conduction
+# ANCHOR_END: model-heat_conduction
 
 assert abs(T.value(gauche, "T") - 25.0) < 1e-12
 assert abs(T.value(droite, "T") - 20.0) < 1e-12

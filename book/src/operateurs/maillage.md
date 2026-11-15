@@ -87,7 +87,7 @@ quadratique prend de lui-même l'interpolation `LAGRANGE2` (cf.
 [Espace éléments finis](../fe-space.md)) :
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:extrude_quadratique}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-extrude}}
 ```
 
 ## `sweep` : une surface entre deux lignes

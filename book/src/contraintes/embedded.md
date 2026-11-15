@@ -69,7 +69,7 @@ Un cube `HEX8` en conduction, ses coins tenus au champ linéaire
 exactement ; un nœud immergé au cœur prend la valeur de l'hôte en ce point.
 
 ```python
-{{#include ../../../tests/python/test_doc_contraintes.py:embedded_complet}}
+{{#include ../../../tests/python/test_doc_contraintes.py:model-embedded}}
 ```
 
 `examples/barre_baignee_elastique.py` baigne une barre dans un volume

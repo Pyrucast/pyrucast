@@ -100,7 +100,7 @@ point réduit.
 Une facette carrée, ses inconnues et son matériau :
 
 ```python
-{{#include ../../../tests/python/test_doc_mecanique.py:coque}}
+{{#include ../../../tests/python/test_doc_mecanique.py:model-shell}}
 ```
 
 ## Côté Rust

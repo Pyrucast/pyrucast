@@ -409,7 +409,7 @@ coup — en octets, le seuil valant `None` quand rien ne déborde.
 l'unité qui se lit le mieux.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_physiques.py:spill_stats}}
+{{#include ../../../tests/python/test_doc_ops_physiques.py:pyrucast-spill_stats}}
 ```
 
 Le journal, lui, ressemble à ceci :
