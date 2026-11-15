@@ -157,8 +157,8 @@ n'est pas une intégrale. L'intégrale d'une composante sur chaque maille est
 
 Les opérateurs qui **produisent** un champ aux points de Gauss sont rangés
 dans `pyrucast.element_field` (détail dans [Opérateurs sur les
-champs](operateurs/champs.md), [Construction](operateurs/construction.md) et
-[Comportement](operateurs/comportement.md)) :
+champs](algorithmes/champs.md), [Construction](algorithmes/champs-materiau.md) et
+[Comportement](algorithmes/comportement.md)) :
 
 | Famille | Opérateurs |
 |---|---|
@@ -177,7 +177,7 @@ zone, puisqu'un sous-espace porte chaque composante dans une seule zone ; avec
 
 Ces champs sont ensuite **consommés** par l'assemblage (`stiffness`, `mass`,
 `tangent`, `internal_forces`, `external_forces`, cf.
-[Assemblage](operateurs/assemblage.md)), ramenés aux nœuds (`divergence`,
+[`pyrucast.matrix`](reference/matrix.md)), ramenés aux nœuds (`divergence`,
 `sum_to_nodes`), tracés (`plot`) ou exportés (`pyrucast.export.to_arrays(…,
 element_fields=[…])`).
 

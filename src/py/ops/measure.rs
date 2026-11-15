@@ -7,17 +7,37 @@ use crate::py::node_field::{PyNodeField, PySubNodeField};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 
-/// Integral `∫_Ω f dΩ` of a field over its support, using the finite-element
-/// quadrature — the total of one `component` (e.g. the resultant of a
-/// distributed force **density**).
+/// Integrate one component of a field over its support, `∫_Ω f dΩ`.
 ///
-/// - `NodeField`: interpolates with the shape functions, `∫ Σ_i f_i N_i dΩ` —
-///   `fespace` is **required**.
-/// - `ElementField`: integrates the Gauss-point values directly,
-///   `Σ_cell Σ_g f·|J|·w` — `fespace` is ignored.
+/// The integral uses the finite-element quadrature: it is the total of the
+/// component — the resultant of a distributed force **density**, or the measure
+/// of the domain for a field equal to 1. For a field of nodal forces, already
+/// integrated, the resultant is a plain sum instead: `field.sum(component)`.
 ///
-/// For a field of already-integrated **nodal** forces, the resultant is a plain
-/// sum instead: `field.sum(component)`.
+/// # Parameters
+///
+/// - `field`: a `NodeField` or an `ElementField`. A `NodeField` is interpolated
+///   with the shape functions, `∫ Σ_i f_i N_i dΩ`; an `ElementField` is
+///   integrated from its Gauss-point values, `Σ_cell Σ_g f·|J|·w`.
+/// - `component`: the component to integrate.
+/// - `fespace`: the FE space that interpolates a `NodeField` and gives the
+///   quadrature — required for a `NodeField`, ignored for an `ElementField`.
+///
+/// # Returns
+///
+/// The integral, a `float`.
+///
+/// # Raises
+///
+/// - `TypeError` if `field` is a `NodeField` without `fespace`, or neither a
+///   `NodeField` nor an `ElementField`.
+/// - `RuntimeError` if a `NodeField` does not define `component` at every node
+///   of `fespace`, or if no zone of an `ElementField` carries it.
+///
+/// # Notes
+///
+/// The cells are summed in parallel: the last bit of the result may change with
+/// the number of threads.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (field, component, fespace=None))]
@@ -42,13 +62,31 @@ pub fn integral(
     ))
 }
 
-/// Squared Euclidean norm `xᵀx = Σ v²` of a field (Cast3M `XTX`) — the sum of
-/// squares over every value of the field, a node that several zones carry
-/// counted once. Accepts a `NodeField`, `SubNodeField`, `ElementField` or
-/// `SubElementField`.
+/// Squared Euclidean norm `xᵀx = Σ v²` of a field.
 ///
-/// With `components` given, the sum is restricted to those components only
-/// (the rest ignored); by default every component is taken.
+/// The sum of the squares of every value of the field; a node that several
+/// zones carry counts once. Restricted to some components, it measures the
+/// norm of a residual on a subset of the degrees of freedom.
+///
+/// # Parameters
+///
+/// - `x`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
+/// - `components`: the components to sum, the others ignored; `None` takes
+///   every component. A component absent from a zone is ignored there.
+///
+/// # Returns
+///
+/// The squared norm, a `float`.
+///
+/// # Raises
+///
+/// - `TypeError` if `x` is none of the four field types.
+/// - `RuntimeError` if no zone of `x` carries any of `components`.
+///
+/// # Notes
+///
+/// The sum is gathered in parallel: the last bit of the result may change with
+/// the number of threads.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (x, components = None))]
@@ -90,18 +128,38 @@ pub fn xtx(x: &Bound<'_, PyAny>, components: Option<Vec<String>>) -> PyResult<f6
     ))
 }
 
-/// Global scalar product `∑ xᵢ · yᵢ` of two **whole** fields — Cast3M's `XTY`.
+/// Global scalar product `Σ xᵢ·yᵢ` of two whole fields, a single number.
 ///
-/// `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
-/// `ElementField` / `SubElementField`). The sum runs over the supports both
-/// carry and, on each, over the components both carry (aligned by name), a
-/// node that several zones carry counted once; a support or a component on one
-/// side only has no counterpart and adds nothing. Two sub-fields must sit on
-/// the same support. Returns a single float — the field inner product used for
-/// energies (`F·u`), residual norms, etc.
+/// The inner product of fields used for energies (`F·u`) and residual norms.
+/// The sum runs over the supports both fields carry and, on each, over the
+/// components both carry, aligned by name (their order may differ); a node
+/// that several zones carry counts once. A support or a component on one side
+/// only has no counterpart and adds nothing.
 ///
-/// For the **node-by-node** scalar product (a field, one value per node),
-/// see `pyrucast.field.psca`.
+/// # Parameters
+///
+/// - `x`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
+/// - `y`: a field of the same type as `x`; two sub-fields must sit on the same
+///   support.
+///
+/// # Returns
+///
+/// The scalar product, a `float`.
+///
+/// # Raises
+///
+/// - `TypeError` if `y` is not of the type of `x`, or `x` none of the four.
+/// - `RuntimeError` if two sub-fields sit on different supports.
+///
+/// # Notes
+///
+/// The sum is gathered in parallel: the last bit of the result may change with
+/// the number of threads.
+///
+/// # See also
+///
+/// `pyrucast.field.psca`, the scalar product node by node: a field, one value
+/// per node.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn xty(x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyResult<f64> {

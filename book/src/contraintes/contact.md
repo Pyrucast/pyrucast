@@ -119,7 +119,7 @@ bloc du haut : le contact se ferme et transmet \\(\sigma_{yy} = -S\\), les
 réactions \\(-\lambda_i\\) étant les forces nodales de la pression.
 
 ```python
-{{#include ../../../tests/python/test_doc_contraintes.py:contact}}
+{{#include ../../../tests/python/test_doc_contraintes.py:model-contact}}
 ```
 
 Le jeu que porte le contact, ici nul :
@@ -131,7 +131,7 @@ Le jeu que porte le contact, ici nul :
 Le bloc du haut glissé d'un quart, et les contacts appariés de nouveau :
 
 ```python
-{{#include ../../../tests/python/test_doc_contraintes.py:update_contact}}
+{{#include ../../../tests/python/test_doc_contraintes.py:model-update_contact}}
 ```
 
 ## Côté Rust

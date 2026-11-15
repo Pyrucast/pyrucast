@@ -72,11 +72,11 @@ etire = _mouvement(maillage, noeuds, [[1.2, 0.0], [0.0, 1.0]])
 tourne = _mouvement(maillage, noeuds, [[1.2 * c60, -s60], [1.2 * s60, c60]])
 u = etire
 
-# ANCHOR: cauchy
+# ANCHOR: element_field-stress_measure
 S = solide.integrate_behavior(solide.strain(u, materiaux), materiaux, repos)
 F = pc.element_field.deformation(u, fes, "gradient")
 sigma = pc.element_field.stress_measure(S, F, "cauchy")  # J⁻¹ F S Fᵀ
-# ANCHOR_END: cauchy
+# ANCHOR_END: element_field-stress_measure
 sxx = sigma[0].value(0, 0, "sigma_xx")
 S_t = solide.integrate_behavior(solide.strain(tourne, materiaux), materiaux, repos)
 F_t = pc.element_field.deformation(tourne, fes, "gradient")
@@ -93,7 +93,7 @@ assert abs(sigma_t.value(0, 0, "sigma_xy") - c60 * s60 * (sxx - syy)) < 1e-10
 retour = pc.element_field.stress_measure(sigma, F, "pk2")
 assert abs(retour[0].value(0, 0, "S_xx") - S[0].value(0, 0, "S_xx")) < 1e-12
 
-# ANCHOR: configuration_courante
+# ANCHOR: coords-displace_from
 # The current configuration x = X + u, laid once in a set of its own: the
 # reference stays where it is, and in_config makes it active for one block.
 courante = coords.add_config("current")
@@ -101,7 +101,7 @@ pc.coords.displace_from(u, 0, courante, ["u_x", "u_y"])
 with coords.in_config(courante):
     K = pc.matrix.stiffness(solide, materiaux)  # on x = X + u
     K_sigma = pc.matrix.geometric(solide, materiaux, sigma)  # K_σ with Cauchy
-# ANCHOR_END: configuration_courante
+# ANCHOR_END: coords-displace_from
 assert coords.active == 0
 with coords.in_config(courante):
     assert abs(noeuds[2].position()[0] - 2.4) < 1e-14
@@ -138,7 +138,7 @@ bas = sum(f_ext.value(noeuds[k], "f_y") for k in (0, 1, 2))
 assert abs(bas - 2.4) < 1e-12
 assert abs(sum(f_ext.value(n, "f_x") for n in noeuds)) < 1e-12
 
-# ANCHOR: axes
+# ANCHOR: element_field-rotate_frame
 # A conduction whose strong axis runs along x at rest. On the plate stretched
 # by 1.2 then turned by 60°, the axes turn with the part — by the rotation R of
 # F = R U, not by the stretch — and the conductivities stay the material's.
@@ -149,7 +149,7 @@ axes = pc.element_field.material_field(
 )
 F = pc.element_field.deformation(tourne, fes, "gradient")  # on the reference
 tournes = pc.element_field.rotate_frame(axes, F)  # V1 = (cos 60°, sin 60°)
-# ANCHOR_END: axes
+# ANCHOR_END: element_field-rotate_frame
 assert coords.active == 0
 assert abs(tournes[0].value(0, 0, "V1X") - c60) < 1e-12
 assert abs(tournes[0].value(0, 0, "V1Y") - s60) < 1e-12

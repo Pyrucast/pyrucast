@@ -305,7 +305,7 @@ sous-trait **et** redéfinir le seam correspondant pour rendre `Some(self)` :
   `σ(B) = C(B) : ε_e(B)` — jamais `σ(A) + C:Δε`. C'est ce qui la garde juste
   quand le matériau dépend de la température, sans que le pas-à-pas ait à
   corriger quoi que ce soit (détail dans
-  [comportement](operateurs/comportement.md)).
+  [comportement](algorithmes/comportement.md)).
 
   **Deux invariants tiennent dans ce noyau**, et ils décident de la forme du
   reste : aucun test que l'amont a déjà tranché — présence d'une composante,
@@ -356,6 +356,8 @@ matchent par **appartenance**. Un `HeatConduction` rend
 `&[Physics::Thermal]`, un `Dirichlet` `&[Physics::Constraint]`.
 
 ### Un genre de matrice = un layout + un noyau
+
+{{#pyalgo matrix.stiffness matrix.mass matrix.geometric matrix.tangent}}
 
 L'assemblage est **agnostique au genre de matrice**. L'énum `MatrixKind`
 (`Stiffness`, `Mass`, `Geometric`, `Tangent`) est le discriminant qui fait

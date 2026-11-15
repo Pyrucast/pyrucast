@@ -377,7 +377,7 @@ Les clés du dictionnaire sont `threshold`, `count`, `largest`, `live` et `peak`
 en octets ; `threshold` vaut `None` quand rien ne déborde. Sur un build qui ne
 peut pas déborder (feature absente, ou hors Unix), `spill_stats` existe quand
 même : tous les compteurs y valent 0. Voir
-[Calculs plus gros que la RAM](../operateurs/solveur.md).
+[Calculs plus gros que la RAM](../algorithmes/solveur.md#calculs-plus-gros-que-la-ram).
 
 ### `archive` — sauvegarde et relecture d'un graphe
 

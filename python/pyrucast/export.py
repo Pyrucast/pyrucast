@@ -1,4 +1,4 @@
-"""Export vers formats externes — miroir de ``ops::export`` (Rust).
+"""Export to external formats — mirror of ``ops::export`` (Rust).
 
 Writes meshes and fields for third-party tools: legacy VTK for ParaView
 (ASCII or binary, single files or time series), and the flat arrays every

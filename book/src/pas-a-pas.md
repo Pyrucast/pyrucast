@@ -167,7 +167,7 @@ La déformation que lit chaque loi vient de l'opérateur `strain` du modèle,
 moins la dilatation thermique ; les lois avancent depuis l'état convergé du
 début du sous-pas (`integrate_behavior`). Toutes calculent leur contrainte à
 partir de leur déformation élastique avec le matériau de fin de pas
-(voir [comportement](operateurs/comportement.md)) : un module qui dépend de la
+(voir [comportement](algorithmes/comportement.md)) : un module qui dépend de la
 température ne demande donc **aucune** correction, là où Cast3M ajoute
 `(D⁻¹ₙ₊₁ − D⁻¹ₙ)σₙ` à l'incrément.
 
@@ -247,7 +247,7 @@ exacte (cf. [Grandes transformations](mecanique/grandes-transformations.md#la-co
 
 **Le contact** suit le glissement du point projeté. Chaque fois que
 l'opérateur est reconstruit, ses contacts sont mis à jour à l'itéré
-([`update_contact`](contraintes/contact.md#grands-glissements--mettre-le-contact-à-jour),
+([`update_contact`](reference/model.md#model-update_contact),
 le `RFCO` de Cast3M) : facette, poids et normale de `X + u`, mêmes
 multiplicateurs, et le jeu de ce nouvel appariement mesuré sur `X`. Entre deux
 reconstructions, les relations restent celles de l'opérateur : la résolution

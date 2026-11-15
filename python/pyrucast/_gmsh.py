@@ -128,39 +128,45 @@ def _views(gmsh):
 
 
 def from_gmsh(coords, *, dim=-1, tag=-1, views=True):
-    """Fetch the current gmsh model's mesh — one ``Mesh`` per named group — and
-    its views.
+    """Fetch the mesh of the current gmsh model, one `Mesh` per named group.
 
-    To be called once meshing is done on the gmsh side — pyrucast reads, it
-    does not drive: geometry and meshing remain gmsh's business.
+    To be called once meshing is done on the gmsh side — pyrucast reads, it does
+    not drive: geometry and meshing remain gmsh's business. gmsh's arrays are
+    views on its own memory, read through the buffer protocol: nothing is
+    copied until the mesh is built, so `gmsh.finalize()` may be called right
+    after.
 
-    Returns ``(meshes, fields)``:
+    # Parameters
 
-    - ``meshes`` — the same ``dict[str, Mesh]`` as :func:`read_gmsh`, under the
-      same rules: nodes land in the supplied ``coords``, whose dimension decides
-      how many of gmsh's three coordinates are kept (a 2-D ``Coords`` flattens
-      onto ``xy``); every returned mesh shares that ``Coords``, so a node
-      between two groups is *the same* on both sides; one zone per element
-      type in each group; cells without a physical group under the key
-      ``"<ungrouped>"``. Named points arrive as POI1 meshes, ready to carry a
-      boundary condition.
-    - ``fields`` — with ``views=True``, one entry per model-based gmsh view:
-      ``NodeData`` becomes a ``NodeField``, ``ElementData`` a one-point
-      ``ElementField`` (a zone on every group all of whose cells it defines),
-      and a view with several time steps an ``Evolution`` over their times.
-      A scalar view keeps its name as component name; a view of ``n``
-      components names them ``name_0 … name_{n-1}``. Other data kinds are
-      skipped with a warning.
+    - `coords`: where the nodes are added; its dimension decides how many of
+      gmsh's three coordinates are kept (a 2-D `Coords` keeps `x` and `y`).
+    - `dim`: the one dimension to import; `-1` imports them all.
+    - `tag`: the one entity of dimension `dim` to import; `-1` imports them all.
+      The node table is read in full whatever happens — a surface cell leans
+      on nodes classified on its border curves —, and only the nodes actually
+      referenced are created.
+    - `views`: `True` also reads the model-based views as fields.
 
-    ``dim`` restricts the import to one dimension (``-1``, the default: all),
-    and ``tag`` to that single entity of dimension ``dim``. The node table is
-    read in full whatever happens — a surface cell leans on nodes classified on
-    its border curves — and only the nodes actually referenced are
-    materialized.
+    # Returns
 
-    gmsh's arrays are **views** on its own memory, and pyrucast reads them
-    through the buffer protocol: nothing is copied until the mesh is built. So
-    ``gmsh.finalize()`` may be called right after — pyrucast then owns its data.
+    `(meshes, fields)`:
+
+    - `meshes`: the same `dict[str, Mesh]` as `pyrucast.mesh.read_gmsh`, under
+      the same rules: every mesh on `coords`, so a node between two groups is
+      the same on both sides; one zone per element type in each group; cells
+      without a physical group under the key `"<ungrouped>"`. Named points
+      arrive as POI1 meshes, ready to carry a boundary condition.
+    - `fields`: with `views=True`, one entry per model-based view: `NodeData`
+      becomes a `NodeField`, `ElementData` a one-point `ElementField` (a zone
+      on every group all of whose cells it defines), and a view with several
+      time steps an `Evolution` over their times. A scalar view keeps its name
+      as component name; a view of `n` components names them
+      `name_0 … name_{n-1}`. Other data kinds are skipped with a warning.
+
+    # Raises
+
+    - `ImportError` if the `gmsh` module is not installed.
+    - `RuntimeError` if gmsh is not initialized.
     """
     gmsh = _import_gmsh()
     if tag >= 0 and dim < 0:
@@ -233,20 +239,32 @@ def _gmsh_codes():
 
 
 def to_gmsh(meshes, fields=None, *, model_name="pyrucast"):
-    """Push pyrucast meshes and fields into the running gmsh session, as a new
-    model named ``model_name`` — to look at them in the gmsh GUI, or to save
-    them with ``gmsh.write``.
+    """Push meshes and fields into the running gmsh session, as a new model.
 
-    - ``meshes`` — ``dict[str, Mesh]`` on one ``Coords``: each key becomes a
-      physical group (``"<ungrouped>"`` excepted). A cell present in several
+    To look at them in the gmsh GUI, or to save them with `gmsh.write`. gmsh
+    must be initialized (`gmsh.initialize()`).
+
+    # Parameters
+
+    - `meshes`: a `dict[str, Mesh]` on one `Coords`. Each key becomes a
+      physical group (`"<ungrouped>"` excepted); a cell present in several
       meshes is written once, on a discrete entity carrying all its groups.
-    - ``fields`` — ``dict[str, NodeField | ElementField | Evolution]``: each
-      becomes a view — ``NodeData`` for a node field, ``ElementData`` (the
-      Gauss mean per cell) for an element field, one time step per tabulated
-      value of an ``Evolution``. gmsh draws 1, 3 or 9 components; a field of
-      another count gets one view per component, ``name_component``.
+    - `fields`: a `dict[str, NodeField | ElementField | Evolution]`, each
+      becoming a view — `NodeData` for a node field, `ElementData` (the Gauss
+      mean per cell) for an element field, one time step per tabulated value
+      of an `Evolution`. gmsh draws 1, 3 or 9 components; a field of another
+      count gets one view per component, `name_component`.
+    - `model_name`: the name of the new gmsh model.
 
-    gmsh must be initialized. Returns the model name.
+    # Returns
+
+    `model_name`.
+
+    # Raises
+
+    - `ImportError` if the `gmsh` module is not installed.
+    - `RuntimeError` if gmsh is not initialized, or if the meshes do not all
+      lie on one `Coords`.
     """
     gmsh = _import_gmsh()
     fields = fields or {}

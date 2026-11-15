@@ -234,11 +234,11 @@ la recompilation.
 | `cargo test --features viz` | 1036 tests + 893 doctests | `#[cfg(test)]` dans 123 fichiers de `src/`, 42 fichiers `tests/*.rs`, commentaires `///` et `//!` | 154 s | ✓ | | ✓ | | | | ✓ | ✓ |
 | `cargo build --features viz-interactive` | la fenêtre winit compile | aucun test — 960 lignes que rien n'exerce sans écran | 14 s | ✓ | | ✓ | | | | ✓ | ✓ |
 | `maturin develop --release --features extension-module,viz` | l'extension Python s'installe, compilée en release comme la roue | — | 4 s | | | | ✓ | | | ✓ | ✓ |
-| `python -m pytest` | l'API Python, unité par unité | 73 fichiers `tests/python/test_*.py`, dont 13 `test_doc_*.py` qui sont aussi les sources des exemples du book | 32 s | | | | ✓ | | | ✓ | ✓ |
+| `python -m pytest` | l'API Python, unité par unité | 98 fichiers `tests/python/test_*.py`, dont 27 `test_doc_*.py` qui sont aussi les sources des exemples du book | 86 s | | | | ✓ | | | ✓ | ✓ |
 | `script/run_examples.sh` | des chaînes de calcul **de bout en bout** | 30 `examples/*.py`, 3 `examples/*.rs`, 6 `tutoriel/*.py` | 80 s | | | | | ✓ | | ✓ | ✓ |
 | `cargo doc --no-deps --lib` (`-D warnings`) | la rustdoc n'a aucun lien cassé | — | 1 s | | | | | | ✓ | ✓ | ✓ |
 | `mdbook build book` | le book se rend | `book/src/**` | 1 s | | | | | | ✓ | ✓ | ✓ |
-| `python script/doc_lint.py` | les **six garde-fous** du book et des exemples | `book/src/**.md`, le book construit, la rustdoc, le module Python installé | 28 s | | | | | | ✓ | ✓ | ✓ |
+| `python script/doc_lint.py` | les **neuf garde-fous** du book et des exemples | `book/src/**.md`, le book construit, la rustdoc, le module Python installé | 28 s | | | | | | ✓ | ✓ | ✓ |
 | `cargo clippy` × 4 jeux de features | aucun avertissement, `-D warnings` | — | 105 s | | | | | | | | ✓ |
 
 Et les totaux, dans le même régime :
@@ -328,7 +328,7 @@ est donc exécuté par `check_rust`, `check_python` ou `check_examples`, et il n
 peut plus diverger de l'API.
 
 `check_doc` ne compile donc rien lui-même. Il construit la rustdoc et le book,
-puis lance `script/doc_lint.py`, six vérifications de texte :
+puis lance `script/doc_lint.py`, neuf vérifications de texte :
 
 | garde-fou | ce qu'il tient |
 |---|---|
@@ -338,6 +338,9 @@ puis lance `script/doc_lint.py`, six vérifications de texte :
 | `doctests` | cliquet : la couverture des doctests ne peut que monter |
 | `api-python` | cliquet : toute entrée Python est citée par un exemple exécuté |
 | `equations` | chaque équation arrive intacte à MathJax |
+| `reference` | toute fonction publique est rendue une fois dans la référence et listée une fois dans le sommaire ; les pages construites la contiennent (mdBook saute sans rien dire un préprocesseur qui ne démarre pas, par exemple si `python` désigne un Python 2) |
+| `stub` | le stub commité dit ce que dit le module installé : noms, arguments, docstrings |
+| `docstrings` | cliquet : une docstring suit la règle d'écriture |
 
 Le premier est le plus important, parce que le mécanisme porteur n'est gardé par
 rien d'autre : une ancre inexistante rend un bloc **vide**, avec un code de

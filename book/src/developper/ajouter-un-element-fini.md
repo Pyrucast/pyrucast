@@ -74,7 +74,7 @@ Rien d'autre. En particulier :
 Reste à écrire la doc : une fiche `book/src/elements/<nom>.md`, une entrée
 dans `SUMMARY.md`, une ligne dans le catalogue
 d'[`elements/index.md`](../elements/index.md), et une ligne dans la table de
-correspondance gmsh d'[`operateurs/maillage.md`](../operateurs/maillage.md).
+correspondance gmsh d'[`algorithmes/maillage-echanges.md`](../algorithmes/maillage-echanges.md#types-déléments-reconnus).
 
 Les deux figures de la fiche (élément de référence, quadrature) se génèrent :
 déclarer l'élément dans `ELEMENTS` de `script/elements_figures.py` (sa règle de

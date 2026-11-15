@@ -38,10 +38,10 @@ def _un_qua4(eps_xx):
 
 # ── Barre ───────────────────────────────────────────────────────────────────
 
-# ANCHOR: barre
+# ANCHOR: model-truss
 import pyrucast
 
-# Une barre de longueur 2, fixée à gauche, guidée en y à droite, tirée par F = 1000.
+# A bar of length 2, fixed on the left, guided in y on the right, pulled by F = 1000.
 c = pyrucast.Coords(2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([2.0, 0.0])
@@ -57,18 +57,18 @@ materiaux = pyrucast.element_field.material_field(modele, [("E", 200e3), ("A", 0
 
 force = pyrucast.NodeField(ligne, ["f_x"])
 force.unit().set_value(b, "f_x", 1000.0)
-u = pyrucast.matrix.stiffness(modele, materiaux).solve(force)  # valeurs imposées nulles
+u = pyrucast.matrix.stiffness(modele, materiaux).solve(force)  # zero imposed values
 print(u.value(b, "u_x"))  # 1.0 = F·L/(E·A)
 
 deformation = pyrucast.element_field.strain(modele, u, materiaux)
 repos = pyrucast.element_field.initial_state(
     modele, materiaux
-)  # l'état de départ de la loi
+)  # the starting state of the law
 effort = pyrucast.element_field.integrate_behavior(
     modele, deformation, materiaux, repos
 )
 print(effort.components(), effort[0].value(0, 0, "n"))  # ['n'] 1000.0
-# ANCHOR_END: barre
+# ANCHOR_END: model-truss
 
 assert abs(u.value(b, "u_x") - 1.0) < 1e-12
 assert effort.components() == ["n"]
@@ -76,8 +76,8 @@ assert abs(effort[0].value(0, 0, "n") - 1000.0) < 1e-9
 
 # ── Élasticité ──────────────────────────────────────────────────────────────
 
-# ANCHOR: elasticite
-gauche, droite, carre = _carre()  # un carré [0, 1]² de 2×2 QUA4
+# ANCHOR: model-elasticity
+gauche, droite, carre = _carre()  # a square [0, 1]² of 2×2 QUA4
 plaque = pyrucast.model.elasticity(pyrucast.FiniteElementSpace(carre), "plane_stress")
 coin = gauche.node(0, 0, 0)
 modele = (
@@ -88,7 +88,7 @@ modele = (
 )
 materiaux = pyrucast.element_field.material_field(
     modele,
-    [("E", 200e3), ("nu", 0.3), ("phi_f_x", 100.0)],  # traction S = 100 à droite
+    [("E", 200e3), ("nu", 0.3), ("phi_f_x", 100.0)],  # traction S = 100 on the right
 )
 u = pyrucast.matrix.stiffness(modele, materiaux).solve(
     pyrucast.node_field.external_forces(modele, materiaux)
@@ -102,7 +102,7 @@ repos = pyrucast.element_field.initial_state(modele, materiaux)
 sigma = pyrucast.element_field.integrate_behavior(modele, eps, materiaux, repos)
 print(sigma.components())  # ['sigma_xx', 'sigma_yy', 'sigma_xy']
 print(round(sigma[0].value(0, 0, "sigma_xx"), 9))  # 100.0
-# ANCHOR_END: elasticite
+# ANCHOR_END: model-elasticity
 
 assert abs(u.value(haut_droit, "u_x") - 5e-4) < 1e-15
 assert abs(u.value(haut_droit, "u_y") + 1.5e-4) < 1e-15
@@ -164,8 +164,8 @@ assert abs(_traction_orthotrope(math.pi / 2) - 100.0 / 10e3) < 1e-12
 
 # ── Plasticité de von Mises ─────────────────────────────────────────────────
 
-# ANCHOR: plasticite
-fes, u = _un_qua4(2e-3)  # une maille, ε_xx = 2·10⁻³ : au-delà de σ_y/E
+# ANCHOR: model-plasticity_perfect
+fes, u = _un_qua4(2e-3)  # one cell, ε_xx = 2·10⁻³: beyond σ_y/E
 modele = pyrucast.model.plasticity_perfect(fes, "plane_stress")
 materiaux = pyrucast.element_field.material_field(
     modele, [("E", 210e3), ("nu", 0.3), ("sigma_y", 250.0)]
@@ -174,7 +174,7 @@ materiaux = pyrucast.element_field.material_field(
 eps = pyrucast.element_field.strain(modele, u, materiaux)
 repos = pyrucast.element_field.initial_state(
     modele, materiaux
-)  # premier pas : l'état de repos
+)  # first step: the rest state
 etat = pyrucast.element_field.integrate_behavior(modele, eps, materiaux, repos)
 s = {nom: etat[0].value(0, 0, nom) for nom in ("sigma_xx", "sigma_yy", "sigma_xy")}
 q = math.sqrt(
@@ -183,15 +183,15 @@ q = math.sqrt(
     - s["sigma_xx"] * s["sigma_yy"]
     + 3 * s["sigma_xy"] ** 2
 )
-print(round(q, 3))  # 250.0 : la contrainte équivalente est plafonnée à σ_y
-print(etat[0].value(0, 0, "p") > 0)  # True : de la déformation plastique
+print(round(q, 3))  # 250.0: the equivalent stress is capped at σ_y
+print(etat[0].value(0, 0, "p") > 0)  # True: plastic strain
 
-# Le pas suivant repart de cet état.
+# The next step starts again from this state.
 etat = pyrucast.element_field.integrate_behavior(modele, eps, materiaux, prev=etat)
 Kt = pyrucast.matrix.tangent(
     modele, materiaux, eps, prev=etat
-)  # le module algorithmique
-# ANCHOR_END: plasticite
+)  # the algorithmic modulus
+# ANCHOR_END: model-plasticity_perfect
 
 assert abs(q - 250.0) < 1e-3
 assert etat[0].value(0, 0, "p") > 0.0
@@ -199,7 +199,7 @@ assert Kt.symmetric
 
 # ── Écrouissage isotrope ────────────────────────────────────────────────────
 
-# ANCHOR: ecrouissage
+# ANCHOR: model-plasticity_isotropic
 modele = pyrucast.model.plasticity_isotropic(fes, "plane_stress")
 materiaux = pyrucast.element_field.material_field(
     modele, [("E", 210e3), ("nu", 0.3), ("sigma_y", 250.0), ("H", 1000.0)]
@@ -216,13 +216,13 @@ q = math.sqrt(
     + 3 * s["sigma_xy"] ** 2
 )
 print(round(q - (250.0 + 1000.0 * etat[0].value(0, 0, "p")), 3))  # 0.0 : q = σ_y + H·p
-# ANCHOR_END: ecrouissage
+# ANCHOR_END: model-plasticity_isotropic
 
 assert abs(q - (250.0 + 1000.0 * etat[0].value(0, 0, "p"))) < 1e-3
 
 # ── Drucker-Prager ──────────────────────────────────────────────────────────
 
-# ANCHOR: drucker_prager
+# ANCHOR: model-drucker_prager
 modele = pyrucast.model.drucker_prager(fes, "plane_strain")
 materiaux = pyrucast.element_field.material_field(
     modele, [("E", 20e3), ("nu", 0.2), ("friction", 0.3), ("k", 10.0), ("psi", 0.1)]
@@ -232,21 +232,21 @@ repos = pyrucast.element_field.initial_state(modele, materiaux)
 etat = pyrucast.element_field.integrate_behavior(modele, eps, materiaux, repos)
 Kt = pyrucast.matrix.tangent(
     modele, materiaux, eps, repos
-)  # par perturbation, symétrisée
+)  # by perturbation, symmetrized
 print(Kt.symmetric)  # True
-# ANCHOR_END: drucker_prager
+# ANCHOR_END: model-drucker_prager
 
 assert etat[0].value(0, 0, "p") > 0.0
 assert Kt.symmetric
 
 # ── Fluage de Norton ────────────────────────────────────────────────────────
 
-# ANCHOR: fluage
+# ANCHOR: model-creep_norton
 modele = pyrucast.model.creep_norton(fes, "plane_strain")
 materiaux = pyrucast.element_field.material_field(
     modele, [("E", 150e3), ("nu", 0.3), ("K", 400.0), ("n", 5.0)]
 )
-eps = pyrucast.element_field.strain(modele, u, materiaux)  # déformation maintenue
+eps = pyrucast.element_field.strain(modele, u, materiaux)  # strain held
 repos = pyrucast.element_field.initial_state(modele, materiaux)
 try:
     pyrucast.element_field.integrate_behavior(modele, eps, materiaux, repos)
@@ -256,15 +256,15 @@ except RuntimeError as erreur:
 etat = pyrucast.element_field.integrate_behavior(modele, eps, materiaux, repos, dt=1.0)
 sigma_1 = etat[0].value(0, 0, "sigma_xx")
 etat = pyrucast.element_field.integrate_behavior(modele, eps, materiaux, etat, dt=1.0)
-print(etat[0].value(0, 0, "sigma_xx") < sigma_1)  # True : la contrainte se relaxe
-# ANCHOR_END: fluage
+print(etat[0].value(0, 0, "sigma_xx") < sigma_1)  # True: the stress relaxes
+# ANCHOR_END: model-creep_norton
 
 assert etat[0].value(0, 0, "sigma_xx") < sigma_1
 
 # ── Mazars ──────────────────────────────────────────────────────────────────
 
-# ANCHOR: mazars
-fes, u = _un_qua4(2e-4)  # ε_xx = 2·10⁻⁴, au-delà du seuil ε_d0 = 10⁻⁴
+# ANCHOR: model-mazars
+fes, u = _un_qua4(2e-4)  # ε_xx = 2·10⁻⁴, beyond the threshold ε_d0 = 10⁻⁴
 modele = pyrucast.model.mazars(fes, "plane_stress")
 materiaux = pyrucast.element_field.material_field(
     modele,
@@ -284,16 +284,16 @@ etat = pyrucast.element_field.integrate_behavior(
 )
 print(
     round(etat[0].value(0, 0, "kappa"), 6)
-)  # 0.0002 : la plus grande déformation équivalente atteinte
+)  # 0.0002: the largest equivalent strain reached
 print(0.0 < etat[0].value(0, 0, "damage") < 1.0)  # True
-# ANCHOR_END: mazars
+# ANCHOR_END: model-mazars
 
 assert abs(etat[0].value(0, 0, "kappa") - 2e-4) < 1e-12
 assert 0.0 < etat[0].value(0, 0, "damage") < 1.0
 
 # ── Damage TC ───────────────────────────────────────────────────────────────
 
-# ANCHOR: damage_tc
+# ANCHOR: model-damage_tc
 modele = pyrucast.model.damage_tc(fes, "plane_stress")
 materiaux = pyrucast.element_field.material_field(
     modele,
@@ -306,15 +306,15 @@ etat = pyrucast.element_field.integrate_behavior(
 print(
     etat[0].value(0, 0, "d_plus") > 0, etat[0].value(0, 0, "d_minus")
 )  # True 0.0 : traction seule
-# ANCHOR_END: damage_tc
+# ANCHOR_END: model-damage_tc
 
 assert etat[0].value(0, 0, "d_plus") > 0.0
 assert etat[0].value(0, 0, "d_minus") == 0.0
 
 # ── Poutres ─────────────────────────────────────────────────────────────────
 
-# ANCHOR: bernoulli
-# Une console de longueur 2 dans le plan, encastrée à gauche, F = −10 en y au bout.
+# ANCHOR: model-bernoulli
+# A cantilever of length 2 in the plane, clamped on the left, F = −10 in y at the tip.
 c = pyrucast.Coords(2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([2.0, 0.0])
@@ -335,11 +335,11 @@ force = pyrucast.NodeField(ligne, ["f_y"])
 force.unit().set_value(b, "f_y", -10.0)
 u = pyrucast.matrix.stiffness(modele, materiaux).solve(force)
 print(round(u.value(b, "u_y"), 12))  # -1.333333333333 = F·L³/(3EI), exacte
-# ANCHOR_END: bernoulli
+# ANCHOR_END: model-bernoulli
 
 assert abs(u.value(b, "u_y") + 10.0 * 8.0 / (3.0 * 200e3 * 1e-4)) < 1e-12
 
-# ANCHOR: timoshenko
+# ANCHOR: model-timoshenko
 poutre = pyrucast.model.timoshenko(
     pyrucast.FiniteElementSpace(ligne, interpolation="MODEL_EMBEDDED")
 )
@@ -351,14 +351,14 @@ materiaux = pyrucast.element_field.material_field(
 )
 u = pyrucast.matrix.stiffness(modele, materiaux).solve(force)
 print(round(u.value(b, "u_y"), 12))  # -1.383333333333 = F·L³/(3EI) + F·L/(G·A_s)
-# ANCHOR_END: timoshenko
+# ANCHOR_END: model-timoshenko
 
 _exact = -10.0 * 8.0 / (3.0 * 200e3 * 1e-4) - 10.0 * 2.0 / (80e3 * 5e-3)
 assert abs(u.value(b, "u_y") - _exact) < 1e-12
 
 # ── Coques ──────────────────────────────────────────────────────────────────
 
-# ANCHOR: coque
+# ANCHOR: model-shell
 c = pyrucast.Coords(3)
 n = [
     c.add_node(p)
@@ -368,15 +368,15 @@ surface = pyrucast.Mesh(c, "QUA4")
 surface.unit().add_cell(n)
 coque = pyrucast.model.shell(
     pyrucast.FiniteElementSpace(surface), "thick"
-)  # ou "kirchhoff"
+)  # or "kirchhoff"
 print(coque[0].primal_vars())  # ['u_x', 'u_y', 'u_z', 'r_x', 'r_y', 'r_z']
 print(coque[0].material_components())  # ['E', 'nu', 'h']
 materiaux = pyrucast.element_field.material_field(
     coque, [("E", 210e3), ("nu", 0.3), ("h", 0.01)]
 )
 K = pyrucast.matrix.stiffness(coque, materiaux)
-print(K.n_rows)  # 24 : six inconnues par nœud
-# ANCHOR_END: coque
+print(K.n_rows)  # 24: six unknowns per node
+# ANCHOR_END: model-shell
 
 assert coque[0].primal_vars() == ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"]
 assert K.n_rows == 24

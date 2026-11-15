@@ -1,7 +1,7 @@
-"""Mesures — miroir de ``ops::measure`` (Rust).
+"""Measures — mirror of ``ops::measure`` (Rust).
 
 The operators returning a number rather than a container: integral over a
-espace éléments finis, normes et produits scalaires globaux.
+finite element space, global norms and scalar products.
 """
 
 from ._pyrucast import (

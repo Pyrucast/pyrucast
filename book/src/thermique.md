@@ -94,7 +94,7 @@ Une barre de conductivité 2, chauffée par un flux de 10 à gauche, à 20 à
 droite. Le profil est linéaire, \\(T(x) = 20 + Q\\,(1 - x)/k\\) :
 
 ```python
-{{#include ../../tests/python/test_doc_thermique.py:conduction}}
+{{#include ../../tests/python/test_doc_thermique.py:model-heat_conduction}}
 ```
 
 Le gradient et le flux aux points de Gauss, et les forces internes, qui

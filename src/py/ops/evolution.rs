@@ -7,23 +7,34 @@ use crate::py::node_field::PyNodeField;
 use pyo3::prelude::*;
 use pyrucast_macros::py_op;
 
-/// The values of `field` along `line`, one curve per component: the value
-/// against the distance travelled along the line.
+/// The values of `field` along `line`, one curve per component.
 ///
-/// `line` is a POI1 mesh, read in the order of its cells, zone after zone:
-/// that order is the path. The abscissa of a point is the length of the
-/// path up to it — the sum of the straight distances from one point to the
-/// next —, `0` at the first point; its ordinate, the value of the
-/// component at that node (a node the field does not define reads zero).
-/// `components=None` takes every component of the field, in its order;
-/// each gives one `SubEvolution` of the returned `Evolution`, its
-/// `ordinate_type` the component's name. A field of another mesh, or a
-/// field at the Gauss points, is brought onto the line's points first with
-/// `pyrucast.node_field.project`.
+/// Each curve gives the value against the distance travelled along the line.
+/// The order of the cells of `line`, zone after zone, is the path. The
+/// abscissa of a point is the length of the path up to it — the sum of the
+/// straight distances from one point to the next —, `0` at the first point;
+/// its ordinate is the value of the component at that node (a node the field
+/// does not define reads zero).
 ///
-/// Raises when `line` is not POI1, when two consecutive points coincide,
-/// for a component the field does not carry, and when the field and
-/// `line` hang from different `Coords`.
+/// # Parameters
+///
+/// - `field`: the field to read, at the nodes. A field of another mesh, or a
+///   field at the Gauss points, is first brought onto the points of the line
+///   with `pyrucast.node_field.project`.
+/// - `line`: the path, a POI1 mesh on the same `Coords` as `field`.
+/// - `components`: the components to read, one curve each; `None` takes every
+///   component of the field, in its order.
+///
+/// # Returns
+///
+/// An `Evolution` with one `SubEvolution` per component, in the order of
+/// `components`, whose `ordinate_type` is the component's name.
+///
+/// # Raises
+///
+/// `RuntimeError` if `line` is not POI1, if two consecutive points coincide
+/// (the abscissa would repeat), if `field` does not carry one of
+/// `components`, or if `field` and `line` hang from different `Coords`.
 #[py_op(method_on = PyNodeField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]

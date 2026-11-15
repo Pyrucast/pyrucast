@@ -3,14 +3,14 @@
 Cette page est un **guide de choix**, pas une référence : elle compare les
 mailleurs entre eux et dit lequel prendre. La description de chaque opérateur,
 ses arguments et ses pièges vivent dans
-[Opérateurs → Maillage](operateurs/maillage.md).
+[Opérateurs → Maillage](algorithmes/maillage.md).
 
 La partie 3D viendra plus tard ; seul le 2D est traité ici.
 
 ## Mailler en 2D
 
 Quatre opérateurs remplissent l'intérieur d'un contour fermé. Ils prennent tous
-la même chose — un ou plusieurs [contours orientés](operateurs/maillage.md) en
+la même chose — un ou plusieurs [contours orientés](algorithmes/maillage.md) en
 `SEG2` et une taille de maille visée — et rendent tous un maillage dont le bord
 **est** le contour, nœuds compris.
 
@@ -122,7 +122,7 @@ paveur y fait mieux :
 les deux côtés y posent un nombre de nœuds **différent** sur la même portée,
 dix contre onze, et aucune disposition de lignes n'invente la rangée manquante.
 Le remède est dans le contour, pas dans le mailleur — voir
-[la règle de discrétisation](operateurs/maillage.md).
+[la règle de discrétisation](algorithmes/maillage.md).
 
 ### Un profil à sept angles rentrants
 
@@ -257,7 +257,7 @@ taille :
 | cercle R = 1 | 547, 0,081 | **610, 0,281** | 620, 0,027 |
 
 Le détail du mécanisme est sur la page
-[Mailler](operateurs/maillage.md#relaxation-du-front--relax) des opérateurs. Les
+[Mailler](algorithmes/pave-surface.md#relaxation-du-front--relax) des opérateurs. Les
 deux mailleurs en grille prennent le même réglage, qui n'y gouverne que la
 bande : la grille est posée droite quoi qu'il arrive.
 
@@ -309,4 +309,4 @@ une figure.
 À venir. En attendant, les mailleurs volumiques — `triangulate_volume`
 (tétraèdres), `pave_volume` (couche limite d'hexaèdres autour d'un cœur
 tétraédrique), `extrude` et `sweep_solid` — sont décrits dans
-[Opérateurs → Maillage](operateurs/maillage.md).
+[Opérateurs → Maillage](algorithmes/maillage.md).

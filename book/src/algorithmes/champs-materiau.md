@@ -1,4 +1,4 @@
-# Opérateurs de construction
+# Champs matériau
 
 Les **champs matériau** prêts pour l'assemblage vivent dans
 `ops::element_field`, avec les autres producteurs de champs aux points de
@@ -17,16 +17,16 @@ comme Dirichlet).
 
 | Python | Effet |
 |---|---|
-| `material_field(model, [(nom, valeur), …])` | un `ElementField` **uniforme** : une zone par sous-modèle consommateur de matériau, chaque composante demandée mise à la valeur donnée |
-| `material_field_per_sub_model(model, [[(nom, valeur), …], …])` | un `ElementField` **uniforme par zone** : une liste de paires **par** sous-modèle du modèle, dans l'ordre, une liste vide pour un sous-modèle sans matériau, comme une contrainte (matériaux différents par zone) |
-| `sub_material_field(sub_model, [(nom, valeur), …])` | une **seule** zone (`SubElementField`) pour un sous-modèle donné |
+| [`material_field(model, …)`](../reference/element_field.md#element_field-material_field) | un `ElementField` **uniforme** : une zone par sous-modèle consommateur de matériau, chaque composante demandée mise à la valeur donnée |
+| [`material_field_per_sub_model(model, …)`](../reference/element_field.md#element_field-material_field_per_sub_model) | un `ElementField` **uniforme par zone** : une liste de paires **par** sous-modèle du modèle, dans l'ordre, une liste vide pour un sous-modèle sans matériau, comme une contrainte (matériaux différents par zone) |
+| [`sub_material_field(sub_model, …)`](../reference/element_field.md#element_field-sub_material_field) | une **seule** zone (`SubElementField`) pour un sous-modèle donné |
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_physiques.py:material_field}}
+{{#include ../../../tests/python/test_doc_ops_physiques.py:element_field-material_field}}
 ```
 
 Le champ produit est ensuite passé tel quel à
-[`stiffness(model, materials)`](assemblage.md) et à
+[`stiffness(model, materials)`](../reference/matrix.md#matrix-stiffness) et à
 [`integrate_behavior`](comportement.md). Comme l'assembleur sélectionne, pour
 chaque sous-modèle, la zone dont le `SubFiniteElementSpace` correspond au sien,
 un champ couvrant seulement certains sous-espaces reste valide tant que chaque

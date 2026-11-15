@@ -160,7 +160,7 @@ l'ancien LU dense). Tous dans les tolérances numériques.
 
 Le solveur utilise un **LU creux multithreadé** (faer) et met en cache la
 **factorisation réutilisable** dans la `Matrix` (factor once, solve many). Détails
-dans [Opérateurs de solveur](../operateurs/solveur.md). Rôles des bibliothèques :
+dans [Résolution d'un système linéaire](../algorithmes/solveur.md). Rôles des bibliothèques :
 
 ```text
 nalgebra            nalgebra-sparse                faer

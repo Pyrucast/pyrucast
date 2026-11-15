@@ -166,10 +166,10 @@ def _champ_par_elements(mesh, composante, valeur):
 _, mesh, n = _triangle()
 temperature = _champ_nodal(n, ["T"], 20.0)
 stresses = _champ_par_elements(mesh, "sigma_xx", 1.0)
-# ANCHOR: vtk
+# ANCHOR: export-export_vtk
 import pyrucast
 
-# Géométrie seule.
+# Geometry alone.
 pyrucast.export.export_vtk(mesh, "maillage.vtk")
 
 # Geometry + field at the nodes (POINT_DATA).
@@ -178,7 +178,7 @@ pyrucast.export.export_vtk(mesh, "solution.vtk", field=temperature)
 # Geometry + field at the Gauss points (CELL_DATA): one value per cell = the
 # intra-element mean of the cell's Gauss points.
 pyrucast.export.export_vtk(mesh, "contraintes.vtk", field=stresses)
-# ANCHOR_END: vtk
+# ANCHOR_END: export-export_vtk
 
 # ── VTK binaire et séries temporelles ──────────────────────────────────────
 

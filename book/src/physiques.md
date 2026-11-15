@@ -53,7 +53,7 @@ Ce que les accesseurs d'un sous-modèle répondent :
 
 Seul un domaine avec comportement se prête aux opérateurs de comportement de
 `pyrucast.element_field` : `strain`, `integrate_behavior`, et la tangente
-`pyrucast.matrix.tangent` (voir [Comportement](operateurs/comportement.md)).
+`pyrucast.matrix.tangent` (voir [Comportement](algorithmes/comportement.md)).
 
 ## Les variables
 

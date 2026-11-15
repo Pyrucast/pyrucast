@@ -1,50 +1,42 @@
-# Opérateurs de solveur
+# Résolution d'un système linéaire
 
-Le module `ops::solver` résout le système linéaire `A · x = b` issu de
-l'assemblage. Le back-end est un **LU creux parallèle** (faer), confiné à
-`ops::solver` : il consomme le CSC assemblé par `nalgebra-sparse`. Chaque crate
-garde son rôle — `nalgebra` (primitives), `nalgebra-sparse`
-(assemblage/stockage/serde), `faer` (factorise & résout). Voir
+{{#pyalgo solver.solve}}
+
+`solve` résout le système linéaire `A · x = b` issu de l'assemblage. Le calcul
+est un **LU creux parallèle** (faer), confiné à `ops::solver` : il lit la
+matrice assemblée par `nalgebra-sparse`. Chaque bibliothèque garde son rôle —
+`nalgebra` (primitives), `nalgebra-sparse` (assemblage, stockage, sauvegarde),
+`faer` (factorise et résout). Voir
 [Parallélisme](../developper/parallelisme.md).
 
-## `solve(matrix, rhs, …)` → `NodeField`
+Une résolution :
 
-Un seul point d'entrée. Résout `A x = b` où `A` est la [`Matrice`](../matrix.md)
-assemblée et `b` le `NodeField` de chargement. L'opération :
+1. obtient la **factorisation** de `A` (gardée sur la matrice, voir plus bas) ;
+2. lit le second membre à chacune des **lignes** de la matrice (une valeur
+   absente vaut 0) ;
+3. effectue la descente-remontée pour ce second membre ;
+4. range la solution dans un champ aux nœuds posé sur les **colonnes** de la
+   matrice (déplacements, températures, multiplicateurs…).
 
-1. obtient la **factorisation** de `A` (cache de la matrice, cf. ci-dessous) ;
-2. lit le `NodeField` de chargement à chacune des **lignes** de la matrice (les
-   entrées absentes valent `0.0` par défaut) ;
-3. effectue la descente/remontée pour ce second membre ;
-4. emballe la solution dans un `NodeField` indexé sur les **colonnes** de la
-   matrice (les primales : déplacements, températures, multiplicateurs…).
+## Les supports de la solution
 
-La solution a **une zone par support colonne des blocs** de la matrice, chaque
-zone vivant sur le handle POI1 **du bloc lui-même** (aucun support n'est
-reconstruit — ces supports sont créés une fois à la construction des
-sous-modèles et réutilisés d'assemblage en assemblage). Elle est donc
-`same_support` avec tout champ posé sur ces supports, et deux résolutions
-successives partagent les mêmes supports : leur arithmétique (`a - b`, …)
-s'aligne zone à zone. Sur un modèle contraint, une zone porte les
+La solution a **une zone par support de colonnes des blocs** de la matrice, et
+chaque zone est posée sur le support du bloc lui-même : aucun support n'est
+reconstruit. Ces supports sont créés une fois, à la construction des
+sous-modèles, et réutilisés d'un assemblage à l'autre. Deux résolutions
+successives partagent donc les mêmes supports, et leur arithmétique (`a - b`,
+…) s'aligne zone à zone. Sur un modèle contraint, une zone porte les
 multiplicateurs `lambda`, que les relations aient été gardées ou éliminées.
 
-Pour poser un **autre** champ sur ces mêmes supports (p. ex. projeter les
-forces externes avant de calculer un résidu `f_ext − K·u`), la matrice expose
-ses supports en maillages : `k.row_mesh()` (côté dual, où vivent le second
-membre et `mul_field`) et `k.col_mesh()` (côté primal, où vit la solution) —
-handles partagés, dédupliqués. `restrict(&f_ext, &k.row_mesh()?)` s'aligne
-alors zone à zone avec `K·u` ; pour un résidu **strict** (toute composante
-soustraite, absente lue à `0` — et non passée brute par l'union),
-`restrict_like(&f_ext, &f_int)` reprojette aussi sur les composantes.
+En Rust, la matrice donne ces supports en maillages : `k.row_mesh()` (les
+lignes, où vivent le second membre et le produit `K·u`) et `k.col_mesh()` (les
+colonnes, où vit la solution). `restrict(&f_ext, &k.row_mesh()?)` s'aligne
+alors zone à zone avec `K·u` ; pour un résidu `f_ext − K·u` où chaque
+composante est soustraite (une composante absente valant 0),
+`restrict_like(&f_ext, &f_int)` ramène aussi `f_ext` sur les composantes de
+`f_int`.
 
-Une matrice singulière (p. ex. conditions aux limites oubliées) produit un pivot
-nul ⇒ solution non finie ⇒ erreur explicite.
-
-```python
-{{#include ../../../tests/python/test_doc_ops_physiques.py:solve}}
-```
-
-### La matrice se suffit
+## La matrice se suffit
 
 `solve` ne prend **pas** de modèle : tout ce qu'il lui faut est dans la matrice.
 
@@ -59,18 +51,6 @@ Le sens voyage avec le bloc : une somme de matrices (`K + K_σ + M`) garde les
 blocs de ses opérandes, et l'archive les écrit. Rien ne peut donc contredire la
 matrice, et une matrice de contact ne peut pas être résolue comme si ses
 relations étaient des égalités.
-
-### Options
-
-| option | défaut | rôle |
-|---|---|---|
-| `relations` | `"lagrange"` | comment les relations sont imposées : multiplicateurs, ou élimination (`"eliminate"`) |
-| `method` | `"lu"` | factorisation directe ; `"cholesky"` exige un système symétrique défini positif |
-| `active_set` | `"schur"` | stratégie de l'ensemble actif, lue seulement si la matrice porte des inégalités |
-| `max_iter` | `100` | borne de la boucle de statut |
-| `tol` | `1e-10` | tolérance de signe sur `λ` et sur le jeu |
-| `cache` | `True` | réutiliser ce qui est rangé sur la matrice |
-| `verbosity` | `"silent"` | ce que la résolution raconte (`"brief"`, `"detailed"`) |
 
 ## Les voies de la résolution
 
@@ -429,7 +409,7 @@ coup — en octets, le seuil valant `None` quand rien ne déborde.
 l'unité qui se lit le mieux.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_physiques.py:spill_stats}}
+{{#include ../../../tests/python/test_doc_ops_physiques.py:pyrucast-spill_stats}}
 ```
 
 Le journal, lui, ressemble à ceci :

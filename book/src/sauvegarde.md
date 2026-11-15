@@ -84,7 +84,7 @@ Le format binaire est identique sous Linux et Windows : entiers petit-boutistes 
 
 ## Ce n'est pas un format d'échange
 
-Un fichier `.pyr` est le format de **session** de pyrucast : il sert à reprendre un calcul, pas à le publier. Pour donner des résultats à un autre outil, [`export_vtk`](operateurs/champs.md) existe pour ça, et ParaView le lit nativement.
+Un fichier `.pyr` est le format de **session** de pyrucast : il sert à reprendre un calcul, pas à le publier. Pour donner des résultats à un autre outil, [`export_vtk`](algorithmes/champs.md) existe pour ça, et ParaView le lit nativement.
 
 La distinction n'est pas de la pudeur. Un format d'échange comme HDF5 apporte l'interopérabilité, la lecture partielle et la compression — mais **aucune notion d'identité d'objet ni de référence partagée**. La garantie du haut de cette page devrait y être reconstruite à l'identique, par-dessus. À l'inverse, un format de session n'a pas à être lisible par des tiers, et gagne à pouvoir casser tant que la bibliothèque n'est pas figée. Confondre les deux les abîme tous les deux.
 

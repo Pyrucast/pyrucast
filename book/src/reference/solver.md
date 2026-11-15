@@ -1,0 +1,3 @@
+# pyrucast.solver
+
+{{#pymodule solver}}

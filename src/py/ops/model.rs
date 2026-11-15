@@ -13,26 +13,35 @@ use crate::py::node_field::PyNodeField;
 use pyo3::prelude::*;
 use pyrucast_macros::py_op;
 
-/// `model.interface_transfer(side_a, side_b, target, variables, tol=1e-9)` —
-/// the exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
-/// that do **not** share their nodes, coupling into the model `target`.
+/// Exchange `j·n = h(c₁ − c₂)` across an interface whose two sides share no node.
 ///
-/// `variables` lists the exchanged unknowns of `target`, each coupling into
-/// the dual row `target` pairs it with: `["c_H2"]` on a `fick` model for a
-/// coating, `["T"]` on a `heat_conduction` for a contact resistance, the
-/// displacements on an `elasticity` for a bonded joint of finite stiffness.
-/// Neither the dual row nor the nature is an argument: both are read from
-/// `target`, and a variable `target` does not declare — or variables of two
-/// natures — raise. `h_<variable>` is supplied at assembly time.
+/// This is what lets the field **jump** across the interface: with a shared node
+/// it could not. The jump is `q/h` for a flux density `q`. The coefficient
+/// `h_<variable>` is supplied at assembly time.
 ///
-/// `side_a` and `side_b` are the two facing **boundary** FE spaces, which
-/// must be conforming — same element type, same cell count, and local node
-/// `k` of a cell facing local node `k` of its counterpart, within `tol`, a
-/// **distance** in the length unit of the mesh. A non-matching interface
-/// raises rather than being projected.
+/// # Parameters
 ///
-/// This is what lets the field **jump** across the interface: with a shared
-/// node it could not. The jump is `q/h` for a flux density `q`.
+/// - `side_a`, `side_b`: the two facing **boundary** FE spaces. They must be
+///   conforming — same element type, same cell count, and local node `k` of a
+///   cell facing local node `k` of its counterpart, within `tol`. A non-matching
+///   interface raises rather than being projected.
+/// - `target`: the model it couples into; the dual row of each variable and the
+///   nature are read from it.
+/// - `variables`: the exchanged unknowns of `target`, each coupling into the
+///   dual row `target` pairs it with: `["c_H2"]` on a `fick` model for a
+///   coating, `["T"]` on a `heat_conduction` for a contact resistance, the
+///   displacements on an `elasticity` for a bonded joint of finite stiffness.
+/// - `tol`: the matching tolerance, a **distance** in the length unit of the
+///   mesh.
+///
+/// # Returns
+///
+/// A `Model` coupling the two sides.
+///
+/// # Raises
+///
+/// `RuntimeError` if the two sides do not match, for a variable `target` does
+/// not declare, or for variables of two natures.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (side_a, side_b, target, variables, tol = crate::models::interface_transfer::DEFAULT_TOL))]
@@ -48,27 +57,36 @@ pub fn interface_transfer(
     Ok(PyModel { inner })
 }
 
-/// `model.dirichlet(imposed_mesh, target, variable, sense="=")` — Dirichlet
-/// constraint (a single sub-model) holding `variable` on the nodes of
-/// `imposed_mesh`, via Lagrange multipliers.
+/// Hold `variable` at imposed values on the nodes of `imposed_mesh`.
 ///
-/// `imposed_mesh` is the POI1 mesh of constrained nodes, one relation per
-/// node. `target` is the model being constrained: `variable` must be one of
-/// its primals, and its dual row is read from it — the `T → q` map is the
-/// target's business, not something to retype. Each relation gets a multiplier
-/// node of its own, minted beside its constrained node (`Model.multiplier_mesh()`
-/// gives them back); its names are those of every constraint relation, `lambda`
-/// and `imposed`. The imposed value `u_d` is written in the load field at the
-/// multiplier node's `imposed` component — `Model.constraint_rhs` does it from
-/// the constrained node.
-///
-/// **One variable, and one only** — compose for a clamp:
+/// A Dirichlet constraint, a single sub-model, through Lagrange multipliers. Each
+/// relation, one per node, gets a multiplier node of its own, minted beside its
+/// constrained node (`Model.multiplier_mesh()` gives them back), with the names
+/// of every constraint relation, `lambda` and `imposed`. The imposed value `u_d`
+/// is written in the load field at the multiplier node's `imposed` component —
+/// `Model.constraint_rhs` does it from the constrained node. One variable, and
+/// one only — compose for a clamp:
 /// `dirichlet(nodes, m, "u_x") | dirichlet(nodes, m, "u_y")`.
 ///
-/// `sense` (`"="`, the default, `">="` or `"<="`) turns the constraint
-/// unilateral (`u ≥ u_d` / `u ≤ u_d`): the matrix carries the sense, and
-/// `solve` runs its active-set loop. See the model chapter of the book for the
-/// full semantics.
+/// # Parameters
+///
+/// - `imposed_mesh`: the POI1 mesh of the constrained nodes.
+/// - `target`: the model being constrained; the dual row of `variable` is read
+///   from it.
+/// - `variable`: the unknown of `target` to hold, one of its primals.
+/// - `sense`: `"="` (the default), `">="` or `"<="`. The last two make the
+///   constraint unilateral (`u ≥ u_d`, `u ≤ u_d`): the matrix carries the sense,
+///   and `pyrucast.solver.solve` runs its active-set loop.
+///
+/// # Returns
+///
+/// A `Model` of one constraint sub-model.
+///
+/// # Raises
+///
+/// - `ValueError` for an unknown `sense`.
+/// - `RuntimeError` if `imposed_mesh` is not POI1, or if `variable` is not a
+///   primal of `target`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (imposed_mesh, target, variable, sense = RelationSense::Equality))]
@@ -82,20 +100,34 @@ pub fn dirichlet(
     Ok(PyModel { inner })
 }
 
-/// `model.mpc(terms, target, sense="=")` — multi-point constraint (a single
-/// sub-model) imposing, per relation, `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange
-/// multipliers.
+/// Impose a linear relation `Σₖ aₖ·u(nodeₖ, varₖ) = g` between nodes, per relation.
 ///
-/// `terms` is a list of `(mesh, variable, coefficient)` tuples: each `mesh` is
-/// a POI1 mesh (one node per relation), paired element-for-element with the
-/// others (relation `r` = cell `r` of every mesh); each `variable` is a primal
-/// of `target`, the model being constrained — the union of two models to tie
-/// two bodies — whose dual row is read from it. Each relation gets a
-/// multiplier node of its own, minted beside the node of the first term; `g`
-/// is written in the load field at its `imposed` component (default `0`).
-/// `sense` (`"="`, the default, `">="` or `"<="`) turns the relations
-/// unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`): the matrix carries the sense, and
-/// `solve` runs its active-set loop. See the constraints chapter of the book.
+/// A multi-point constraint, a single sub-model, through Lagrange multipliers.
+/// Each relation gets a multiplier node of its own, minted beside the node of the
+/// first term; `g` is written in the load field at its `imposed` component
+/// (default `0`).
+///
+/// # Parameters
+///
+/// - `terms`: a list of `(mesh, variable, coefficient)` tuples. Each `mesh` is a
+///   POI1 mesh, one node per relation, paired cell for cell with the others
+///   (relation `r` = cell `r` of every mesh); each `variable` is a primal of
+///   `target`.
+/// - `target`: the model being constrained — the union of two models to tie two
+///   bodies —; the dual rows are read from it.
+/// - `sense`: `"="` (the default), `">="` or `"<="`. The last two make the
+///   relations unilateral (`Σ aₖ·uₖ ≥ g`, `≤ g`): the matrix carries the sense,
+///   and `pyrucast.solver.solve` runs its active-set loop.
+///
+/// # Returns
+///
+/// A `Model` of one constraint sub-model.
+///
+/// # Raises
+///
+/// - `ValueError` for an unknown `sense`.
+/// - `RuntimeError` if the meshes of `terms` do not hold the same number of
+///   nodes, or if a variable is not a primal of `target`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (terms, target, sense = RelationSense::Equality))]
@@ -117,20 +149,32 @@ pub fn mpc(
     Ok(PyModel { inner })
 }
 
-/// `model.embedded(immersed, host, target, variables, tol=1e-6)` — embedded
-/// (immersed) constraint (a single sub-model) tying each node of `immersed` to
-/// the interpolation of `host` at that node, via Lagrange multipliers.
+/// Tie each node of `immersed` to the interpolation of `host` at that node.
 ///
-/// `immersed` and `host` are meshes sharing one Coords (e.g. a bar embedded in
-/// a volume). `target` is the model being constrained; `variables` lists the
-/// primals of `target` to tie (e.g. `["u_x", "u_y", "u_z"]`), each dual row
-/// read from it. The coupling weights are the host shape functions at each
-/// immersed node, computed once at build by locating the node in the host (an
-/// immersed node outside the host is an error); `tol` is the location
-/// tolerance, a gap in the host's **reference** element, without dimension.
-/// Each relation — one per immersed node and variable — gets a multiplier node
-/// of its own; the right-hand side defaults to `0` (a rigid tie). See the
-/// constraints chapter of the book.
+/// An embedded constraint, a single sub-model, through Lagrange multipliers — a
+/// bar embedded in a volume, for instance. The coupling weights are the host
+/// shape functions at each immersed node, computed once at build by locating the
+/// node in the host. Each relation — one per immersed node and variable — gets a
+/// multiplier node of its own; the right-hand side defaults to `0`, a rigid tie.
+///
+/// # Parameters
+///
+/// - `immersed`: the immersed nodes' mesh, on the same `Coords` as `host`.
+/// - `host`: the mesh they are immersed in.
+/// - `target`: the model being constrained; the dual rows are read from it.
+/// - `variables`: the primals of `target` to tie, `["u_x", "u_y", "u_z"]` for
+///   instance.
+/// - `tol`: the location tolerance, a gap in the host's **reference** element,
+///   without dimension.
+///
+/// # Returns
+///
+/// A `Model` of one constraint sub-model.
+///
+/// # Raises
+///
+/// `RuntimeError` if an immersed node lies outside the host, or if a variable is
+/// not a primal of `target`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (immersed, host, target, variables, tol = crate::models::embedded::DEFAULT_TOL))]
@@ -145,23 +189,34 @@ pub fn embedded(
     Ok(PyModel { inner })
 }
 
-/// `model.contact(slave, master, target, variables)` — node-to-surface contact
-/// (a single sub-model): prevent the nodes of `slave` from penetrating the
-/// oriented `master` surface mesh, one **unilateral** relation (`≥`) per slave
-/// node.
+/// Node-to-surface contact: keep the nodes of `slave` out of the `master` surface.
 ///
-/// Each slave node is paired at build with its closest master facet
-/// (projection weights, facet normal, initial signed gap); the pairing is
-/// then fixed (linearised, frictionless contact). The master surface must
-/// be consistently oriented with its normal pointing toward the slave
-/// body. `target` is the model being constrained; `variables` lists its
-/// displacement primals, one per space dimension in ambient order (e.g.
-/// `["u_x", "u_y"]`), each dual row read from it. Each relation gets a
-/// multiplier node of its own, minted beside its slave node.
+/// One **unilateral** relation (`≥`) per slave node, a single sub-model. Each
+/// slave node is paired at build with its closest master facet (projection
+/// weights, facet normal, initial signed gap); the pairing is then fixed
+/// (linearized, frictionless contact) until `pyrucast.model.update_contact`
+/// pairs it again. Each relation gets a multiplier node of its own, minted
+/// beside its slave node. The initial-gap right-hand side `-g0` is a load the
+/// contact carries: `pyrucast.node_field.external_forces` returns it with the
+/// other loads of the model. Solve with `pyrucast.solver.solve`, which runs its
+/// active-set loop.
 ///
-/// Solve with `solve`. The initial-gap right-hand side `-g0` is a load the
-/// contact carries: `node_field.external_forces` returns it with the other
-/// loads of the model. See the contact chapter of the book.
+/// # Parameters
+///
+/// - `slave`: the nodes that must not penetrate.
+/// - `master`: the surface mesh, consistently oriented, its normal pointing
+///   toward the slave body.
+/// - `target`: the model being constrained; the dual rows are read from it.
+/// - `variables`: the displacement primals of `target`, one per spatial axis in
+///   ambient order (`["u_x", "u_y"]`).
+///
+/// # Returns
+///
+/// A `Model` of one constraint sub-model.
+///
+/// # Raises
+///
+/// `RuntimeError` if a variable is not a primal of `target`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (slave, master, target, variables))]
@@ -175,23 +230,31 @@ pub fn contact(
     Ok(PyModel { inner })
 }
 
-/// `model.update_contact(model, displacement)` — the model with its contacts
-/// **updated** to the positions `X + u`: `X` the active configuration, `u` read
-/// in `displacement` on each contact's variables (`u_x`, `u_y`, `u_z`; a node
-/// or a component it lacks reads zero). Every other sub-model is shared as it
-/// is; a model without contact comes back unchanged.
+/// The model with its contacts paired again on the positions `X + u`.
 ///
-/// Each slave node is paired again with its closest master facet on `X + u`,
-/// and its relation becomes the gap linearised there, written in total
-/// displacement from `X`: the right-hand side the contact carries is `-g~`,
-/// the gap of the new pairing measured on `X`. The multiplier nodes are kept,
-/// so the unknowns `lambda` and the rows `imposed` stay the same; at `u = 0`,
-/// the contact as it was built. A master facet collapsed by the displacement
-/// is not detected here.
+/// Each slave node is paired again with its closest master facet on `X + u`, and
+/// its relation becomes the gap linearized there, written in total displacement
+/// from `X`: the right-hand side the contact carries is `-g~`, the gap of the new
+/// pairing measured on `X`. The multiplier nodes are kept, so the unknowns
+/// `lambda` and the rows `imposed` stay the same; at `u = 0`, the contact as it
+/// was built. What large displacements call for: the step-by-step loop updates
+/// its contacts each time it rebuilds its operator.
 ///
-/// What large displacements call for: the step-by-step loop updates its
-/// contacts each time it rebuilds its operator. See the contact chapter of the
-/// book.
+/// # Parameters
+///
+/// - `model`: the model whose contacts to update. Every other sub-model is
+///   shared as it is; a model without contact comes back unchanged.
+/// - `displacement`: `u`, read on each contact's variables (`u_x`, `u_y`,
+///   `u_z`); a node or a component it lacks reads zero. `X` is the active
+///   configuration.
+///
+/// # Returns
+///
+/// A new `Model`.
+///
+/// # Notes
+///
+/// A master facet collapsed by the displacement is not detected.
 #[py_op(method_on = PyModel)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]

@@ -1,7 +1,10 @@
-"""Source of the examples of `book/src/operateurs/assemblage.md`.
+"""Source of the examples of the assemblers.
 
-Every section of the page pulls its block from here through `{{#include …:anchor}}`: the page can no longer show a call that has ceased to exist.
-Voir `book/src/developper/documentation-et-tests.md`.
+An anchor named `module-function` (`matrix-stiffness`, `model-flux`) is the
+example the generated reference shows under that function. The other anchors
+are pulled by `book/src/matrix.md` through `{{#include …:anchor}}`. Either
+way, a page can no longer show a call that has ceased to exist.
+See `book/src/developper/documentation-et-tests.md`.
 
 The setup lives **outside** the anchors — the chapter's reader does not need
 to see a mesh built again at every operator.
@@ -52,11 +55,11 @@ def _modele_mecanique():
 # ── stiffness ──────────────────────────────────────────────
 
 model, _, _, _ = _modele_thermique()
-# ANCHOR: stiffness
+# ANCHOR: matrix-stiffness
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 K = pyrucast.matrix.stiffness(model, materials)
 print(K)  # Matrix: n row(s) × n col(s), …
-# ANCHOR_END: stiffness
+# ANCHOR_END: matrix-stiffness
 assert K.n_rows == K.n_cols
 assert K.n_rows > 0
 
@@ -66,12 +69,12 @@ assert K.n_rows > 0
 # ── mass ───────────────────────────────────────────────────
 
 model, _, _, _ = _modele_mecanique()
-# ANCHOR: mass
+# ANCHOR: matrix-mass
 materials = pyrucast.element_field.material_field(
     model, [("E", 210.0), ("nu", 0.3), ("rho", 7800.0)]
 )
 M = pyrucast.matrix.mass(model, materials)
-# ANCHOR_END: mass
+# ANCHOR_END: matrix-mass
 assert M.n_rows == M.n_cols
 
 # ── lump ───────────────────────────────────────────────────
@@ -80,10 +83,10 @@ model, _, _, _ = _modele_mecanique()
 materials = pyrucast.element_field.material_field(
     model, [("E", 210.0), ("nu", 0.3), ("rho", 7800.0)]
 )
-# ANCHOR: lump
+# ANCHOR: matrix-lump
 M = pyrucast.matrix.mass(model, materials)
-M_lumped = pyrucast.matrix.lump(M)  # diagonale
-# ANCHOR_END: lump
+M_lumped = pyrucast.matrix.lump(M)  # diagonal
+# ANCHOR_END: matrix-lump
 assert M_lumped.n_rows == M.n_rows
 
 # ── Composition de matrices ─────────────────────────────────────────────────
@@ -101,22 +104,6 @@ k.add_sub(bloc_supplementaire)
 k.assemble()
 # ANCHOR_END: assemble
 assert k.n_rows == k_ref.n_rows
-
-# ── somme de matrices ──────────────────────────────────────
-
-model, _, multiplier, _ = _modele_thermique()
-materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
-k = pyrucast.matrix.stiffness(model, materials)
-m = pyrucast.matrix.stiffness(model, materials)
-dt = 0.1
-# Loading: the imposed temperature, carried by the multiplier node.
-rhs = pyrucast.NodeField(multiplier, ["imposed"])
-rhs[0].set_value(multiplier.node(0, 0, 0), "imposed", 1.0)
-# ANCHOR: somme
-sys = m / dt + k  # assemblée : se résout telle quelle
-u = pyrucast.solver.solve(sys, rhs)
-# ANCHOR_END: somme
-assert u.node_count > 0
 
 # ── somme sur deux configurations ──────────────────────────
 
@@ -155,9 +142,9 @@ stress = pyrucast.ElementField(fes, ["sigma_xx", "sigma_yy", "sigma_xy"])
 stress[0].set_uniform("sigma_xx", 3.0)
 stress[0].set_uniform("sigma_yy", 0.0)
 stress[0].set_uniform("sigma_xy", 0.0)
-# ANCHOR: geometric
+# ANCHOR: matrix-geometric
 Kg = pyrucast.matrix.geometric(model, materials, stress)
-# ANCHOR_END: geometric
+# ANCHOR_END: matrix-geometric
 assert Kg.n_rows == Kg.n_cols
 
 # ── Tangente cohérente ──────────────────────────────────────────────────────
@@ -176,13 +163,12 @@ u = pyrucast.NodeField(u_mesh, ["u_x", "u_y"])
 for noeud, x in zip(noeuds, [0.0, 1.0, 1.0, 0.0]):
     u[0].set_value(noeud, "u_x", 1e-5 * x)
     u[0].set_value(noeud, "u_y", 0.0)
-# ANCHOR: tangent
+# ANCHOR: matrix-tangent
 strain = pyrucast.element_field.deformation(u, fes)
-repos = pyrucast.element_field.initial_state(
-    model, materials
-)  # premier pas : l'état de repos
-Kt = pyrucast.matrix.tangent(model, materials, strain, repos)
-# ANCHOR_END: tangent
+# First step: the state at A is the state at rest.
+rest = pyrucast.element_field.initial_state(model, materials)
+Kt = pyrucast.matrix.tangent(model, materials, strain, rest)
+# ANCHOR_END: matrix-tangent
 assert Kt.n_rows == Kt.n_cols
 
 # ── Chargement réparti ──────────────────────────────────────────────────────
@@ -199,7 +185,7 @@ Q = 2.0
 # Another loading, carried by a distinct node: the union sets them side by side.
 ailleurs = c.add_node([2.0])
 other_loads = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes([ailleurs]), ["q"])
-# ANCHOR: flux
+# ANCHOR: model-flux
 # Uniform flux Q on the left edge (a SEG2 mesh), poured into the dual row
 # "q" of the loaded model — it is the one that owns that row and gives its
 # kind to the load. The load is a sub-model: its density lives in the
@@ -209,5 +195,5 @@ charge = pyrucast.model.flux(edge_fes, conduction, "q")
 densite = pyrucast.element_field.material_field(charge, [("phi_q", Q)])
 load = pyrucast.node_field.external_forces(charge, densite)
 rhs = load | other_loads
-# ANCHOR_END: flux
+# ANCHOR_END: model-flux
 assert rhs.node_count > 0

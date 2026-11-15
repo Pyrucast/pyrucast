@@ -755,7 +755,7 @@ crate::physics_operator! {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn creep_norton(fespace, kinematics: Kinematics) = crate::ops::model::plasticity, PlasticLaw::CreepNorton;
-    python: "`model.creep_norton(fespace, kinematics)` — Norton-Odqvist secondary creep,\n`ṗ = (q/K)^n`. Material `E`, `nu`, `K`, `n`.\n\nThere is **no yield threshold**: any stress creeps, however slowly. Like\nevery rate-dependent law it needs the time increment —\n`integrate_behavior(..., dt=...)` — and raises without one, because\nintegrating a creep law as if it were instantaneous would give a\nplausible wrong answer."
+    python: "Norton-Odqvist secondary creep, `ṗ = (q/K)^n`.\n\nMaterial `E`, `nu`, `K`, `n`. There is **no yield threshold**: any stress\ncreeps, however slowly. Like every rate-dependent law it needs the time\nincrement, `integrate_behavior(..., dt=...)`, and raises without one:\nintegrating a creep law as if it were instantaneous would give a plausible\nwrong answer."
 }
 
 crate::physics_operator! {
@@ -788,7 +788,7 @@ crate::physics_operator! {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn creep_blackburn(fespace, kinematics: Kinematics) = crate::ops::model::plasticity, PlasticLaw::CreepBlackburn;
-    python: "`model.creep_blackburn(fespace, kinematics)` — a **saturating primary** creep\nstage plus a steady secondary one, with Blackburn's `sinh` stress\ndependence (which spans decades of stress where a power law cannot).\nMaterial `E`, `nu`, `A_1`, `alpha_1`, `r_1`, `B_s`, `beta_s`.\n\nThe primary strain is tracked as its own internal variable (`p_prim`), so\nthe law integrates correctly under a varying load."
+    python: "Blackburn creep: a saturating primary stage plus a steady secondary one.\n\nBlackburn's `sinh` stress dependence spans decades of stress where a power law\ncannot. Material `E`, `nu`, `A_1`, `alpha_1`, `r_1`, `B_s`, `beta_s`. The\nprimary strain is its own internal variable (`p_prim`), so the law integrates\ncorrectly under a varying load. Rate-dependent: it needs `dt`."
 }
 
 crate::physics_operator! {
@@ -821,7 +821,7 @@ crate::physics_operator! {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn creep_lemaitre(fespace, kinematics: Kinematics) = crate::ops::model::plasticity, PlasticLaw::CreepLemaitre;
-    python: "`model.creep_lemaitre(fespace, kinematics)` — Lemaitre primary creep by\n**strain** hardening, `ṗ = (q/K)^N · p^(−M)`. Material `E`, `nu`, `K`,\n`N`, `M`.\n\nThe accumulated strain itself slows the flow, producing a decelerating\nprimary stage with no explicit time dependence — which is what makes it\nusable under a varying load, where a time-hardening form would be wrong."
+    python: "Lemaitre primary creep by strain hardening, `ṗ = (q/K)^N · p^(−M)`.\n\nMaterial `E`, `nu`, `K`, `N`, `M`. The accumulated strain itself slows the\nflow, producing a decelerating primary stage with no explicit time dependence\n— which is what makes it usable under a varying load, where a time-hardening\nform would be wrong. Rate-dependent: it needs `dt`."
 }
 
 crate::physics_operator! {
@@ -856,7 +856,7 @@ crate::physics_operator! {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn viscoplasticity_chaboche(fespace, kinematics: Kinematics) = crate::ops::model::plasticity, PlasticLaw::ViscoplasticChaboche;
-    python: "`model.viscoplasticity_chaboche(fespace, kinematics)` — a Norton flow on the\nshifted overstress `J(σ − X) − R − k`, with Armstrong-Frederick kinematic\nhardening and saturating isotropic hardening. Material `E`, `nu`, `k`,\n`K`, `n`, `C_1`, `gamma_1`, `b`, `Q`.\n\nThe back stress `X` is what makes the law usable under **cyclic**\nloading: it translates the yield surface, so reverse yielding happens\nearly — the Bauschinger effect, which no isotropic law can produce. It\ncosts seven internal variables (`X_xx…X_xy`, `R`)."
+    python: "Chaboche viscoplasticity, with kinematic and isotropic hardening.\n\nA Norton flow on the shifted overstress `J(σ − X) − R − k`, with\nArmstrong-Frederick kinematic hardening and saturating isotropic hardening.\nMaterial `E`, `nu`, `k`, `K`, `n`, `C_1`, `gamma_1`, `b`, `Q`.\n\nThe back stress `X` is what makes the law usable under **cyclic** loading: it\ntranslates the yield surface, so reverse yielding happens early — the\nBauschinger effect, which no isotropic law can produce. It costs seven\ninternal variables (`X_xx…X_xy`, `R`). Rate-dependent: it needs `dt`."
 }
 
 crate::physics_operator! {
@@ -890,7 +890,7 @@ crate::physics_operator! {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn viscoplasticity_lemaitre_chaboche(fespace, kinematics: Kinematics) = crate::ops::model::plasticity, PlasticLaw::ViscoplasticLemaitreChaboche;
-    python: "`model.viscoplasticity_lemaitre_chaboche(fespace, kinematics)` — Chaboche\nviscoplasticity coupled to Lemaitre's ductile **damage**: the flow is\ndriven by the effective stress `σ/(1−D)`, and `Ḋ = (Y/S)^s·ṗ`. Material\nas above, plus `S`, `s`, `D_c`.\n\nA damaged material flows faster, which damages it more — the coupling\nthat produces tertiary creep and, at `D_c`, rupture. Adds `damage` to the\ninternal state."
+    python: "Chaboche viscoplasticity coupled to Lemaitre's ductile damage.\n\nThe flow is driven by the effective stress `σ/(1−D)`, and `Ḋ = (Y/S)^s·ṗ`.\nMaterial as `pyrucast.model.viscoplasticity_chaboche`, plus `S`, `s`, `D_c`.\n\nA damaged material flows faster, which damages it more — the coupling that\nproduces tertiary creep and, at `D_c`, rupture. Adds `damage` to the internal\nstate. Rate-dependent: it needs `dt`."
 }
 
 /// The internal-variable names of a Chaboche-family law: the back stress

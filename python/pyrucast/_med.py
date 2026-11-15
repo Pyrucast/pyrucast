@@ -301,22 +301,41 @@ def _frames(value):
 
 
 def to_medcoupling(meshes, fields=None, *, mesh_name="mesh", gauss=True):
-    """Build a ``medcoupling.MEDFileData`` from pyrucast meshes and fields —
-    write it with ``.write(path, 2)``.
+    """Build a `medcoupling.MEDFileData` from meshes and fields.
 
-    - ``meshes`` — ``dict[str, Mesh]`` on one ``Coords``: each key becomes a
-      MED group (``"<ungrouped>"`` excepted). A cell present in several meshes
-      is written once and belongs to each group; a POI1 mesh becomes a
-      **node** group.
-    - ``fields`` — ``dict[str, NodeField | ElementField | Evolution]``: a
-      ``NodeField`` becomes ``ON_NODES`` (``0`` where it defines nothing), an
-      ``ElementField`` ``ON_GAUSS_PT`` with its rule declared in MED's
-      reference element (``gauss=False``: ``ON_CELLS``, the Gauss mean per
-      cell), on the cells its zones cover — a profile when that is not a whole
-      level; an ``Evolution`` gives one time step per tabulated value.
+    The result is written with its own method, `.write(path, 2)`.
 
-    MED's node numbering is applied in Rust; the arrays are handed over
-    without a copy and rearranged with numpy, never cell by cell in Python.
+    # Parameters
+
+    - `meshes`: a `dict[str, Mesh]` on one `Coords`. Each key becomes a MED
+      group (`"<ungrouped>"` excepted); a cell present in several meshes is
+      written once and belongs to each group; a POI1 mesh becomes a **node**
+      group.
+    - `fields`: a `dict[str, NodeField | ElementField | Evolution]`. A
+      `NodeField` becomes `ON_NODES` (`0` where it defines nothing), an
+      `ElementField` `ON_GAUSS_PT` with its rule declared in MED's reference
+      element, on the cells its zones cover — a profile when that is not a
+      whole level; an `Evolution` gives one time step per tabulated value.
+    - `mesh_name`: the name of the MED mesh.
+    - `gauss`: `True` writes an `ElementField` at its Gauss points; `False`
+      writes it `ON_CELLS`, the Gauss mean per cell.
+
+    # Returns
+
+    The `medcoupling.MEDFileData`.
+
+    # Raises
+
+    - `ImportError` if the `medcoupling` or `numpy` module is not installed.
+    - `RuntimeError` if the meshes do not all lie on one `Coords`.
+
+    # Notes
+
+    For `TRI6`, `PENTA15` and `HEX20` at the Gauss points, the reference
+    element declared follows the connectivity written: the file is right and
+    reads back in pyrucast, but medcoupling's `getLocalizationOfDiscr()`
+    refuses it. MED's node numbering is applied in Rust; the arrays are
+    rearranged with numpy, never cell by cell in Python.
     """
     mc, np = _import_medcoupling()
     fields = fields or {}

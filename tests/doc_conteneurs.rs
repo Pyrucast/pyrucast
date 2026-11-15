@@ -2,7 +2,7 @@
 //!
 //! Couvre `introduction.md`, `node.md`, `mesh.md`, `field.md`, `node-field.md`,
 //! `element-field.md`, `evolution.md`, `sauvegarde.md`, `compilation.md` et
-//! `operateurs/assemblage.md`. The pages pull these functions through
+//! `matrix.md`. The pages pull these functions through
 //! `{{#include …:anchor}}` and `cargo test` runs them. The anchor covers the
 //! **fonction entière**, signature comprise.
 //!

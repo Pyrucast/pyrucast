@@ -82,6 +82,55 @@ falls back as a singular base does today. With `"lagrange"` the base keeps the
 equality multipliers, a saddle-point: the LU stays. To measure on a release
 build before deciding.
 
+## Cholesky accepts a singular matrix without a word
+
+`solve(k, f, method="cholesky")` on a singular stiffness (boundary conditions
+forgotten) returns a field without raising, where the default LU raises
+"matrix is singular". Observed by running on 2026-11-15; the values returned
+were not examined. The docstring of `solver.solve` (`src/py/ops/solver.rs`)
+promises the error only for a matrix that is not positive definite, so it
+does not lie, but the user who asks for Cholesky loses the check LU gives.
+
+- Probable cause, not verified: a singular, positive semi-definite matrix
+  meets a pivot that rounding leaves slightly positive instead of zero, and
+  faer's `Llt` (`src/ops/solver/lu.rs`) only refuses a pivot `≤ 0`.
+- Lead: first look at how the LU detects the singular case, then check the
+  pivots of `L` against a threshold relative to the largest, and raise the
+  same "singular" error. Then write it in `# Raises` and add a test.
+
+## `to_medcoupling` copies every array it hands to medcoupling
+
+`to_medcoupling` (`python/pyrucast/_med.py`) gets its arrays from `to_arrays`
+without a copy, then copies them once more with `np.array(...)` before
+building the medcoupling objects: the node coordinates, the connectivity of
+each block (`setNodalConnectivity`) and the values of each field (`_values`).
+The comment in place gives the reason: medcoupling takes over the memory of
+the numpy arrays it is given, so they must own it, and a view on a pyrucast
+`Array` would dangle once that array is freed. On a large mesh the export
+holds every array twice for a moment.
+
+- Lead: let `to_arrays` (or a variant for this adapter) hand over arrays that
+  numpy owns outright, built in Rust and given away rather than lent, so
+  medcoupling can take them as they are. First check, in the medcoupling
+  source, under what condition it takes over a buffer and how it frees it
+  (allocator compatibility).
+- Measure the peak memory and the time on a large mesh before and after.
+
+## An unknown shell formulation raises two different exceptions
+
+`model.shell(fespace, "foo")` raises `ValueError`, while
+`element_field.shell_deformation(field, fespace, "foo")` raises
+`RuntimeError` for the same unknown name. Observed by running on 2026-11-15.
+
+- Cause: `model.shell` receives a `ShellFormulation`, converted by pyo3 like
+  every named enum, which raises `ValueError`. `shell_deformation`
+  (`src/py/ops/element_field.rs`) takes a `&str` and calls
+  `Named::parse` itself, whose `PyrucastError::Message` becomes a
+  `RuntimeError`.
+- Fix: take `formulation: ShellFormulation` in the binding, as `model.shell`
+  does, then update `# Raises` in its docstring. Look for other bindings
+  that take a `&str` and parse it themselves.
+
 ## `NodeField::with` and `with_components_per_submesh`
 
 Rust `NodeField::with(mesh, components_per_submesh)`
@@ -153,8 +202,6 @@ well, or keep it documented (`book/src/evolution.md` says so).
 Same rules as the reviewed pages: checked against the code, Python first then
 "Côté Rust", current state only.
 
-- `operateurs/assemblage.md`: heading "Règle invariante : un Model = une
-  Matrice".
 - `operateurs/comportement.md`: heading `internal_forces(model, state)`; the
   signature is `internal_forces(model, state, solution, materials)`.
 - `sauvegarde.md`: a reloaded field is read through

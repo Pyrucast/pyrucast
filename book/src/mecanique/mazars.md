@@ -96,7 +96,7 @@ prenant le maximum avec le seuil, cela revient à
 Une maille étirée à deux fois le seuil :
 
 ```python
-{{#include ../../../tests/python/test_doc_mecanique.py:mazars}}
+{{#include ../../../tests/python/test_doc_mecanique.py:model-mazars}}
 ```
 
 ## Côté Rust

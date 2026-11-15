@@ -11,7 +11,17 @@ mathjax-support = true
 smart-punctuation = true
 additional-js = ["mermaid.min.js", "mermaid-init.js"]
 
+[build]
+# The operator reference is generated from these: rebuild when they change.
+extra-watch-dirs = ["../python/pyrucast", "../tests/python"]
+
 [preprocessor]
 
 [preprocessor.mermaid]
 command = "mdbook-mermaid"
+
+# The operator reference, generated from the Python docstrings. Ahead of
+# `links`, which resolves the `{{#include}}` of the examples it emits.
+[preprocessor.pyapi]
+command = "python ../script/book_pyapi.py"
+before = ["links"]

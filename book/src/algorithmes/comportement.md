@@ -1,4 +1,4 @@
-# Opérateurs de comportement
+# Intégration du comportement
 
 Le module `ops::element_field::behavior` **intègre la loi de comportement** d'un
 [`Model`](../model.md) — le `COMP` de cast3m (« intégrer le comportement ») ;
@@ -7,9 +7,11 @@ le `BSIG` de cast3m (`∫ Bᵀ σ`).
 
 ## `initial_state(model, materials)` → `ElementField`
 
+{{#pyalgo element_field.initial_state}}
+
 L'**état de repos** du modèle : ce que porte chaque loi avant que rien ne se
 soit passé. C'est l'état de A du premier pas, à donner comme `prev` à
-`integrate_behavior` et à [`matrix.tangent`](assemblage.md).
+`integrate_behavior` et à [`matrix.tangent`](../reference/matrix.md#matrix-tangent).
 
 Il a une zone par sous-modèle portant une loi, sur son sous-espace de
 comportement, avec toutes les composantes que la loi écrit, si bien que la
@@ -23,7 +25,9 @@ contrainte, qui n'ont pas de loi, sont ignorés. La méthode
 
 ## `integrate_behavior(model, deformation, materials, prev, dt=None)` → `ElementField`
 
-Là où [`stiffness`](assemblage.md) produit la **linéarisation** du modèle (une
+{{#pyalgo element_field.integrate_behavior}}
+
+Là où [`stiffness`](../reference/matrix.md#matrix-stiffness) produit la **linéarisation** du modèle (une
 matrice), `integrate_behavior` produit la **réponse ponctuelle exacte** comme
 [champ aux points de Gauss](../element-field.md).
 
@@ -89,13 +93,13 @@ tout l'intérêt d'intégrer le comportement exactement.
 ### Boucle multi-pas (fil d'état)
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_physiques.py:pas_a_pas}}
+{{#include ../../../tests/python/test_doc_ops_physiques.py:element_field-integrate_behavior}}
 ```
 
 ## Exemple : efforts de section d'une poutre
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_physiques.py:beam_deformation}}
+{{#include ../../../tests/python/test_doc_ops_physiques.py:element_field-beam_deformation}}
 ```
 
 ## Exemple : résultantes d'une coque
@@ -104,7 +108,7 @@ Le même montage, avec la formulation en argument : ce sont ses lignes de
 flexion qui distinguent `thick` de `kirchhoff`.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_physiques.py:shell_deformation}}
+{{#include ../../../tests/python/test_doc_ops_physiques.py:element_field-shell_deformation}}
 ```
 
 Les pages [Barre](../mecanique/truss.md), [Élasticité](../mecanique/elasticite.md)
@@ -116,6 +120,8 @@ variables internes (`VAR0` → `VAR1`), voir
 
 ## `internal_forces(model, state)` → `NodeField`
 
+{{#pyalgo node_field.internal_forces}}
+
 Les **forces internes** `f = ∫ Bᵀ σ dΩ` (le `BSIG` de cast3m) sont la
 **transposée** de l'opérateur de déformation `B` : là où
 [`strain`](champs.md#le-b-du-modèle--strainmodel-solution-materials--elementfield)
@@ -125,8 +131,7 @@ nœuds. C'est la **généralisation mécanique** de [`divergence`](champs.md) (q
 est exactement `Bᵀ q` pour un transport scalaire) : une composante de sortie par
 DDL dual.
 
-`state` est le champ d'état matériau renvoyé par `integrate_behavior`. Chaque
-sous-modèle porteur d'un comportement applique **son propre** `Bᵀ` — c'est
+Chaque sous-modèle porteur d'un comportement applique **son propre** `Bᵀ` — c'est
 pourquoi l'opérateur prend un **modèle** et pas un simple espace EF : un même
 `SEG2` peut être une barre (`Bᵀ` axial, DDL déplacement) ou une poutre (`Bᵀ` à
 deux quadratures flexion + cisaillement, DDL `w, θ`), et seul le modèle tranche.
@@ -142,16 +147,18 @@ configuration de référence par la contrainte **nominale** `P = F S`, lue enti�
 [Grandes transformations](../mecanique/grandes-transformations.md).
 
 C'est le côté **intérieur** du bilan `Σ f_int = Σ f_ext`, dont l'écart est le
-résidu d'équilibre. Le miroir nodal de [`stiffness`](assemblage.md) : là où
+résidu d'équilibre. Le miroir nodal de [`stiffness`](../reference/matrix.md#matrix-stiffness) : là où
 l'assemblage demande à chaque sous-modèle ses blocs de `∂r/∂u`, celui-ci lui
 demande son terme de `r`. Un sous-modèle qui n'a pas de terme de ce côté n'en
 déclare aucun et n'apparaît pas dans le résultat.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_physiques.py:forces_internes}}
+{{#include ../../../tests/python/test_doc_ops_physiques.py:node_field-internal_forces}}
 ```
 
 ## `external_forces(model)` → `NodeField`
+
+{{#pyalgo node_field.external_forces}}
 
 L'autre côté du bilan : la **donnée** de chaque terme, à droite du signe égal.
 Une physique dont le terme n'est qu'une réponse à `u` — élasticité, conduction,

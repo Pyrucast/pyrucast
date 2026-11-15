@@ -703,32 +703,57 @@ class ElementField:
         """
     def consolidate(self) -> ElementField:
         r"""
-        Fuse the zones of an element `field` sharing the same `FiniteElementSpace`
-        support into a single zone carrying the union of their components.
+        Fuse the zones of `field` that lie on the same FE subspace into one.
         
-        The counterpart of `|`, which leaves component-disjoint zones side by side:
-        this is how per-physics material zones built on one shared fespace become a
-        single material field readable by every physics. Components carried by two
-        zones must agree value by value, else it errors. `field` itself is left
-        untouched.
+        The counterpart of `|`, which leaves zones with distinct components side by
+        side and refuses two zones carrying the same component on one subspace. This
+        is how material zones built physics by physics on one shared FE space (`k`
+        for heat, `E`, `nu`, `alpha` for mechanics) become a single material field
+        that every physics reads.
+        
+        # Parameters
+        
+        - `field`: the field to consolidate.
+        
+        # Returns
+        
+        A new `ElementField`, one zone per FE subspace carrying the union of the
+        components; `field` itself is left untouched.
+        
+        # Raises
+        
+        `RuntimeError` if two zones on one subspace carry the same component.
         """
     def cell_integral(self, target: FiniteElementSpace) -> ElementField:
         r"""
-        Integral of every component of `field` over **each cell** (Cast3M
-        `INTG 'ELEM'`), with the field's own quadrature: `Σ_g f(g)·|J|·w_g`, the
-        `2πr` included on a body of revolution. The result lives on `target`, a
-        space of the same mesh with **one point per cell** —
-        `FiniteElementSpace(mesh, quadrature="REDUCED")`, a single point at each
-        centroid. Integrating `1` gives every cell's measure. Raises when `target`
-        has several points per cell or does not cover the field's mesh.
+        Integrate every component of `field` over each cell.
+        
+        `v_e = Σ_g f(g)·|J|·w_g`, with the field's own quadrature, the `2πr`
+        included on a body of revolution. Integrating `1` gives the measure of every
+        cell; `pyrucast.node_field.sum_to_nodes` then gathers it at the nodes.
+        
+        # Parameters
+        
+        - `field`: the field to integrate, at the Gauss points.
+        - `target`: a space of the same mesh with **one point per cell** —
+          `FiniteElementSpace(mesh, quadrature="REDUCED")`, a single point at each
+          centroid.
+        
+        # Returns
+        
+        An `ElementField` on `target`, with the components of `field`.
+        
+        # Raises
+        
+        `RuntimeError` if `target` has several points per cell or does not cover the
+        mesh of `field`.
         """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> ElementField:
         r"""
         Per-component 0/1 **mask** of this field against a value band — same
-        structure as the field (Cast3M `MASQUE`): same zones, same support, same
-        components, same Gauss points, only the values are rewritten (`1.0` inside
-        the band, `0.0` outside). The result is therefore multipliable term by term
-        with the field.
+        structure as the field: same zones, same support, same components, same
+        Gauss points, only the values are rewritten (`1.0` inside the band, `0.0`
+        outside). The result is therefore multipliable term by term with the field.
         
         Its sibling `select` extracts the passing *cells* instead, and produces a
         `Mesh`.
@@ -741,47 +766,223 @@ class ElementField:
         """
     def abs(self) -> ElementField:
         r"""
-        Element-wise absolute value of a field.
+        Absolute value of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sqrt(self) -> ElementField:
         r"""
-        Element-wise square root of a field (`nan` for negatives).
+        Square root of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. A negative value gives `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def exp(self) -> ElementField:
         r"""
-        Element-wise exponential `eˣ` of a field.
+        Exponential `eˣ` of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def log(self) -> ElementField:
         r"""
-        Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
+        Natural logarithm of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. Zero gives `-inf`, a negative value `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def log10(self) -> ElementField:
         r"""
-        Element-wise base-10 logarithm of a field.
+        Base-10 logarithm of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. Zero gives `-inf`, a negative value `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def cos(self) -> ElementField:
         r"""
-        Element-wise cosine of a field (radians).
+        Cosine of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sin(self) -> ElementField:
         r"""
-        Element-wise sine of a field (radians).
+        Sine of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def tan(self) -> ElementField:
         r"""
-        Element-wise tangent of a field (radians).
+        Tangent of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sinh(self) -> ElementField:
         r"""
-        Element-wise hyperbolic sine of a field.
+        Hyperbolic sine of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def cosh(self) -> ElementField:
         r"""
-        Element-wise hyperbolic cosine of a field.
+        Hyperbolic cosine of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def tanh(self) -> ElementField:
         r"""
-        Element-wise hyperbolic tangent of a field.
+        Hyperbolic tangent of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
         r"""
@@ -816,26 +1017,54 @@ class ElementField:
         """
     def divergence(self, prefix: builtins.str) -> NodeField:
         r"""
-        Weak divergence of a per-element quantity named `prefix` — the adjoint of
-        `gradient`: `d_i = ∫ ∇N_i · A dΩ`, accumulated per node.
+        Weak divergence `d_i = ∫ ∇N_i · A dΩ` of a quantity at the Gauss points.
         
-        The **rank is read off the names**, so one operator serves both: `A_x, A_y`
-        is a vector and yields a single `div_A` component; `A_xx, A_xy, A_yy` is a
-        symmetric tensor and yields one component per axis, `div_A_x, div_A_y`. The
-        tensor case is the internal forces of a continuum when the quantity is a
-        Cauchy stress — `divergence(stress, "sigma")` is Cast3m `BSIG` — but the
-        operator knows nothing of mechanics: it needs only the geometry and the
-        names. A node shared by several subspaces receives the sum of their
+        The adjoint of `pyrucast.element_field.gradient`, accumulated per node:
+        integrated quantities, not the pointwise values of `∇·A`. The tensor case
+        is the internal forces of a continuum when the quantity is a Cauchy stress,
+        but the operator knows nothing of mechanics: it needs only the geometry and
+        the names. A node shared by several subspaces receives the sum of their
         contributions.
+        
+        # Parameters
+        
+        - `field`: the quantity, at the Gauss points.
+        - `prefix`: the name of the quantity, `A`. Its rank is read off the names
+          the field carries: `A_x, A_y` is a vector; `A_xx, A_xy, A_yy` a symmetric
+          tensor, read whole (non-symmetric) when it also carries `A_yx` — as the
+          nominal stress of large strains. On an axisymmetric space the tensor also
+          carries its hoop term `A_zz`.
+        
+        # Returns
+        
+        A `NodeField`: a single `div_A` component for a vector, one component per
+        axis for a tensor (`div_A_x`, `div_A_y`, …).
+        
+        # Raises
+        
+        `RuntimeError` if `field` carries no `prefix` of either rank, or both.
         """
     def sum_to_nodes(self) -> NodeField:
         r"""
-        A field carrying **one point per cell** gathered at the nodes by
-        **summation** (Cast3M `CHAN 'CHPO' 'SOMM'`): each node receives, per
-        component, the sum of the values of the cells it belongs to — across zones
-        too. Not a smoothing: no average, no weight. Applied to the cell measures of
-        `cell_integral`, it gives the volume each node stands for. Raises on a zone
-        with more than one point per cell (build it on a `REDUCED` space).
+        Gather a field of one point per cell at the nodes, by summation.
+        
+        Each node receives, per component, the sum of the values of the cells it
+        belongs to — across zones too. It is not a smoothing: no average, no weight.
+        Applied to the cell measures of `pyrucast.element_field.cell_integral`, it
+        gives the volume each node stands for.
+        
+        # Parameters
+        
+        - `field`: an `ElementField` with one point per cell, built on a space with
+          the `REDUCED` quadrature.
+        
+        # Returns
+        
+        A `NodeField` with the components of `field`.
+        
+        # Raises
+        
+        `RuntimeError` if a zone of `field` has more than one point per cell.
         """
 
 @typing.final
@@ -1307,61 +1536,96 @@ class Matrix:
     def __len__(self) -> builtins.int: ...
     def lump(self) -> Matrix:
         r"""
-        Lump an assembled matrix into a diagonal one by row-sum concentration
-        (Cast3M `LUMP`). Applied to a consistent mass / capacity matrix it yields the
-        diagonal (lumped) mass, conserving the total mass.
+        Lump an assembled matrix into a diagonal one, each term the sum of its row.
+        
+        Applied to a consistent mass or capacity matrix, it yields the lumped
+        (diagonal) mass, which conserves the total mass:
+        `Σ_i M_lump[i,i] = Σ_ij M[i,j]`. It is the cheap, uncoupled form explicit
+        time schemes use.
+        
+        # Parameters
+        
+        - `matrix`: an assembled, square matrix whose row `i` and column `i` carry
+          the same node.
+        
+        # Returns
+        
+        A new matrix with the rows and the columns of `matrix`, in the same order,
+        and one diagonal block per row support: it is solved, multiplied by a field
+        and saved like `matrix`, which is left untouched.
+        
+        # Raises
+        
+        `RuntimeError` if `matrix` has no assembled values (an output of `|` or
+        `filter`, before `assemble()`).
         """
     def solve(self, rhs: NodeField, method: builtins.str = 'lu', relations: builtins.str = 'lagrange', active_set: builtins.str = 'schur', cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10, verbosity: builtins.str = 'silent') -> NodeField:
         r"""
         Solve the linear system `A·x = b` for `x` (sparse direct, faer).
         
-        `matrix` is the assembled system `A`; `rhs` is the right-hand side `b` as a
-        `NodeField`, read at every row DOF of the matrix (a DOF no zone defines
-        reads zero). The imposed value of a constraint relation lives at its
-        multiplier node, component `imposed`. The matrix carries everything the
-        solve needs: its relation rows, their coefficients and their sense (`=`,
-        `>=`, `<=`), declared by the constraints that built them — no model is
-        passed alongside.
+        The matrix carries everything the solve needs: its relation rows, their
+        coefficients and their sense (`=`, `>=`, `<=`), declared by the constraints
+        that built them — no model is passed alongside. As soon as it carries an
+        inequality, an active-set loop decides which relations are saturated: an
+        active relation holds as an equation (its `lambda` is `<= 0` for `>=`, `>= 0`
+        for `<=`), an inactive one reports `lambda = 0`.
         
-        `relations` says how the constraint relations are enforced:
+        # Parameters
         
-        - `"lagrange"` (default) — by their multipliers, the saddle-point solved as
-          assembled; the multipliers come back in the solution at their nodes.
-          As soon as the matrix carries an inequality, the **active-set** loop
-          decides which relations are saturated: an active relation holds as an
-          equation (its `lambda` is `<= 0` for `>=`, `>= 0` for `<=`), an inactive
-          one reports `lambda = 0`;
-        - `"eliminate"` — each equality relation eliminates one unknown, and the
-          smaller system left, without multipliers, is solved; each relation's
-          multiplier is recovered from its eliminated unknown's row and returned at
-          its node — the very solution the multipliers give. An inequality is not
-          eliminated: it stays on the reduced system, resolved by the same
-          active-set loop, its `lambda` returned at its multiplier node. Scope:
-          non-chained, disjoint slaves.
+        - `matrix`: the assembled system `A`.
+        - `rhs`: the right-hand side `b`, read at every row of `matrix`; a row no zone
+          of `rhs` defines reads zero. The imposed value of a constraint relation
+          lives at its multiplier node, component `imposed`.
+        - `method`: the factorization. `"lu"` works on any square matrix;
+          `"cholesky"` asks that the system be symmetric **and** positive definite —
+          never a system with multipliers, usually one reduced by elimination. The
+          active-set loop factorizes by LU whatever is asked.
+        - `relations`: how the constraint relations are enforced. `"lagrange"`: by
+          their multipliers, the system solved as assembled. `"eliminate"`: each
+          equality relation eliminates one unknown and the smaller system left,
+          without multipliers, is solved; an inequality is not eliminated, it stays
+          on the reduced system and is resolved by the same active-set loop. Scope of
+          `"eliminate"`: each relation eliminates an unknown of its own, which
+          appears in no other equality relation.
+        - `active_set`: how each status of the active-set loop is factorized, read
+          only when `matrix` carries an inequality. `"schur"` factorizes the
+          inequality-free base once and updates it per status, falling back on
+          `"refactorize"` when that base is singular; `"refactorize"` factorizes the
+          full system at each status change.
+        - `cache`: reuse what a previous solve stored on `matrix` — the
+          factorization, the condensation, the active-set state and its last status —
+          and store what this one computes. The store is cleared when the matrix
+          changes. A matrix keeps one of them at a time, and a factorization serves
+          the `method` it was made with only: another `relations` or `method`
+          computes afresh and replaces it. `False` neither reads nor fills it.
+        - `max_iter`: the bound of the active-set loop, in status changes.
+        - `tol`: the sign tolerance of the active-set loop, on the multiplier and on
+          the gap.
+        - `verbosity`: how much the solve reports on stdout: `"silent"`, `"brief"` or
+          `"detailed"`.
         
-        `method` selects the factorization: `"lu"` (default) works on any square
-        matrix, `"cholesky"` asks that the system be symmetric **and** positive
-        definite — never a Lagrange saddle-point, usually a system reduced by
-        elimination. The active-set loop factorizes by LU whatever is asked.
+        # Returns
         
-        `active_set` selects how each status of the active-set loop is factorized:
-        `"schur"` (default) factorizes the inequality-free base once and updates it
-        per status (falling back when that base is singular), `"refactorize"`
-        refactorizes the full system at each status change. `max_iter` (default
-        `100`) bounds the status loop; `tol` (default `1e-10`) is its sign
-        tolerance on the multiplier and on the gap.
+        The solution, read at the columns of `matrix`: one zone per column support of
+        its blocks, each on the support of the block itself. Two solves of the same
+        model therefore share their supports, and their fields combine zone by zone.
+        The multiplier of every relation comes back at its node, component `lambda`,
+        whether the relations were kept or eliminated.
         
-        `cache` (default `True`) reuses what is stored transparently on the matrix —
-        the factorization, the condensation, the active-set state and its last
-        status — cleared automatically when the matrix changes. A matrix keeps one
-        of them at a time, and a factorization serves the `method` it was made
-        with only: another `relations` or `method` computes afresh and replaces it. `verbosity` says
-        how much the solve reports on stdout: `"silent"` (default), `"brief"` or
-        `"detailed"`.
+        # Raises
         
-        A `Ctrl+C` is honoured at the solver's phase boundaries and at each status
-        iteration; a factorization itself is a single library call and is not
-        interrupted mid-way.
+        `RuntimeError` if `matrix` has no assembled values, if the LU meets a singular
+        matrix (boundary conditions forgotten, typically), if `"cholesky"` meets a
+        matrix that is not positive definite, if a relation is out of the scope of
+        `"eliminate"`, or if the active-set loop has not converged after `max_iter`
+        status changes. `ValueError` for an unknown `method`, `relations`,
+        `active_set` or `verbosity`. `KeyboardInterrupt` on `Ctrl+C`.
+        
+        # Notes
+        
+        `Ctrl+C` is honoured between the phases of the solve and at each status
+        change; a factorization is a single library call and is not interrupted
+        mid-way.
         """
 
 @typing.final
@@ -1500,654 +1764,1186 @@ class Mesh:
     def __len__(self) -> builtins.int: ...
     def to_poi1(self) -> Mesh:
         r"""
-        Convert a mesh to POI1, submesh by submesh.
+        The distinct nodes of `mesh`, as a POI1 mesh, submesh by submesh.
         
-        Returns a new mesh with the same number of submeshes; each output
-        submesh is a POI1 submesh holding the de-duplicated nodes of the
-        corresponding input submesh, in order of first appearance.
+        # Parameters
+        
+        - `mesh`: the mesh whose nodes to take.
+        
+        # Returns
+        
+        A POI1 `Mesh` with one zone per submesh of `mesh`, holding its distinct nodes
+        in the order they first appear.
         """
     def barycenter(self) -> Mesh:
         r"""
-        Build a POI1 mesh of per-element centroids (centres of gravity), submesh
-        by submesh.
+        A POI1 mesh of one fresh node at the centroid of each cell of `mesh`.
         
-        Returns a new mesh with the same number of submeshes; each output submesh
-        is a POI1 submesh with one **fresh** node per element of the corresponding
-        input submesh, placed at the element's centroid. A POI1 input is therefore
-        copied to colocated fresh nodes — handy to mint Lagrange-multiplier support
-        nodes from a set of constrained points.
+        A POI1 input is therefore copied to fresh nodes at the same places — handy to
+        create the support nodes of Lagrange multipliers from a set of constrained
+        points.
+        
+        # Parameters
+        
+        - `mesh`: the mesh whose cells to take.
+        
+        # Returns
+        
+        A POI1 `Mesh` with one zone per submesh of `mesh`, one fresh node per cell.
         """
     def elements_on(self, points: Mesh, strict: builtins.bool = True) -> Mesh:
         r"""
-        Keep the elements of `mesh` resting on the nodes of `points`
-        (Cast3m `ELEM … APPUYE`).
+        Keep the cells of `mesh` resting on the nodes of `points`.
         
-        Only the node set referenced by `points` matters (typically a POI1
-        points mesh). With `strict=True` a cell is kept when **all** its nodes
-        are in the set (`APPUYE STRICTEMENT`); with `strict=False` when **at
-        least one** is (`APPUYE`). The result mirrors `mesh` submesh by submesh
-        (same types, possibly-empty zones). Both meshes must share the same
-        `Coords`.
+        Only the set of nodes `points` references matters, typically a POI1 mesh.
+        
+        # Parameters
+        
+        - `mesh`: the cells to filter.
+        - `points`: the nodes, on the same `Coords` as `mesh`.
+        - `strict`: `True` keeps a cell when **all** its nodes are in the set;
+          `False` when **at least one** is.
+        
+        # Returns
+        
+        A `Mesh` mirroring `mesh` submesh by submesh — same types, possibly empty
+        zones.
+        
+        # Raises
+        
+        `RuntimeError` if `mesh` and `points` are not attached to the same `Coords`.
         """
     def points_in_sphere(self, center: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Nodes **inside** the sphere of centre `center` and radius `radius`.
+        Nodes inside the sphere of centre `center` and radius `radius`.
         
         Keeps the nodes at a distance `≤ radius + tol` from `center`. In 2-D the
-        sphere is a disc — `center` just has to match the mesh dimension.
+        sphere is a disc.
+        
+        # Parameters
+        
+        - `mesh`: the mesh whose nodes to test.
+        - `center`: the centre, with the dimension of the mesh.
+        - `radius`: the radius, `≥ 0`.
+        - `tol`: the precision of the test, a distance to the surface of the region;
+          `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+        
+        # Returns
+        
+        A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+        nodes kept.
+        
+        # Raises
+        
+        `RuntimeError` if a point does not have the dimension of the mesh, if `radius` is negative, or if `tol` is negative.
         """
     def points_on_sphere(self, center: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Nodes **on** the sphere of centre `center` and radius `radius`
-        (Cast3m `POIN … SPHE`).
+        Nodes on the sphere of centre `center` and radius `radius`.
         
         Keeps the nodes whose distance to `center` is within `tol` of `radius`, on
         either side. In 2-D this selects a circle.
+        
+        # Parameters
+        
+        - `mesh`: the mesh whose nodes to test.
+        - `center`: the centre, with the dimension of the mesh.
+        - `radius`: the radius, `≥ 0`.
+        - `tol`: the precision of the test, a distance to the surface of the region;
+          `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+        
+        # Returns
+        
+        A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+        nodes kept.
+        
+        # Raises
+        
+        `RuntimeError` if a point does not have the dimension of the mesh, if `radius` is negative, or if `tol` is negative.
         """
     def points_on_plane(self, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Nodes **on** the plane through `origin` with normal `normal`
-        (Cast3m `POIN … PLAN`).
+        Nodes on the plane through `origin` with normal `normal`.
         
-        Keeps the nodes within `tol` of the plane — the usual way to grab a
-        boundary face of a box mesh. `normal` need not be normalized; in 2-D the
-        plane is a line.
+        Keeps the nodes within `tol` of the plane — the usual way to grab a boundary
+        face of a box mesh. In 2-D the plane is a line.
+        
+        # Parameters
+        
+        - `mesh`: the mesh whose nodes to test.
+        - `origin`: a point of the plane.
+        - `normal`: the normal of the plane, not necessarily of unit length.
+        - `tol`: the precision of the test, a distance to the surface of the region;
+          `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+        
+        # Returns
+        
+        A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+        nodes kept.
+        
+        # Raises
+        
+        `RuntimeError` if a point does not have the dimension of the mesh, if `normal` is the zero vector, or if `tol` is negative.
         """
     def points_below_plane(self, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Nodes **below** the plane through `origin` with normal `normal` — the
-        half-space the normal points away from, plane included.
+        Nodes below the plane through `origin`: the side `normal` points away from.
         
-        There is no `points_above_plane`: flip the normal and this is the other
-        half-space.
+        The half-space includes the plane. There is no `points_above_plane`: flip the
+        normal and this is the other half-space.
+        
+        # Parameters
+        
+        - `mesh`: the mesh whose nodes to test.
+        - `origin`: a point of the plane.
+        - `normal`: the normal of the plane, pointing to the side left out.
+        - `tol`: the precision of the test, a distance to the surface of the region;
+          `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+        
+        # Returns
+        
+        A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+        nodes kept.
+        
+        # Raises
+        
+        `RuntimeError` if a point does not have the dimension of the mesh, if `normal` is the zero vector, or if `tol` is negative.
         """
     def points_on_line(self, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Nodes **on** the infinite line through `a` and `b`
-        (Cast3m `POIN … DROIT`).
+        Nodes on the infinite line through `a` and `b`.
         
-        Keeps the nodes at a distance `≤ tol` from the line, with no bound along
-        it — use `points_in_cylinder` with a small radius for a selection clipped
-        to the `a → b` segment.
+        Keeps the nodes at a distance `≤ tol` from the line, with no bound along it —
+        `pyrucast.mesh.points_in_cylinder` with a small radius gives a selection
+        clipped to the segment `a → b`.
+        
+        # Parameters
+        
+        - `mesh`: the mesh whose nodes to test.
+        - `a`, `b`: two distinct points of the line.
+        - `tol`: the precision of the test, a distance to the surface of the region;
+          `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+        
+        # Returns
+        
+        A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+        nodes kept.
+        
+        # Raises
+        
+        `RuntimeError` if a point does not have the dimension of the mesh, if `a` and `b` coincide, or if `tol` is negative.
         """
     def points_in_cylinder(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Nodes **inside** the finite cylinder of axis `base → top` and radius
-        `radius`.
+        Nodes inside the finite cylinder of axis `base → top` and radius `radius`.
         
-        The cylinder is capped: a node is kept when it is within `radius + tol` of
-        the axis **and** its axial coordinate falls between the two end sections.
+        The cylinder is capped: a node is kept when it is within `radius + tol` of the
+        axis **and** its axial coordinate falls between the two end sections.
+        
+        # Parameters
+        
+        - `mesh`: the mesh whose nodes to test.
+        - `base`, `top`: the centres of the two end sections, distinct.
+        - `radius`: the radius, `≥ 0`.
+        - `tol`: the precision of the test, a distance to the surface of the region;
+          `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+        
+        # Returns
+        
+        A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+        nodes kept.
+        
+        # Raises
+        
+        `RuntimeError` if a point does not have the dimension of the mesh, if `base` and `top` coincide, if `radius` is negative, or if `tol` is negative.
         """
     def points_on_cylinder(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Nodes **on** the lateral surface of the finite cylinder of axis
-        `base → top` and radius `radius` (Cast3m `POIN … CYLI`).
+        Nodes on the lateral surface of the cylinder of axis `base → top`.
         
-        The end discs are **not** part of the selection — they are flat faces, and
-        `points_on_plane` cuts those. This is how you grab the bore of a tube.
+        The end discs are **not** part of the selection — they are flat faces, which
+        `pyrucast.mesh.points_on_plane` cuts. This is how you grab the bore of a tube.
+        
+        # Parameters
+        
+        - `mesh`: the mesh whose nodes to test.
+        - `base`, `top`: the centres of the two end sections, distinct.
+        - `radius`: the radius, `≥ 0`.
+        - `tol`: the precision of the test, a distance to the surface of the region;
+          `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+        
+        # Returns
+        
+        A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+        nodes kept.
+        
+        # Raises
+        
+        `RuntimeError` if a point does not have the dimension of the mesh, if `base` and `top` coincide, if `radius` is negative, or if `tol` is negative.
         """
     def points_in_cone(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], base_radius: builtins.float, top_radius: builtins.float = 0.0, tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Nodes **inside** the cone of axis `base → top`, radius `base_radius` at
-        `base` and `top_radius` at `top`.
+        Nodes inside the truncated cone of axis `base → top`.
         
-        The shape is a truncated cone: `top_radius=0` (the default) gives a true
-        cone whose apex is `top`, `top_radius=base_radius` a cylinder. Capped like
-        `points_in_cylinder`.
+        Its radius is `base_radius` at `base` and `top_radius` at `top`: the default
+        `top_radius=0` gives a true cone whose apex is `top`, `top_radius=base_radius`
+        a cylinder. Capped like `pyrucast.mesh.points_in_cylinder`.
+        
+        # Parameters
+        
+        - `mesh`: the mesh whose nodes to test.
+        - `base`, `top`: the centres of the two end sections, distinct.
+        - `base_radius`: the radius at `base`, `≥ 0`.
+        - `top_radius`: the radius at `top`, `≥ 0`.
+        - `tol`: the precision of the test, a distance to the surface of the region;
+          `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+        
+        # Returns
+        
+        A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+        nodes kept.
+        
+        # Raises
+        
+        `RuntimeError` if a point does not have the dimension of the mesh, if `base` and `top` coincide, if a radius is negative, or if `tol` is negative.
         """
     def points_on_cone(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], base_radius: builtins.float, top_radius: builtins.float = 0.0, tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Nodes **on** the lateral surface of the cone of axis `base → top`, radius
-        `base_radius` at `base` and `top_radius` at `top` (Cast3m `POIN … CONE`).
+        Nodes on the lateral surface of the truncated cone of axis `base → top`.
         
         The distance to the slanted surface is the perpendicular one, so the band
-        stays `tol` wide however steep the cone is. As for `points_on_cylinder`,
-        the end discs are not part of the selection.
+        stays `tol` wide however steep the cone is. As for
+        `pyrucast.mesh.points_on_cylinder`, the end discs are not part of the
+        selection.
+        
+        # Parameters
+        
+        - `mesh`: the mesh whose nodes to test.
+        - `base`, `top`: the centres of the two end sections, distinct.
+        - `base_radius`: the radius at `base`, `≥ 0`.
+        - `top_radius`: the radius at `top`, `≥ 0`; `0` gives a true cone.
+        - `tol`: the precision of the test, a distance to the surface of the region;
+          `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+        
+        # Returns
+        
+        A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+        nodes kept.
+        
+        # Raises
+        
+        `RuntimeError` if a point does not have the dimension of the mesh, if `base` and `top` coincide, if a radius is negative, or if `tol` is negative.
         """
     def points_in_torus(self, center: typing.Sequence[builtins.float], axis: typing.Sequence[builtins.float], major_radius: builtins.float, minor_radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Nodes **inside** the torus of centre `center`, axis `axis`, major radius
-        `major_radius` and minor radius `minor_radius`.
+        Nodes inside the torus of centre `center` and axis `axis`, in 3-D.
         
         The section is circular: the torus is the set of points at a distance
         `≤ minor_radius` from the circle of radius `major_radius` drawn around
-        `center` in the plane normal to `axis`. **3-D only.**
+        `center` in the plane normal to `axis`.
+        
+        # Parameters
+        
+        - `mesh`: the mesh whose nodes to test.
+        - `center`: the centre of the torus.
+        - `axis`: the axis of revolution.
+        - `major_radius`: the radius of the circle the tube follows.
+        - `minor_radius`: the radius of the tube.
+        - `tol`: the precision of the test, a distance to the surface of the region;
+          `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+        
+        # Returns
+        
+        A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+        nodes kept.
+        
+        # Raises
+        
+        `RuntimeError` if the mesh is not 3-D, if a point does not have the dimension of the mesh, if `axis` is the zero vector, if a radius is negative, or if `tol` is negative.
         """
     def points_on_torus(self, center: typing.Sequence[builtins.float], axis: typing.Sequence[builtins.float], major_radius: builtins.float, minor_radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Nodes **on** the torus of centre `center`, axis `axis`, major radius
-        `major_radius` and minor radius `minor_radius`.
+        Nodes on the torus of centre `center` and axis `axis`, in 3-D.
         
-        Keeps the nodes within `tol` of the tube's surface. The torus being
-        closed, there is no cap to worry about here. **3-D only.**
+        Keeps the nodes within `tol` of the tube's surface. The torus being closed,
+        there is no cap to worry about.
+        
+        # Parameters
+        
+        - `mesh`: the mesh whose nodes to test.
+        - `center`: the centre of the torus.
+        - `axis`: the axis of revolution.
+        - `major_radius`: the radius of the circle the tube follows.
+        - `minor_radius`: the radius of the tube.
+        - `tol`: the precision of the test, a distance to the surface of the region;
+          `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+        
+        # Returns
+        
+        A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+        nodes kept.
+        
+        # Raises
+        
+        `RuntimeError` if the mesh is not 3-D, if a point does not have the dimension of the mesh, if `axis` is the zero vector, if a radius is negative, or if `tol` is negative.
         """
     def consolidate(self) -> Mesh:
         r"""
-        Fuse submeshes of the same element type into one, dropping duplicate cells
-        (identical node sequences).
+        Fuse the submeshes of `mesh` of one element type, dropping duplicate cells.
         
-        Types appear in their first-seen order; the face colour of the first
-        submesh of each type is kept. `mesh` itself is left untouched.
+        A duplicate cell has the same node sequence as another. Types appear in the
+        order they are first seen; the face colour of the first submesh of each type is
+        kept.
         
-        Errors if `mesh` has no submesh (no `Coords` to attach to).
+        # Parameters
+        
+        - `mesh`: the mesh to consolidate, left untouched.
+        
+        # Returns
+        
+        A new `Mesh`, one submesh per element type.
+        
+        # Raises
+        
+        `RuntimeError` if `mesh` has no submesh (no `Coords` to attach to).
         """
     def border(self, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Extract the boundary of a surface mesh (TRI3/QUA4) as SEG2 loops.
+        The boundary of a surface mesh, as SEG2 loops.
         
-        An element edge used by exactly one cell is a boundary edge; the boundary
-        edges (pooled across all surface submeshes) are chained into closed loops.
-        Returns a Mesh with one SEG2 submesh per loop — a single loop for a
-        simply-connected domain, several when the domain has holes or disjoint
-        pieces. Loops keep the CCW boundary orientation (outer loop CCW, holes
-        CW), so the result can feed straight back into `triangulate_surface`.
+        An edge used by exactly one cell is a boundary edge; the boundary edges, pooled
+        across all surface submeshes, are chained into closed loops. The loops keep the
+        counterclockwise boundary orientation (outer loop counterclockwise, holes
+        clockwise), so the result feeds straight back into
+        `pyrucast.mesh.triangulate_surface`.
         
-        With `angle_deg` given, each loop is further split into open **arêtes** at
-        its corner nodes — where the boundary turns by more than `angle_deg`
-        degrees — one SEG2 submesh per arête (as `skin` splits a volume's skin into
-        flat faces). A loop with no such corner stays a single closed loop.
-        `angle_deg=None` (the default) keeps every boundary as one closed loop.
+        # Parameters
+        
+        - `mesh`: a surface mesh, TRI3, QUA4, TRI6, QUA8 or QUA9.
+        - `angle_deg`: when given, each loop is split into open **sides** at its
+          corners — where the boundary turns by more than `angle_deg` degrees —, as
+          `pyrucast.mesh.skin` splits a volume's skin into flat faces; a loop with no
+          such corner stays whole. `None` keeps every loop whole.
+        
+        # Returns
+        
+        A `Mesh` with one SEG2 submesh per loop — or per side —, on the nodes of
+        `mesh`: a single loop for a simply connected domain, several with holes or
+        disjoint pieces.
+        
+        # Raises
+        
+        `RuntimeError` if `mesh` is not a surface mesh.
         """
     def skin(self, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Extract the boundary surface (skin) of a volume mesh, split by flat face.
+        The boundary surface of a volume mesh, one submesh per flat face.
         
-        Works on every volume type — TET4, PYRA5, PENTA6, HEX8 and their quadratic
-        counterparts TET10, PENTA15, HEX20, HEX27.
+        A facet of a volume cell used by exactly one cell lies on the boundary;
+        sharing is decided on the facet's corners, so cells of different degrees still
+        cancel. The boundary facets, pooled across all volume submeshes, are grouped
+        into flat faces by flooding across shared edges as long as neighbouring facets
+        stay coplanar. **A facet keeps its own type**: a HEX8 yields QUA4, a TET10
+        TRI6, a HEX27 QUA9 — so the skin of a quadratic mesh is quadratic.
         
-        A volume-element facet (TET4 → 4 triangles, HEX8 → 6 quads, PENTA6 → 2
-        triangles + 3 quads, PYRA5 → 1 quad + 4 triangles) used by exactly one cell
-        lies on the boundary; sharing is decided on the facet's corners, so cells of
-        different degrees still cancel. The boundary facets (pooled across all
-        volume submeshes) are grouped into flat faces by flooding across shared
-        edges as long as neighbouring facets stay coplanar (their normals differ by
-        at most `angle_deg`, default 1°).
+        # Parameters
         
-        **A facet is emitted in its own type**: a HEX8 yields QUA4, a TET10 yields
-        TRI6, a HEX27 yields QUA9 — so the skin of a quadratic mesh is quadratic
-        and keeps its mid-side nodes. Returns a Mesh with one submesh per flat face
-        and per facet type — e.g. 6 submeshes for a cube, 5 for a prism (2 caps +
-        3 sides), 5 for a pyramid (base + 4 triangles). Facets keep their outward
-        orientation; the original nodes are reused.
+        - `mesh`: a volume mesh — TET4, PYRA5, PENTA6, HEX8 or their quadratic
+          counterparts TET10, PENTA15, HEX20, HEX27.
+        - `angle_deg`: the largest angle, in degrees, between the normals of two
+          neighbouring facets of one flat face; `None` takes 1°.
+        
+        # Returns
+        
+        A `Mesh` with one submesh per flat face and per facet type — 6 for a cube, 5
+        for a prism, 5 for a pyramid. The facets keep their outward orientation and
+        the nodes of `mesh`.
+        
+        # Raises
+        
+        `RuntimeError` if `mesh` is not a 3-D volume mesh.
         """
     def orient(self) -> Mesh:
         r"""
-        Harmonise the orientation of a mesh's cells (cast3m `ORIE`).
+        Make the orientation of the cells of `mesh` consistent.
         
-        Cells sharing a facet are made consistently oriented — all normals of a
-        surface point the same way, all segments of a curve run head-to-tail, all
-        volume cells share one handedness — in any dimension (SEG/TRI/QUA/TET/
-        PENTA/HEX, linear or quadratic). Each connected component is seeded by its
-        lowest-indexed cell, which keeps its orientation; the absolute sense is not
-        chosen (use `invert` to flip a whole mesh, e.g. a hole's boundary). Returns
-        a fresh mesh sharing the input's nodes.
+        Cells sharing a facet are oriented alike — all normals of a surface point the
+        same way, all segments of a curve run head to tail, all volume cells share one
+        handedness —, in any dimension, linear or quadratic. Each connected component
+        is seeded by its lowest-indexed cell, which keeps its orientation; the
+        absolute sense is not chosen (`pyrucast.mesh.invert` flips a whole mesh, a
+        hole's boundary for instance).
+        
+        # Parameters
+        
+        - `mesh`: the mesh to orient.
+        
+        # Returns
+        
+        A fresh `Mesh` sharing the nodes of `mesh`, which is left untouched.
         """
     def chain(self) -> Mesh:
         r"""
-        Re-order the cells of a line mesh into a continuous chain.
+        Reorder the cells of a line mesh into a continuous chain.
         
-        The complement of `orient`: where `orient` fixes the *direction* of the
-        cells, `chain` fixes their *order* — each SEG2/SEG3 submesh is sorted so
-        that consecutive cells share a node (and flipped where needed), so reading
-        the connectivity walks the curve from one end to the other. Each submesh is
-        chained on its own and must be one continuous chain, open or closed: a node
-        carrying three segments (branching) or disjoint pieces raise an error.
-        Returns a fresh mesh sharing the input's nodes.
+        The complement of `pyrucast.mesh.orient`: where `orient` fixes the
+        *direction* of the cells, `chain` fixes their *order* — each submesh is sorted
+        so that consecutive cells share a node, flipped where needed, so reading the
+        connectivity walks the curve from one end to the other.
+        
+        # Parameters
+        
+        - `mesh`: a line mesh, SEG2 or SEG3; each submesh is chained on its own and
+          must be one continuous chain, open or closed.
+        
+        # Returns
+        
+        A fresh `Mesh` sharing the nodes of `mesh`.
+        
+        # Raises
+        
+        `RuntimeError` if `mesh` is not a line mesh, for a node carrying three
+        segments (a branch), or for disjoint pieces in one submesh.
         """
     def invert(self) -> Mesh:
         r"""
-        Reverse the orientation of every cell of a mesh (cast3m `INVE`).
+        Reverse the orientation of every cell of `mesh`.
         
-        Flips each cell's winding/traversal/handedness (POI1 cells are unchanged),
-        in any dimension. Combined with `orient`, this selects the inside/outside
-        sense of a closed contour or surface. Returns a fresh mesh sharing the
-        input's nodes.
+        Flips each cell's winding, direction or handedness, in any dimension (POI1
+        cells are unchanged). With `pyrucast.mesh.orient`, it chooses the inside or
+        outside sense of a closed contour or surface.
+        
+        # Parameters
+        
+        - `mesh`: the mesh to flip.
+        
+        # Returns
+        
+        A fresh `Mesh` sharing the nodes of `mesh`, which is left untouched.
         """
     def sweep(self, mesh_b: Mesh, n_layers: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
-        Sweep two line meshes into a mesh of `element_type`, building `n_layers`
-        layers between `mesh_a` and `mesh_b`.
+        Fill the space between two line meshes with `n_layers` layers of cells.
         
-        Between **SEG2** lines, `element_type` is `"QUA4"` (default), `"TRI3"`,
-        `"QUA8"`, `"QUA9"` or `"TRI6"` — a `QUA4` mesh is always built first, then
-        converted (diagonal split for the triangles, promoted to quadratic for
-        `QUA8`/`QUA9`/`TRI6`). Between **SEG3** lines, it is `"QUA8"` (default) or
-        `"QUA9"`, built directly: the lines' own mid-nodes are re-used, so a strip
-        between two arcs follows them exactly.
+        Two **closed loops** (each ending on its own first node) give a closed ring,
+        the seam shared between its first and last cells.
         
-        Two **closed loops** (each ending on its own first node) give a closed
-        ring, the seam shared between its first and last cells; a closed loop
-        swept onto an open line is an error.
+        # Parameters
+        
+        - `mesh_a`, `mesh_b`: the two lines, with the same number of cells.
+        - `n_layers`: the number of layers, `≥ 1`.
+        - `element_type`: between SEG2 lines, `"QUA4"` (the default), `"TRI3"`,
+          `"QUA8"`, `"QUA9"` or `"TRI6"` — a QUA4 mesh is built first, then converted
+          (diagonal split for the triangles, promoted to quadratic for the others).
+          Between SEG3 lines, `"QUA8"` (the default) or `"QUA9"`, built directly: the
+          lines' own mid-nodes are reused, so a strip between two arcs follows them
+          exactly.
+        
+        # Returns
+        
+        A new `Mesh` sharing the nodes of `mesh_a` and `mesh_b`.
+        
+        # Raises
+        
+        `RuntimeError` if the two lines differ in cell count, for an unsupported
+        `element_type`, or for a closed loop swept onto an open line.
         """
     def transfinite(self, side2: Mesh, side3: Mesh, side4: Mesh, element_type: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
-        Build a structured surface bounded by four `SEG2` sides, by transfinite
-        interpolation (the Coons-patch generalization of `sweep` from two lines
-        to four). `side1`/`side3` and `side2`/`side4` are the two pairs of
-        **opposite** sides and must each have the same element count; the four
-        sides must form a closed contour, `side1 → side2 → side3 → side4 →
-        side1`, each sharing its end node with the next side's start node.
+        A structured surface bounded by four SEG2 sides, by transfinite interpolation.
         
-        `element_type` is `"QUA4"` (default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
-        `"TRI6"` — same conversion path as `sweep`.
+        The generalization of `pyrucast.mesh.sweep` from two lines to four (a Coons
+        patch).
+        
+        # Parameters
+        
+        - `side1`, `side2`, `side3`, `side4`: the four sides, forming a closed
+          contour `side1 → side2 → side3 → side4 → side1`, each ending on the start
+          node of the next. `side1`/`side3` and `side2`/`side4` are the two pairs of
+          **opposite** sides, each with the same cell count.
+        - `element_type`: `"QUA4"` (the default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
+          `"TRI6"` — the same conversion path as `pyrucast.mesh.sweep`.
+        
+        # Returns
+        
+        A new `Mesh` on the nodes of the sides plus fresh interior nodes.
+        
+        # Raises
+        
+        `RuntimeError` if the sides do not close, if opposite sides differ in cell
+        count, or for an unsupported `element_type`.
         """
     def extrude(self, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh:
         r"""
-        Extrude `mesh` by `n_layers` layers along `direction` (the total
-        displacement vector). SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
+        Extrude `mesh` along `direction` in `n_layers` layers.
+        
+        SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
+        
+        # Parameters
+        
+        - `mesh`: the mesh to extrude.
+        - `direction`: the total displacement vector, with the dimension of the mesh.
+        - `n_layers`: the number of layers, `≥ 1`.
+        
+        # Returns
+        
+        A new `Mesh`, sharing the nodes of `mesh` on its first layer.
+        
+        # Raises
+        
+        `RuntimeError` if `n_layers` is zero, or if the produced cells need 3-D
+        coordinates the mesh does not have (a surface extruded in 2-D).
         """
     def revolve(self, angle: builtins.float, n_layers: builtins.int, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:
         r"""
-        Revolve `mesh` by `n_layers` layers over a total `angle` (radians) — the
-        rotational companion of `extrude`. SEG2 → QUA4, TRI3 → PENTA6,
-        QUA4 → HEX8, and in quadratic SEG3 → QUA8, TRI6 → PENTA15, QUA8 → HEX20
-        (the mid-node of an edge along the sweep sits on the arc).
+        Revolve `mesh` about an axis in `n_layers` layers, over a total `angle`.
         
-        In 2-D the revolution is about the point `center` (counterclockwise for a
-        positive `angle`) and `axis` is ignored; in 3-D it is about the line
-        through `center` directed by `axis` (right-handed), which is then
-        required. `|angle|` may not exceed a full turn, and a full turn closes the
-        ring: the last node layer is the first one again, so there is no seam.
+        The rotational companion of `pyrucast.mesh.extrude`: SEG2 → QUA4,
+        TRI3 → PENTA6, QUA4 → HEX8, and in quadratic SEG3 → QUA8, TRI6 → PENTA15,
+        QUA8 → HEX20 (the mid-node of an edge along the sweep sits on the arc). A full
+        turn closes the ring: the last layer of nodes is the first one again.
         
-        A **line** may touch the axis by one corner: that node stays put, and the
-        cells touching it close into triangles — SEG2 → TRI3, SEG3 → TRI6 —, a
-        submesh of their own after the quadrangles. A line from the axis to the rim
-        thus revolves into a disc sector: a fan of triangles at the centre, a ring
-        of quadrangles around it, one node at the centre. A surface cell may not
-        touch the axis (its prism would collapse), nor may a line lie along it.
+        A **line** may touch the axis by one corner: that node stays put, and the cells
+        touching it close into triangles — SEG2 → TRI3, SEG3 → TRI6 —, a submesh of
+        their own after the quadrangles. A line from the axis to the rim thus revolves
+        into a disc sector: a fan of triangles at the centre, a ring of quadrangles
+        around it, one node at the centre.
+        
+        # Parameters
+        
+        - `mesh`: the mesh to revolve. A surface cell may not touch the axis (its prism
+          would collapse), nor may a line lie along it.
+        - `angle`: the total angle, in radians, `|angle| ≤ 2π`; counterclockwise for a
+          positive angle in 2-D.
+        - `n_layers`: the number of layers, `≥ 1`.
+        - `center`: in 2-D, the centre of the revolution; in 3-D, a point of its axis.
+        - `axis`: in 3-D, the direction of the axis (right-handed), required; ignored
+          in 2-D.
+        
+        # Returns
+        
+        A new `Mesh`, sharing the nodes of `mesh` on its first layer.
+        
+        # Raises
+        
+        `RuntimeError` if `|angle|` exceeds a full turn, if the produced cells need 3-D
+        coordinates the mesh does not have, or for a cell the axis would collapse.
         """
     def sweep_solid(self, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
         r"""
-        Sweep two matching surface meshes into a solid mesh, building `n_layers`
-        layers between `mesh_a` and `mesh_b`. The 3-D companion of `sweep`:
-        TRI3 faces → PENTA6 prisms, QUA4 faces → HEX8 hexahedra.
+        Fill the space between two matching surface meshes with `n_layers` layers.
+        
+        The 3-D companion of `pyrucast.mesh.sweep`: TRI3 faces → PENTA6 prisms,
+        QUA4 faces → HEX8 hexahedra.
+        
+        # Parameters
+        
+        - `mesh_a`, `mesh_b`: the two surface meshes, TRI3 or QUA4, cell `i` of one
+          facing cell `i` of the other.
+        - `n_layers`: the number of layers, `≥ 1`.
+        
+        # Returns
+        
+        A new `Mesh` sharing the nodes of `mesh_a` and `mesh_b`.
+        
+        # Raises
+        
+        `RuntimeError` for a surface type other than TRI3 or QUA4, or if the two
+        meshes do not match.
         """
     def to_quadratic(self) -> Mesh:
         r"""
-        Build the **quadratic** (Lagrange-2) copy of a linear mesh: each element
-        type is bumped to its quadratic sibling (TRI3→TRI6, HEX8→HEX20, …). Corner
-        nodes are re-used; one mid-edge node is created per edge (at the midpoint)
-        and shared between the cells that use it. The original mesh is untouched.
+        The quadratic (Lagrange-2) copy of the linear mesh `mesh`.
+        
+        Each element type is bumped to its quadratic sibling (TRI3 → TRI6,
+        HEX8 → HEX20, …). Corner nodes are reused; one node is created at the middle of
+        each edge and shared between the cells that use it.
+        
+        # Parameters
+        
+        - `mesh`: the linear mesh, left untouched.
+        
+        # Returns
+        
+        A new `Mesh`.
         """
     def convert(self, element_type: builtins.str) -> Mesh:
         r"""
-        Convert every submesh of `mesh` to `element_type`, splitting each cell into
-        cells of the target type **without moving or adding any node** on the
-        existing corners. Supported: identity (already the target type — copied
-        verbatim), `"QUA4"` → `"TRI3"` (two triangles per quad, `(0,2)` diagonal),
-        and `"HEX8"` → `"TET4"` (six tetrahedra per hex, a conforming space-filling
-        split). Corner nodes are re-used; face colours are preserved. To promote to
-        a quadratic type (`TRI3`→`TRI6`, …), which creates mid-edge nodes, use
-        `to_quadratic`. The original mesh is untouched.
+        Split every cell of `mesh` into cells of `element_type`, adding no node.
+        
+        Supported: the identity (already the target type, copied as it is),
+        `"QUA4"` → `"TRI3"` (two triangles per quadrangle, diagonal `(0, 2)`), and
+        `"HEX8"` → `"TET4"` (six tetrahedra per hexahedron, a conforming split).
+        Corner nodes are reused; face colours are kept. To promote to a quadratic type,
+        which creates mid-edge nodes, use `pyrucast.mesh.to_quadratic`.
+        
+        # Parameters
+        
+        - `mesh`: the mesh to convert, left untouched.
+        - `element_type`: the target element type.
+        
+        # Returns
+        
+        A new `Mesh` on the nodes of `mesh`.
+        
+        # Raises
+        
+        - `ValueError` for an unknown `element_type`.
+        - `RuntimeError` for a conversion that is not supported.
         """
     def copy(self, new_nodes: builtins.bool = True) -> Mesh:
         r"""
-        Copy `mesh`, either onto **fresh nodes** placed at the same spots
-        (`new_nodes=True`, the default) or onto the very same nodes
-        (`new_nodes=False`, only the connectivity is copied).
+        Copy `mesh`, onto fresh nodes or onto the same nodes.
         
-        Both modes keep the submesh order, element types, cell order and face
-        colours, and hand back a mesh that is **never sealed** — editable even
-        when the source has been frozen by a finite-element space, a field or a
-        matrix. The original is left untouched.
+        Both modes keep the submesh order, element types, cell order and face colours,
+        and hand back a mesh that is **never sealed** — editable even when the source
+        has been frozen by a finite-element space, a field or a matrix.
         
-        With `new_nodes=True` each distinct node of `mesh` yields one fresh node at
-        the same position (nodes shared between cells stay shared), so the two
-        meshes no longer move together. With `new_nodes=False` they share their
-        nodes: moving one moves it in both.
+        # Parameters
+        
+        - `mesh`: the mesh to copy, left untouched.
+        - `new_nodes`: `True` gives each distinct node of `mesh` one fresh node at the
+          same position (nodes shared between cells stay shared), so the two meshes
+          no longer move together. `False` copies the connectivity only: the two
+          meshes share their nodes, and moving one moves it in both.
+        
+        # Returns
+        
+        A new `Mesh`.
         """
     def project_on_sphere(self, center: typing.Sequence[builtins.float], radius: builtins.float) -> Mesh:
         r"""
-        Project `mesh` **radially** onto the sphere of centre `center` and radius
-        `radius`: every node — corners and mid-nodes alike — is pushed along the
-        ray from `center` through it, to the distance `radius`.
+        Push every node of `mesh` radially onto the sphere of centre `center`.
         
-        Returns a fresh copy with its own nodes (one per distinct node, so a
-        closed loop stays closed), in the same zones, types and colours; `mesh`
-        is left untouched. In a plane through `center` the sphere is a circle: a
-        contour of that plane lands on it node for node, each at its own angle —
-        the inner loop of a ring, ready for `sweep`. A node on `center` has no
-        direction and is an error.
+        Corners and mid-nodes alike move along the ray from `center` through them, to
+        the distance `radius`. In a plane through `center` the sphere is a circle: a
+        contour of that plane lands on it node for node, each at its own angle — the
+        inner loop of a ring, ready for `pyrucast.mesh.sweep`.
+        
+        # Parameters
+        
+        - `mesh`: the mesh to project, left untouched.
+        - `center`: the centre of the sphere.
+        - `radius`: the radius of the sphere.
+        
+        # Returns
+        
+        A fresh `Mesh` with its own nodes, one per distinct node (a closed loop stays
+        closed), in the same zones, types and colours.
+        
+        # Raises
+        
+        `RuntimeError` for a node on `center`, which has no direction.
         """
     def translate(self, vector: typing.Sequence[builtins.float]) -> Mesh:
         r"""
-        Translate `mesh` by `vector`, returning a fresh copy with its own nodes
-        (the original is left untouched). `vector` matches the mesh dimension.
+        Translate `mesh` by `vector`.
+        
+        # Parameters
+        
+        - `mesh`: the mesh to move.
+        - `vector`: the translation, with the dimension of the mesh.
+        
+        # Returns
+        
+        A fresh `Mesh` with its own nodes; `mesh` is left untouched.
+        
+        # Raises
+        
+        `RuntimeError` if `vector` does not have the dimension of the mesh.
         """
     def rotate(self, angle: builtins.float, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:
         r"""
-        Rotate `mesh` by `angle` (radians) about `center`, returning a fresh copy
-        with its own nodes (the original is left untouched).
+        Rotate `mesh` by `angle` about `center`.
         
-        In 2-D, `center` is a point and `axis` is ignored. In 3-D, the rotation is
-        about the line through `center` directed by `axis` (right-handed); `axis`
-        is required.
+        # Parameters
+        
+        - `mesh`: the mesh to turn.
+        - `angle`: the angle, in radians.
+        - `center`: in 2-D, the centre of the rotation; in 3-D, a point of its axis.
+        - `axis`: in 3-D, the direction of the axis (right-handed), required; ignored
+          in 2-D.
+        
+        # Returns
+        
+        A fresh `Mesh` with its own nodes; `mesh` is left untouched.
+        
+        # Raises
+        
+        `RuntimeError` if a point does not have the dimension of the mesh, or in 3-D
+        without `axis`.
         """
     def symmetry_point(self, center: typing.Sequence[builtins.float]) -> Mesh:
         r"""
-        Mirror `mesh` through the point `center` (Cast3m `SYME … POINT`),
-        returning a fresh copy with its own nodes (the original is left
-        untouched). Every node goes to `2·center − x`.
+        Mirror `mesh` through the point `center`: every node goes to `2·center − x`.
         
-        In 3-D the map reverses orientation, so the cells are re-ordered (as
-        `invert` does) to keep the copy's Jacobians positive; in 2-D it is a plain
-        half-turn and nothing is re-ordered.
+        In 3-D the map reverses orientation, so the cells are reordered (as
+        `pyrucast.mesh.invert` does) to keep the copy's Jacobians positive; in 2-D it
+        is a plain half-turn and nothing is reordered.
+        
+        # Parameters
+        
+        - `mesh`: the mesh to mirror.
+        - `center`: the centre of symmetry, with the dimension of the mesh.
+        
+        # Returns
+        
+        A fresh `Mesh` with its own nodes; `mesh` is left untouched.
         """
     def symmetry_line(self, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float]) -> Mesh:
         r"""
-        Mirror `mesh` through the infinite line running through `a` and `b`
-        (Cast3m `SYME … DROIT`), returning a fresh copy with its own nodes (the
-        original is left untouched).
+        Mirror `mesh` through the infinite line through `a` and `b`.
         
         In 2-D this is the mirror image about the line; in 3-D it is the half-turn
-        about it (for the mirror image through a plane, use `symmetry_plane`).
-        Orientation-reversing in 2-D only, where the cells are re-ordered (as
-        `invert` does) to keep the copy's Jacobians positive.
+        about it (the mirror image through a plane is
+        `pyrucast.mesh.symmetry_plane`). It reverses orientation in 2-D only, where
+        the cells are reordered (as `pyrucast.mesh.invert` does) to keep the copy's
+        Jacobians positive.
+        
+        # Parameters
+        
+        - `mesh`: the mesh to mirror.
+        - `a`, `b`: two distinct points of the line.
+        
+        # Returns
+        
+        A fresh `Mesh` with its own nodes; `mesh` is left untouched.
+        
+        # Raises
+        
+        `RuntimeError` if `a` and `b` coincide.
         """
     def symmetry_plane(self, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float], c: typing.Sequence[builtins.float]) -> Mesh:
         r"""
-        Mirror `mesh` through the plane running through the three points `a`, `b`
-        and `c` (Cast3m `SYME … PLAN`), returning a fresh copy with its own nodes
-        (the original is left untouched). Only the plane the three points span
-        matters, not their order; they must not be aligned.
+        Mirror `mesh` through the plane through the points `a`, `b` and `c`, in 3-D.
         
-        3-D only — in 2-D the mirror about a line is `symmetry_line`. Always
-        orientation-reversing, so the cells are re-ordered (as `invert` does) to
-        keep the copy's Jacobians positive.
+        Only the plane the three points span matters, not their order. The map always
+        reverses orientation, so the cells are reordered (as `pyrucast.mesh.invert`
+        does) to keep the copy's Jacobians positive. In 2-D the mirror about a line is
+        `pyrucast.mesh.symmetry_line`.
+        
+        # Parameters
+        
+        - `mesh`: the mesh to mirror, in 3-D.
+        - `a`, `b`, `c`: three points of the plane, not aligned.
+        
+        # Returns
+        
+        A fresh `Mesh` with its own nodes; `mesh` is left untouched.
+        
+        # Raises
+        
+        `RuntimeError` if the mesh is not 3-D, or if the three points are aligned.
         """
     def triangulate_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Mesh the interior of a closed SEG2 `contour` with `element_type` cells
-        using a constrained-Delaunay + Ruppert-refinement mesher.
+        Mesh the inside of the closed SEG2 loops of `contour`, Delaunay and Ruppert.
         
-        `contour` holds **one or more** closed SEG2 loops, each oriented by the
-        caller: a **counter-clockwise** loop is a domain's outer boundary, a
-        **clockwise** loop is a hole (contained in an outer loop). Several
-        disjoint CCW loops mesh several independent domains at once. `size` sets
-        the target element edge length; `None` uses the mean boundary edge length
-        per domain. `element_type` is "TRI3" or "QUA4" (QUA4 is quad-dominant:
-        the result may also carry a few boundary triangles). The contour may be
-        2-D or a planar loop in 3-D (meshed in its best-fit plane, lifted back).
+        A constrained Delaunay triangulation refined by Ruppert's algorithm. The
+        contour may be 2-D, or a planar loop in 3-D, meshed in its best-fit plane and
+        lifted back.
+        
+        # Parameters
+        
+        - `contour`: **one or more** closed SEG2 loops, each oriented by the caller: a
+          **counterclockwise** loop is a domain's outer boundary, a **clockwise** loop
+          a hole inside an outer loop. Several disjoint counterclockwise loops mesh
+          several independent domains at once.
+        - `element_type`: `"TRI3"`, or `"QUA4"`, quadrangle-dominant: the result may
+          also carry a few triangles at the boundary.
+        - `size`: the target edge length; `None` takes the mean boundary edge length,
+          domain by domain.
+        
+        # Returns
+        
+        A new `Mesh` on the contour's nodes plus fresh interior nodes.
+        
+        # Raises
+        
+        `RuntimeError` for a loop of fewer than three segments or not closed, or for
+        an `element_type` other than TRI3 or QUA4.
         """
     def pave_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, prefer_quads: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
-        Pave the inside of a closed contour with quadrangles, in rows walking
-        inward from the boundary.
+        Pave the inside of closed loops with quadrangles, in rows walking inward.
         
-        The quadrangle-oriented companion of `triangulate_surface`, and the one to
-        reach for when the mesh is going to be computed on: paving lays QUA4 cells
-        down directly, in rows that follow the contour, instead of triangulating
-        and pairing triangles up afterwards.
+        The quadrangle companion of `pyrucast.mesh.triangulate_surface`, and the one
+        to reach for when the mesh is going to be computed on: it lays quadrangles
+        down directly, in rows that follow the contour, instead of triangulating and
+        pairing triangles up afterwards. The contour is untouchable: its nodes come
+        back at their own positions and no node is ever added on a boundary edge. A
+        contour the paver cannot work with is therefore reported rather than worked
+        around.
         
-        `contour` holds **one or more** closed SEG2 loops, oriented by the caller
-        exactly as for `triangulate_surface`: a **counter-clockwise** loop is a
-        domain's outer boundary, a **clockwise** loop is a hole. Several disjoint
-        CCW loops pave several independent domains at once. `size` sets the target
-        element edge length; `None` uses the mean boundary edge length per domain.
-        `element_type` is "QUA4", "QUA8" or "QUA9". The contour may be 2-D or a
-        planar loop in 3-D (paved in its best-fit plane, then lifted back).
+        # Parameters
         
-        The contour is untouchable: its nodes come back at their own positions and
-        no node is ever added on a boundary edge. A contour the paver cannot work
-        with is therefore reported rather than worked around — `prefer_quads=True` on a
-        loop with an odd number of segments raises, since a polygon with an odd
-        number of sides has no filling by quadrangles alone and evening the count
-        out would mean adding a boundary node; so does a contour so coarse for the
-        requested size that the front folds onto itself.
+        - `contour`: **one or more** closed SEG2 loops, oriented as for
+          `pyrucast.mesh.triangulate_surface`: a **counterclockwise** loop is a
+          domain's outer boundary, a **clockwise** loop a hole. Several disjoint
+          counterclockwise loops mesh several independent domains at once. It may be
+          2-D, or a planar loop in 3-D, meshed in its best-fit plane and lifted back.
+        - `element_type`: `"QUA4"`, `"QUA8"` or `"QUA9"`.
+        - `size`: the target edge length; `None` takes the mean boundary edge length,
+          domain by domain.
+        - `prefer_quads`: `False` lets an odd loop cost one triangle, returned in a
+          separate TRI3 submesh along with the few cells a distorted leftover polygon
+          could not make square. `True` removes the first kind, not the second, and
+          raises on a loop with an odd number of segments: a polygon with an odd
+          number of sides has no filling by quadrangles alone, and evening the count
+          would mean adding a boundary node.
+        - `relax`: what the front may do to itself between two rows. After each row
+          the fresh chain is smoothed, which keeps the front from kinking — and, being
+          a Laplacian, rounds its corners off. A front sheds nodes only at its
+          **corners**, so once they are rounded away it keeps every node it has while
+          its perimeter shrinks, and the middle comes out finer than asked: a plain
+          20 × 20 square at size 1 gives 600 cells instead of 400.
+          - `"free"` (`None`, the default): a node moves wherever the smoothing
+            points. The only mode that never lets the front kink.
+          - `"along"`: the same step, kept only **along** the front: the spacing is
+            evened out, the shape is not. The square then comes out as the 400 exact
+            squares anyone would draw.
+          - `"none"`: the front stays exactly where the row put it.
         
-        With `prefer_quads=False` (the default) an odd loop simply costs one triangle,
-        returned in a separate TRI3 submesh, along with the few cells a distorted
-        leftover polygon could not make square. `prefer_quads=True` removes the
-        first kind, not the second: fewer triangles, none guaranteed.
+          `"along"` and `"none"` win on anything with corners to keep and can kink on
+          a curve, where there is nothing to preserve and everything to straighten.
         
-        `relax` chooses what the front is allowed to do to itself between two rows.
-        After each row the fresh chain is smoothed, which keeps the front from
-        kinking — and, being a Laplacian, rounds its corners off. That costs more
-        than it looks: a front sheds nodes only at its **corners**, so once they are
-        rounded away it keeps every node it has while its perimeter shrinks, and the
-        middle of the domain comes out finer than asked. A plain 20 × 20 square at
-        size 1 gives 600 cells instead of 400.
+        # Returns
         
-        - `"free"` (the default) — the historical behaviour: a node moves wherever
-          the smoothing points. The only mode that never lets the front kink.
-        - `"along"` — the same step, kept only **along** the front: the spacing is
-          evened out, the shape is not. The square then comes out as the 400 exact
-          squares anyone would draw.
-        - `"none"` — the front stays exactly where the row put it.
+        A new `Mesh` on the contour's nodes plus fresh interior nodes.
         
-        There is no best answer, which is why it is a choice: `"along"` and
-        `"none"` win on anything with corners to keep and can kink on a curve, where
-        there is nothing to preserve and everything to straighten. A run that fails
-        to converge raises rather than grinding on.
+        # Raises
+        
+        - `ValueError` for an unknown `relax`.
+        - `RuntimeError` for an `element_type` other than QUA4, QUA8 or QUA9, with
+          `prefer_quads=True` on an odd loop, or for a contour too coarse for the size
+          asked, where the front folds onto itself.
+        - `RuntimeError` also for a run that fails to converge.
         """
     def regularize(self, sweeps: builtins.int = 20, angular: builtins.bool = True, in_place: builtins.bool = False) -> Mesh:
         r"""
-        Move the interior nodes of a surface mesh to improve its cells, leaving the
-        connectivity and the boundary exactly as they are.
+        Move the interior nodes of a 2-D surface mesh to improve its cells.
         
-        `sweeps` is how many passes to run. `angular=True` (the default) uses
-        angle-based smoothing, which aims at the right angles a quadrangle wants;
-        `False` uses the plain Laplacian, which aims at the one-ring's barycentre
-        and knows nothing about angles. `in_place=True` writes the new positions
-        onto your own nodes and hands the same mesh back; otherwise the moved nodes
-        are duplicated and a fresh mesh comes out, the boundary's nodes being
-        shared since they never moved.
+        The connectivity and the boundary stay exactly as they are. Two guarantees
+        hold: **no node on the boundary ever moves**, and a position is taken only
+        when every incident cell stays valid and the worst incident quality does not
+        get worse. Smoothing cannot fix a node with the wrong number of cells around
+        it — that is `pyrucast.mesh.cleanup`'s job, and running it first is usually
+        what unlocks the smoothing.
         
-        Two guarantees hold whatever the rule: **no node on the boundary ever
-        moves**, and a position is taken only when every incident cell stays valid
-        and the worst incident quality does not get worse.
+        # Parameters
         
-        Smoothing cannot change who is next to whom, so it cannot fix a node with
-        the wrong number of cells around it — the angles around a node sum to 2π
-        whatever the positions. That is `cleanup`'s job, and running it first is
-        usually what unlocks the smoothing.
+        - `mesh`: a 2-D mesh; its TRI3 and QUA4 cells are smoothed, its POI1 and SEG2
+          submeshes ignored.
+        - `sweeps`: the number of passes.
+        - `angular`: `True` uses angle-based smoothing, which aims at the right angles
+          a quadrangle wants; `False` the plain Laplacian, which aims at the
+          barycentre of the neighbours and knows nothing about angles.
+        - `in_place`: `True` writes the new positions onto your own nodes and returns
+          `mesh` itself; `False` duplicates the moved nodes into a fresh mesh, the
+          boundary's nodes being shared since they never move.
         
-        TRI3 and QUA4 only, in 2-D. POI1 and SEG2 submeshes are ignored.
+        # Returns
+        
+        A new `Mesh`, or `mesh` itself with `in_place=True`.
+        
+        # Raises
+        
+        `RuntimeError` if `mesh` is not 2-D, or has no surface cells (TRI3/QUA4).
         """
     def cleanup(self) -> Mesh:
         r"""
-        Fix the connectivity of a surface mesh: remove its doublets, give up the
-        nodes that have only three cells around them, and switch the diagonals that
-        lower the valence error.
+        Fix the connectivity of a 2-D surface mesh: doublets and wrong valences.
         
-        **No node of the contour ever moves**, and none is ever given up: the mesh
-        keeps exactly the boundary it came with.
+        It removes the doublets, gives up the nodes that have only three cells around
+        them, and switches the diagonals that lower the valence error. **No node of
+        the contour ever moves**, and none is ever given up: the mesh keeps exactly
+        the boundary it came with. Smoothing cannot fix these: the angles around a
+        node sum to 2π whatever the positions. Turning a lone triangle into a
+        quadrangle is `pyrucast.mesh.merge_triangles`'s job.
         
-        A **doublet** is an interior node with only two quadrangles around it,
-        which therefore share two edges; the node sits in a wedge no smoothing can
-        open. A node of the **wrong valence** wants four cells and has three or
-        five, giving corners of 120° or 72° on average — and the angles around a
-        node sum to 2π whatever the positions, so smoothing will never square them.
+        # Parameters
         
-        Two moves answer that:
+        - `mesh`: a 2-D surface mesh, TRI3 and QUA4, never modified.
         
-        - the **diagonal switch**, for a node of valence five or more: two
-          quadrangles sharing an edge form a hexagon, which splits across any of
-          its three diagonals. It changes no node and no boundary, and is applied
-          only when it strictly lowers the valence error and leaves both cells
-          convex.
-        - the **collapse**, for an interior node with only three cells: round a
-          node carrying `q` quadrangles and `t` triangles the star is bounded by a
-          polygon of `n = 2q + t` sides, and an `n`-gon decomposes with no interior
-          node into `q'` quadrangles and `t'` triangles such that `2q' + t' = n - 2`
-          — always a cell fewer than the star. So the node is given up along with
-          that cell: 3 quadrangles become 2, and 1 quadrangle with 2 triangles
-          becomes a single quadrangle. It is the only move that removes a node,
-          changes how many cells there are, or moves anything: removing a node
-          leaves the ring round it stretched, so the move is judged after relaxing
-          that ring, and the relaxation is kept along with it. A move that does not
-          improve the neighbourhood's worst cell is undone whole.
+        # Returns
         
-        - the **pair collapse**, for two interior nodes sharing an edge with at
-          least one short of a cell: neither can be given up alone without trading
-          one irregular node for two, but together they carry `val(a) + val(b) - 2`
-          cells — a hexagon's worth at 3-3, a heptagon's at 3-4 — and both re-cut
-          with two cells fewer. Two nodes and two cells go at once, and a triangle
-          in the star is carried across rather than created.
+        A new `Mesh`, wound the way `mesh` was, clockwise or not. Your own nodes come
+        back untouched, apart from those on a ring a collapse relaxed, which are
+        duplicated.
         
-        Triangles are read for incidence and reshaped, and they only ever leave two
-        at a time — their number has the parity of the boundary's edge count, which
-        nothing here may change. Turning a lone triangle into a quadrangle is
-        `merge_triangles`'s job.
+        # Raises
         
-        Your own nodes come back untouched apart from those on a ring a collapse
-        relaxed, which are duplicated — the mesh you hand in is never modified. The
-        result comes back wound the way it went in, clockwise or not.
+        `RuntimeError` if `mesh` is not 2-D, or has no surface cells (TRI3/QUA4).
+        
+        # Notes
+        
+        A **doublet** is an interior node with only two quadrangles around it, which
+        therefore share two edges. A node of the **wrong valence** wants four cells
+        and has three or five. Three moves answer that:
+        
+        - the **diagonal switch**, for a node of valence five or more: two quadrangles
+          sharing an edge form a hexagon, which splits across any of its three
+          diagonals. It is applied only when it strictly lowers the valence error and
+          leaves both cells convex.
+        - the **collapse**, for an interior node with only three cells: round a node
+          carrying `q` quadrangles and `t` triangles the star is bounded by a polygon
+          of `n = 2q + t` sides, which decomposes with no interior node into `q'`
+          quadrangles and `t'` triangles such that `2q' + t' = n − 2` — always a cell
+          fewer. So the node is given up along with that cell. Removing a node leaves
+          the ring round it stretched, so the move is judged after relaxing that ring;
+          a move that does not improve the neighbourhood's worst cell is undone whole.
+        - the **pair collapse**, for two interior nodes sharing an edge with at least
+          one short of a cell: together they carry `val(a) + val(b) − 2` cells and
+          both re-cut with two cells fewer.
+        
+        Triangles only ever leave two at a time: their number has the parity of the
+        boundary's edge count, which nothing here may change.
         """
     def merge_triangles(self) -> Mesh:
         r"""
-        Remove the triangles from a quadrangle-dominant mesh, in pairs.
+        Remove the triangles from a quadrangle-dominant mesh `mesh`, in pairs.
+        
+        # Parameters
+        
+        - `mesh`: a 2-D surface mesh, TRI3 and QUA4.
+        
+        # Returns
+        
+        A new `Mesh`.
+        
+        # Raises
+        
+        `RuntimeError` if `mesh` is not 2-D, or has no surface cells (TRI3/QUA4).
         """
     def grid_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, prefer_quads: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
-        Mesh the inside of a closed contour with a structured grid core and a
-        frontal band — the regular-mesh companion of `pave_surface`.
+        Mesh the inside of closed loops with a structured grid core and a frontal band.
         
-        Same input, same output, same promise that the contour is untouchable: only
-        the interior is obtained differently. `pave_surface` walks a front inward
-        until two of its rows meet, and that meeting line carries the valence
-        defects, the leftover triangles and the flattest cells — even on a plain
-        rectangle, which comes out as an onion with four diagonal seams.
-        `grid_surface` lays a tensor grid instead, and leaves the front only what
-        the grid could not reach.
+        The regular companion of `pyrucast.mesh.pave_surface`, with the same input,
+        output and untouchable contour. `pave_surface` walks a front inward until two
+        of its rows meet, and that meeting line carries the valence defects, the
+        leftover triangles and the flattest cells — even a plain rectangle comes out
+        as an onion with four diagonal seams. `grid_surface` lays a tensor grid
+        instead, and leaves the front only what the grid could not reach.
         
         The grid's lines are taken from the contour: every axis-aligned edge long
         enough to be a feature pins a line, and the gaps are subdivided at about
-        `size`. A grid node landing on a contour node **is** that node, so the core
-        reaches the boundary rather than stopping short of it. On a rectilinear
-        domain laid out for the grid there is no band at all and the mesh is the
-        grid: every cell a rectangle, every Jacobian 1, no triangle.
+        `size`. A grid node landing on a contour node **is** that node. On a
+        rectilinear domain laid out for the grid there is no band at all: every cell
+        a rectangle, no triangle. That is the one thing asked of the caller: **break
+        every side at the shape's own corners and let each piece take a whole number
+        of cells**. A contour that does not just gets more band and less grid, down to
+        the quality of `pave_surface` in the worst case.
         
-        That last part is the one thing asked of the caller. A grid can only meet a
-        contour whose nodes fall on grid lines, so **break every side at the
-        shape's own corners and let each piece take a whole number of cells**. A
-        contour that does not is not an error — it just gets more band and less
-        grid, down to the quality of `pave_surface` in the worst case.
+        # Parameters
         
-        `band` is extra clearance in cells between the core and the contour. Zero
-        is the useful value; raise it only for a contour the grid cannot meet, such
-        as a curve, where giving the front a couple of cells to work in beats
-        letting it fight for a sliver.
+        - `contour`: **one or more** closed SEG2 loops, oriented as for
+          `pyrucast.mesh.triangulate_surface`: a **counterclockwise** loop is a
+          domain's outer boundary, a **clockwise** loop a hole. Several disjoint
+          counterclockwise loops mesh several independent domains at once. It may be
+          2-D, or a planar loop in 3-D, meshed in its best-fit plane and lifted back.
+        - `element_type`: `"QUA4"`, `"QUA8"` or `"QUA9"`.
+        - `size`: the target edge length; `None` takes the mean boundary edge length,
+          domain by domain.
+        - `band`: extra clearance, in cells, between the core and the contour. Zero is
+          the useful value; raise it only for a contour the grid cannot meet, such as
+          a curve, where giving the front a couple of cells to work in beats letting
+          it fight for a sliver.
+        - `prefer_quads`: `False` lets an odd loop cost one triangle, returned in a
+          separate TRI3 submesh along with the few cells a distorted leftover polygon
+          could not make square. `True` removes the first kind, not the second, and
+          raises on a loop with an odd number of segments: a polygon with an odd
+          number of sides has no filling by quadrangles alone, and evening the count
+          would mean adding a boundary node.
+        - `relax`: what the front may do to itself between two rows — `"free"`
+          (`None`, the default), `"along"` or `"none"`; see
+          `pyrucast.mesh.pave_surface`.
         
-        `relax` chooses what the front may do to itself between two rows: `"free"`
-        (the default, and the historical behaviour), `"along"` — the smoothing kept
-        only along the front, which keeps its corners and with them the front's
-        ability to shed nodes as it contracts — or `"none"`. See `pave_surface`,
-        which shares the band with this operator and where the choice is spelled
-        out.
+        # Returns
+        
+        A new `Mesh` on the contour's nodes plus fresh interior nodes.
+        
+        # Raises
+        
+        - `ValueError` for an unknown `relax`.
+        - `RuntimeError` for an `element_type` other than QUA4, QUA8 or QUA9, with
+          `prefer_quads=True` on an odd loop, or for a contour too coarse for the size
+          asked, where the front folds onto itself.
         """
     def grid_surface2(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, prefer_quads: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
-        Mesh the inside of a closed contour with a structured grid core and a
-        frontal band, taking the grid's lines **one per contour node**.
+        Mesh the inside of closed loops with a grid core, a line per contour node.
         
-        The second of the two grid meshers, and the sibling of `grid_surface`, which
-        it does not replace: same input, same output, same untouchable contour, and
-        neither wins everywhere.
-        
-        `grid_surface` pins a line on the coordinate each aligned side lies on, and
-        subdivides between two lines by whichever side spans them end to end. Every
+        The sibling of `pyrucast.mesh.grid_surface`, which it does not replace: same
+        input, output and untouchable contour, and neither wins everywhere.
+        `grid_surface` pins a line on the coordinate each aligned side lies on; every
         line is straight. `grid_surface2` gives every node of the contour the line
-        that crosses it, collapses the bands too thin to be cells — welding each of
-        their edges onto the contour node at one end, or onto its midpoint — and
-        lets a grid node within a quarter cell of a contour node move onto it.
+        that crosses it, collapses the bands too thin to be cells, and lets a grid
+        node within a quarter cell of a contour node move onto it. A row is therefore
+        a polyline, so one row can meet two facing walls at two different heights: a
+        wall cut into ten can face a wall cut into eleven.
         
-        A row is therefore a polyline rather than a line, and that is the point: one
-        row can meet two facing walls at two different heights, so a wall cut into
-        ten can face a wall cut into eleven. `grid_surface` has to pick one of them
-        and sends the other to the band.
+        **Reach for it on a rectilinear shape**, all the more so when its sides were
+        not cut at the corners facing them; **reach for `grid_surface` on anything
+        curved**. Measured worst cell, `grid_surface` then `grid_surface2`: plate with
+        a step off the grid 0.405 / 0.963, L with arbitrary dimensions 0.437 / 0.979,
+        crenellated profile 0.323 / 0.651, house with a pitched roof 0.420 / 0.548. On
+        a **circle** the order reverses hard — 0.288 against 0.005 —: nothing dictates
+        a grid line over most of a curve.
         
-        **Reach for `grid_surface2` on a rectilinear shape**, all the more so when
-        its sides were not cut at the corners facing them; **reach for
-        `grid_surface` on anything curved**, where the contour's nodes only tell you
-        where its vertices happened to fall. Measured worst cell, `grid_surface`
-        then `grid_surface2`: plate with a step off the grid 0.405 / 0.963, L with
-        arbitrary dimensions 0.437 / 0.979, crenellated profile with its base in one
-        run 0.323 / 0.651, house with a pitched roof 0.420 / 0.548. On a **circle**
-        the order reverses hard — 0.288 against 0.005 — and `grid_surface2` should
-        not be used: nothing dictates a grid line over most of a curve. The book's
-        *Mailler une géométrie* page puts all four surface meshers side by side.
+        # Parameters
         
-        `size`, `band` and `relax` mean what they mean for `grid_surface`.
+        - `contour`: **one or more** closed SEG2 loops, oriented as for
+          `pyrucast.mesh.triangulate_surface`: a **counterclockwise** loop is a
+          domain's outer boundary, a **clockwise** loop a hole. Several disjoint
+          counterclockwise loops mesh several independent domains at once. It may be
+          2-D, or a planar loop in 3-D, meshed in its best-fit plane and lifted back.
+        - `element_type`: `"QUA4"`, `"QUA8"` or `"QUA9"`.
+        - `size`: the target edge length; `None` takes the mean boundary edge length,
+          domain by domain.
+        - `band`: as for `pyrucast.mesh.grid_surface`.
+        - `prefer_quads`: `False` lets an odd loop cost one triangle, returned in a
+          separate TRI3 submesh along with the few cells a distorted leftover polygon
+          could not make square. `True` removes the first kind, not the second, and
+          raises on a loop with an odd number of segments: a polygon with an odd
+          number of sides has no filling by quadrangles alone, and evening the count
+          would mean adding a boundary node.
+        - `relax`: what the front may do to itself between two rows — `"free"`
+          (`None`, the default), `"along"` or `"none"`; see
+          `pyrucast.mesh.pave_surface`.
+        
+        # Returns
+        
+        A new `Mesh` on the contour's nodes plus fresh interior nodes.
+        
+        # Raises
+        
+        - `ValueError` for an unknown `relax`.
+        - `RuntimeError` for an `element_type` other than QUA4, QUA8 or QUA9, with
+          `prefer_quads=True` on an odd loop, or for a contour too coarse for the size
+          asked, where the front folds onto itself.
         """
     def pave_volume(self, layers: builtins.int = 1, thickness: typing.Optional[builtins.float] = None, size: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Mesh the inside of a closed envelope with a hexahedral boundary layer over
-        a tetrahedral core — the 3-D companion of `pave_surface`.
+        Mesh a closed envelope: a hexahedral boundary layer over a tetrahedral core.
         
-        Puts hexahedra where they matter, in the layer against the boundary where
-        gradients are steepest and an element's shape decides the accuracy, and
-        leaves the smooth interior to tetrahedra.
+        The 3-D companion of `pyrucast.mesh.pave_surface`. Hexahedra go where they
+        matter, in the layer against the boundary where gradients are steepest; the
+        smooth interior is left to tetrahedra. Pyramids join the two: the layer's
+        inner faces are squares and a tetrahedron has none, so without them the mesh
+        could not be conforming.
         
-        `layers` boundary layers are grown inward, each `thickness` deep;
-        `thickness=None` takes the envelope's mean edge length, which gives roughly
-        cube-shaped cells. `size` is the target element size for the tetrahedral
-        core. The envelope is a closed surface of QUA4 and/or TRI3 facets whose
-        normals point **out of the material**, exactly as for `triangulate_volume`;
-        its nodes are reused as they are.
+        # Parameters
         
-        The result carries a QUA4-born HEX8 submesh, a TRI3-born PENTA6 one, a
-        PYRA5 one and a TET4 one, each present only if non-empty. The pyramids are
-        the junction: the layer's inner faces are squares and a tetrahedron has
-        none, so without them the mesh could not be conforming.
+        - `envelope`: a closed surface of QUA4 and/or TRI3 facets, its normals pointing
+          **out of the material**; its nodes are reused as they are.
+        - `layers`: the number of boundary layers, grown inward.
+        - `thickness`: the depth of each layer; `None` takes the envelope's mean edge
+          length, which gives roughly cube-shaped cells.
+        - `size`: the target cell size of the tetrahedral core.
+        
+        # Returns
+        
+        A new `Mesh` with a HEX8 submesh (born of the QUA4 facets), a PENTA6 one (born
+        of the TRI3 facets), a PYRA5 one and a TET4 one, each present only if not
+        empty.
+        
+        # Raises
+        
+        `RuntimeError` if `envelope` is not closed.
         """
     def triangulate_volume(self, size: typing.Optional[builtins.float] = None, allow_surface_nodes: builtins.bool = False) -> Mesh:
         r"""
-        Fill the inside of a closed `TRI3` `envelope` with `TET4` cells — the 3-D
-        companion of `triangulate_surface`.
+        Fill the inside of a closed TRI3 `envelope` with TET4 cells.
         
-        The envelope's normals must point **out of the material**; a concave
-        shape is fine, and an internal cavity is simply another closed surface
-        whose normals point into the hole. Its nodes are reused as they are, and
-        nodes are added inside the solid so the cells come out well shaped.
+        The 3-D companion of `pyrucast.mesh.triangulate_surface`. A concave shape is
+        fine, and an internal cavity is simply another closed surface whose normals
+        point into the hole. The envelope's nodes are reused as they are, and nodes
+        are added inside the solid so the cells come out well shaped.
         
-        `size` is the target edge length; `None` takes the mean edge length of
-        the envelope. `allow_surface_nodes` lets the mesher cut the envelope
-        finer where it cannot otherwise fit it or make it usable: the shape is
-        kept — every added node lies on the edge or facet it divides — but the
-        skin of the result no longer matches the surface handed in, and a warning
-        on stderr says how many were added. Without it, such a surface is
-        refused rather than meshed badly.
+        # Parameters
+        
+        - `envelope`: the closed TRI3 surface, its normals pointing **out of the
+          material**.
+        - `size`: the target edge length; `None` takes the mean edge length of the
+          envelope.
+        - `allow_surface_nodes`: lets the mesher cut the envelope finer where it
+          cannot otherwise fit it or make it usable. The shape is kept — every added
+          node lies on the edge or facet it divides —, but the skin of the result no
+          longer matches the surface handed in, and a warning on stderr says how many
+          nodes were added. Without it, such a surface is refused rather than meshed
+          badly.
+        
+        # Returns
+        
+        A new `Mesh` of TET4 cells.
+        
+        # Raises
+        
+        `RuntimeError` if `envelope` is not a closed surface, or, without
+        `allow_surface_nodes`, for a surface the mesher cannot fit.
         """
     def merge_nodes(self, tol: builtins.float, in_place: builtins.bool = False) -> Mesh:
         r"""
-        Weld together nodes closer than `tol`, redirecting the connectivity to one
-        representative per cluster.
+        Weld together the nodes of `mesh` closer than `tol`.
         
-        Returns a new mesh mirroring `mesh` (same submeshes, types and colours)
-        with welded-away nodes redirected to their cluster representative — the
+        The connectivity is redirected to one representative per cluster — the
         smallest-id node of the cluster, which keeps its own coordinates (no
-        averaging). Cells that collapse onto a repeated node (a degenerate segment,
-        triangle, …) are dropped. `tol` must be ≥ 0; `tol = 0` welds only exactly
-        coincident nodes. `mesh` itself is left untouched.
+        averaging). A cluster is a connected component of the relation "closer than
+        `tol`": the weld propagates from node to node, so on a chain a—b—c where a and
+        c are further apart than `tol`, all three still end up as one — which is why a
+        `tol` of the order of the element size collapses a whole region rather than a
+        seam. Every call prints a one-line tally on stdout once the weld is done —
+        nodes welded, cells dropped, tolerance used.
         
-        A cluster is a connected component of the « closer than `tol` » relation:
-        the weld propagates from node to node, so on a chain a—b—c where a and c
-        are further apart than `tol`, all three still end up as one — which is why
-        a `tol` of the order of the element size collapses a whole region rather
-        than a seam.
+        # Parameters
         
-        With `in_place=True` the connectivity of `mesh`'s **own** submeshes is
-        rewritten instead — the assumed side effect — and the very same mesh object
-        is returned. Since the union `mesh_a | mesh_b` shares its submeshes rather
-        than copying them, welding that union in place welds `mesh_a` and `mesh_b`
-        themselves: afterwards they really do share their interface nodes. The mesh
-        structure is preserved (same submeshes, same cells in the same order), so a
-        cell that *would* collapse is an error here instead of being dropped, as is
-        a submesh already sealed by a finite-element space, field or matrix. Both
-        are checked before anything is written: a rejected call changes nothing.
+        - `mesh`: the mesh to weld.
+        - `tol`: the distance, `≥ 0`; `0` welds only coincident nodes.
+        - `in_place`: `False` builds a new mesh, where cells that collapse onto a
+          repeated node (a degenerate segment, triangle, …) are dropped. `True`
+          rewrites the connectivity of `mesh`'s **own** submeshes instead and returns
+          `mesh` itself. Since the union `mesh_a | mesh_b` shares its submeshes, welding
+          that union in place welds `mesh_a` and `mesh_b` themselves: afterwards they
+          share their interface nodes. The structure is kept (same submeshes, same
+          cells in the same order), so a cell that would collapse is an error, as is a
+          submesh already sealed by a finite-element space, a field or a matrix; both
+          are checked before anything is written.
         
-        Every call prints a one-line tally on stdout once the weld is done — nodes
-        welded, cells dropped, tolerance used.
+        # Returns
+        
+        A new `Mesh` mirroring `mesh` (same submeshes, types and colours), or `mesh`
+        itself with `in_place=True`.
+        
+        # Raises
+        
+        `RuntimeError` if `tol` is negative, or, with `in_place=True`, for a cell that
+        would collapse or a sealed submesh.
         """
     def positions(self, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
         r"""
-        Build a `NodeField` carrying the position of every node of `mesh`
-        — one `SubNodeField` per submesh, on the distinct nodes of its zone.
+        The positions of the nodes of `mesh`, as a field at the nodes.
         
-        One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
-        requests all the axes the mesh's `Coords` has (`["X"]` in 1-D,
-        `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D).
+        The bridge from geometry to fields: the result can be plotted, derived, or
+        written back after a computation with `pyrucast.coords.set`. Positions are
+        read in the active configuration of the `Coords`.
+        
+        # Parameters
+        
+        - `mesh`: the nodes to read.
+        - `components`: the axes to read, among `"X"`, `"Y"`, `"Z"`, one component
+          each; `None` reads every axis of the `Coords` (`["X"]` in 1-D, `["X", "Y"]`
+          in 2-D, `["X", "Y", "Z"]` in 3-D).
+        
+        # Returns
+        
+        A `NodeField` with one zone per submesh of `mesh`, on the distinct nodes of
+        that submesh.
+        
+        # Raises
+        
+        `RuntimeError` for a component other than `"X"`, `"Y"`, `"Z"`, or an axis
+        beyond the dimension of the `Coords`.
         """
 
 @typing.final
@@ -2297,176 +3093,400 @@ class Model:
     def __len__(self) -> builtins.int: ...
     def elastic_stress(self, strain: ElementField, materials: ElementField) -> ElementField:
         r"""
-        Elastic stress `σ = D:ε` of a strain field at the Gauss points of every
-        continuum sub-model of `model` — Cast3M `ELAS` applied to a strain.
+        Elastic stress `σ = D:ε` of `strain`, for each continuum sub-model of `model`.
         
-        `D` is the operator each law predicts with: the Hooke matrix of an
-        elasticity, in its symmetry; the isotropic `D` behind a plasticity's elastic
-        predictor; the **undamaged** `D` a damage law degrades. `strain` is in
-        tensor convention, the layout of `deformation` and `thermal_strain`;
-        `materials` needs only each law's elastic constants (`E`, `nu` when
-        isotropic). One zone per continuum sub-model, its components the stresses
-        the law writes; a sub-model with no elastic operator (conduction, bar, beam,
-        constraint) contributes none.
+        `D` is the operator each law predicts with, not the response of the law
+        itself: the Hooke matrix of an elasticity, in its symmetry; the isotropic `D`
+        behind a plasticity's elastic predictor; the **undamaged** `D` a damage law
+        degrades. It turns an imposed strain increment (thermal, given) into the
+        stress it would cause if nothing yielded.
+        
+        # Parameters
+        
+        - `model`: the sub-models whose elastic operator to apply.
+        - `strain`: the strain at the Gauss points, in tensor convention — the layout
+          of `pyrucast.element_field.deformation` and
+          `pyrucast.element_field.thermal_strain`.
+        - `materials`: the material field; only each law's elastic constants are read
+          (`E`, `nu` when isotropic).
+        
+        # Returns
+        
+        An `ElementField` with one zone per continuum sub-model, its components the
+        stresses the law writes. A sub-model with no elastic operator (conduction,
+        bar, beam, constraint) contributes none.
+        
+        # Raises
+        
+        `RuntimeError` if `materials` lacks an elastic constant of a law.
         """
     def elastic_strain(self, stress: ElementField, materials: ElementField) -> ElementField:
         r"""
-        Elastic strain `ε = D⁻¹:σ` of a stress field at the Gauss points of every
-        continuum sub-model of `model` — the inverse of `elastic_stress` (Cast3M
-        `ELAS` applied to a stress).
+        Elastic strain `ε = D⁻¹:σ` of `stress`, for each continuum sub-model of `model`.
         
-        `stress` carries the stresses each law writes (`sigma_xx`, …; the state
-        returned by `integrate_behavior` will do); `materials` the elastic
-        constants. The result is in tensor convention, the layout of `deformation`,
-        so it subtracts from a strain component for component; in plane stress the
-        out-of-plane `eps_zz` is not written. Raises when `D` is singular at a point
-        (a zero modulus).
+        The inverse of `pyrucast.element_field.elastic_stress`: it brings a stress
+        back to the elastic strain that carries it, for instance under other moduli
+        when the material varies with the temperature.
+        
+        # Parameters
+        
+        - `model`: the sub-models whose elastic operator to invert.
+        - `stress`: the stresses each law writes (`sigma_xx`, …); the state returned
+          by `pyrucast.element_field.integrate_behavior` will do.
+        - `materials`: the material field; only each law's elastic constants are read.
+        
+        # Returns
+        
+        An `ElementField` in tensor convention, the layout of
+        `pyrucast.element_field.deformation`, so it subtracts from a strain component
+        for component. In plane stress the out-of-plane `eps_zz` is not written.
+        
+        # Raises
+        
+        `RuntimeError` if `D` is singular at a point (a zero modulus), or if
+        `materials` lacks an elastic constant of a law.
         """
     def strain(self, solution: NodeField, materials: ElementField) -> ElementField:
         r"""
-        The input of every law of `model`, produced from the nodal `solution` — the
-        model's `B`, of which `internal_forces` is the transpose (Cast3M `EPSI`,
-        extended to every physics).
+        The input of every law of `model`, computed from the nodal `solution`.
         
-        One zone per sub-model with a law, on its behaviour space, carrying what
-        that law reads: the small-strain tensor `eps_*` of a continuum or a bar, the
-        gradient `grad_T_*` of conduction, `T` itself for radiation, the section
-        strains of a beam, the generalized strains of a shell. Each law reads its
-        own unknowns of `solution` by name, so one solution — displacement,
-        temperature, multipliers — serves the whole model; sub-models without a law
-        produce nothing. `materials` is read by the beams alone (their `Φ`). The
-        result feeds `integrate_behavior` as is.
+        The model's `B`, of which `pyrucast.node_field.internal_forces` is the
+        transpose. Each law declares which producer feeds it, applied to its own
+        unknowns on its own space:
+        
+        | sub-model | producer | zone returned |
+        |---|---|---|
+        | elasticity, plasticity, damage, bar | `deformation` | `eps_*`, or the measure of the law (`E_*`, `H_*`) |
+        | conduction, Fick | `gradient` | `grad_T_*`, `grad_c_<species>_*` |
+        | radiation | `interp_to_gauss` | `T` at the points |
+        | Bernoulli and Timoshenko beams | `beam_deformation` | `eps`, `kappa*`, `gamma*`, `torsion` |
+        | shell | `shell_deformation` | `eps_*`, `kappa_*`, `drill`, `gamma_*` |
+        
+        # Parameters
+        
+        - `model`: the laws whose input to compute.
+        - `solution`: the current solution. Each law reads its own unknowns by name,
+          so one solution — displacement, temperature, multipliers — serves the whole
+          model; an unknown it lacks reads zero.
+        - `materials`: the material field, read by the beams alone (their
+          `Φ = 12EI/(G·A_s·L²)`).
+        
+        # Returns
+        
+        An `ElementField` with one zone per sub-model carrying a law, on its behaviour
+        space; sub-models without a law (constraints, loads, exchanges) produce
+        nothing. It feeds `pyrucast.element_field.integrate_behavior` as it is.
         """
     def material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
         r"""
-        Build a material `ElementField` applying the same uniform
-        `(component, value)` pairs to every material-hungry sub-model of
-        `model`. Sub-models that need no material (Dirichlet, …) are skipped.
+        Build a uniform material field for every sub-model of `model` that needs one.
+        
+        The same pairs are applied to every sub-model that consumes material; the
+        others (constraints) are skipped. The field is then given as it is to
+        `pyrucast.matrix.stiffness` and `pyrucast.element_field.integrate_behavior`,
+        which pick for each sub-model the zone on its FE subspace. Once built, it is
+        an ordinary `ElementField`, which can vary in space or be scaled.
+        
+        # Parameters
+        
+        - `model`: the sub-models whose material to build.
+        - `components_and_values`: the `(component, value)` pairs, one uniform value
+          per component, for instance `[("E", 210e9), ("nu", 0.3)]`.
+        
+        # Returns
+        
+        An `ElementField` with one zone per sub-model that consumes material.
+        
+        # Raises
+        
+        `RuntimeError` if a component a physics requires is missing.
         """
     def material_field_per_sub_model(self, components_and_values_per_sub_model: typing.Sequence[typing.Sequence[tuple[builtins.str, builtins.float]]]) -> ElementField:
         r"""
-        Build a material `ElementField` where each sub-model gets its own
-        `(component, value)` list. The outer list length must equal
-        `model.len()`. An empty inner list **skips** the matching
-        sub-model (typical for Dirichlet).
+        Build a material field with its own uniform values for each sub-model.
+        
+        Different materials zone by zone: the n-th list of pairs goes to the n-th
+        sub-model of `model`.
+        
+        # Parameters
+        
+        - `model`: the sub-models whose material to build.
+        - `components_and_values_per_sub_model`: one list of `(component, value)`
+          pairs per sub-model of `model`, in order; an empty list skips that
+          sub-model (a constraint).
+        
+        # Returns
+        
+        An `ElementField` with one zone per non-empty list.
+        
+        # Raises
+        
+        `RuntimeError` if the number of lists is not the number of sub-models, or if
+        a component a physics requires is missing.
         """
     def integrate_behavior(self, deformation: ElementField, materials: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> ElementField:
         r"""
-        Integrate the constitutive law of `model` (Cast3m `COMP`), stepping A → B.
+        Integrate the constitutive laws of `model` over a step from A to B.
         
-        `deformation` is the **end-of-step** behaviour input ε(B) (from
-        `gradient(field, fespace)` or `deformation(u, fespace)`); `prev` is the
-        **state at A** — the converged output of the previous step (stress,
-        internal variables and start-of-step strain), or
-        `element_field.initial_state(model, materials)` on the first step;
-        `materials` supplies the per-zone material data; `dt` is the time increment
-        (`None` if the law is rate-independent). Returns the material-state field at
-        B (dual flux/stress + updated internal variables) of every behaviour-bearing
-        sub-model — feed it back as `prev` at the next step.
+        Each law takes the converged state at the start of the step, A, and the
+        strain at its end, B, and returns the state at B, point by point. For a
+        linear law the result is consistent with the assembled stiffness
+        (`∫ Bᵀ·flux = K·u`); a non-linear law gives its exact response. Constraint
+        sub-models, which have no law, are skipped; the zones of `deformation`,
+        `materials` and `prev` are paired by FE subspace.
         
-        For a linear law the result is consistent with the assembled stiffness
-        (`∫ Bᵀ·flux = K·u`); a non-linear law is the exact response.
+        # Parameters
+        
+        - `model`: the laws to integrate.
+        - `deformation`: the input of the laws at the end of the step, `ε(B)` —
+          from `pyrucast.element_field.strain`, or a producer such as
+          `pyrucast.element_field.deformation` or `pyrucast.element_field.gradient`.
+        - `materials`: the material field, zone by zone.
+        - `prev`: the state at A, the output of the previous step (stress, internal
+          variables, strain at A); on a first step,
+          `pyrucast.element_field.initial_state(model, materials)`.
+        - `dt`: the time increment; `None` when no law depends on the rate.
+        
+        # Returns
+        
+        The material state at B of every sub-model carrying a law: the dual flux or
+        stress and the updated internal variables — to give back as `prev` at the
+        next step.
+        
+        # Raises
+        
+        `RuntimeError` if a rate-dependent law (creep, viscoplasticity) gets no `dt`.
         """
     def initial_state(self, materials: ElementField) -> ElementField:
         r"""
-        The **rest state** of `model` — the `prev` of a first step, for
-        `integrate_behavior` and `matrix.tangent`.
+        The rest state of `model`, the `prev` of a first step.
         
-        One zone per sub-model carrying a law, with the components that law
-        writes. Nearly every law rests at zero; a law whose internal variable starts
-        from a material constant seeds it from `materials` (Gurson's porosity from
-        `f_0`). Constraint sub-models, which have no law, are skipped.
+        What each law carries before anything happened, to give as `prev` to
+        `pyrucast.element_field.integrate_behavior` and `pyrucast.matrix.tangent`.
+        Nearly every law rests at zero; a law whose internal variable starts from a
+        material constant seeds it from `materials` (Gurson's porosity from `f_0`).
+        
+        # Parameters
+        
+        - `model`: the laws whose rest state to build.
+        - `materials`: the material field, read by the laws that seed a variable.
+        
+        # Returns
+        
+        An `ElementField` with one zone per sub-model carrying a law, on its
+        behaviour subspace, with every component that law writes. Constraint
+        sub-models, which have no law, are skipped.
         """
     def stiffness_matrix(self, materials: ElementField) -> Matrix:
         r"""
         Assemble the stiffness matrix `K` of `model`.
         
-        `materials` carries the per-zone material data: every sub-model that
-        needs it picks the `SubElementField` whose FE subspace matches its own.
+        One matrix covers every unknown of the model, multipliers included: a physics
+        contributes its block, a constraint the two halves `C` and `Cᵀ` of its
+        relations. Boundary conditions have no special status — they are sub-models
+        like the others.
+        
+        # Parameters
+        
+        - `model`: the physics and the constraints to assemble.
+        - `materials`: the material data, zone by zone. Every sub-model that needs
+          some picks the zone whose FE subspace is its own; a sub-model without
+          material (a constraint) ignores it.
+        
+        # Returns
+        
+        The matrix, assembled on the configuration active at the call.
+        
+        # Raises
+        
+        `RuntimeError` if no zone of `materials` lies on the FE subspace of a
+        sub-model with the components its physics requires.
         """
     def mass_matrix(self, materials: ElementField) -> Matrix:
         r"""
-        Assemble the consistent mass matrix `M` of `model` (Cast3M `MASS`), or the
-        heat-capacity matrix `C` for a thermal model (Cast3M `CAPA`).
+        Assemble the mass matrix `M` of `model`, or its heat-capacity matrix `C`.
         
-        Mechanics assembles `M = ∫ ρ Nᵀ N` (material `rho`); heat conduction
-        assembles `C = ∫ ρ cp Nᵀ N` (material `rho`, `cp`). `materials` carries the
-        per-zone coefficients, exactly like [`stiffness`].
+        Mechanics assembles the consistent mass `M = ∫ ρ N_i N_j`, heat conduction the
+        capacity `C = ∫ ρ c_p N_i N_j`. A physics without a mass term (a boundary
+        exchange, a constraint) contributes nothing.
+        
+        # Parameters
+        
+        - `model`: the physics to assemble.
+        - `materials`: the material data, zone by zone, as for [`stiffness`]. It must
+          carry `rho` on a mechanical zone, `rho` and `cp` on a thermal one: the
+          stiffness does not read them, so the material field holds them only if
+          given.
+        
+        # Returns
+        
+        The matrix, assembled on the configuration active at the call.
+        
+        # Raises
+        
+        `RuntimeError` if `rho` or `cp` is missing on a zone that needs it.
         """
     def geometric_matrix(self, materials: ElementField, stress: ElementField) -> Matrix:
         r"""
-        Assemble the geometric (initial-stress) stiffness `K_g` of `model` (Cast3M
-        `KSIG`), from the current stress field `stress` (Voigt-named `sigma_*`).
-        `materials` resolves each mechanical zone, exactly like [`stiffness`].
+        Assemble the geometric (initial-stress) stiffness `K_g` of `model`.
+        
+        `K_g[(i,a),(j,b)] = δ_ab ∫ ∇N_i · σ · ∇N_j` is the stiffening a stress in
+        place brings: the term of buckling and of prestressed analyses. It does not
+        depend on the constitutive law. A physics without geometric stiffness (heat
+        conduction, a constraint) contributes nothing.
+        
+        # Parameters
+        
+        - `model`: the physics to assemble.
+        - `materials`: the material data, zone by zone, as for [`stiffness`].
+        - `stress`: the current Cauchy stress at the Gauss points, components
+          `sigma_*` — typically what `element_field.integrate_behavior` returns. Each
+          zone is picked by its FE subspace, like `materials`.
+        
+        # Returns
+        
+        The matrix, assembled on the configuration active at the call.
+        
+        # Raises
+        
+        `RuntimeError` if `stress` lacks a `sigma_*` component on a mechanical zone.
         """
     def tangent_matrix(self, materials: ElementField, deformation: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> Matrix:
         r"""
-        Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`
-        (Cast3M `KTAN`). `D_alg` is evaluated **at the Gauss point**, from the same
-        inputs `integrate_behavior` takes — no field of moduli is materialised, since
-        this assembler would be its only reader. `prev` is the state at A:
-        `element_field.initial_state(model, materials)` on a first step.
+        Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`.
+        
+        `D_alg` is the derivative of the step `ε(B) ↦ σ(B)`, the state at A held
+        fixed: both ends of the step are in its definition, hence the same inputs as
+        `element_field.integrate_behavior`. This is the matrix that gives a Newton
+        iteration its quadratic convergence.
+        
+        A linear physics (conduction, diffusion, exchanges, trusses, beams, shells)
+        and the constraints have no law to differentiate: their tangent is their
+        stiffness, assembled without reading `deformation`.
+        
+        # Parameters
+        
+        - `model`: the physics and the constraints to assemble.
+        - `materials`: the material data, zone by zone, as for [`stiffness`].
+        - `deformation`: the input of the laws at the end of the step, `ε(B)` — from
+          `element_field.deformation`.
+        - `prev`: the state at A, the converged output of the previous step; on a
+          first step, `element_field.initial_state(model, materials)`.
+        - `dt`: the time increment; `None` when no law depends on the rate.
+        
+        # Returns
+        
+        The matrix, assembled on the configuration active at the call.
+        
+        # Raises
+        
+        `RuntimeError` if a non-linear law of `model` has no tangent of its own
+        (`model.mazars`, `model.damage_tc`, `model.damage_sic_sic`): the call fails
+        rather than return an empty block.
+        
+        # Notes
+        
+        `D_alg` is evaluated at each Gauss point during the assembly: no field of
+        moduli is stored between the law and this function.
         """
     def update_contact(self, displacement: NodeField) -> Model:
         r"""
-        `model.update_contact(model, displacement)` — the model with its contacts
-        **updated** to the positions `X + u`: `X` the active configuration, `u` read
-        in `displacement` on each contact's variables (`u_x`, `u_y`, `u_z`; a node
-        or a component it lacks reads zero). Every other sub-model is shared as it
-        is; a model without contact comes back unchanged.
+        The model with its contacts paired again on the positions `X + u`.
         
-        Each slave node is paired again with its closest master facet on `X + u`,
-        and its relation becomes the gap linearised there, written in total
-        displacement from `X`: the right-hand side the contact carries is `-g~`,
-        the gap of the new pairing measured on `X`. The multiplier nodes are kept,
-        so the unknowns `lambda` and the rows `imposed` stay the same; at `u = 0`,
-        the contact as it was built. A master facet collapsed by the displacement
-        is not detected here.
+        Each slave node is paired again with its closest master facet on `X + u`, and
+        its relation becomes the gap linearized there, written in total displacement
+        from `X`: the right-hand side the contact carries is `-g~`, the gap of the new
+        pairing measured on `X`. The multiplier nodes are kept, so the unknowns
+        `lambda` and the rows `imposed` stay the same; at `u = 0`, the contact as it
+        was built. What large displacements call for: the step-by-step loop updates
+        its contacts each time it rebuilds its operator.
         
-        What large displacements call for: the step-by-step loop updates its
-        contacts each time it rebuilds its operator. See the contact chapter of the
-        book.
+        # Parameters
+        
+        - `model`: the model whose contacts to update. Every other sub-model is
+          shared as it is; a model without contact comes back unchanged.
+        - `displacement`: `u`, read on each contact's variables (`u_x`, `u_y`,
+          `u_z`); a node or a component it lacks reads zero. `X` is the active
+          configuration.
+        
+        # Returns
+        
+        A new `Model`.
+        
+        # Notes
+        
+        A master facet collapsed by the displacement is not detected.
         """
     def internal_forces(self, state: ElementField, solution: NodeField, materials: ElementField) -> NodeField:
         r"""
-        Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`
-        (Cast3m `BSIG` for a continuum).
+        Internal nodal forces of `model`, the left side of `Σ f_int = Σ f_ext`.
         
-        The nodal mirror of `matrix.stiffness(model, materials)`: every sub-model is
-        asked for its term of the residual on the internal side. `state` is the
-        material-state field produced by `integrate_behavior` (`COMP`); a
-        behaviour-bearing sub-model applies its own `Bᵀ` (continuum solid, bar or
-        beam), a sub-model with no term here declares none. Returns a `NodeField`
-        whose components are each sub-model's dual variables (`f_x`, … for a
-        solid/bar; `f_w`, `m_theta` for a beam).
+        The nodal mirror of `pyrucast.matrix.stiffness`: every sub-model is asked
+        for its term of the residual on the internal side. A sub-model carrying a
+        behaviour applies its own `Bᵀ` (continuum solid, bar or beam), which is why
+        the operator takes a model and not a mere FE space; a sub-model with no term
+        on this side declares none and does not appear in the result.
         
         For a linear law the result equals the assembled stiffness applied to the
-        solution (`K·u`); a non-linear law gives the exact internal forces. Its
-        counterpart is `external_forces(model, materials)`, and the gap between the
-        two sums is the residual.
+        solution (`K·u`); a non-linear law gives the exact internal forces. A law in
+        large strains is served on the reference configuration by the nominal
+        stress `P = F·S`, read whole (`P_xx, P_xy, P_yx, P_yy`):
+        `f = ∫ P·∇₀N dV₀`. Its counterpart is `pyrucast.node_field.external_forces`,
+        and the gap between the two sums is the residual.
         
-        `solution` is the current one, multipliers included: a term that is linear in
-        `u` reads it directly — a boundary transfer's `∫ h·a·N` has no law to go
-        through — and a constraint draws its force `Cᵀ λ` from it, spread over the
-        constrained nodes by the relation's coefficients. That force is the
-        opposite of the **reaction**: the reaction of a model's constraints is
-        `−internal_forces(model.filter("constraint"), …)`, whichever way `solve`
-        treated the relations.
+        # Parameters
+        
+        - `model`: the physics and the constraints.
+        - `state`: the material state at the Gauss points, as returned by
+          `pyrucast.element_field.integrate_behavior`. Each zone is picked by its FE
+          subspace.
+        - `solution`: the current solution, multipliers included. A term linear in
+          `u` reads it directly — a boundary transfer's `∫ h·a·N` has no law to go
+          through —, and a constraint draws its force `Cᵀλ` from it, spread over the
+          constrained nodes by the relation's coefficients. That force is the
+          opposite of the **reaction**: the reaction of a model's constraints is
+          `−internal_forces(model.filter("constraint"), …)`, whichever way
+          `pyrucast.solver.solve` treated the relations.
+        - `materials`: the material data, zone by zone, as for
+          `pyrucast.matrix.stiffness`.
+        
+        # Returns
+        
+        A `NodeField` whose components are the dual variables of each sub-model
+        (`f_x`, … for a solid or a bar; `f_w`, `m_theta` for a beam).
+        
+        # Raises
+        
+        `RuntimeError` if `state` or `materials` has no zone on the FE subspace of a
+        sub-model that reads it, or lacks a component it reads.
         """
     def external_forces(self, materials: ElementField) -> NodeField:
         r"""
-        External nodal forces of `model` — the right side of `Σ f_int = Σ f_ext`.
+        External nodal forces of `model`, the right side of `Σ f_int = Σ f_ext`.
         
-        The counterpart of `internal_forces(model, state, solution, materials)`.
-        Every sub-model is asked for its terms of the residual on the external side:
-        the given data of its weak form, on the right of the equals sign. A physics
-        whose term is entirely a response to `u` (elasticity, conduction, a bar) has
-        none, so a model made only of those yields an empty field — which is the
-        honest answer, not a failure.
+        The counterpart of `pyrucast.node_field.internal_forces`. Every sub-model is
+        asked for its terms of the residual on the external side: the given data of
+        its weak form, on the right of the equals sign — the ambient of a boundary
+        transfer, a distributed flux. A physics whose term is entirely a response to
+        `u` (elasticity, conduction, a bar) has none. The terms loading one node are
+        added.
         
-        Splitting the two sides is what keeps signs out of the physics: an author
-        writes both halves positively, as the weak form reads, and the single
-        subtraction lives in the caller.
+        # Parameters
+        
+        - `model`: the physics whose given data to integrate.
+        - `materials`: the material data, zone by zone, as for
+          `pyrucast.matrix.stiffness`; it carries the densities the terms read.
+        
+        # Returns
+        
+        A `NodeField` with a single zone over every loaded node. A model made only
+        of physics without such a term yields an empty field — the right answer,
+        not a failure.
+        
+        # Raises
+        
+        `RuntimeError` if `materials` has no zone on the FE subspace of a sub-model
+        that reads it, or lacks a component it reads.
         """
 
 @typing.final
@@ -2788,83 +3808,292 @@ class NodeField:
         """
     def gradient(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
-        Gradient `∇f` of a node `field` at the Gauss points of `fespace`.
+        Gradient `∇f` of a field at the nodes, at the Gauss points of `fespace`.
         
-        Geometric and physics-agnostic: each component of `field` is
-        differentiated w.r.t. every spatial axis, giving an `ElementField` with
-        one component `grad_<name>_<axis>` per (input component, axis) pair
-        (`grad_T_x`, …). Feed the result to `integrate_behavior`.
+        `∇f = Σ_i f_i ∇N_i`, evaluated at each Gauss point, cell by cell. The
+        operator is geometric and knows no physics; its result feeds
+        `pyrucast.element_field.integrate_behavior` (heat conduction reads
+        `grad_T_*`). A node the field does not define reads zero.
+        
+        # Parameters
+        
+        - `field`: the field to differentiate, at the nodes.
+        - `fespace`: the FE space whose cells and Gauss points to use.
+        
+        # Returns
+        
+        An `ElementField` on `fespace`, with one component `grad_<name>_<axis>` per
+        pair of input component and spatial axis (`grad_T_x`, `grad_T_y`, …).
         """
     def interp_to_gauss(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
-        Interpolate a nodal `field` to the Gauss points of `fespace`
-        (`f(ξ_g) = Σ_i f_i N_i(ξ_g)`), turning a per-node `NodeField` into a
-        per-element `ElementField` with the same component names. Cast3M `CHAN`
-        (nodes → Gauss).
+        Interpolate a field at the nodes to the Gauss points of `fespace`.
+        
+        `f(ξ_g) = Σ_i f_i N_i(ξ_g)`: values, not derivatives — typically to carry a
+        nodal temperature to the Gauss points before
+        `pyrucast.element_field.thermal_strain`. A node the field does not define
+        reads zero.
+        
+        # Parameters
+        
+        - `field`: the field to interpolate, at the nodes.
+        - `fespace`: the FE space whose cells and Gauss points to use.
+        
+        # Returns
+        
+        An `ElementField` on `fespace` with the components of `field`, one value per
+        cell and Gauss point.
         """
     def along(self, line: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Evolution:
         r"""
-        The values of `field` along `line`, one curve per component: the value
-        against the distance travelled along the line.
+        The values of `field` along `line`, one curve per component.
         
-        `line` is a POI1 mesh, read in the order of its cells, zone after zone:
-        that order is the path. The abscissa of a point is the length of the
-        path up to it — the sum of the straight distances from one point to the
-        next —, `0` at the first point; its ordinate, the value of the
-        component at that node (a node the field does not define reads zero).
-        `components=None` takes every component of the field, in its order;
-        each gives one `SubEvolution` of the returned `Evolution`, its
-        `ordinate_type` the component's name. A field of another mesh, or a
-        field at the Gauss points, is brought onto the line's points first with
-        `pyrucast.node_field.project`.
+        Each curve gives the value against the distance travelled along the line.
+        The order of the cells of `line`, zone after zone, is the path. The
+        abscissa of a point is the length of the path up to it — the sum of the
+        straight distances from one point to the next —, `0` at the first point;
+        its ordinate is the value of the component at that node (a node the field
+        does not define reads zero).
         
-        Raises when `line` is not POI1, when two consecutive points coincide,
-        for a component the field does not carry, and when the field and
-        `line` hang from different `Coords`.
+        # Parameters
+        
+        - `field`: the field to read, at the nodes. A field of another mesh, or a
+          field at the Gauss points, is first brought onto the points of the line
+          with `pyrucast.node_field.project`.
+        - `line`: the path, a POI1 mesh on the same `Coords` as `field`.
+        - `components`: the components to read, one curve each; `None` takes every
+          component of the field, in its order.
+        
+        # Returns
+        
+        An `Evolution` with one `SubEvolution` per component, in the order of
+        `components`, whose `ordinate_type` is the component's name.
+        
+        # Raises
+        
+        `RuntimeError` if `line` is not POI1, if two consecutive points coincide
+        (the abscissa would repeat), if `field` does not carry one of
+        `components`, or if `field` and `line` hang from different `Coords`.
         """
     def abs(self) -> NodeField:
         r"""
-        Element-wise absolute value of a field.
+        Absolute value of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sqrt(self) -> NodeField:
         r"""
-        Element-wise square root of a field (`nan` for negatives).
+        Square root of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. A negative value gives `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def exp(self) -> NodeField:
         r"""
-        Element-wise exponential `eˣ` of a field.
+        Exponential `eˣ` of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def log(self) -> NodeField:
         r"""
-        Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
+        Natural logarithm of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. Zero gives `-inf`, a negative value `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def log10(self) -> NodeField:
         r"""
-        Element-wise base-10 logarithm of a field.
+        Base-10 logarithm of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. Zero gives `-inf`, a negative value `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def cos(self) -> NodeField:
         r"""
-        Element-wise cosine of a field (radians).
+        Cosine of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sin(self) -> NodeField:
         r"""
-        Element-wise sine of a field (radians).
+        Sine of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def tan(self) -> NodeField:
         r"""
-        Element-wise tangent of a field (radians).
+        Tangent of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sinh(self) -> NodeField:
         r"""
-        Element-wise hyperbolic sine of a field.
+        Hyperbolic sine of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def cosh(self) -> NodeField:
         r"""
-        Element-wise hyperbolic cosine of a field.
+        Hyperbolic cosine of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def tanh(self) -> NodeField:
         r"""
-        Element-wise hyperbolic tangent of a field.
+        Hyperbolic tangent of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
         r"""
@@ -2885,23 +4114,34 @@ class NodeField:
         """
     def restrict(self, mesh: Mesh) -> NodeField:
         r"""
-        Restrict `field` to the nodes used by `mesh`.
+        Restrict `field` to the nodes of `mesh`.
         
-        Returns a new `NodeField` with one zone per submesh of `mesh`, each
-        supported on the submesh's canonical POI1 node cloud (its distinct nodes,
-        materialised once and cached). Two restrictions onto the **same** `mesh`
-        share that support, so they combine directly: `restrict(a, mesh) -
-        restrict(b, mesh)` is the node-by-node difference. That support is also the
-        one a stiffness block over `mesh` uses, so `K * restrict(f, mesh)` and
-        `solve(K, f) - restrict(g, mesh)` line up too.
+        Each zone of the result lies on the POI1 cloud of a submesh of `mesh` — its
+        distinct nodes, built once and kept with the submesh. Two restrictions onto
+        the **same** `mesh` share that support, so they combine directly:
+        `restrict(a, mesh) - restrict(b, mesh)` is the node-by-node difference.
+        That support is also the one a stiffness block over `mesh` uses, so
+        `K * restrict(f, mesh)` and `solve(K, f) - restrict(g, mesh)` line up too.
         
-        Each zone carries the union of `field`'s components; nodes of `mesh` absent
-        from `field` are assigned `0.0`. Element operations on the region
-        (`gradient`, `integral`, `deformation`, `interp_to_gauss`) take `mesh` as a
-        separate argument and read the field by node id. Use `restrict_like` to
-        land on the exact support of an existing field instead of a mesh.
+        Element operations on the region (`gradient`, `integral`, `deformation`,
+        `interp_to_gauss`) take `mesh` as a separate argument and read the field by
+        node. To land on the support of an existing field rather than a mesh, use
+        `pyrucast.node_field.restrict_like`.
         
-        Errors if `mesh` and `field` are attached to different `Coords`s.
+        # Parameters
+        
+        - `field`: the field to restrict.
+        - `mesh`: the region, on the same `Coords` as `field`.
+        
+        # Returns
+        
+        A new `NodeField` with one zone per submesh of `mesh`, each carrying the
+        union of the components of `field`. A node of `mesh` the field does not
+        define gets `0.0`; the nodes outside `mesh` are dropped.
+        
+        # Raises
+        
+        `RuntimeError` if `mesh` and `field` are attached to different `Coords`.
         """
     def project(self, mesh: Mesh, target: Mesh, tol: builtins.float = 1e-06) -> NodeField:
         r"""
@@ -2917,33 +4157,58 @@ class NodeField:
         """
     def restrict_like(self, target: NodeField) -> NodeField:
         r"""
-        Reproject `field` onto the exact support and components of `target`,
-        zone by zone.
+        Read `field` on the support and the components of `target`, zone by zone.
         
-        Unlike `restrict` (which lands on a fresh support materialised from a
-        mesh, carrying the union of `field`'s components), this reuses each zone
-        of `target` as-is — same support, same component list — so the result is
-        on the very same support as `target` and combines with it directly by the
-        arithmetic operators (`target + restrict_like(field, target)`). A
-        `(node, component)` pair is filled from `field` when it covers it, `0.0`
-        otherwise; nodes and components of `field` absent from `target` are dropped.
-        Errors if `target` and `field` are attached to different `Coords`s.
+        Unlike `pyrucast.node_field.restrict`, which lands on a support built from
+        a mesh and carries every component of `field`, this reuses each zone of
+        `target` as it is — same support, same components. The result combines with
+        `target` directly by the arithmetic operators: typically, to fold an
+        increment from `pyrucast.solver.solve`, which also carries the
+        multipliers, into a current solution (`target + restrict_like(du, target)`).
+        
+        # Parameters
+        
+        - `field`: the field to read.
+        - `target`: the field whose zones, supports and components the result
+          takes, on the same `Coords` as `field`.
+        
+        # Returns
+        
+        A new `NodeField` zone for zone like `target`. A `(node, component)` pair
+        takes the value of `field` when it defines it, `0.0` otherwise; the nodes
+        and components of `field` absent from `target` are dropped.
+        
+        # Raises
+        
+        `RuntimeError` if `target` and `field` are attached to different `Coords`.
         """
     def consolidate(self) -> NodeField:
         r"""
-        Fuse the zones of a node `field` sharing the same support into one,
-        carrying the union of their components; zones on distinct supports stay
-        side by side.
+        Fuse the zones of `field` that lie on the same support into one.
         
-        Errors if two zones disagree on a value at a shared `(node, component)`
-        pair. `field` itself is left untouched.
+        The zones on one support become a single zone carrying the union of their
+        components; zones on distinct supports stay side by side. The union `a | b`
+        and `pyrucast.node_field.merge` end with this step.
+        
+        # Parameters
+        
+        - `field`: the field to consolidate.
+        
+        # Returns
+        
+        A new `NodeField`; `field` itself is left untouched.
+        
+        # Raises
+        
+        `RuntimeError` if two zones disagree on a value at a shared
+        `(node, component)` pair.
         """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
         r"""
         Per-component 0/1 **mask** of this field against a value band — same
-        structure as the field (Cast3M `MASQUE`): same zones, same support, same
-        components, only the values are rewritten (`1.0` inside the band, `0.0`
-        outside). The result is therefore multipliable term by term with the field.
+        structure as the field: same zones, same support, same components, only the
+        values are rewritten (`1.0` inside the band, `0.0` outside). The result is
+        therefore multipliable term by term with the field.
         
         Its sibling `select` extracts the passing *nodes* instead, and produces a
         `Mesh`.
@@ -3192,10 +4457,10 @@ class SubElementField:
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubElementField:
         r"""
         Per-component 0/1 **mask** of this sub-field against a value band — same
-        structure as the sub-field (Cast3M `MASQUE`): same support, same
-        components, same Gauss points, only the values are rewritten (`1.0` inside
-        the band, `0.0` outside). The result is therefore multipliable term by term
-        with the sub-field.
+        structure as the sub-field: same support, same components, same Gauss
+        points, only the values are rewritten (`1.0` inside the band, `0.0`
+        outside). The result is therefore multipliable term by term with the
+        sub-field.
         
         Its sibling `select` extracts the passing *cells* instead, and produces a
         `Mesh`.
@@ -3209,47 +4474,223 @@ class SubElementField:
         """
     def abs(self) -> SubElementField:
         r"""
-        Element-wise absolute value of a field.
+        Absolute value of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sqrt(self) -> SubElementField:
         r"""
-        Element-wise square root of a field (`nan` for negatives).
+        Square root of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. A negative value gives `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def exp(self) -> SubElementField:
         r"""
-        Element-wise exponential `eˣ` of a field.
+        Exponential `eˣ` of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def log(self) -> SubElementField:
         r"""
-        Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
+        Natural logarithm of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. Zero gives `-inf`, a negative value `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def log10(self) -> SubElementField:
         r"""
-        Element-wise base-10 logarithm of a field.
+        Base-10 logarithm of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. Zero gives `-inf`, a negative value `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def cos(self) -> SubElementField:
         r"""
-        Element-wise cosine of a field (radians).
+        Cosine of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sin(self) -> SubElementField:
         r"""
-        Element-wise sine of a field (radians).
+        Sine of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def tan(self) -> SubElementField:
         r"""
-        Element-wise tangent of a field (radians).
+        Tangent of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sinh(self) -> SubElementField:
         r"""
-        Element-wise hyperbolic sine of a field.
+        Hyperbolic sine of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def cosh(self) -> SubElementField:
         r"""
-        Element-wise hyperbolic cosine of a field.
+        Hyperbolic cosine of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def tanh(self) -> SubElementField:
         r"""
-        Element-wise hyperbolic tangent of a field.
+        Hyperbolic tangent of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
         r"""
@@ -3831,12 +5272,25 @@ class SubModel:
         """
     def material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> SubElementField:
         r"""
-        Build the material `SubElementField` of one sub-model.
+        Build a uniform material field for one sub-model.
         
-        `sub_material_field(sub_model, [("k", 1.0), ...])` — fresh
-        SubElementField on the sub-model's FE subspace, pre-filled with the
-        given uniform value per declared component. Errors for physics that
-        need no material (e.g. Dirichlet).
+        A fresh zone on the FE subspace of the sub-model, filled with the given
+        values.
+        
+        # Parameters
+        
+        - `sub_model`: the sub-model whose material to build.
+        - `components_and_values`: the `(component, value)` pairs, one uniform value
+          per component, for instance `[("E", 210e9), ("nu", 0.3)]`.
+        
+        # Returns
+        
+        A `SubElementField` on the FE subspace of `sub_model`.
+        
+        # Raises
+        
+        `RuntimeError` if a component the physics requires is missing, or for a
+        physics that needs no material (a constraint).
         """
 
 @typing.final
@@ -4070,47 +5524,223 @@ class SubNodeField:
         """
     def abs(self) -> SubNodeField:
         r"""
-        Element-wise absolute value of a field.
+        Absolute value of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sqrt(self) -> SubNodeField:
         r"""
-        Element-wise square root of a field (`nan` for negatives).
+        Square root of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. A negative value gives `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def exp(self) -> SubNodeField:
         r"""
-        Element-wise exponential `eˣ` of a field.
+        Exponential `eˣ` of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def log(self) -> SubNodeField:
         r"""
-        Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
+        Natural logarithm of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. Zero gives `-inf`, a negative value `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def log10(self) -> SubNodeField:
         r"""
-        Element-wise base-10 logarithm of a field.
+        Base-10 logarithm of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. Zero gives `-inf`, a negative value `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def cos(self) -> SubNodeField:
         r"""
-        Element-wise cosine of a field (radians).
+        Cosine of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sin(self) -> SubNodeField:
         r"""
-        Element-wise sine of a field (radians).
+        Sine of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def tan(self) -> SubNodeField:
         r"""
-        Element-wise tangent of a field (radians).
+        Tangent of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sinh(self) -> SubNodeField:
         r"""
-        Element-wise hyperbolic sine of a field.
+        Hyperbolic sine of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def cosh(self) -> SubNodeField:
         r"""
-        Element-wise hyperbolic cosine of a field.
+        Hyperbolic cosine of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def tanh(self) -> SubNodeField:
         r"""
-        Element-wise hyperbolic tangent of a field.
+        Hyperbolic tangent of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
         r"""
@@ -4136,10 +5766,9 @@ class SubNodeField:
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubNodeField:
         r"""
         Per-component 0/1 **mask** of this sub-field against a value band — same
-        structure as the sub-field (Cast3M `MASQUE`): same support, same
-        components, only the values are rewritten (`1.0` inside the band, `0.0`
-        outside). The result is therefore multipliable term by term with the
-        sub-field.
+        structure as the sub-field: same support, same components, only the values
+        are rewritten (`1.0` inside the band, `0.0` outside). The result is
+        therefore multipliable term by term with the sub-field.
         
         Its sibling `select` extracts the passing *nodes* instead, and produces a
         `Mesh`.
@@ -4154,129 +5783,203 @@ class SubNodeField:
 
 def abs(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise absolute value of a field.
+    Absolute value of `field`, value by value.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def along(field: NodeField, line: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Evolution:
     r"""
-    The values of `field` along `line`, one curve per component: the value
-    against the distance travelled along the line.
+    The values of `field` along `line`, one curve per component.
     
-    `line` is a POI1 mesh, read in the order of its cells, zone after zone:
-    that order is the path. The abscissa of a point is the length of the
-    path up to it — the sum of the straight distances from one point to the
-    next —, `0` at the first point; its ordinate, the value of the
-    component at that node (a node the field does not define reads zero).
-    `components=None` takes every component of the field, in its order;
-    each gives one `SubEvolution` of the returned `Evolution`, its
-    `ordinate_type` the component's name. A field of another mesh, or a
-    field at the Gauss points, is brought onto the line's points first with
-    `pyrucast.node_field.project`.
+    Each curve gives the value against the distance travelled along the line.
+    The order of the cells of `line`, zone after zone, is the path. The
+    abscissa of a point is the length of the path up to it — the sum of the
+    straight distances from one point to the next —, `0` at the first point;
+    its ordinate is the value of the component at that node (a node the field
+    does not define reads zero).
     
-    Raises when `line` is not POI1, when two consecutive points coincide,
-    for a component the field does not carry, and when the field and
-    `line` hang from different `Coords`.
+    # Parameters
+    
+    - `field`: the field to read, at the nodes. A field of another mesh, or a
+      field at the Gauss points, is first brought onto the points of the line
+      with `pyrucast.node_field.project`.
+    - `line`: the path, a POI1 mesh on the same `Coords` as `field`.
+    - `components`: the components to read, one curve each; `None` takes every
+      component of the field, in its order.
+    
+    # Returns
+    
+    An `Evolution` with one `SubEvolution` per component, in the order of
+    `components`, whose `ordinate_type` is the component's name.
+    
+    # Raises
+    
+    `RuntimeError` if `line` is not POI1, if two consecutive points coincide
+    (the abscissa would repeat), if `field` does not carry one of
+    `components`, or if `field` and `line` hang from different `Coords`.
     """
 
 def arc(a: Node, center: Node, b: Node, n_elems: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
-    Build an open arc of `n_elems` elements from `a` to `b`, following the
-    circle centred on `center` that passes through both (the shorter arc is
-    built).
+    An open arc of `n_elems` cells from `a` to `b`, centred on `center`.
     
-    `element_type` is `"SEG2"` (default) or `"SEG3"`.
+    The circle passes through both ends; the shorter arc is built.
+    
+    # Parameters
+    
+    - `a`, `b`: the end nodes.
+    - `center`: the centre node of the circle.
+    - `n_elems`: the number of cells, `≥ 1`.
+    - `element_type`: `"SEG2"` (the default) or `"SEG3"`.
+    
+    # Returns
+    
+    A `Mesh` of one zone, with fresh nodes between `a` and `b`.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `element_type`.
+    - `RuntimeError` if `a`, `center` and `b` are aligned (the plane of the arc is
+      undefined).
     """
 
 def barycenter(mesh: Mesh) -> Mesh:
     r"""
-    Build a POI1 mesh of per-element centroids (centres of gravity), submesh
-    by submesh.
+    A POI1 mesh of one fresh node at the centroid of each cell of `mesh`.
     
-    Returns a new mesh with the same number of submeshes; each output submesh
-    is a POI1 submesh with one **fresh** node per element of the corresponding
-    input submesh, placed at the element's centroid. A POI1 input is therefore
-    copied to colocated fresh nodes — handy to mint Lagrange-multiplier support
-    nodes from a set of constrained points.
+    A POI1 input is therefore copied to fresh nodes at the same places — handy to
+    create the support nodes of Lagrange multipliers from a set of constrained
+    points.
+    
+    # Parameters
+    
+    - `mesh`: the mesh whose cells to take.
+    
+    # Returns
+    
+    A POI1 `Mesh` with one zone per submesh of `mesh`, one fresh node per cell.
     """
 
 def beam_deformation(field: NodeField, fespace: FiniteElementSpace, material: ElementField) -> ElementField:
     r"""
-    Generalised **section strains** of a beam at the Gauss points, in whichever
-    configuration the mesh puts it — the geometric producer of the behaviour
-    input for `timoshenko` and `bernoulli`.
+    Generalized section strains of a beam at the Gauss points of `fespace`.
     
-    | `Coords` | DOFs read | components produced |
+    The product `B·u` with the element's own `B`, for Bernoulli and Timoshenko
+    beams alike. The configuration is read on the dimension of the `Coords`:
+    
+    | `Coords` | unknowns read | components produced |
     |---|---|---|
     | 1-D | `w, theta` | `kappa, gamma` |
     | 2-D | `u_x, u_y, r_z` | `eps, kappa, gamma` |
     | 3-D | six | `eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z` |
     
-    For an oriented element it builds the local axes, rotates the nodal triples
-    into them, then evaluates the strains from the local DOFs.
+    For an oriented element, the local axes are built and the nodal triples
+    turned into them before the strains are evaluated. The strains are evaluated
+    at each Gauss point: the curvature varies along an unloaded span (`M' = V`),
+    the shear stays constant. Fed to `pyrucast.element_field.integrate_behavior`,
+    they give the section forces (`N = E·A·eps`, `M = E·I·kappa`,
+    `V = G·A_s·gamma`).
     
-    The **material** is required, and that is the honest signature: the
-    element's interpolation depends on `Φ = 12EI/(G·A_s·L²)`, so its curvature
-    distribution cannot be recovered without knowing the shear stiffness. An
-    operator that took no material could only ever report a mean.
+    # Parameters
     
-    Feed the result to `integrate_behavior` to obtain the section forces
-    (`N = E·A·eps`, `M = E·I·kappa`, `V = G·A_s·gamma`). The moment then varies
-    along the element, as `M' = V` requires, while the shear stays constant.
+    - `field`: the displacements and rotations, at the nodes.
+    - `fespace`: the FE space of the beam, on SEG2 cells.
+    - `material`: the material field. It is required: the element's
+      interpolation depends on `Φ = 12EI/(G·A_s·L²)`. A material without shear
+      constants — a Bernoulli beam's — means `Φ = 0`, so one operator serves both
+      theories.
+    
+    # Returns
+    
+    An `ElementField` on `fespace` with the components of the table.
+    
+    # Raises
+    
+    `RuntimeError` if the cells of `fespace` are not SEG2.
     """
 
 def bernoulli(fespace: FiniteElementSpace) -> Model:
     r"""
-    `model.bernoulli(fespace)` — the classical **Euler-Bernoulli** beam,
-    where plane sections stay normal to the deflected axis and there is no
-    transverse shear at all.
+    Euler-Bernoulli beam, without transverse shear, on SEG2 cells.
     
-    The configuration follows the mesh: a 1-D `Coords` gives a pure-bending
-    beam (DOFs `w`, `theta`; material `E`, `I`), a 2-D one a plane frame
-    (`u_x, u_y, r_z`; `+ A`), a 3-D one a space frame (six DOFs;
-    `+ I_y, I_z, J, G`). Read them back with `model.primal_vars()`.
+    Plane sections stay normal to the deflected axis. The configuration follows
+    the mesh: a 1-D `Coords` gives a pure-bending beam (unknowns `w`, `theta`;
+    material `E`, `I`), a 2-D one a plane frame (`u_x, u_y, r_z`; `+ A`), a 3-D
+    one a space frame (six unknowns; `+ I_y, I_z, J, G`). Read them back with
+    `model.primal_vars()`.
     
-    The deflection is interpolated by **cubic Hermite** functions, so the
-    subspace must be `HERMITE3` — build it with
-    `FiniteElementSpace(mesh, interpolation="HERMITE3")`. That basis is what
-    makes the element **nodally exact** wherever the interior carries no
-    distributed load, so one element per member suffices for a frame; a
-    Lagrange subspace would carry a linear deflection, of zero curvature, and
-    is refused.
+    The cubic Hermite basis makes the element **nodally exact** wherever the
+    interior carries no distributed load, so one element per member suffices for
+    a frame. Prefer `pyrucast.model.timoshenko` for a stocky member, where the
+    shear compliance matters: reaching Bernoulli by making the shear area huge
+    would work in exact arithmetic and lock in floating point.
     
-    Prefer `timoshenko` for a stocky member, where the shear compliance
-    matters. Reaching Bernoulli by making the shear area huge would work in
-    exact arithmetic and lock in floating point, which is why this is a
-    physics of its own rather than a limiting case.
+    # Parameters
+    
+    - `fespace`: the FE space, on SEG2 cells with the `HERMITE3` interpolation —
+      `FiniteElementSpace(mesh, interpolation="HERMITE3")`. A Lagrange subspace
+      would carry a linear deflection, of zero curvature, and is refused.
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`.
+    
+    # Raises
+    
+    `RuntimeError` if a cell is not SEG2, or for a subspace that is not
+    `HERMITE3`.
     """
 
 def border(mesh: Mesh, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Extract the boundary of a surface mesh (TRI3/QUA4) as SEG2 loops.
+    The boundary of a surface mesh, as SEG2 loops.
     
-    An element edge used by exactly one cell is a boundary edge; the boundary
-    edges (pooled across all surface submeshes) are chained into closed loops.
-    Returns a Mesh with one SEG2 submesh per loop — a single loop for a
-    simply-connected domain, several when the domain has holes or disjoint
-    pieces. Loops keep the CCW boundary orientation (outer loop CCW, holes
-    CW), so the result can feed straight back into `triangulate_surface`.
+    An edge used by exactly one cell is a boundary edge; the boundary edges, pooled
+    across all surface submeshes, are chained into closed loops. The loops keep the
+    counterclockwise boundary orientation (outer loop counterclockwise, holes
+    clockwise), so the result feeds straight back into
+    `pyrucast.mesh.triangulate_surface`.
     
-    With `angle_deg` given, each loop is further split into open **arêtes** at
-    its corner nodes — where the boundary turns by more than `angle_deg`
-    degrees — one SEG2 submesh per arête (as `skin` splits a volume's skin into
-    flat faces). A loop with no such corner stays a single closed loop.
-    `angle_deg=None` (the default) keeps every boundary as one closed loop.
+    # Parameters
+    
+    - `mesh`: a surface mesh, TRI3, QUA4, TRI6, QUA8 or QUA9.
+    - `angle_deg`: when given, each loop is split into open **sides** at its
+      corners — where the boundary turns by more than `angle_deg` degrees —, as
+      `pyrucast.mesh.skin` splits a volume's skin into flat faces; a loop with no
+      such corner stays whole. `None` keeps every loop whole.
+    
+    # Returns
+    
+    A `Mesh` with one SEG2 submesh per loop — or per side —, on the nodes of
+    `mesh`: a single loop for a simply connected domain, several with holes or
+    disjoint pieces.
+    
+    # Raises
+    
+    `RuntimeError` if `mesh` is not a surface mesh.
     """
 
 def boundary_transfer(fespace: FiniteElementSpace, target: Model, variables: typing.Sequence[builtins.str]) -> Model:
     r"""
-    `model.boundary_transfer(fespace, target, variables)` — surface
-    exchange with an **imposed ambient** (Robin / film) spanning every
-    subspace of a *boundary* `fespace` (edge mesh in 2-D, surface mesh in
-    3-D), coupling into the model `target`.
+    Surface exchange with an imposed ambient (Robin, film), coupling into `target`.
     
-    `variables` lists the exchanged unknowns of `target`; each couples into
-    the dual row `target` pairs it with — naming the bulk physics' own DOFs is
-    what makes the boundary term couple into it:
+    Naming the bulk physics' own unknowns is what makes the boundary term couple
+    into it:
     
     | `target` | `variables` | you get |
     |---|---|---|
@@ -4284,288 +5987,529 @@ def boundary_transfer(fespace: FiniteElementSpace, target: Model, variables: typ
     | `fick(..., "H2")` | `["c_H2"]` | a surface mass-transfer law |
     | `elasticity` | `["u_x", "u_y"]` | a Winkler elastic foundation |
     
-    Neither the dual row nor the nature (`"thermal"`, `"diffusion"`,
-    `"mechanical"`) is an argument: both are read from `target`. A variable
-    `target` does not declare, or variables of two natures, raise.
-    
     Material, per variable: the coefficient `h_<variable>` and the ambient
     `a_ext_<variable>`. The film `h∫NᵢNⱼ` goes into the stiffness, the ambient
-    term `h·a_ext·∫Nᵢ dΓ` comes out of `node_field.external_forces(...)`.
+    term `h·a_ext·∫Nᵢ dΓ` comes out of `pyrucast.node_field.external_forces`.
     Compose with `|`:
-    `conduction = model.heat_conduction(bulk)`
     `model = conduction | model.boundary_transfer(skin, conduction, ["T"])`.
+    
+    # Parameters
+    
+    - `fespace`: the **boundary** FE space (an edge mesh in 2-D, a surface mesh
+      in 3-D).
+    - `target`: the model it couples into. The dual row of each variable and the
+      nature (`"thermal"`, `"diffusion"`, `"mechanical"`) are read from it.
+    - `variables`: the exchanged unknowns of `target`.
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`.
+    
+    # Raises
+    
+    `RuntimeError` for a variable `target` does not declare, or for variables of
+    two natures.
     """
 
 def cell_integral(field: ElementField, target: FiniteElementSpace) -> ElementField:
     r"""
-    Integral of every component of `field` over **each cell** (Cast3M
-    `INTG 'ELEM'`), with the field's own quadrature: `Σ_g f(g)·|J|·w_g`, the
-    `2πr` included on a body of revolution. The result lives on `target`, a
-    space of the same mesh with **one point per cell** —
-    `FiniteElementSpace(mesh, quadrature="REDUCED")`, a single point at each
-    centroid. Integrating `1` gives every cell's measure. Raises when `target`
-    has several points per cell or does not cover the field's mesh.
+    Integrate every component of `field` over each cell.
+    
+    `v_e = Σ_g f(g)·|J|·w_g`, with the field's own quadrature, the `2πr`
+    included on a body of revolution. Integrating `1` gives the measure of every
+    cell; `pyrucast.node_field.sum_to_nodes` then gathers it at the nodes.
+    
+    # Parameters
+    
+    - `field`: the field to integrate, at the Gauss points.
+    - `target`: a space of the same mesh with **one point per cell** —
+      `FiniteElementSpace(mesh, quadrature="REDUCED")`, a single point at each
+      centroid.
+    
+    # Returns
+    
+    An `ElementField` on `target`, with the components of `field`.
+    
+    # Raises
+    
+    `RuntimeError` if `target` has several points per cell or does not cover the
+    mesh of `field`.
     """
 
 def chain(mesh: Mesh) -> Mesh:
     r"""
-    Re-order the cells of a line mesh into a continuous chain.
+    Reorder the cells of a line mesh into a continuous chain.
     
-    The complement of `orient`: where `orient` fixes the *direction* of the
-    cells, `chain` fixes their *order* — each SEG2/SEG3 submesh is sorted so
-    that consecutive cells share a node (and flipped where needed), so reading
-    the connectivity walks the curve from one end to the other. Each submesh is
-    chained on its own and must be one continuous chain, open or closed: a node
-    carrying three segments (branching) or disjoint pieces raise an error.
-    Returns a fresh mesh sharing the input's nodes.
+    The complement of `pyrucast.mesh.orient`: where `orient` fixes the
+    *direction* of the cells, `chain` fixes their *order* — each submesh is sorted
+    so that consecutive cells share a node, flipped where needed, so reading the
+    connectivity walks the curve from one end to the other.
+    
+    # Parameters
+    
+    - `mesh`: a line mesh, SEG2 or SEG3; each submesh is chained on its own and
+      must be one continuous chain, open or closed.
+    
+    # Returns
+    
+    A fresh `Mesh` sharing the nodes of `mesh`.
+    
+    # Raises
+    
+    `RuntimeError` if `mesh` is not a line mesh, for a node carrying three
+    segments (a branch), or for disjoint pieces in one submesh.
     """
 
 def circle(center: Node, normal: typing.Sequence[builtins.float], radius: builtins.float, n_elems: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
-    Build a closed circle mesh of `n_elems` elements, centred on `center`,
-    lying in the plane defined by the 3-component `normal`, with the given
-    `radius`.
+    A closed circle of `n_elems` cells, centred on `center`.
     
-    `element_type` is `"SEG2"` (default) or `"SEG3"`.
+    # Parameters
+    
+    - `center`: the centre node.
+    - `normal`: the normal of the circle's plane, three components even in 2-D.
+    - `radius`: the radius.
+    - `n_elems`: the number of cells.
+    - `element_type`: `"SEG2"` (the default) or `"SEG3"`.
+    
+    # Returns
+    
+    A `Mesh` of one zone, on fresh nodes.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `element_type`.
+    - `RuntimeError` if `normal` does not have three components.
     """
 
 def cleanup(mesh: Mesh) -> Mesh:
     r"""
-    Fix the connectivity of a surface mesh: remove its doublets, give up the
-    nodes that have only three cells around them, and switch the diagonals that
-    lower the valence error.
+    Fix the connectivity of a 2-D surface mesh: doublets and wrong valences.
     
-    **No node of the contour ever moves**, and none is ever given up: the mesh
-    keeps exactly the boundary it came with.
+    It removes the doublets, gives up the nodes that have only three cells around
+    them, and switches the diagonals that lower the valence error. **No node of
+    the contour ever moves**, and none is ever given up: the mesh keeps exactly
+    the boundary it came with. Smoothing cannot fix these: the angles around a
+    node sum to 2π whatever the positions. Turning a lone triangle into a
+    quadrangle is `pyrucast.mesh.merge_triangles`'s job.
     
-    A **doublet** is an interior node with only two quadrangles around it,
-    which therefore share two edges; the node sits in a wedge no smoothing can
-    open. A node of the **wrong valence** wants four cells and has three or
-    five, giving corners of 120° or 72° on average — and the angles around a
-    node sum to 2π whatever the positions, so smoothing will never square them.
+    # Parameters
     
-    Two moves answer that:
+    - `mesh`: a 2-D surface mesh, TRI3 and QUA4, never modified.
     
-    - the **diagonal switch**, for a node of valence five or more: two
-      quadrangles sharing an edge form a hexagon, which splits across any of
-      its three diagonals. It changes no node and no boundary, and is applied
-      only when it strictly lowers the valence error and leaves both cells
-      convex.
-    - the **collapse**, for an interior node with only three cells: round a
-      node carrying `q` quadrangles and `t` triangles the star is bounded by a
-      polygon of `n = 2q + t` sides, and an `n`-gon decomposes with no interior
-      node into `q'` quadrangles and `t'` triangles such that `2q' + t' = n - 2`
-      — always a cell fewer than the star. So the node is given up along with
-      that cell: 3 quadrangles become 2, and 1 quadrangle with 2 triangles
-      becomes a single quadrangle. It is the only move that removes a node,
-      changes how many cells there are, or moves anything: removing a node
-      leaves the ring round it stretched, so the move is judged after relaxing
-      that ring, and the relaxation is kept along with it. A move that does not
-      improve the neighbourhood's worst cell is undone whole.
+    # Returns
     
-    - the **pair collapse**, for two interior nodes sharing an edge with at
-      least one short of a cell: neither can be given up alone without trading
-      one irregular node for two, but together they carry `val(a) + val(b) - 2`
-      cells — a hexagon's worth at 3-3, a heptagon's at 3-4 — and both re-cut
-      with two cells fewer. Two nodes and two cells go at once, and a triangle
-      in the star is carried across rather than created.
+    A new `Mesh`, wound the way `mesh` was, clockwise or not. Your own nodes come
+    back untouched, apart from those on a ring a collapse relaxed, which are
+    duplicated.
     
-    Triangles are read for incidence and reshaped, and they only ever leave two
-    at a time — their number has the parity of the boundary's edge count, which
-    nothing here may change. Turning a lone triangle into a quadrangle is
-    `merge_triangles`'s job.
+    # Raises
     
-    Your own nodes come back untouched apart from those on a ring a collapse
-    relaxed, which are duplicated — the mesh you hand in is never modified. The
-    result comes back wound the way it went in, clockwise or not.
+    `RuntimeError` if `mesh` is not 2-D, or has no surface cells (TRI3/QUA4).
+    
+    # Notes
+    
+    A **doublet** is an interior node with only two quadrangles around it, which
+    therefore share two edges. A node of the **wrong valence** wants four cells
+    and has three or five. Three moves answer that:
+    
+    - the **diagonal switch**, for a node of valence five or more: two quadrangles
+      sharing an edge form a hexagon, which splits across any of its three
+      diagonals. It is applied only when it strictly lowers the valence error and
+      leaves both cells convex.
+    - the **collapse**, for an interior node with only three cells: round a node
+      carrying `q` quadrangles and `t` triangles the star is bounded by a polygon
+      of `n = 2q + t` sides, which decomposes with no interior node into `q'`
+      quadrangles and `t'` triangles such that `2q' + t' = n − 2` — always a cell
+      fewer. So the node is given up along with that cell. Removing a node leaves
+      the ring round it stretched, so the move is judged after relaxing that ring;
+      a move that does not improve the neighbourhood's worst cell is undone whole.
+    - the **pair collapse**, for two interior nodes sharing an edge with at least
+      one short of a cell: together they carry `val(a) + val(b) − 2` cells and
+      both re-cut with two cells fewer.
+    
+    Triangles only ever leave two at a time: their number has the parity of the
+    boundary's edge count, which nothing here may change.
     """
 
 def consolidate_element(field: ElementField) -> ElementField:
     r"""
-    Fuse the zones of an element `field` sharing the same `FiniteElementSpace`
-    support into a single zone carrying the union of their components.
+    Fuse the zones of `field` that lie on the same FE subspace into one.
     
-    The counterpart of `|`, which leaves component-disjoint zones side by side:
-    this is how per-physics material zones built on one shared fespace become a
-    single material field readable by every physics. Components carried by two
-    zones must agree value by value, else it errors. `field` itself is left
-    untouched.
+    The counterpart of `|`, which leaves zones with distinct components side by
+    side and refuses two zones carrying the same component on one subspace. This
+    is how material zones built physics by physics on one shared FE space (`k`
+    for heat, `E`, `nu`, `alpha` for mechanics) become a single material field
+    that every physics reads.
+    
+    # Parameters
+    
+    - `field`: the field to consolidate.
+    
+    # Returns
+    
+    A new `ElementField`, one zone per FE subspace carrying the union of the
+    components; `field` itself is left untouched.
+    
+    # Raises
+    
+    `RuntimeError` if two zones on one subspace carry the same component.
     """
 
 def consolidate_mesh(mesh: Mesh) -> Mesh:
     r"""
-    Fuse submeshes of the same element type into one, dropping duplicate cells
-    (identical node sequences).
+    Fuse the submeshes of `mesh` of one element type, dropping duplicate cells.
     
-    Types appear in their first-seen order; the face colour of the first
-    submesh of each type is kept. `mesh` itself is left untouched.
+    A duplicate cell has the same node sequence as another. Types appear in the
+    order they are first seen; the face colour of the first submesh of each type is
+    kept.
     
-    Errors if `mesh` has no submesh (no `Coords` to attach to).
+    # Parameters
+    
+    - `mesh`: the mesh to consolidate, left untouched.
+    
+    # Returns
+    
+    A new `Mesh`, one submesh per element type.
+    
+    # Raises
+    
+    `RuntimeError` if `mesh` has no submesh (no `Coords` to attach to).
     """
 
 def consolidate_node(field: NodeField) -> NodeField:
     r"""
-    Fuse the zones of a node `field` sharing the same support into one,
-    carrying the union of their components; zones on distinct supports stay
-    side by side.
+    Fuse the zones of `field` that lie on the same support into one.
     
-    Errors if two zones disagree on a value at a shared `(node, component)`
-    pair. `field` itself is left untouched.
+    The zones on one support become a single zone carrying the union of their
+    components; zones on distinct supports stay side by side. The union `a | b`
+    and `pyrucast.node_field.merge` end with this step.
+    
+    # Parameters
+    
+    - `field`: the field to consolidate.
+    
+    # Returns
+    
+    A new `NodeField`; `field` itself is left untouched.
+    
+    # Raises
+    
+    `RuntimeError` if two zones disagree on a value at a shared
+    `(node, component)` pair.
     """
 
 def contact(slave: Mesh, master: Mesh, target: Model, variables: typing.Sequence[builtins.str]) -> Model:
     r"""
-    `model.contact(slave, master, target, variables)` — node-to-surface contact
-    (a single sub-model): prevent the nodes of `slave` from penetrating the
-    oriented `master` surface mesh, one **unilateral** relation (`≥`) per slave
-    node.
+    Node-to-surface contact: keep the nodes of `slave` out of the `master` surface.
     
-    Each slave node is paired at build with its closest master facet
-    (projection weights, facet normal, initial signed gap); the pairing is
-    then fixed (linearised, frictionless contact). The master surface must
-    be consistently oriented with its normal pointing toward the slave
-    body. `target` is the model being constrained; `variables` lists its
-    displacement primals, one per space dimension in ambient order (e.g.
-    `["u_x", "u_y"]`), each dual row read from it. Each relation gets a
-    multiplier node of its own, minted beside its slave node.
+    One **unilateral** relation (`≥`) per slave node, a single sub-model. Each
+    slave node is paired at build with its closest master facet (projection
+    weights, facet normal, initial signed gap); the pairing is then fixed
+    (linearized, frictionless contact) until `pyrucast.model.update_contact`
+    pairs it again. Each relation gets a multiplier node of its own, minted
+    beside its slave node. The initial-gap right-hand side `-g0` is a load the
+    contact carries: `pyrucast.node_field.external_forces` returns it with the
+    other loads of the model. Solve with `pyrucast.solver.solve`, which runs its
+    active-set loop.
     
-    Solve with `solve`. The initial-gap right-hand side `-g0` is a load the
-    contact carries: `node_field.external_forces` returns it with the other
-    loads of the model. See the contact chapter of the book.
+    # Parameters
+    
+    - `slave`: the nodes that must not penetrate.
+    - `master`: the surface mesh, consistently oriented, its normal pointing
+      toward the slave body.
+    - `target`: the model being constrained; the dual rows are read from it.
+    - `variables`: the displacement primals of `target`, one per spatial axis in
+      ambient order (`["u_x", "u_y"]`).
+    
+    # Returns
+    
+    A `Model` of one constraint sub-model.
+    
+    # Raises
+    
+    `RuntimeError` if a variable is not a primal of `target`.
     """
 
 def convert(mesh: Mesh, element_type: builtins.str) -> Mesh:
     r"""
-    Convert every submesh of `mesh` to `element_type`, splitting each cell into
-    cells of the target type **without moving or adding any node** on the
-    existing corners. Supported: identity (already the target type — copied
-    verbatim), `"QUA4"` → `"TRI3"` (two triangles per quad, `(0,2)` diagonal),
-    and `"HEX8"` → `"TET4"` (six tetrahedra per hex, a conforming space-filling
-    split). Corner nodes are re-used; face colours are preserved. To promote to
-    a quadratic type (`TRI3`→`TRI6`, …), which creates mid-edge nodes, use
-    `to_quadratic`. The original mesh is untouched.
+    Split every cell of `mesh` into cells of `element_type`, adding no node.
+    
+    Supported: the identity (already the target type, copied as it is),
+    `"QUA4"` → `"TRI3"` (two triangles per quadrangle, diagonal `(0, 2)`), and
+    `"HEX8"` → `"TET4"` (six tetrahedra per hexahedron, a conforming split).
+    Corner nodes are reused; face colours are kept. To promote to a quadratic type,
+    which creates mid-edge nodes, use `pyrucast.mesh.to_quadratic`.
+    
+    # Parameters
+    
+    - `mesh`: the mesh to convert, left untouched.
+    - `element_type`: the target element type.
+    
+    # Returns
+    
+    A new `Mesh` on the nodes of `mesh`.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `element_type`.
+    - `RuntimeError` for a conversion that is not supported.
     """
 
 def copy(mesh: Mesh, new_nodes: builtins.bool = True) -> Mesh:
     r"""
-    Copy `mesh`, either onto **fresh nodes** placed at the same spots
-    (`new_nodes=True`, the default) or onto the very same nodes
-    (`new_nodes=False`, only the connectivity is copied).
+    Copy `mesh`, onto fresh nodes or onto the same nodes.
     
-    Both modes keep the submesh order, element types, cell order and face
-    colours, and hand back a mesh that is **never sealed** — editable even
-    when the source has been frozen by a finite-element space, a field or a
-    matrix. The original is left untouched.
+    Both modes keep the submesh order, element types, cell order and face colours,
+    and hand back a mesh that is **never sealed** — editable even when the source
+    has been frozen by a finite-element space, a field or a matrix.
     
-    With `new_nodes=True` each distinct node of `mesh` yields one fresh node at
-    the same position (nodes shared between cells stay shared), so the two
-    meshes no longer move together. With `new_nodes=False` they share their
-    nodes: moving one moves it in both.
+    # Parameters
+    
+    - `mesh`: the mesh to copy, left untouched.
+    - `new_nodes`: `True` gives each distinct node of `mesh` one fresh node at the
+      same position (nodes shared between cells stay shared), so the two meshes
+      no longer move together. `False` copies the connectivity only: the two
+      meshes share their nodes, and moving one moves it in both.
+    
+    # Returns
+    
+    A new `Mesh`.
     """
 
 def cos(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise cosine of a field (radians).
+    Cosine of `field`, value by value, in radians.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def cosh(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise hyperbolic cosine of a field.
+    Hyperbolic cosine of `field`, value by value.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def creep_blackburn(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.creep_blackburn(fespace, kinematics)` — a **saturating primary** creep
-    stage plus a steady secondary one, with Blackburn's `sinh` stress
-    dependence (which spans decades of stress where a power law cannot).
-    Material `E`, `nu`, `A_1`, `alpha_1`, `r_1`, `B_s`, `beta_s`.
+    Blackburn creep: a saturating primary stage plus a steady secondary one.
     
-    The primary strain is tracked as its own internal variable (`p_prim`), so
-    the law integrates correctly under a varying load.
+    Blackburn's `sinh` stress dependence spans decades of stress where a power law
+    cannot. Material `E`, `nu`, `A_1`, `alpha_1`, `r_1`, `B_s`, `beta_s`. The
+    primary strain is its own internal variable (`p_prim`), so the law integrates
+    correctly under a varying load. Rate-dependent: it needs `dt`.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def creep_lemaitre(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.creep_lemaitre(fespace, kinematics)` — Lemaitre primary creep by
-    **strain** hardening, `ṗ = (q/K)^N · p^(−M)`. Material `E`, `nu`, `K`,
-    `N`, `M`.
+    Lemaitre primary creep by strain hardening, `ṗ = (q/K)^N · p^(−M)`.
     
-    The accumulated strain itself slows the flow, producing a decelerating
-    primary stage with no explicit time dependence — which is what makes it
-    usable under a varying load, where a time-hardening form would be wrong.
+    Material `E`, `nu`, `K`, `N`, `M`. The accumulated strain itself slows the
+    flow, producing a decelerating primary stage with no explicit time dependence
+    — which is what makes it usable under a varying load, where a time-hardening
+    form would be wrong. Rate-dependent: it needs `dt`.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def creep_norton(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.creep_norton(fespace, kinematics)` — Norton-Odqvist secondary creep,
-    `ṗ = (q/K)^n`. Material `E`, `nu`, `K`, `n`.
+    Norton-Odqvist secondary creep, `ṗ = (q/K)^n`.
     
-    There is **no yield threshold**: any stress creeps, however slowly. Like
-    every rate-dependent law it needs the time increment —
-    `integrate_behavior(..., dt=...)` — and raises without one, because
-    integrating a creep law as if it were instantaneous would give a
-    plausible wrong answer.
+    Material `E`, `nu`, `K`, `n`. There is **no yield threshold**: any stress
+    creeps, however slowly. Like every rate-dependent law it needs the time
+    increment, `integrate_behavior(..., dt=...)`, and raises without one:
+    integrating a creep law as if it were instantaneous would give a plausible
+    wrong answer.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def damage_sic_sic(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.damage_sic_sic(fespace, kinematics)` — **orthotropic** damage of a
-    woven SiC/SiC ceramic-matrix composite: one damage per weave direction.
-    Material `E`, `nu`, then `eps_0_i`, `eps_c_i`, `d_max_i` for `i = 1..3`,
-    plus the material axes (`V1X, V1Y[, V1Z, V2X…]`).
+    Orthotropic damage of a woven SiC/SiC composite, one damage per direction.
     
-    The matrix cracks in planes normal to the tows while the fibres keep
-    carrying load, so the stiffness falls **by direction** and by very
-    different amounts — which no scalar damage can express. The directions
-    are the same material axes an orthotropic elasticity uses, so a curved
-    part gets them right cell by cell.
+    Material `E`, `nu`, then `eps_0_i`, `eps_c_i`, `d_max_i` for `i = 1..3`, plus
+    the material axes (`V1X, V1Y[, V1Z, V2X…]`).
+    
+    The matrix cracks in planes normal to the tows while the fibres keep carrying
+    load, so the stiffness falls **by direction** and by very different amounts —
+    which no scalar damage can express. The directions are the same material axes
+    an orthotropic elasticity uses, so a curved part gets them right cell by cell.
     
     Each damage **saturates** at `d_max_i` rather than reaching one: matrix
     cracking does not take the whole stiffness, and a law that let it would
     predict a collapse that does not happen. State: `kappa_1..3`, `d_1..3`.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def damage_tc(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.damage_tc(fespace, kinematics)` — **two** damage variables, tension
-    and compression apart: `σ = (1−d⁺)σ̃⁺ + (1−d⁻)σ̃⁻`. Material `E`, `nu`,
-    `f_t`, `f_c`, `A_t`, `A_c`.
+    Damage with two variables, tension and compression apart.
+    
+    `σ = (1−d⁺)σ̃⁺ + (1−d⁻)σ̃⁻`. Material `E`, `nu`, `f_t`, `f_c`, `A_t`, `A_c`.
     
     Mazars blends its two branches into one scalar, so a material damaged in
-    compression is equally damaged in tension and a crack that **closes**
-    cannot carry load again. Keeping the two apart recovers the compressive
-    stiffness on closure — the unilateral effect — which is what makes the
-    law usable under cyclic loading. State: `r_plus`, `r_minus`, `d_plus`,
-    `d_minus`.
+    compression is equally damaged in tension and a crack that **closes** cannot
+    carry load again. Keeping the two apart recovers the compressive stiffness on
+    closure — the unilateral effect — which is what makes the law usable under
+    cyclic loading. State: `r_plus`, `r_minus`, `d_plus`, `d_minus`.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str = 'linear') -> ElementField:
     r"""
     Deformation of a displacement field `u` at the Gauss points of `fespace`.
     
-    `u` must carry exactly `space_dim` components, taken in order as the
-    displacement along x, y, z. `measure` chooses the deformation, with
-    `H = ∇u` and `F = I + H`:
+    With `H = ∇u` and `F = I + H`, the measure is one of:
     
     | measure | formula | components |
     |---|---|---|
     | `"linear"` (default) | `ε = ½(H + Hᵀ)` | `eps_xx`, `eps_xy`, … (tensor convention) |
-    | `"gradient"` (`"F"`) | `F = I + H` | every `F_ij`, row-major |
+    | `"gradient"` (`"F"`) | `F = I + H` | every `F_ij`, row by row |
     | `"green_lagrange"` | `E = ½(FᵀF − I)` | `E_xx`, `E_xy`, … |
     | `"right_cauchy_green"` (`"C"`) | `C = FᵀF` | `C_xx`, … |
     | `"left_cauchy_green"` (`"b"`) | `b = FFᵀ` | `b_xx`, … |
@@ -4573,1204 +6517,2358 @@ def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str
     | `"euler_almansi"` (`"almansi"`) | `e = ½(I − b⁻¹)` | `e_xx`, … |
     | `"jacobian"` (`"J"`) | `J = det F` | `J` alone |
     
-    On an axisymmetric space, the hoop entry `<prefix>_zz` is appended
-    (`H_θθ = u_r / r`).
+    A symmetric measure gives one component `<prefix>_<ai><aj>` per independent
+    entry `i ≤ j`; the gradient `F`, not symmetric, gives them all. The linear
+    measure is in tensor convention, `eps_xy = ½(∂u_x/∂y + ∂u_y/∂x)`, not the
+    engineering shear `γ`. In 2-D the out-of-plane direction is not deformed and
+    its entries are not produced.
+    
+    # Parameters
+    
+    - `u`: the displacement, at the nodes; exactly one component per spatial
+      axis, taken in order as the displacement along x, y, z.
+    - `fespace`: the FE space whose cells and Gauss points to use.
+    - `measure`: the measure to compute, a name or its alias from the table.
+    
+    # Returns
+    
+    An `ElementField` on `fespace` with the components of the measure. On an
+    axisymmetric space, the hoop entry `<prefix>_zz`, built on `H_θθ = u_r / r`,
+    is appended.
+    
+    # Raises
+    
+    - `RuntimeError` if `u` does not carry one component per spatial axis.
+    - `ValueError` for an unknown `measure`.
+    
+    # Notes
+    
+    Nothing is checked at the Gauss point: a degenerate transformation
+    (`det F = 0`) gives non-finite values for Hencky and Almansi. Only
+    `"jacobian"` sees an inverted cell, where `J ≤ 0` at one of its points:
+    `C = FᵀF` stays positive definite when `F` changes sign.
     """
 
 def dirichlet(imposed_mesh: Mesh, target: Model, variable: builtins.str, sense: builtins.str = '=') -> Model:
     r"""
-    `model.dirichlet(imposed_mesh, target, variable, sense="=")` — Dirichlet
-    constraint (a single sub-model) holding `variable` on the nodes of
-    `imposed_mesh`, via Lagrange multipliers.
+    Hold `variable` at imposed values on the nodes of `imposed_mesh`.
     
-    `imposed_mesh` is the POI1 mesh of constrained nodes, one relation per
-    node. `target` is the model being constrained: `variable` must be one of
-    its primals, and its dual row is read from it — the `T → q` map is the
-    target's business, not something to retype. Each relation gets a multiplier
-    node of its own, minted beside its constrained node (`Model.multiplier_mesh()`
-    gives them back); its names are those of every constraint relation, `lambda`
-    and `imposed`. The imposed value `u_d` is written in the load field at the
-    multiplier node's `imposed` component — `Model.constraint_rhs` does it from
-    the constrained node.
-    
-    **One variable, and one only** — compose for a clamp:
+    A Dirichlet constraint, a single sub-model, through Lagrange multipliers. Each
+    relation, one per node, gets a multiplier node of its own, minted beside its
+    constrained node (`Model.multiplier_mesh()` gives them back), with the names
+    of every constraint relation, `lambda` and `imposed`. The imposed value `u_d`
+    is written in the load field at the multiplier node's `imposed` component —
+    `Model.constraint_rhs` does it from the constrained node. One variable, and
+    one only — compose for a clamp:
     `dirichlet(nodes, m, "u_x") | dirichlet(nodes, m, "u_y")`.
     
-    `sense` (`"="`, the default, `">="` or `"<="`) turns the constraint
-    unilateral (`u ≥ u_d` / `u ≤ u_d`): the matrix carries the sense, and
-    `solve` runs its active-set loop. See the model chapter of the book for the
-    full semantics.
+    # Parameters
+    
+    - `imposed_mesh`: the POI1 mesh of the constrained nodes.
+    - `target`: the model being constrained; the dual row of `variable` is read
+      from it.
+    - `variable`: the unknown of `target` to hold, one of its primals.
+    - `sense`: `"="` (the default), `">="` or `"<="`. The last two make the
+      constraint unilateral (`u ≥ u_d`, `u ≤ u_d`): the matrix carries the sense,
+      and `pyrucast.solver.solve` runs its active-set loop.
+    
+    # Returns
+    
+    A `Model` of one constraint sub-model.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `sense`.
+    - `RuntimeError` if `imposed_mesh` is not POI1, or if `variable` is not a
+      primal of `target`.
     """
 
 def displace(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
     r"""
-    Displace nodes by `field` (incremental): `coord[a] += field.value(node,
-    components[a])` on the active coordinate set. `components` lists one
-    displacement-component name per spatial axis, in axis order; `None` →
-    `["u_x", "u_y", "u_z"][:dim]`. Mutates the field's `Coords` in place. What
-    the field carries is applied, and nothing else: a node carrying none of the
-    components (a multiplier node of a solution) does not move, and a
-    component a node lacks moves it by 0 along that axis.
+    Move the nodes of `field` by its values, an increment: `x += u`.
+    
+    The increment is added to the active configuration of the field's
+    `Coords`, in place, each distinct node once. What the field carries is
+    applied, and nothing else: a node carrying none of the components (a
+    multiplier node of a solution) does not move, and a component a node lacks
+    moves it by 0 along that axis.
+    
+    # Parameters
+    
+    - `field`: the displacement, at the nodes.
+    - `components`: one displacement component per spatial axis, in axis
+      order; `None` → `["u_x", "u_y", "u_z"][:dim]`.
+    
+    # Raises
+    
+    `RuntimeError` if `components` does not hold one name per axis.
+    
+    # See also
+    
+    `pyrucast.coords.displace_from`, which lays a configuration at `X + u`
+    without accumulating.
     """
 
 def displace_from(field: NodeField, reference: builtins.int, target: builtins.int, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
     r"""
-    Lay configuration `target` of the field's `Coords` at configuration
-    `reference` displaced by `field`: `x = X + u`, in absolute — called again,
-    it lands at `X + u` again, nothing accumulates. What the field carries is
-    applied, and nothing else: a node it does not define, or that carries none
-    of the components (a multiplier node of a solution), stays at its reference
-    position, and a component a node lacks counts as 0. The active
-    configuration is left as it is. `components` names one displacement component per axis; `None` →
-    `["u_x", "u_y", "u_z"][:dim]`. Cast3M `FORM` with a displacement, without
-    changing the active configuration.
+    Lay configuration `target` at `reference` displaced by `field`: `x = X + u`.
+    
+    The position is absolute: called again, it lands at `X + u` again, nothing
+    accumulates. What the field carries is applied, and nothing else: a node it
+    does not define, or that carries none of the components (a multiplier node
+    of a solution), stays at its reference position, and a component a node
+    lacks counts as 0 — the output of `pyrucast.solver.solve` is given as it
+    is. The active configuration is left as it is; `Coords.in_config` computes
+    on `target`.
+    
+    # Parameters
+    
+    - `field`: the displacement `u`, at the nodes.
+    - `reference`: the index of the configuration holding `X`, left unchanged.
+    - `target`: the index of the configuration to write, another than
+      `reference`; what it held before is replaced.
+    - `components`: one displacement component per spatial axis, in axis
+      order; `None` → `["u_x", "u_y", "u_z"][:dim]`.
+    
+    # Raises
+    
+    `RuntimeError` if `reference` or `target` is not a configuration of the
+    `Coords`, if `target` is `reference`, if `components` does not hold one name
+    per axis, or if a node would get a negative radius on an axisymmetric
+    `Coords`.
     """
 
 def divergence(field: ElementField, prefix: builtins.str) -> NodeField:
     r"""
-    Weak divergence of a per-element quantity named `prefix` — the adjoint of
-    `gradient`: `d_i = ∫ ∇N_i · A dΩ`, accumulated per node.
+    Weak divergence `d_i = ∫ ∇N_i · A dΩ` of a quantity at the Gauss points.
     
-    The **rank is read off the names**, so one operator serves both: `A_x, A_y`
-    is a vector and yields a single `div_A` component; `A_xx, A_xy, A_yy` is a
-    symmetric tensor and yields one component per axis, `div_A_x, div_A_y`. The
-    tensor case is the internal forces of a continuum when the quantity is a
-    Cauchy stress — `divergence(stress, "sigma")` is Cast3m `BSIG` — but the
-    operator knows nothing of mechanics: it needs only the geometry and the
-    names. A node shared by several subspaces receives the sum of their
+    The adjoint of `pyrucast.element_field.gradient`, accumulated per node:
+    integrated quantities, not the pointwise values of `∇·A`. The tensor case
+    is the internal forces of a continuum when the quantity is a Cauchy stress,
+    but the operator knows nothing of mechanics: it needs only the geometry and
+    the names. A node shared by several subspaces receives the sum of their
     contributions.
+    
+    # Parameters
+    
+    - `field`: the quantity, at the Gauss points.
+    - `prefix`: the name of the quantity, `A`. Its rank is read off the names
+      the field carries: `A_x, A_y` is a vector; `A_xx, A_xy, A_yy` a symmetric
+      tensor, read whole (non-symmetric) when it also carries `A_yx` — as the
+      nominal stress of large strains. On an axisymmetric space the tensor also
+      carries its hoop term `A_zz`.
+    
+    # Returns
+    
+    A `NodeField`: a single `div_A` component for a vector, one component per
+    axis for a tensor (`div_A_x`, `div_A_y`, …).
+    
+    # Raises
+    
+    `RuntimeError` if `field` carries no `prefix` of either rank, or both.
     """
 
 def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.drucker_prager(fespace, kinematics)` — pressure-sensitive plasticity
-    with **non-associated** flow: `f = q + α·I₁ − k`, plastic potential
-    `g = q + ψ·I₁`. Material `E`, `nu`, `alpha` (friction), `k` (cohesion),
-    `psi` (dilatancy).
+    Drucker-Prager pressure-sensitive plasticity, with non-associated flow.
     
-    `ψ = α` recovers associated flow; `ψ < α` is the usual choice for soils
-    and rocks, whose measured dilatancy is far below what friction alone
-    would imply. A non-associated law has a **non-symmetric** tangent.
-    Returns beyond the cone's apex (`I₁ = k/α`) collapse onto the tip.
+    `f = q + α·I₁ − k`, plastic potential `g = q + ψ·I₁`. Material `E`, `nu`,
+    `alpha` (friction), `k` (cohesion), `psi` (dilatancy).
+    
+    `ψ = α` recovers associated flow; `ψ < α` is the usual choice for soils and
+    rocks, whose measured dilatancy is far below what friction alone would imply.
+    A non-associated law has a **non-symmetric** tangent. Returns beyond the
+    cone's apex (`I₁ = k/α`) collapse onto the tip.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def elastic_strain(model: Model, stress: ElementField, materials: ElementField) -> ElementField:
     r"""
-    Elastic strain `ε = D⁻¹:σ` of a stress field at the Gauss points of every
-    continuum sub-model of `model` — the inverse of `elastic_stress` (Cast3M
-    `ELAS` applied to a stress).
+    Elastic strain `ε = D⁻¹:σ` of `stress`, for each continuum sub-model of `model`.
     
-    `stress` carries the stresses each law writes (`sigma_xx`, …; the state
-    returned by `integrate_behavior` will do); `materials` the elastic
-    constants. The result is in tensor convention, the layout of `deformation`,
-    so it subtracts from a strain component for component; in plane stress the
-    out-of-plane `eps_zz` is not written. Raises when `D` is singular at a point
-    (a zero modulus).
+    The inverse of `pyrucast.element_field.elastic_stress`: it brings a stress
+    back to the elastic strain that carries it, for instance under other moduli
+    when the material varies with the temperature.
+    
+    # Parameters
+    
+    - `model`: the sub-models whose elastic operator to invert.
+    - `stress`: the stresses each law writes (`sigma_xx`, …); the state returned
+      by `pyrucast.element_field.integrate_behavior` will do.
+    - `materials`: the material field; only each law's elastic constants are read.
+    
+    # Returns
+    
+    An `ElementField` in tensor convention, the layout of
+    `pyrucast.element_field.deformation`, so it subtracts from a strain component
+    for component. In plane stress the out-of-plane `eps_zz` is not written.
+    
+    # Raises
+    
+    `RuntimeError` if `D` is singular at a point (a zero modulus), or if
+    `materials` lacks an elastic constant of a law.
     """
 
 def elastic_stress(model: Model, strain: ElementField, materials: ElementField) -> ElementField:
     r"""
-    Elastic stress `σ = D:ε` of a strain field at the Gauss points of every
-    continuum sub-model of `model` — Cast3M `ELAS` applied to a strain.
+    Elastic stress `σ = D:ε` of `strain`, for each continuum sub-model of `model`.
     
-    `D` is the operator each law predicts with: the Hooke matrix of an
-    elasticity, in its symmetry; the isotropic `D` behind a plasticity's elastic
-    predictor; the **undamaged** `D` a damage law degrades. `strain` is in
-    tensor convention, the layout of `deformation` and `thermal_strain`;
-    `materials` needs only each law's elastic constants (`E`, `nu` when
-    isotropic). One zone per continuum sub-model, its components the stresses
-    the law writes; a sub-model with no elastic operator (conduction, bar, beam,
-    constraint) contributes none.
+    `D` is the operator each law predicts with, not the response of the law
+    itself: the Hooke matrix of an elasticity, in its symmetry; the isotropic `D`
+    behind a plasticity's elastic predictor; the **undamaged** `D` a damage law
+    degrades. It turns an imposed strain increment (thermal, given) into the
+    stress it would cause if nothing yielded.
+    
+    # Parameters
+    
+    - `model`: the sub-models whose elastic operator to apply.
+    - `strain`: the strain at the Gauss points, in tensor convention — the layout
+      of `pyrucast.element_field.deformation` and
+      `pyrucast.element_field.thermal_strain`.
+    - `materials`: the material field; only each law's elastic constants are read
+      (`E`, `nu` when isotropic).
+    
+    # Returns
+    
+    An `ElementField` with one zone per continuum sub-model, its components the
+    stresses the law writes. A sub-model with no elastic operator (conduction,
+    bar, beam, constraint) contributes none.
+    
+    # Raises
+    
+    `RuntimeError` if `materials` lacks an elastic constant of a law.
     """
 
 def elasticity(fespace: FiniteElementSpace, kinematics: builtins.str, symmetry: builtins.str = 'isotropic', strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.elasticity(fespace, kinematics, symmetry="isotropic",
-    strain_measure="linear")` — linear-elasticity model spanning every subspace of
-    `fespace`. `kinematics` is `"plane_stress"`, `"plane_strain"` or
-    `"axisymmetric"` (2-D), or `"full_3d"` (3-D). DOFs are the vector
-    displacement `u_x, u_y(, u_z)`; material is supplied at assembly time.
+    Linear elasticity, spanning every subspace of `fespace`.
     
-    `"axisymmetric"` requires a geometry built with `Coords.axisymmetric()`
-    (`x = r`, `y = z`): the hoop strain `ε_θθ = u_r / r` comes from the kinematics,
-    the `2πr` integration measure from the geometry, and the two must agree.
+    The unknowns are the displacement `u_x, u_y(, u_z)`, the dual rows the forces
+    `f_x, f_y(, f_z)`. On an axisymmetric geometry (`x = r`, `y = z`), the hoop
+    strain `ε_θθ = u_r / r` comes from the kinematics and the `2πr` integration
+    measure from the geometry: the two must agree.
     
-    `symmetry` is the **material** axis, independent of the kinematic one:
-    `"isotropic"` (the default, material `E`, `nu`), `"orthotropic"`
-    (`E_1, E_2, E_3, nu_12, nu_13, nu_23, G_12, G_13, G_23`) or
-    `"anisotropic"` (the 21 constants `C_11 … C_66`). The two oriented ones
-    also require the material axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z`
-    in 3-D — which are orthonormalised internally.
+    # Parameters
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains,
-    the default), `"green_lagrange"` (large rotations: Hooke on `E` is
-    Saint-Venant–Kirchhoff) or `"hencky"` (`½ ln C`). The stress it writes is
-    the dual, named after it: `sigma_*`, `S_*` or `T_*`.
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `symmetry`: the **material** symmetry, independent of the kinematics:
+      `"isotropic"` (material `E`, `nu`), `"orthotropic"` (`E_1, E_2, E_3, nu_12,
+      nu_13, nu_23, G_12, G_13, G_23`) or `"anisotropic"` (the 21 constants
+      `C_11 … C_66`). The two oriented ones also require the material axes —
+      `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z` in 3-D —, orthonormalised internally.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations: Hooke on `E` is
+      Saint-Venant–Kirchhoff) or `"hencky"` (`½ ln C`). The stress it writes is
+      the dual, named after it: `sigma_*`, `S_*` or `T_*`.
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics`, `symmetry` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads.
     """
 
 def element_type_from_gmsh(code: builtins.int) -> builtins.str:
     r"""
-    Map a gmsh element-type code to pyrucast's element-type name — the
-    translation `pyrucast.mesh.from_gmsh` applies to every block before
-    handing it to `from_arrays`. Raises for a gmsh type pyrucast has no
-    counterpart for (third order and above, …).
+    The pyrucast element type of a gmsh element-type code.
+    
+    The translation `pyrucast.mesh.from_gmsh` applies to every block before
+    handing it to `pyrucast.mesh.from_arrays`.
+    
+    # Parameters
+    
+    - `code`: the gmsh code, `2` for a 3-node triangle.
+    
+    # Returns
+    
+    The name of the pyrucast element type, `"TRI3"` for `2`.
+    
+    # Raises
+    
+    `RuntimeError` for a gmsh type pyrucast has no counterpart for (third order and
+    above, …).
     """
 
 def elements_on(mesh: Mesh, points: Mesh, strict: builtins.bool = True) -> Mesh:
     r"""
-    Keep the elements of `mesh` resting on the nodes of `points`
-    (Cast3m `ELEM … APPUYE`).
+    Keep the cells of `mesh` resting on the nodes of `points`.
     
-    Only the node set referenced by `points` matters (typically a POI1
-    points mesh). With `strict=True` a cell is kept when **all** its nodes
-    are in the set (`APPUYE STRICTEMENT`); with `strict=False` when **at
-    least one** is (`APPUYE`). The result mirrors `mesh` submesh by submesh
-    (same types, possibly-empty zones). Both meshes must share the same
-    `Coords`.
+    Only the set of nodes `points` references matters, typically a POI1 mesh.
+    
+    # Parameters
+    
+    - `mesh`: the cells to filter.
+    - `points`: the nodes, on the same `Coords` as `mesh`.
+    - `strict`: `True` keeps a cell when **all** its nodes are in the set;
+      `False` when **at least one** is.
+    
+    # Returns
+    
+    A `Mesh` mirroring `mesh` submesh by submesh — same types, possibly empty
+    zones.
+    
+    # Raises
+    
+    `RuntimeError` if `mesh` and `points` are not attached to the same `Coords`.
     """
 
 def embedded(immersed: Mesh, host: Mesh, target: Model, variables: typing.Sequence[builtins.str], tol: builtins.float = 1e-06) -> Model:
     r"""
-    `model.embedded(immersed, host, target, variables, tol=1e-6)` — embedded
-    (immersed) constraint (a single sub-model) tying each node of `immersed` to
-    the interpolation of `host` at that node, via Lagrange multipliers.
+    Tie each node of `immersed` to the interpolation of `host` at that node.
     
-    `immersed` and `host` are meshes sharing one Coords (e.g. a bar embedded in
-    a volume). `target` is the model being constrained; `variables` lists the
-    primals of `target` to tie (e.g. `["u_x", "u_y", "u_z"]`), each dual row
-    read from it. The coupling weights are the host shape functions at each
-    immersed node, computed once at build by locating the node in the host (an
-    immersed node outside the host is an error); `tol` is the location
-    tolerance, a gap in the host's **reference** element, without dimension.
-    Each relation — one per immersed node and variable — gets a multiplier node
-    of its own; the right-hand side defaults to `0` (a rigid tie). See the
-    constraints chapter of the book.
+    An embedded constraint, a single sub-model, through Lagrange multipliers — a
+    bar embedded in a volume, for instance. The coupling weights are the host
+    shape functions at each immersed node, computed once at build by locating the
+    node in the host. Each relation — one per immersed node and variable — gets a
+    multiplier node of its own; the right-hand side defaults to `0`, a rigid tie.
+    
+    # Parameters
+    
+    - `immersed`: the immersed nodes' mesh, on the same `Coords` as `host`.
+    - `host`: the mesh they are immersed in.
+    - `target`: the model being constrained; the dual rows are read from it.
+    - `variables`: the primals of `target` to tie, `["u_x", "u_y", "u_z"]` for
+      instance.
+    - `tol`: the location tolerance, a gap in the host's **reference** element,
+      without dimension.
+    
+    # Returns
+    
+    A `Model` of one constraint sub-model.
+    
+    # Raises
+    
+    `RuntimeError` if an immersed node lies outside the host, or if a variable is
+    not a primal of `target`.
     """
 
 def exp(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise exponential `eˣ` of a field.
+    Exponential `eˣ` of `field`, value by value.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def export_vtk(mesh: Mesh, path: builtins.str, field: typing.Optional[typing.Any] = None, binary: builtins.bool = False) -> None:
     r"""
-    Write `mesh` to a legacy **VTK** file (`UNSTRUCTURED_GRID`) that ParaView
-    reads natively — as text, or with `binary=True` as raw big-endian numbers
-    (much smaller and faster to read for a large mesh).
+    Write `mesh`, and a field if given, to a legacy VTK file for ParaView.
     
-    With `field=None` only the geometry is written. Pass a `NodeField` to add
-    it as `POINT_DATA` (one scalar array per component, the nodal value at
-    each point) or an `ElementField` to add it as `CELL_DATA` (one array per
-    component, the per-cell mean of that cell's Gauss values). An element
-    field must come from a space built on **this** mesh, so its cells line up.
+    The file is an `UNSTRUCTURED_GRID` that ParaView reads natively. Every
+    sub-mesh is written; a 2-D `Coords` is completed with `z = 0`.
     
-    Pass an `Evolution` of node or element fields to write a **time series**:
-    `path` is then the index, a `.vtk.series` file ParaView opens as one
-    dataset with a time slider, and each tabulated value goes to its own file
-    next to it, `stem_0000.vtk`, `stem_0001.vtk`, … — `stem` being the name
-    of `path` up to its first dot.
+    # Parameters
+    
+    - `mesh`: the mesh to write.
+    - `path`: the file to write. For an `Evolution`, the index of the series, a
+      `.vtk.series` file.
+    - `field`: what to write on the mesh:
+      - `None`: the geometry alone;
+      - a `NodeField`: `POINT_DATA`, one scalar array per component, the nodal
+        value at each point (`0` where the field defines nothing);
+      - an `ElementField`: `CELL_DATA`, one array per component, the mean of the
+        Gauss values of each cell. The field must come from a space built on
+        **this** mesh, so that its cells line up;
+      - an `Evolution` of node or element fields: a **time series**. Each
+        tabulated value goes to its own file next to `path`, `stem_0000.vtk`,
+        `stem_0001.vtk`, … — `stem` being the name of `path` up to its first
+        dot —, and ParaView opens the index as one dataset with a time slider.
+    - `binary`: `False` writes text; `True` writes raw big-endian numbers, much
+      smaller and faster to read for a large mesh.
+    
+    # Raises
+    
+    - `TypeError` if `field` is none of the types above.
+    - `RuntimeError` if a file cannot be written.
     """
 
 def external_forces(model: Model, materials: ElementField) -> NodeField:
     r"""
-    External nodal forces of `model` — the right side of `Σ f_int = Σ f_ext`.
+    External nodal forces of `model`, the right side of `Σ f_int = Σ f_ext`.
     
-    The counterpart of `internal_forces(model, state, solution, materials)`.
-    Every sub-model is asked for its terms of the residual on the external side:
-    the given data of its weak form, on the right of the equals sign. A physics
-    whose term is entirely a response to `u` (elasticity, conduction, a bar) has
-    none, so a model made only of those yields an empty field — which is the
-    honest answer, not a failure.
+    The counterpart of `pyrucast.node_field.internal_forces`. Every sub-model is
+    asked for its terms of the residual on the external side: the given data of
+    its weak form, on the right of the equals sign — the ambient of a boundary
+    transfer, a distributed flux. A physics whose term is entirely a response to
+    `u` (elasticity, conduction, a bar) has none. The terms loading one node are
+    added.
     
-    Splitting the two sides is what keeps signs out of the physics: an author
-    writes both halves positively, as the weak form reads, and the single
-    subtraction lives in the caller.
+    # Parameters
+    
+    - `model`: the physics whose given data to integrate.
+    - `materials`: the material data, zone by zone, as for
+      `pyrucast.matrix.stiffness`; it carries the densities the terms read.
+    
+    # Returns
+    
+    A `NodeField` with a single zone over every loaded node. A model made only
+    of physics without such a term yields an empty field — the right answer,
+    not a failure.
+    
+    # Raises
+    
+    `RuntimeError` if `materials` has no zone on the FE subspace of a sub-model
+    that reads it, or lacks a component it reads.
     """
 
 def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh:
     r"""
-    Extrude `mesh` by `n_layers` layers along `direction` (the total
-    displacement vector). SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
+    Extrude `mesh` along `direction` in `n_layers` layers.
+    
+    SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
+    
+    # Parameters
+    
+    - `mesh`: the mesh to extrude.
+    - `direction`: the total displacement vector, with the dimension of the mesh.
+    - `n_layers`: the number of layers, `≥ 1`.
+    
+    # Returns
+    
+    A new `Mesh`, sharing the nodes of `mesh` on its first layer.
+    
+    # Raises
+    
+    `RuntimeError` if `n_layers` is zero, or if the produced cells need 3-D
+    coordinates the mesh does not have (a surface extruded in 2-D).
     """
 
 def fick(fespace: FiniteElementSpace, species: builtins.str, symmetry: builtins.str = 'isotropic') -> Model:
     r"""
-    `model.fick(fespace, species, symmetry="isotropic")` — Fickian diffusion of
-    one named **species**, spanning every subspace of `fespace`.
+    Fickian diffusion of one named species, spanning every subspace of `fespace`.
     
-    Every name carries the species: DOFs are `c_<species>` (primal) and
-    `j_<species>` (dual), the diffusivity is `D_<species>`, the reported flux
-    `j_<species>_x…`. Two species therefore share a mesh without colliding —
-    and no bare `c` can be mistaken for anything else. Its physics nature is
-    `"diffusion"`, so `model.filter("diffusion")` isolates it from a thermal
-    or mechanical model it is composed with.
+    Every name carries the species: the unknown is `c_<species>`, the dual row
+    `j_<species>`, the diffusivity `D_<species>`, the reported flux
+    `j_<species>_x…`. Two species therefore share a mesh without colliding. Its
+    physics nature is `"diffusion"`, so `model.filter("diffusion")` isolates it
+    from a thermal or mechanical model it is composed with.
     
-    `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
-    `"anisotropic"`, selecting the diffusivity the material field must carry:
-    `D_<species>`, `D_<species>_1 …`, or the symmetric `D_<species>_11 …` —
-    the oriented ones plus the material axes `V1X, V1Y, …`. Those axes and
-    the optional storage `poro` keep **bare** names: they belong to the
-    medium, not to what diffuses through it.
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `species`: the name of the species, `"H2"` for `c_H2`.
+    - `symmetry`: the diffusivity the material field must carry: `"isotropic"`
+      (`D_<species>`), `"orthotropic"` (`D_<species>_1 …`) or `"anisotropic"`
+      (the symmetric `D_<species>_11 …`), the oriented ones plus the material
+      axes `V1X, V1Y, …`. Those axes and the optional storage `poro` keep
+      **bare** names: they belong to the medium, not to what diffuses through it.
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`.
+    
+    # Raises
+    
+    `ValueError` for an unknown `symmetry`.
     """
 
 def flux(fespace: FiniteElementSpace, target: Model, dual: builtins.str) -> Model:
     r"""
-    `model.flux(fespace, target, dual)` — a **distributed load**: the
-    consistent nodal forces `∫ φ N dΓ` of a given density, fed into the dual row
-    `dual` (`"q"` for a heat source, `"f_x"` for a traction) of the model
-    `target`, which gives it its kind and attests that the row is assembled by
-    someone.
+    A distributed load: the consistent nodal forces `∫ φ N dΓ` of a density.
     
-    Material: `phi_<dual>` — the density, uniform or varying per Gauss point as
-    the field provides.
+    It brings no unknown and writes into the dual row of another physics, which
+    gives it its kind and attests that the row is assembled by someone. Material:
+    `phi_<dual>` — the density, uniform or varying per Gauss point. Its derivative
+    with respect to the solution is taken as **zero**: it feeds no matrix, only
+    the right-hand side, read by `pyrucast.node_field.external_forces`.
     
-    The row `"n"` is the **normal** mode, a pressure: `phi_n` acts along the
-    normal of the cell, `∫ φ n N dΓ`, into every displacement row of the target
-    (`f_x`, `f_y`, `f_z`). The normal is that of the active configuration —
-    evaluated on a configuration laid at `X + u` (`coords.displace_from`), the
-    load follows the wall. For a contour travelled counter-clockwise the normal
-    of a segment points out of the material: a pressure `p` pushing on the wall
-    is then `phi_n = -p`.
+    # Parameters
     
-    Its derivative with respect to the solution is taken as **zero**: it feeds no
-    matrix, only the right-hand side, read by
-    `node_field.external_forces(model, materials)`. That is what sets it apart
-    from a physics: it brings no unknown and writes into the dual row of another.
+    - `fespace`: the FE space the density lives on.
+    - `target`: the model it loads.
+    - `dual`: the dual row of `target` to load (`"q"` for a heat source, `"f_x"`
+      for a traction). The row `"n"` is the **normal** mode, a pressure: `phi_n`
+      acts along the normal of the cell, `∫ φ n N dΓ`, into every displacement
+      row of `target`. The normal is that of the active configuration — on a
+      configuration laid at `X + u` (`pyrucast.coords.displace_from`), the load
+      follows the wall. For a contour travelled counter-clockwise the normal of a
+      segment points out of the material: a pressure `p` pushing on the wall is
+      then `phi_n = -p`.
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`.
+    
+    # Raises
+    
+    `RuntimeError` if `dual` is not a dual row of `target`.
     """
 
 def from_arrays(coords: Coords, node_tags: typing.Any, node_coords: typing.Any, blocks: typing.Any, *, node_fields: typing.Sequence[typing.Any] = [], cell_fields: typing.Sequence[typing.Any] = [], order: builtins.str = 'pyrucast') -> tuple[dict, builtins.list[NodeField], builtins.list[ElementField]]:
     r"""
-    Build meshes and fields from **flat arrays** — the one import every
-    exchange format goes through (`pyrucast.mesh.from_gmsh` and
-    `pyrucast.mesh.from_medcoupling` are built on it).
+    Build meshes and fields from flat arrays, the shape `export.to_arrays` returns.
     
-    - `node_tags` — one integer tag per node (`uint64` or `int64`);
-    - `node_coords` — 1 to 3 coordinates per tag, in the same order; the
-      dimension of `coords` decides how many are kept (padded with zeros);
-    - `blocks` — a sequence of `(element_type, node_tags, cell_tags, groups)`,
-      one per block of cells sharing a type and a combination of groups: the
-      pyrucast type name (`"TET4"`), the flat connectivity in node tags, one
-      tag per cell (or an empty sequence when no cell field names the block),
-      and the group names the cells belong to. A 3-tuple without `cell_tags`
-      is accepted too;
-    - `node_fields` — a sequence of `(components, node_tags, values)`,
-      `len(node_tags) * len(components)` values, node-major;
-    - `cell_fields` — a sequence of `(components, cell_tags, values, layout)`:
+    The one import every exchange format goes through
+    (`pyrucast.mesh.from_gmsh` and `pyrucast.mesh.from_medcoupling` are built on
+    it). Only the nodes a cell references are created. numpy arrays are read
+    **without being copied**, through the buffer protocol; plain Python lists work
+    too, at the cost of a conversion.
+    
+    # Parameters
+    
+    - `coords`: where the nodes are added; its dimension decides how many
+      coordinates are kept.
+    - `node_tags`: one integer tag per node (`uint64` or `int64`).
+    - `node_coords`: 1 to 3 coordinates per tag, in the same order, padded with
+      zeros.
+    - `blocks`: a sequence of `(element_type, node_tags, cell_tags, groups)`, one
+      per block of cells sharing a type and a combination of groups: the pyrucast
+      type name (`"TET4"`), the flat connectivity in node tags, one tag per cell
+      (or an empty sequence when no cell field names the block), and the names of
+      the groups the cells belong to. A 3-tuple without `cell_tags` is accepted
+      too.
+    - `node_fields`: a sequence of `(components, node_tags, values)`,
+      `len(node_tags) * len(components)` values, node-major. A node field keeps
+      the nodes the mesh created.
+    - `cell_fields`: a sequence of `(components, cell_tags, values, layout)`.
       `layout` is `"cell"` (one value per cell and component) or a sequence of
       Gauss rules `(element_type, ref_nodes, xi, weights)` in the format's own
-      reference element — one value per point, component and cell, the points
-      in the order of the rule, which must be pyrucast's;
-    - `order` — the node numbering inside a cell: `"pyrucast"` (= VTK),
+      reference element — one value per point, component and cell, the points in
+      the order of the rule, which must be pyrucast's. A cell field gets a zone on
+      every group all of whose cells it defines.
+    - `order`: the node numbering inside a cell: `"pyrucast"` (the same as VTK),
       `"gmsh"` or `"med"`.
     
-    Returns `(meshes, node_fields, element_fields)`: a `dict` from group name
-    to `Mesh` (all sharing `coords`, in order of first appearance), then the
-    fields in the order they were given. Only nodes referenced by a cell are
-    created; a node field keeps the nodes the mesh created; a cell field gets
-    a zone on every group all of whose cells it defines.
+    # Returns
     
-    numpy arrays are read **without being copied**, through the buffer
-    protocol; plain Python lists work too, at the cost of a conversion.
+    `(meshes, node_fields, element_fields)`: a `dict` from group name to `Mesh`
+    (all on `coords`, in order of first appearance), then the fields in the order
+    they were given.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `order` or element type.
+    - `RuntimeError` for a cell referencing a node tag that is not given.
     """
 
 def from_live_nodes(coords: Coords) -> Mesh:
     r"""
-    Build a points (POI1) mesh holding every live node of `coords`.
+    A POI1 mesh holding every live node of `coords`.
+    
+    # Parameters
+    
+    - `coords`: the coordinates whose nodes to take.
+    
+    # Returns
+    
+    A POI1 `Mesh` of one zone.
     """
 
 def gauss_to_external(element_type: builtins.str, ref_nodes: typing.Sequence[builtins.float], order: builtins.str) -> tuple[builtins.list[builtins.float], builtins.list[builtins.float]]:
     r"""
-    pyrucast's Gauss rule for `element_type`, carried into an external
-    reference element — `ref_nodes`, its nodes numbered in `order`
-    (`"pyrucast"`, `"gmsh"`, `"med"`), `dim` coordinates each. Returns
-    `(xi, weights)`, the points in pyrucast's order, the weights scaled by the
-    ratio of the reference measures. Raises if the external element is not an
-    affine image of pyrucast's under that numbering.
+    Pyrucast's Gauss rule for `element_type`, carried into an external element.
+    
+    The points are mapped into the external reference element and the weights
+    scaled by the ratio of the reference measures.
+    
+    # Parameters
+    
+    - `element_type`: the element type.
+    - `ref_nodes`: the nodes of the external reference element, `dim` coordinates
+      each, numbered in `order`.
+    - `order`: the numbering of `ref_nodes`: `"pyrucast"`, `"gmsh"` or `"med"`.
+    
+    # Returns
+    
+    `(xi, weights)`: the points, in pyrucast's order, and their weights.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `element_type` or `order`.
+    - `RuntimeError` if the external element is not an affine image of pyrucast's
+      under that numbering.
     """
 
 def geometric(model: Model, materials: ElementField, stress: ElementField) -> Matrix:
     r"""
-    Assemble the geometric (initial-stress) stiffness `K_g` of `model` (Cast3M
-    `KSIG`), from the current stress field `stress` (Voigt-named `sigma_*`).
-    `materials` resolves each mechanical zone, exactly like [`stiffness`].
+    Assemble the geometric (initial-stress) stiffness `K_g` of `model`.
+    
+    `K_g[(i,a),(j,b)] = δ_ab ∫ ∇N_i · σ · ∇N_j` is the stiffening a stress in
+    place brings: the term of buckling and of prestressed analyses. It does not
+    depend on the constitutive law. A physics without geometric stiffness (heat
+    conduction, a constraint) contributes nothing.
+    
+    # Parameters
+    
+    - `model`: the physics to assemble.
+    - `materials`: the material data, zone by zone, as for [`stiffness`].
+    - `stress`: the current Cauchy stress at the Gauss points, components
+      `sigma_*` — typically what `element_field.integrate_behavior` returns. Each
+      zone is picked by its FE subspace, like `materials`.
+    
+    # Returns
+    
+    The matrix, assembled on the configuration active at the call.
+    
+    # Raises
+    
+    `RuntimeError` if `stress` lacks a `sigma_*` component on a mechanical zone.
     """
 
 def gradient(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
     r"""
-    Gradient `∇f` of a node `field` at the Gauss points of `fespace`.
+    Gradient `∇f` of a field at the nodes, at the Gauss points of `fespace`.
     
-    Geometric and physics-agnostic: each component of `field` is
-    differentiated w.r.t. every spatial axis, giving an `ElementField` with
-    one component `grad_<name>_<axis>` per (input component, axis) pair
-    (`grad_T_x`, …). Feed the result to `integrate_behavior`.
+    `∇f = Σ_i f_i ∇N_i`, evaluated at each Gauss point, cell by cell. The
+    operator is geometric and knows no physics; its result feeds
+    `pyrucast.element_field.integrate_behavior` (heat conduction reads
+    `grad_T_*`). A node the field does not define reads zero.
+    
+    # Parameters
+    
+    - `field`: the field to differentiate, at the nodes.
+    - `fespace`: the FE space whose cells and Gauss points to use.
+    
+    # Returns
+    
+    An `ElementField` on `fespace`, with one component `grad_<name>_<axis>` per
+    pair of input component and spatial axis (`grad_T_x`, `grad_T_y`, …).
     """
 
 def grid_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, prefer_quads: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
-    Mesh the inside of a closed contour with a structured grid core and a
-    frontal band — the regular-mesh companion of `pave_surface`.
+    Mesh the inside of closed loops with a structured grid core and a frontal band.
     
-    Same input, same output, same promise that the contour is untouchable: only
-    the interior is obtained differently. `pave_surface` walks a front inward
-    until two of its rows meet, and that meeting line carries the valence
-    defects, the leftover triangles and the flattest cells — even on a plain
-    rectangle, which comes out as an onion with four diagonal seams.
-    `grid_surface` lays a tensor grid instead, and leaves the front only what
-    the grid could not reach.
+    The regular companion of `pyrucast.mesh.pave_surface`, with the same input,
+    output and untouchable contour. `pave_surface` walks a front inward until two
+    of its rows meet, and that meeting line carries the valence defects, the
+    leftover triangles and the flattest cells — even a plain rectangle comes out
+    as an onion with four diagonal seams. `grid_surface` lays a tensor grid
+    instead, and leaves the front only what the grid could not reach.
     
     The grid's lines are taken from the contour: every axis-aligned edge long
     enough to be a feature pins a line, and the gaps are subdivided at about
-    `size`. A grid node landing on a contour node **is** that node, so the core
-    reaches the boundary rather than stopping short of it. On a rectilinear
-    domain laid out for the grid there is no band at all and the mesh is the
-    grid: every cell a rectangle, every Jacobian 1, no triangle.
+    `size`. A grid node landing on a contour node **is** that node. On a
+    rectilinear domain laid out for the grid there is no band at all: every cell
+    a rectangle, no triangle. That is the one thing asked of the caller: **break
+    every side at the shape's own corners and let each piece take a whole number
+    of cells**. A contour that does not just gets more band and less grid, down to
+    the quality of `pave_surface` in the worst case.
     
-    That last part is the one thing asked of the caller. A grid can only meet a
-    contour whose nodes fall on grid lines, so **break every side at the
-    shape's own corners and let each piece take a whole number of cells**. A
-    contour that does not is not an error — it just gets more band and less
-    grid, down to the quality of `pave_surface` in the worst case.
+    # Parameters
     
-    `band` is extra clearance in cells between the core and the contour. Zero
-    is the useful value; raise it only for a contour the grid cannot meet, such
-    as a curve, where giving the front a couple of cells to work in beats
-    letting it fight for a sliver.
+    - `contour`: **one or more** closed SEG2 loops, oriented as for
+      `pyrucast.mesh.triangulate_surface`: a **counterclockwise** loop is a
+      domain's outer boundary, a **clockwise** loop a hole. Several disjoint
+      counterclockwise loops mesh several independent domains at once. It may be
+      2-D, or a planar loop in 3-D, meshed in its best-fit plane and lifted back.
+    - `element_type`: `"QUA4"`, `"QUA8"` or `"QUA9"`.
+    - `size`: the target edge length; `None` takes the mean boundary edge length,
+      domain by domain.
+    - `band`: extra clearance, in cells, between the core and the contour. Zero is
+      the useful value; raise it only for a contour the grid cannot meet, such as
+      a curve, where giving the front a couple of cells to work in beats letting
+      it fight for a sliver.
+    - `prefer_quads`: `False` lets an odd loop cost one triangle, returned in a
+      separate TRI3 submesh along with the few cells a distorted leftover polygon
+      could not make square. `True` removes the first kind, not the second, and
+      raises on a loop with an odd number of segments: a polygon with an odd
+      number of sides has no filling by quadrangles alone, and evening the count
+      would mean adding a boundary node.
+    - `relax`: what the front may do to itself between two rows — `"free"`
+      (`None`, the default), `"along"` or `"none"`; see
+      `pyrucast.mesh.pave_surface`.
     
-    `relax` chooses what the front may do to itself between two rows: `"free"`
-    (the default, and the historical behaviour), `"along"` — the smoothing kept
-    only along the front, which keeps its corners and with them the front's
-    ability to shed nodes as it contracts — or `"none"`. See `pave_surface`,
-    which shares the band with this operator and where the choice is spelled
-    out.
+    # Returns
+    
+    A new `Mesh` on the contour's nodes plus fresh interior nodes.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `relax`.
+    - `RuntimeError` for an `element_type` other than QUA4, QUA8 or QUA9, with
+      `prefer_quads=True` on an odd loop, or for a contour too coarse for the size
+      asked, where the front folds onto itself.
     """
 
 def grid_surface2(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, prefer_quads: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
-    Mesh the inside of a closed contour with a structured grid core and a
-    frontal band, taking the grid's lines **one per contour node**.
+    Mesh the inside of closed loops with a grid core, a line per contour node.
     
-    The second of the two grid meshers, and the sibling of `grid_surface`, which
-    it does not replace: same input, same output, same untouchable contour, and
-    neither wins everywhere.
-    
-    `grid_surface` pins a line on the coordinate each aligned side lies on, and
-    subdivides between two lines by whichever side spans them end to end. Every
+    The sibling of `pyrucast.mesh.grid_surface`, which it does not replace: same
+    input, output and untouchable contour, and neither wins everywhere.
+    `grid_surface` pins a line on the coordinate each aligned side lies on; every
     line is straight. `grid_surface2` gives every node of the contour the line
-    that crosses it, collapses the bands too thin to be cells — welding each of
-    their edges onto the contour node at one end, or onto its midpoint — and
-    lets a grid node within a quarter cell of a contour node move onto it.
+    that crosses it, collapses the bands too thin to be cells, and lets a grid
+    node within a quarter cell of a contour node move onto it. A row is therefore
+    a polyline, so one row can meet two facing walls at two different heights: a
+    wall cut into ten can face a wall cut into eleven.
     
-    A row is therefore a polyline rather than a line, and that is the point: one
-    row can meet two facing walls at two different heights, so a wall cut into
-    ten can face a wall cut into eleven. `grid_surface` has to pick one of them
-    and sends the other to the band.
+    **Reach for it on a rectilinear shape**, all the more so when its sides were
+    not cut at the corners facing them; **reach for `grid_surface` on anything
+    curved**. Measured worst cell, `grid_surface` then `grid_surface2`: plate with
+    a step off the grid 0.405 / 0.963, L with arbitrary dimensions 0.437 / 0.979,
+    crenellated profile 0.323 / 0.651, house with a pitched roof 0.420 / 0.548. On
+    a **circle** the order reverses hard — 0.288 against 0.005 —: nothing dictates
+    a grid line over most of a curve.
     
-    **Reach for `grid_surface2` on a rectilinear shape**, all the more so when
-    its sides were not cut at the corners facing them; **reach for
-    `grid_surface` on anything curved**, where the contour's nodes only tell you
-    where its vertices happened to fall. Measured worst cell, `grid_surface`
-    then `grid_surface2`: plate with a step off the grid 0.405 / 0.963, L with
-    arbitrary dimensions 0.437 / 0.979, crenellated profile with its base in one
-    run 0.323 / 0.651, house with a pitched roof 0.420 / 0.548. On a **circle**
-    the order reverses hard — 0.288 against 0.005 — and `grid_surface2` should
-    not be used: nothing dictates a grid line over most of a curve. The book's
-    *Mailler une géométrie* page puts all four surface meshers side by side.
+    # Parameters
     
-    `size`, `band` and `relax` mean what they mean for `grid_surface`.
+    - `contour`: **one or more** closed SEG2 loops, oriented as for
+      `pyrucast.mesh.triangulate_surface`: a **counterclockwise** loop is a
+      domain's outer boundary, a **clockwise** loop a hole. Several disjoint
+      counterclockwise loops mesh several independent domains at once. It may be
+      2-D, or a planar loop in 3-D, meshed in its best-fit plane and lifted back.
+    - `element_type`: `"QUA4"`, `"QUA8"` or `"QUA9"`.
+    - `size`: the target edge length; `None` takes the mean boundary edge length,
+      domain by domain.
+    - `band`: as for `pyrucast.mesh.grid_surface`.
+    - `prefer_quads`: `False` lets an odd loop cost one triangle, returned in a
+      separate TRI3 submesh along with the few cells a distorted leftover polygon
+      could not make square. `True` removes the first kind, not the second, and
+      raises on a loop with an odd number of segments: a polygon with an odd
+      number of sides has no filling by quadrangles alone, and evening the count
+      would mean adding a boundary node.
+    - `relax`: what the front may do to itself between two rows — `"free"`
+      (`None`, the default), `"along"` or `"none"`; see
+      `pyrucast.mesh.pave_surface`.
+    
+    # Returns
+    
+    A new `Mesh` on the contour's nodes plus fresh interior nodes.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `relax`.
+    - `RuntimeError` for an `element_type` other than QUA4, QUA8 or QUA9, with
+      `prefer_quads=True` on an odd loop, or for a contour too coarse for the size
+      asked, where the front folds onto itself.
     """
 
 def gurson(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.gurson(fespace, kinematics)` — Gurson-Tvergaard-Needleman plasticity
-    of a **porous** metal, where the porosity shrinks the yield surface.
-    Material `E`, `nu`, `sigma_y`, `q_1`, `q_2`, `q_3`, `f_0`, `f_c`, `f_f`.
+    Gurson-Tvergaard-Needleman plasticity of a porous metal.
     
-    A ductile metal fails because voids grow and coalesce, not because a
-    stress is reached. The `cosh` term makes the surface **pressure
-    sensitive**, so voids grow under triaxial tension and close under
-    compression — which a J2 law cannot express, and which is why it can
-    never predict ductile rupture. Beyond `f_c` the effective porosity
-    accelerates towards `1/q_1`, modelling coalescence.
+    The porosity shrinks the yield surface. Material `E`, `nu`, `sigma_y`, `q_1`,
+    `q_2`, `q_3`, `f_0`, `f_c`, `f_f`.
     
-    The porosity is exposed as the internal variable `porosity`, starting
-    from `f_0`. Void **nucleation** is not modelled — only growth.
+    A ductile metal fails because voids grow and coalesce, not because a stress is
+    reached. The `cosh` term makes the surface **pressure sensitive**, so voids
+    grow under triaxial tension and close under compression — which a J2 law
+    cannot express. Beyond `f_c` the effective porosity accelerates towards
+    `1/q_1`, modelling coalescence.
+    
+    The porosity is the internal variable `porosity`, starting from `f_0`
+    (`pyrucast.element_field.initial_state` reads it). Void **nucleation** is not
+    modelled — only growth.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def heat_conduction(fespace: FiniteElementSpace, symmetry: builtins.str = 'isotropic') -> Model:
     r"""
-    `model.heat_conduction(fespace, symmetry="isotropic")` — heat-conduction
-    model spanning **every** subspace of `fespace` (one zone per subspace). A
-    single-subspace space gives the unit case; several give one zone each. Compose
-    heterogeneous physics with `|`: `model.heat_conduction(fes) | model.dirichlet(...)`.
+    Heat conduction, spanning every subspace of `fespace`.
     
-    `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
-    `"anisotropic"`, and selects which conductivity the material field must
-    carry: the scalar `k`, the principal `k_1, k_2, k_3`, or the symmetric
-    tensor `k_11 … k_33`. The two oriented ones also require the material
-    axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z` in 3-D.
+    The unknown is the temperature `T`, the dual row the heat flow `q`. Compose
+    heterogeneous physics with `|`:
+    `model.heat_conduction(fes) | model.dirichlet(...)`.
+    
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `symmetry`: the conductivity the material field must carry:
+      `"isotropic"` (the scalar `k`), `"orthotropic"` (the principal
+      `k_1, k_2, k_3`) or `"anisotropic"` (the symmetric tensor `k_11 … k_33`).
+      The two oriented ones also require the material axes — `V1X, V1Y` in 2-D,
+      `V1X…V1Z, V2X…V2Z` in 3-D.
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly time.
+    
+    # Raises
+    
+    `ValueError` for an unknown `symmetry`.
     """
 
 def initial_state(model: Model, materials: ElementField) -> ElementField:
     r"""
-    The **rest state** of `model` — the `prev` of a first step, for
-    `integrate_behavior` and `matrix.tangent`.
+    The rest state of `model`, the `prev` of a first step.
     
-    One zone per sub-model carrying a law, with the components that law
-    writes. Nearly every law rests at zero; a law whose internal variable starts
-    from a material constant seeds it from `materials` (Gurson's porosity from
-    `f_0`). Constraint sub-models, which have no law, are skipped.
+    What each law carries before anything happened, to give as `prev` to
+    `pyrucast.element_field.integrate_behavior` and `pyrucast.matrix.tangent`.
+    Nearly every law rests at zero; a law whose internal variable starts from a
+    material constant seeds it from `materials` (Gurson's porosity from `f_0`).
+    
+    # Parameters
+    
+    - `model`: the laws whose rest state to build.
+    - `materials`: the material field, read by the laws that seed a variable.
+    
+    # Returns
+    
+    An `ElementField` with one zone per sub-model carrying a law, on its
+    behaviour subspace, with every component that law writes. Constraint
+    sub-models, which have no law, are skipped.
     """
 
 def integral(field: typing.Any, component: builtins.str, fespace: typing.Optional[FiniteElementSpace] = None) -> builtins.float:
     r"""
-    Integral `∫_Ω f dΩ` of a field over its support, using the finite-element
-    quadrature — the total of one `component` (e.g. the resultant of a
-    distributed force **density**).
+    Integrate one component of a field over its support, `∫_Ω f dΩ`.
     
-    - `NodeField`: interpolates with the shape functions, `∫ Σ_i f_i N_i dΩ` —
-      `fespace` is **required**.
-    - `ElementField`: integrates the Gauss-point values directly,
-      `Σ_cell Σ_g f·|J|·w` — `fespace` is ignored.
+    The integral uses the finite-element quadrature: it is the total of the
+    component — the resultant of a distributed force **density**, or the measure
+    of the domain for a field equal to 1. For a field of nodal forces, already
+    integrated, the resultant is a plain sum instead: `field.sum(component)`.
     
-    For a field of already-integrated **nodal** forces, the resultant is a plain
-    sum instead: `field.sum(component)`.
+    # Parameters
+    
+    - `field`: a `NodeField` or an `ElementField`. A `NodeField` is interpolated
+      with the shape functions, `∫ Σ_i f_i N_i dΩ`; an `ElementField` is
+      integrated from its Gauss-point values, `Σ_cell Σ_g f·|J|·w`.
+    - `component`: the component to integrate.
+    - `fespace`: the FE space that interpolates a `NodeField` and gives the
+      quadrature — required for a `NodeField`, ignored for an `ElementField`.
+    
+    # Returns
+    
+    The integral, a `float`.
+    
+    # Raises
+    
+    - `TypeError` if `field` is a `NodeField` without `fespace`, or neither a
+      `NodeField` nor an `ElementField`.
+    - `RuntimeError` if a `NodeField` does not define `component` at every node
+      of `fespace`, or if no zone of an `ElementField` carries it.
+    
+    # Notes
+    
+    The cells are summed in parallel: the last bit of the result may change with
+    the number of threads.
     """
 
 def integrate_behavior(model: Model, deformation: ElementField, materials: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> ElementField:
     r"""
-    Integrate the constitutive law of `model` (Cast3m `COMP`), stepping A → B.
+    Integrate the constitutive laws of `model` over a step from A to B.
     
-    `deformation` is the **end-of-step** behaviour input ε(B) (from
-    `gradient(field, fespace)` or `deformation(u, fespace)`); `prev` is the
-    **state at A** — the converged output of the previous step (stress,
-    internal variables and start-of-step strain), or
-    `element_field.initial_state(model, materials)` on the first step;
-    `materials` supplies the per-zone material data; `dt` is the time increment
-    (`None` if the law is rate-independent). Returns the material-state field at
-    B (dual flux/stress + updated internal variables) of every behaviour-bearing
-    sub-model — feed it back as `prev` at the next step.
+    Each law takes the converged state at the start of the step, A, and the
+    strain at its end, B, and returns the state at B, point by point. For a
+    linear law the result is consistent with the assembled stiffness
+    (`∫ Bᵀ·flux = K·u`); a non-linear law gives its exact response. Constraint
+    sub-models, which have no law, are skipped; the zones of `deformation`,
+    `materials` and `prev` are paired by FE subspace.
     
-    For a linear law the result is consistent with the assembled stiffness
-    (`∫ Bᵀ·flux = K·u`); a non-linear law is the exact response.
+    # Parameters
+    
+    - `model`: the laws to integrate.
+    - `deformation`: the input of the laws at the end of the step, `ε(B)` —
+      from `pyrucast.element_field.strain`, or a producer such as
+      `pyrucast.element_field.deformation` or `pyrucast.element_field.gradient`.
+    - `materials`: the material field, zone by zone.
+    - `prev`: the state at A, the output of the previous step (stress, internal
+      variables, strain at A); on a first step,
+      `pyrucast.element_field.initial_state(model, materials)`.
+    - `dt`: the time increment; `None` when no law depends on the rate.
+    
+    # Returns
+    
+    The material state at B of every sub-model carrying a law: the dual flux or
+    stress and the updated internal variables — to give back as `prev` at the
+    next step.
+    
+    # Raises
+    
+    `RuntimeError` if a rate-dependent law (creep, viscoplasticity) gets no `dt`.
     """
 
 def interface_transfer(side_a: FiniteElementSpace, side_b: FiniteElementSpace, target: Model, variables: typing.Sequence[builtins.str], tol: builtins.float = 1e-09) -> Model:
     r"""
-    `model.interface_transfer(side_a, side_b, target, variables, tol=1e-9)` —
-    the exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
-    that do **not** share their nodes, coupling into the model `target`.
+    Exchange `j·n = h(c₁ − c₂)` across an interface whose two sides share no node.
     
-    `variables` lists the exchanged unknowns of `target`, each coupling into
-    the dual row `target` pairs it with: `["c_H2"]` on a `fick` model for a
-    coating, `["T"]` on a `heat_conduction` for a contact resistance, the
-    displacements on an `elasticity` for a bonded joint of finite stiffness.
-    Neither the dual row nor the nature is an argument: both are read from
-    `target`, and a variable `target` does not declare — or variables of two
-    natures — raise. `h_<variable>` is supplied at assembly time.
+    This is what lets the field **jump** across the interface: with a shared node
+    it could not. The jump is `q/h` for a flux density `q`. The coefficient
+    `h_<variable>` is supplied at assembly time.
     
-    `side_a` and `side_b` are the two facing **boundary** FE spaces, which
-    must be conforming — same element type, same cell count, and local node
-    `k` of a cell facing local node `k` of its counterpart, within `tol`, a
-    **distance** in the length unit of the mesh. A non-matching interface
-    raises rather than being projected.
+    # Parameters
     
-    This is what lets the field **jump** across the interface: with a shared
-    node it could not. The jump is `q/h` for a flux density `q`.
+    - `side_a`, `side_b`: the two facing **boundary** FE spaces. They must be
+      conforming — same element type, same cell count, and local node `k` of a
+      cell facing local node `k` of its counterpart, within `tol`. A non-matching
+      interface raises rather than being projected.
+    - `target`: the model it couples into; the dual row of each variable and the
+      nature are read from it.
+    - `variables`: the exchanged unknowns of `target`, each coupling into the
+      dual row `target` pairs it with: `["c_H2"]` on a `fick` model for a
+      coating, `["T"]` on a `heat_conduction` for a contact resistance, the
+      displacements on an `elasticity` for a bonded joint of finite stiffness.
+    - `tol`: the matching tolerance, a **distance** in the length unit of the
+      mesh.
+    
+    # Returns
+    
+    A `Model` coupling the two sides.
+    
+    # Raises
+    
+    `RuntimeError` if the two sides do not match, for a variable `target` does
+    not declare, or for variables of two natures.
     """
 
 def internal_forces(model: Model, state: ElementField, solution: NodeField, materials: ElementField) -> NodeField:
     r"""
-    Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`
-    (Cast3m `BSIG` for a continuum).
+    Internal nodal forces of `model`, the left side of `Σ f_int = Σ f_ext`.
     
-    The nodal mirror of `matrix.stiffness(model, materials)`: every sub-model is
-    asked for its term of the residual on the internal side. `state` is the
-    material-state field produced by `integrate_behavior` (`COMP`); a
-    behaviour-bearing sub-model applies its own `Bᵀ` (continuum solid, bar or
-    beam), a sub-model with no term here declares none. Returns a `NodeField`
-    whose components are each sub-model's dual variables (`f_x`, … for a
-    solid/bar; `f_w`, `m_theta` for a beam).
+    The nodal mirror of `pyrucast.matrix.stiffness`: every sub-model is asked
+    for its term of the residual on the internal side. A sub-model carrying a
+    behaviour applies its own `Bᵀ` (continuum solid, bar or beam), which is why
+    the operator takes a model and not a mere FE space; a sub-model with no term
+    on this side declares none and does not appear in the result.
     
     For a linear law the result equals the assembled stiffness applied to the
-    solution (`K·u`); a non-linear law gives the exact internal forces. Its
-    counterpart is `external_forces(model, materials)`, and the gap between the
-    two sums is the residual.
+    solution (`K·u`); a non-linear law gives the exact internal forces. A law in
+    large strains is served on the reference configuration by the nominal
+    stress `P = F·S`, read whole (`P_xx, P_xy, P_yx, P_yy`):
+    `f = ∫ P·∇₀N dV₀`. Its counterpart is `pyrucast.node_field.external_forces`,
+    and the gap between the two sums is the residual.
     
-    `solution` is the current one, multipliers included: a term that is linear in
-    `u` reads it directly — a boundary transfer's `∫ h·a·N` has no law to go
-    through — and a constraint draws its force `Cᵀ λ` from it, spread over the
-    constrained nodes by the relation's coefficients. That force is the
-    opposite of the **reaction**: the reaction of a model's constraints is
-    `−internal_forces(model.filter("constraint"), …)`, whichever way `solve`
-    treated the relations.
+    # Parameters
+    
+    - `model`: the physics and the constraints.
+    - `state`: the material state at the Gauss points, as returned by
+      `pyrucast.element_field.integrate_behavior`. Each zone is picked by its FE
+      subspace.
+    - `solution`: the current solution, multipliers included. A term linear in
+      `u` reads it directly — a boundary transfer's `∫ h·a·N` has no law to go
+      through —, and a constraint draws its force `Cᵀλ` from it, spread over the
+      constrained nodes by the relation's coefficients. That force is the
+      opposite of the **reaction**: the reaction of a model's constraints is
+      `−internal_forces(model.filter("constraint"), …)`, whichever way
+      `pyrucast.solver.solve` treated the relations.
+    - `materials`: the material data, zone by zone, as for
+      `pyrucast.matrix.stiffness`.
+    
+    # Returns
+    
+    A `NodeField` whose components are the dual variables of each sub-model
+    (`f_x`, … for a solid or a bar; `f_w`, `m_theta` for a beam).
+    
+    # Raises
+    
+    `RuntimeError` if `state` or `materials` has no zone on the FE subspace of a
+    sub-model that reads it, or lacks a component it reads.
     """
 
 def interp_to_gauss(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
     r"""
-    Interpolate a nodal `field` to the Gauss points of `fespace`
-    (`f(ξ_g) = Σ_i f_i N_i(ξ_g)`), turning a per-node `NodeField` into a
-    per-element `ElementField` with the same component names. Cast3M `CHAN`
-    (nodes → Gauss).
+    Interpolate a field at the nodes to the Gauss points of `fespace`.
+    
+    `f(ξ_g) = Σ_i f_i N_i(ξ_g)`: values, not derivatives — typically to carry a
+    nodal temperature to the Gauss points before
+    `pyrucast.element_field.thermal_strain`. A node the field does not define
+    reads zero.
+    
+    # Parameters
+    
+    - `field`: the field to interpolate, at the nodes.
+    - `fespace`: the FE space whose cells and Gauss points to use.
+    
+    # Returns
+    
+    An `ElementField` on `fespace` with the components of `field`, one value per
+    cell and Gauss point.
     """
 
 def invert(mesh: Mesh) -> Mesh:
     r"""
-    Reverse the orientation of every cell of a mesh (cast3m `INVE`).
+    Reverse the orientation of every cell of `mesh`.
     
-    Flips each cell's winding/traversal/handedness (POI1 cells are unchanged),
-    in any dimension. Combined with `orient`, this selects the inside/outside
-    sense of a closed contour or surface. Returns a fresh mesh sharing the
-    input's nodes.
+    Flips each cell's winding, direction or handedness, in any dimension (POI1
+    cells are unchanged). With `pyrucast.mesh.orient`, it chooses the inside or
+    outside sense of a closed contour or surface.
+    
+    # Parameters
+    
+    - `mesh`: the mesh to flip.
+    
+    # Returns
+    
+    A fresh `Mesh` sharing the nodes of `mesh`, which is left untouched.
     """
 
 def line(a: Node, b: Node, n_elems: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
-    Build a line of `n_elems` elements from node `a` to node `b`.
+    A straight line of `n_elems` cells from node `a` to node `b`.
     
-    `element_type` is `"SEG2"` (default) or `"SEG3"`.
+    # Parameters
+    
+    - `a`, `b`: the end nodes, of one `Coords`.
+    - `n_elems`: the number of cells, `≥ 1`.
+    - `element_type`: `"SEG2"` (the default) or `"SEG3"`.
+    
+    # Returns
+    
+    A `Mesh` of one zone, with fresh nodes between `a` and `b`.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `element_type`.
+    - `RuntimeError` if `n_elems` is zero, or if `a` and `b` belong to different
+      `Coords`.
     """
 
 def load(path: builtins.str) -> dict:
     r"""
-    Read back what [`save`] wrote, as a dictionary.
+    Read back what `pyrucast.save` wrote, as a dictionary.
     
     The objects are **new**: nothing already alive in your session is touched,
-    they are simply added alongside.
+    they are simply added alongside. Objects that shared a support when saved
+    share one again.
+    
+    # Parameters
+    
+    - `path`: the file `pyrucast.save` wrote.
+    
+    # Returns
+    
+    A `dict` with the keys and the objects given to `pyrucast.save`.
+    
+    # Raises
+    
+    `RuntimeError` if the file cannot be read, or is not a pyrucast archive.
     """
 
 def log(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
+    Natural logarithm of `field`, value by value.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded. Zero gives `-inf`, a negative value `nan`.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def log10(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise base-10 logarithm of a field.
+    Base-10 logarithm of `field`, value by value.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded. Zero gives `-inf`, a negative value `nan`.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def lump(matrix: Matrix) -> Matrix:
     r"""
-    Lump an assembled matrix into a diagonal one by row-sum concentration
-    (Cast3M `LUMP`). Applied to a consistent mass / capacity matrix it yields the
-    diagonal (lumped) mass, conserving the total mass.
+    Lump an assembled matrix into a diagonal one, each term the sum of its row.
+    
+    Applied to a consistent mass or capacity matrix, it yields the lumped
+    (diagonal) mass, which conserves the total mass:
+    `Σ_i M_lump[i,i] = Σ_ij M[i,j]`. It is the cheap, uncoupled form explicit
+    time schemes use.
+    
+    # Parameters
+    
+    - `matrix`: an assembled, square matrix whose row `i` and column `i` carry
+      the same node.
+    
+    # Returns
+    
+    A new matrix with the rows and the columns of `matrix`, in the same order,
+    and one diagonal block per row support: it is solved, multiplied by a field
+    and saved like `matrix`, which is left untouched.
+    
+    # Raises
+    
+    `RuntimeError` if `matrix` has no assembled values (an output of `|` or
+    `filter`, before `assemble()`).
     """
 
 def mask_element(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
     r"""
-    Per-component 0/1 **mask** of a field against a value band — same structure
-    as the input (Cast3M `MASQUE`): same zones, same support, same components,
-    only the values are rewritten (`1.0` inside the band, `0.0` outside). The
-    result is therefore multipliable term by term with the input.
+    A 0/1 mask of `field` against a band of values, component by component.
     
-    `field` is an `ElementField` or a `SubElementField`, and the result is of
-    the same kind. Its sibling `pyrucast.mesh.select` extracts the passing
-    *support* instead, and produces a `Mesh`.
+    The result has the structure of the input — same zones, same support, same
+    components, same Gauss points —, only the values are rewritten: `1.0` inside
+    the band, `0.0` outside. It therefore multiplies term by term with the input.
+    There is **no** AND across components: each value stands on its own. The
+    comparisons `>=`, `>`, `<=`, `<` of a field against a number build the same
+    mask. Its sibling `pyrucast.mesh.select` extracts the passing cells instead,
+    as a `Mesh`.
     
-    The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
-    `le` (`≤`), `lt` (`<`). There is **no** AND across components: each value
-    stands on its own. `components=None` tests every component; a `components`
-    list tests only those, leaving the others at `1.0` (identity for the
-    product), and a zone missing a listed component is left all-`1.0`.
+    # Parameters
+    
+    - `field`: an `ElementField` or a `SubElementField`.
+    - `ge`, `gt`: the lower bound, `v ≥ ge` or `v > gt` — at most one of the two.
+    - `le`, `lt`: the upper bound, `v ≤ le` or `v < lt` — at most one of the two.
+      A bound left out leaves that side open; at least one bound is given.
+    - `components`: the components to test, the others left at `1.0` (neutral
+      for the product); a zone missing a listed component is left all `1.0`.
+      `None` tests every component.
+    
+    # Returns
+    
+    A field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    - `TypeError` if `field` is neither an `ElementField` nor a `SubElementField`.
+    - `RuntimeError` if no bound is given, if both bounds of one side are, or if
+      the lower bound exceeds the upper one.
     """
 
 def mask_node(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
     r"""
-    Per-component 0/1 **mask** of a field against a value band — same structure
-    as the input (Cast3M `MASQUE`): same zones, same support, same components,
-    only the values are rewritten (`1.0` inside the band, `0.0` outside). The
-    result is therefore multipliable term by term with the input.
+    A 0/1 mask of `field` against a band of values, component by component.
     
-    `field` is a `NodeField` or a `SubNodeField`, and the result is of the same
-    kind. Its sibling `pyrucast.mesh.select` extracts the passing *support*
-    instead, and produces a `Mesh`.
+    The result has the structure of the input — same zones, same support, same
+    components —, only the values are rewritten: `1.0` inside the band, `0.0`
+    outside. It therefore multiplies term by term with the input. There is
+    **no** AND across components: each value stands on its own. The
+    comparisons `>=`, `>`, `<=`, `<` of a field against a number build the same
+    mask. Its sibling `pyrucast.mesh.select` extracts the passing nodes
+    instead, as a `Mesh`.
     
-    The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
-    `le` (`≤`), `lt` (`<`). There is **no** AND across components: each value
-    stands on its own. `components=None` tests every component; a `components`
-    list tests only those, leaving the others at `1.0` (identity for the
-    product), and a zone missing a listed component is left all-`1.0`.
+    # Parameters
+    
+    - `field`: a `NodeField` or a `SubNodeField`.
+    - `ge`, `gt`: the lower bound, `v ≥ ge` or `v > gt` — at most one of the two.
+    - `le`, `lt`: the upper bound, `v ≤ le` or `v < lt` — at most one of the two.
+      A bound left out leaves that side open; at least one bound is given.
+    - `components`: the components to test, the others left at `1.0` (neutral
+      for the product); a zone missing a listed component is left all `1.0`.
+      `None` tests every component.
+    
+    # Returns
+    
+    A field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    - `TypeError` if `field` is neither a `NodeField` nor a `SubNodeField`.
+    - `RuntimeError` if no bound is given, if both bounds of one side are, or
+      if the lower bound exceeds the upper one.
     """
 
 def mass(model: Model, materials: ElementField) -> Matrix:
     r"""
-    Assemble the consistent mass matrix `M` of `model` (Cast3M `MASS`), or the
-    heat-capacity matrix `C` for a thermal model (Cast3M `CAPA`).
+    Assemble the mass matrix `M` of `model`, or its heat-capacity matrix `C`.
     
-    Mechanics assembles `M = ∫ ρ Nᵀ N` (material `rho`); heat conduction
-    assembles `C = ∫ ρ cp Nᵀ N` (material `rho`, `cp`). `materials` carries the
-    per-zone coefficients, exactly like [`stiffness`].
+    Mechanics assembles the consistent mass `M = ∫ ρ N_i N_j`, heat conduction the
+    capacity `C = ∫ ρ c_p N_i N_j`. A physics without a mass term (a boundary
+    exchange, a constraint) contributes nothing.
+    
+    # Parameters
+    
+    - `model`: the physics to assemble.
+    - `materials`: the material data, zone by zone, as for [`stiffness`]. It must
+      carry `rho` on a mechanical zone, `rho` and `cp` on a thermal one: the
+      stiffness does not read them, so the material field holds them only if
+      given.
+    
+    # Returns
+    
+    The matrix, assembled on the configuration active at the call.
+    
+    # Raises
+    
+    `RuntimeError` if `rho` or `cp` is missing on a zone that needs it.
     """
 
 def match_gauss(element_type: builtins.str, ref_nodes: typing.Sequence[builtins.float], xi: typing.Sequence[builtins.float], weights: typing.Sequence[builtins.float], order: builtins.str) -> builtins.list[builtins.int]:
     r"""
-    For each of pyrucast's Gauss points of `element_type`, the index of the
-    same point in the external rule `(xi, weights)` declared in the external
-    reference element `ref_nodes` (numbered in `order`). Raises when the two
-    rules are not the same quadrature.
+    Where each Gauss point of `element_type` sits in an external rule.
+    
+    # Parameters
+    
+    - `element_type`: the element type.
+    - `ref_nodes`: the nodes of the external reference element, numbered in
+      `order`.
+    - `xi`, `weights`: the external rule, declared in that element.
+    - `order`: the numbering of `ref_nodes`: `"pyrucast"`, `"gmsh"` or `"med"`.
+    
+    # Returns
+    
+    For each Gauss point of pyrucast, the index of the same point in `xi`.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `element_type` or `order`.
+    - `RuntimeError` if the two rules are not the same quadrature.
     """
 
 def material_field(model: Model, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
     r"""
-    Build a material `ElementField` applying the same uniform
-    `(component, value)` pairs to every material-hungry sub-model of
-    `model`. Sub-models that need no material (Dirichlet, …) are skipped.
+    Build a uniform material field for every sub-model of `model` that needs one.
+    
+    The same pairs are applied to every sub-model that consumes material; the
+    others (constraints) are skipped. The field is then given as it is to
+    `pyrucast.matrix.stiffness` and `pyrucast.element_field.integrate_behavior`,
+    which pick for each sub-model the zone on its FE subspace. Once built, it is
+    an ordinary `ElementField`, which can vary in space or be scaled.
+    
+    # Parameters
+    
+    - `model`: the sub-models whose material to build.
+    - `components_and_values`: the `(component, value)` pairs, one uniform value
+      per component, for instance `[("E", 210e9), ("nu", 0.3)]`.
+    
+    # Returns
+    
+    An `ElementField` with one zone per sub-model that consumes material.
+    
+    # Raises
+    
+    `RuntimeError` if a component a physics requires is missing.
     """
 
 def material_field_per_sub_model(model: Model, components_and_values_per_sub_model: typing.Sequence[typing.Sequence[tuple[builtins.str, builtins.float]]]) -> ElementField:
     r"""
-    Build a material `ElementField` where each sub-model gets its own
-    `(component, value)` list. The outer list length must equal
-    `model.len()`. An empty inner list **skips** the matching
-    sub-model (typical for Dirichlet).
+    Build a material field with its own uniform values for each sub-model.
+    
+    Different materials zone by zone: the n-th list of pairs goes to the n-th
+    sub-model of `model`.
+    
+    # Parameters
+    
+    - `model`: the sub-models whose material to build.
+    - `components_and_values_per_sub_model`: one list of `(component, value)`
+      pairs per sub-model of `model`, in order; an empty list skips that
+      sub-model (a constraint).
+    
+    # Returns
+    
+    An `ElementField` with one zone per non-empty list.
+    
+    # Raises
+    
+    `RuntimeError` if the number of lists is not the number of sub-models, or if
+    a component a physics requires is missing.
     """
 
 def mazars(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.mazars(fespace, kinematics)` — Mazars isotropic damage spanning every
-    subspace of `fespace`. `kinematics` is `"plane_stress"` / `"plane_strain"` /
-    `"axisymmetric"` (2-D) or `"solid"` (3-D). Same DOFs as elasticity; material
-    (`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at
-    assembly / integration time. The behaviour integration (`COMP`) carries
-    the scalar history variable `kappa` (`VAR0`→`VAR1`) and outputs `damage`.
+    Mazars isotropic damage of a quasi-brittle material, such as concrete.
+    
+    Same unknowns as `pyrucast.model.elasticity`. Material `E`, `nu`, `eps_d0`,
+    `A_t`, `B_t`, `A_c`, `B_c`. The state carries the scalar history variable
+    `kappa` and the output `damage`.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def merge(a: NodeField, b: NodeField) -> NodeField:
     r"""
-    The union `a | b`: the zones of both fields, those on the same support
-    fused into one carrying the union of their components, those on distinct
-    supports side by side (nothing is densified).
+    The union `a | b` of two fields at the nodes, consolidated.
     
-    Errors if the two fields hold different values at the same
-    `(node, component)` pair, or are attached to different `Coords`s.
+    The zones of both fields: those on the same support fused into one carrying
+    the union of their components, those on distinct supports side by side
+    (nothing is densified).
+    
+    # Parameters
+    
+    - `a`: the first field.
+    - `b`: the second field, on the same `Coords` as `a`.
+    
+    # Returns
+    
+    A new `NodeField`; `a` and `b` are left untouched.
+    
+    # Raises
+    
+    `RuntimeError` if `a` and `b` hold different values at the same
+    `(node, component)` pair, or are attached to different `Coords`.
     """
 
 def merge_nodes(mesh: Mesh, tol: builtins.float, in_place: builtins.bool = False) -> Mesh:
     r"""
-    Weld together nodes closer than `tol`, redirecting the connectivity to one
-    representative per cluster.
+    Weld together the nodes of `mesh` closer than `tol`.
     
-    Returns a new mesh mirroring `mesh` (same submeshes, types and colours)
-    with welded-away nodes redirected to their cluster representative — the
+    The connectivity is redirected to one representative per cluster — the
     smallest-id node of the cluster, which keeps its own coordinates (no
-    averaging). Cells that collapse onto a repeated node (a degenerate segment,
-    triangle, …) are dropped. `tol` must be ≥ 0; `tol = 0` welds only exactly
-    coincident nodes. `mesh` itself is left untouched.
+    averaging). A cluster is a connected component of the relation "closer than
+    `tol`": the weld propagates from node to node, so on a chain a—b—c where a and
+    c are further apart than `tol`, all three still end up as one — which is why a
+    `tol` of the order of the element size collapses a whole region rather than a
+    seam. Every call prints a one-line tally on stdout once the weld is done —
+    nodes welded, cells dropped, tolerance used.
     
-    A cluster is a connected component of the « closer than `tol` » relation:
-    the weld propagates from node to node, so on a chain a—b—c where a and c
-    are further apart than `tol`, all three still end up as one — which is why
-    a `tol` of the order of the element size collapses a whole region rather
-    than a seam.
+    # Parameters
     
-    With `in_place=True` the connectivity of `mesh`'s **own** submeshes is
-    rewritten instead — the assumed side effect — and the very same mesh object
-    is returned. Since the union `mesh_a | mesh_b` shares its submeshes rather
-    than copying them, welding that union in place welds `mesh_a` and `mesh_b`
-    themselves: afterwards they really do share their interface nodes. The mesh
-    structure is preserved (same submeshes, same cells in the same order), so a
-    cell that *would* collapse is an error here instead of being dropped, as is
-    a submesh already sealed by a finite-element space, field or matrix. Both
-    are checked before anything is written: a rejected call changes nothing.
+    - `mesh`: the mesh to weld.
+    - `tol`: the distance, `≥ 0`; `0` welds only coincident nodes.
+    - `in_place`: `False` builds a new mesh, where cells that collapse onto a
+      repeated node (a degenerate segment, triangle, …) are dropped. `True`
+      rewrites the connectivity of `mesh`'s **own** submeshes instead and returns
+      `mesh` itself. Since the union `mesh_a | mesh_b` shares its submeshes, welding
+      that union in place welds `mesh_a` and `mesh_b` themselves: afterwards they
+      share their interface nodes. The structure is kept (same submeshes, same
+      cells in the same order), so a cell that would collapse is an error, as is a
+      submesh already sealed by a finite-element space, a field or a matrix; both
+      are checked before anything is written.
     
-    Every call prints a one-line tally on stdout once the weld is done — nodes
-    welded, cells dropped, tolerance used.
+    # Returns
+    
+    A new `Mesh` mirroring `mesh` (same submeshes, types and colours), or `mesh`
+    itself with `in_place=True`.
+    
+    # Raises
+    
+    `RuntimeError` if `tol` is negative, or, with `in_place=True`, for a cell that
+    would collapse or a sealed submesh.
     """
 
 def merge_triangles(mesh: Mesh) -> Mesh:
     r"""
-    Remove the triangles from a quadrangle-dominant mesh, in pairs.
+    Remove the triangles from a quadrangle-dominant mesh `mesh`, in pairs.
+    
+    # Parameters
+    
+    - `mesh`: a 2-D surface mesh, TRI3 and QUA4.
+    
+    # Returns
+    
+    A new `Mesh`.
+    
+    # Raises
+    
+    `RuntimeError` if `mesh` is not 2-D, or has no surface cells (TRI3/QUA4).
     """
 
 def mpc(terms: typing.Sequence[tuple[Mesh, builtins.str, builtins.float]], target: Model, sense: builtins.str = '=') -> Model:
     r"""
-    `model.mpc(terms, target, sense="=")` — multi-point constraint (a single
-    sub-model) imposing, per relation, `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange
-    multipliers.
+    Impose a linear relation `Σₖ aₖ·u(nodeₖ, varₖ) = g` between nodes, per relation.
     
-    `terms` is a list of `(mesh, variable, coefficient)` tuples: each `mesh` is
-    a POI1 mesh (one node per relation), paired element-for-element with the
-    others (relation `r` = cell `r` of every mesh); each `variable` is a primal
-    of `target`, the model being constrained — the union of two models to tie
-    two bodies — whose dual row is read from it. Each relation gets a
-    multiplier node of its own, minted beside the node of the first term; `g`
-    is written in the load field at its `imposed` component (default `0`).
-    `sense` (`"="`, the default, `">="` or `"<="`) turns the relations
-    unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`): the matrix carries the sense, and
-    `solve` runs its active-set loop. See the constraints chapter of the book.
+    A multi-point constraint, a single sub-model, through Lagrange multipliers.
+    Each relation gets a multiplier node of its own, minted beside the node of the
+    first term; `g` is written in the load field at its `imposed` component
+    (default `0`).
+    
+    # Parameters
+    
+    - `terms`: a list of `(mesh, variable, coefficient)` tuples. Each `mesh` is a
+      POI1 mesh, one node per relation, paired cell for cell with the others
+      (relation `r` = cell `r` of every mesh); each `variable` is a primal of
+      `target`.
+    - `target`: the model being constrained — the union of two models to tie two
+      bodies —; the dual rows are read from it.
+    - `sense`: `"="` (the default), `">="` or `"<="`. The last two make the
+      relations unilateral (`Σ aₖ·uₖ ≥ g`, `≤ g`): the matrix carries the sense,
+      and `pyrucast.solver.solve` runs its active-set loop.
+    
+    # Returns
+    
+    A `Model` of one constraint sub-model.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `sense`.
+    - `RuntimeError` if the meshes of `terms` do not hold the same number of
+      nodes, or if a variable is not a primal of `target`.
     """
 
 def orient(mesh: Mesh) -> Mesh:
     r"""
-    Harmonise the orientation of a mesh's cells (cast3m `ORIE`).
+    Make the orientation of the cells of `mesh` consistent.
     
-    Cells sharing a facet are made consistently oriented — all normals of a
-    surface point the same way, all segments of a curve run head-to-tail, all
-    volume cells share one handedness — in any dimension (SEG/TRI/QUA/TET/
-    PENTA/HEX, linear or quadratic). Each connected component is seeded by its
-    lowest-indexed cell, which keeps its orientation; the absolute sense is not
-    chosen (use `invert` to flip a whole mesh, e.g. a hole's boundary). Returns
-    a fresh mesh sharing the input's nodes.
+    Cells sharing a facet are oriented alike — all normals of a surface point the
+    same way, all segments of a curve run head to tail, all volume cells share one
+    handedness —, in any dimension, linear or quadratic. Each connected component
+    is seeded by its lowest-indexed cell, which keeps its orientation; the
+    absolute sense is not chosen (`pyrucast.mesh.invert` flips a whole mesh, a
+    hole's boundary for instance).
+    
+    # Parameters
+    
+    - `mesh`: the mesh to orient.
+    
+    # Returns
+    
+    A fresh `Mesh` sharing the nodes of `mesh`, which is left untouched.
     """
 
 def ottosen(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.ottosen(fespace, kinematics)` — Ottosen's four-parameter criterion for
-    concrete, whose strength depends on the pressure **and** on the Lode
-    angle (so tension and compression differ). Material `E`, `nu`, `a`, `b`,
-    `k_1`, `k_2`, `sigma_c`.
+    Ottosen's four-parameter criterion for concrete.
     
-    Integrated by a cutting-plane return with a numerically differentiated
-    normal: the criterion is exact, and the gradient — long enough that a
-    hand-derived one could not be checked — is a central difference.
+    Its strength depends on the pressure **and** on the Lode angle, so tension and
+    compression differ. Material `E`, `nu`, `a`, `b`, `k_1`, `k_2`, `sigma_c`.
+    
+    Integrated by a cutting-plane return with a numerically differentiated normal:
+    the criterion is exact, and the gradient is a central difference.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def pave_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, prefer_quads: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
-    Pave the inside of a closed contour with quadrangles, in rows walking
-    inward from the boundary.
+    Pave the inside of closed loops with quadrangles, in rows walking inward.
     
-    The quadrangle-oriented companion of `triangulate_surface`, and the one to
-    reach for when the mesh is going to be computed on: paving lays QUA4 cells
-    down directly, in rows that follow the contour, instead of triangulating
-    and pairing triangles up afterwards.
+    The quadrangle companion of `pyrucast.mesh.triangulate_surface`, and the one
+    to reach for when the mesh is going to be computed on: it lays quadrangles
+    down directly, in rows that follow the contour, instead of triangulating and
+    pairing triangles up afterwards. The contour is untouchable: its nodes come
+    back at their own positions and no node is ever added on a boundary edge. A
+    contour the paver cannot work with is therefore reported rather than worked
+    around.
     
-    `contour` holds **one or more** closed SEG2 loops, oriented by the caller
-    exactly as for `triangulate_surface`: a **counter-clockwise** loop is a
-    domain's outer boundary, a **clockwise** loop is a hole. Several disjoint
-    CCW loops pave several independent domains at once. `size` sets the target
-    element edge length; `None` uses the mean boundary edge length per domain.
-    `element_type` is "QUA4", "QUA8" or "QUA9". The contour may be 2-D or a
-    planar loop in 3-D (paved in its best-fit plane, then lifted back).
+    # Parameters
     
-    The contour is untouchable: its nodes come back at their own positions and
-    no node is ever added on a boundary edge. A contour the paver cannot work
-    with is therefore reported rather than worked around — `prefer_quads=True` on a
-    loop with an odd number of segments raises, since a polygon with an odd
-    number of sides has no filling by quadrangles alone and evening the count
-    out would mean adding a boundary node; so does a contour so coarse for the
-    requested size that the front folds onto itself.
+    - `contour`: **one or more** closed SEG2 loops, oriented as for
+      `pyrucast.mesh.triangulate_surface`: a **counterclockwise** loop is a
+      domain's outer boundary, a **clockwise** loop a hole. Several disjoint
+      counterclockwise loops mesh several independent domains at once. It may be
+      2-D, or a planar loop in 3-D, meshed in its best-fit plane and lifted back.
+    - `element_type`: `"QUA4"`, `"QUA8"` or `"QUA9"`.
+    - `size`: the target edge length; `None` takes the mean boundary edge length,
+      domain by domain.
+    - `prefer_quads`: `False` lets an odd loop cost one triangle, returned in a
+      separate TRI3 submesh along with the few cells a distorted leftover polygon
+      could not make square. `True` removes the first kind, not the second, and
+      raises on a loop with an odd number of segments: a polygon with an odd
+      number of sides has no filling by quadrangles alone, and evening the count
+      would mean adding a boundary node.
+    - `relax`: what the front may do to itself between two rows. After each row
+      the fresh chain is smoothed, which keeps the front from kinking — and, being
+      a Laplacian, rounds its corners off. A front sheds nodes only at its
+      **corners**, so once they are rounded away it keeps every node it has while
+      its perimeter shrinks, and the middle comes out finer than asked: a plain
+      20 × 20 square at size 1 gives 600 cells instead of 400.
+      - `"free"` (`None`, the default): a node moves wherever the smoothing
+        points. The only mode that never lets the front kink.
+      - `"along"`: the same step, kept only **along** the front: the spacing is
+        evened out, the shape is not. The square then comes out as the 400 exact
+        squares anyone would draw.
+      - `"none"`: the front stays exactly where the row put it.
     
-    With `prefer_quads=False` (the default) an odd loop simply costs one triangle,
-    returned in a separate TRI3 submesh, along with the few cells a distorted
-    leftover polygon could not make square. `prefer_quads=True` removes the
-    first kind, not the second: fewer triangles, none guaranteed.
+      `"along"` and `"none"` win on anything with corners to keep and can kink on
+      a curve, where there is nothing to preserve and everything to straighten.
     
-    `relax` chooses what the front is allowed to do to itself between two rows.
-    After each row the fresh chain is smoothed, which keeps the front from
-    kinking — and, being a Laplacian, rounds its corners off. That costs more
-    than it looks: a front sheds nodes only at its **corners**, so once they are
-    rounded away it keeps every node it has while its perimeter shrinks, and the
-    middle of the domain comes out finer than asked. A plain 20 × 20 square at
-    size 1 gives 600 cells instead of 400.
+    # Returns
     
-    - `"free"` (the default) — the historical behaviour: a node moves wherever
-      the smoothing points. The only mode that never lets the front kink.
-    - `"along"` — the same step, kept only **along** the front: the spacing is
-      evened out, the shape is not. The square then comes out as the 400 exact
-      squares anyone would draw.
-    - `"none"` — the front stays exactly where the row put it.
+    A new `Mesh` on the contour's nodes plus fresh interior nodes.
     
-    There is no best answer, which is why it is a choice: `"along"` and
-    `"none"` win on anything with corners to keep and can kink on a curve, where
-    there is nothing to preserve and everything to straighten. A run that fails
-    to converge raises rather than grinding on.
+    # Raises
+    
+    - `ValueError` for an unknown `relax`.
+    - `RuntimeError` for an `element_type` other than QUA4, QUA8 or QUA9, with
+      `prefer_quads=True` on an odd loop, or for a contour too coarse for the size
+      asked, where the front folds onto itself.
+    - `RuntimeError` also for a run that fails to converge.
     """
 
 def pave_volume(envelope: Mesh, layers: builtins.int = 1, thickness: typing.Optional[builtins.float] = None, size: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Mesh the inside of a closed envelope with a hexahedral boundary layer over
-    a tetrahedral core — the 3-D companion of `pave_surface`.
+    Mesh a closed envelope: a hexahedral boundary layer over a tetrahedral core.
     
-    Puts hexahedra where they matter, in the layer against the boundary where
-    gradients are steepest and an element's shape decides the accuracy, and
-    leaves the smooth interior to tetrahedra.
+    The 3-D companion of `pyrucast.mesh.pave_surface`. Hexahedra go where they
+    matter, in the layer against the boundary where gradients are steepest; the
+    smooth interior is left to tetrahedra. Pyramids join the two: the layer's
+    inner faces are squares and a tetrahedron has none, so without them the mesh
+    could not be conforming.
     
-    `layers` boundary layers are grown inward, each `thickness` deep;
-    `thickness=None` takes the envelope's mean edge length, which gives roughly
-    cube-shaped cells. `size` is the target element size for the tetrahedral
-    core. The envelope is a closed surface of QUA4 and/or TRI3 facets whose
-    normals point **out of the material**, exactly as for `triangulate_volume`;
-    its nodes are reused as they are.
+    # Parameters
     
-    The result carries a QUA4-born HEX8 submesh, a TRI3-born PENTA6 one, a
-    PYRA5 one and a TET4 one, each present only if non-empty. The pyramids are
-    the junction: the layer's inner faces are squares and a tetrahedron has
-    none, so without them the mesh could not be conforming.
+    - `envelope`: a closed surface of QUA4 and/or TRI3 facets, its normals pointing
+      **out of the material**; its nodes are reused as they are.
+    - `layers`: the number of boundary layers, grown inward.
+    - `thickness`: the depth of each layer; `None` takes the envelope's mean edge
+      length, which gives roughly cube-shaped cells.
+    - `size`: the target cell size of the tetrahedral core.
+    
+    # Returns
+    
+    A new `Mesh` with a HEX8 submesh (born of the QUA4 facets), a PENTA6 one (born
+    of the TRI3 facets), a PYRA5 one and a TET4 one, each present only if not
+    empty.
+    
+    # Raises
+    
+    `RuntimeError` if `envelope` is not closed.
     """
 
 def plasticity_isotropic(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.plasticity_isotropic(fespace, kinematics)` — von Mises with **linear
-    isotropic hardening**, `σ_y(p) = σ_y + H·p`. Material `E`, `nu`,
-    `sigma_y`, `H`; everything else as `plasticity_perfect` (`H = 0` would
-    give it back exactly).
+    Von Mises plasticity with linear isotropic hardening, `σ_y(p) = σ_y + H·p`.
+    
+    Material `E`, `nu`, `sigma_y`, `H`; everything else as
+    `pyrucast.model.plasticity_perfect`, which `H = 0` gives back exactly.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def plasticity_perfect(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.plasticity_perfect(fespace, kinematics)` — **perfect** (non-hardening)
-    von Mises elastoplasticity spanning every subspace of `fespace`. `kinematics`
-    is `"plane_stress"` / `"plane_strain"` / `"axisymmetric"` (2-D) or
-    `"solid"` (3-D). Same DOFs as elasticity (`u_x, u_y(, u_z)`); material
-    (`E`, `nu`, `sigma_y`) is supplied at assembly / integration time. The
-    behaviour integration (`COMP`) carries the plastic-strain +
-    cumulated-`p` internal state (`VAR0`→`VAR1`) and emits the consistent
-    tangent `D_alg`.
+    Perfect (non-hardening) von Mises elastoplasticity.
+    
+    Same unknowns as `pyrucast.model.elasticity`. Material `E`, `nu`, `sigma_y`.
+    The state carries the plastic strain and the cumulated plastic strain `p`;
+    the law gives its consistent tangent to `pyrucast.matrix.tangent`.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:
     r"""
-    Build a points (POI1) mesh with one point per node in `nodes`.
+    A POI1 mesh with one point per node of `nodes`, in their order.
     
-    The `Coords` comes from the nodes themselves — every `Node` carries its
-    own — so no `Coords` argument is needed. Errors if `nodes` is empty.
+    The `Coords` comes from the nodes themselves — every `Node` carries its own —,
+    so no `Coords` argument is needed.
+    
+    # Parameters
+    
+    - `nodes`: the nodes, all of one `Coords`.
+    
+    # Returns
+    
+    A POI1 `Mesh` of one zone.
+    
+    # Raises
+    
+    `RuntimeError` if `nodes` is empty.
     """
 
 def points_below_plane(mesh: Mesh, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Nodes **below** the plane through `origin` with normal `normal` — the
-    half-space the normal points away from, plane included.
+    Nodes below the plane through `origin`: the side `normal` points away from.
     
-    There is no `points_above_plane`: flip the normal and this is the other
-    half-space.
+    The half-space includes the plane. There is no `points_above_plane`: flip the
+    normal and this is the other half-space.
+    
+    # Parameters
+    
+    - `mesh`: the mesh whose nodes to test.
+    - `origin`: a point of the plane.
+    - `normal`: the normal of the plane, pointing to the side left out.
+    - `tol`: the precision of the test, a distance to the surface of the region;
+      `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+    
+    # Returns
+    
+    A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+    nodes kept.
+    
+    # Raises
+    
+    `RuntimeError` if a point does not have the dimension of the mesh, if `normal` is the zero vector, or if `tol` is negative.
     """
 
 def points_in_cone(mesh: Mesh, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], base_radius: builtins.float, top_radius: builtins.float = 0.0, tol: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Nodes **inside** the cone of axis `base → top`, radius `base_radius` at
-    `base` and `top_radius` at `top`.
+    Nodes inside the truncated cone of axis `base → top`.
     
-    The shape is a truncated cone: `top_radius=0` (the default) gives a true
-    cone whose apex is `top`, `top_radius=base_radius` a cylinder. Capped like
-    `points_in_cylinder`.
+    Its radius is `base_radius` at `base` and `top_radius` at `top`: the default
+    `top_radius=0` gives a true cone whose apex is `top`, `top_radius=base_radius`
+    a cylinder. Capped like `pyrucast.mesh.points_in_cylinder`.
+    
+    # Parameters
+    
+    - `mesh`: the mesh whose nodes to test.
+    - `base`, `top`: the centres of the two end sections, distinct.
+    - `base_radius`: the radius at `base`, `≥ 0`.
+    - `top_radius`: the radius at `top`, `≥ 0`.
+    - `tol`: the precision of the test, a distance to the surface of the region;
+      `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+    
+    # Returns
+    
+    A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+    nodes kept.
+    
+    # Raises
+    
+    `RuntimeError` if a point does not have the dimension of the mesh, if `base` and `top` coincide, if a radius is negative, or if `tol` is negative.
     """
 
 def points_in_cylinder(mesh: Mesh, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Nodes **inside** the finite cylinder of axis `base → top` and radius
-    `radius`.
+    Nodes inside the finite cylinder of axis `base → top` and radius `radius`.
     
-    The cylinder is capped: a node is kept when it is within `radius + tol` of
-    the axis **and** its axial coordinate falls between the two end sections.
+    The cylinder is capped: a node is kept when it is within `radius + tol` of the
+    axis **and** its axial coordinate falls between the two end sections.
+    
+    # Parameters
+    
+    - `mesh`: the mesh whose nodes to test.
+    - `base`, `top`: the centres of the two end sections, distinct.
+    - `radius`: the radius, `≥ 0`.
+    - `tol`: the precision of the test, a distance to the surface of the region;
+      `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+    
+    # Returns
+    
+    A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+    nodes kept.
+    
+    # Raises
+    
+    `RuntimeError` if a point does not have the dimension of the mesh, if `base` and `top` coincide, if `radius` is negative, or if `tol` is negative.
     """
 
 def points_in_sphere(mesh: Mesh, center: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Nodes **inside** the sphere of centre `center` and radius `radius`.
+    Nodes inside the sphere of centre `center` and radius `radius`.
     
     Keeps the nodes at a distance `≤ radius + tol` from `center`. In 2-D the
-    sphere is a disc — `center` just has to match the mesh dimension.
+    sphere is a disc.
+    
+    # Parameters
+    
+    - `mesh`: the mesh whose nodes to test.
+    - `center`: the centre, with the dimension of the mesh.
+    - `radius`: the radius, `≥ 0`.
+    - `tol`: the precision of the test, a distance to the surface of the region;
+      `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+    
+    # Returns
+    
+    A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+    nodes kept.
+    
+    # Raises
+    
+    `RuntimeError` if a point does not have the dimension of the mesh, if `radius` is negative, or if `tol` is negative.
     """
 
 def points_in_torus(mesh: Mesh, center: typing.Sequence[builtins.float], axis: typing.Sequence[builtins.float], major_radius: builtins.float, minor_radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Nodes **inside** the torus of centre `center`, axis `axis`, major radius
-    `major_radius` and minor radius `minor_radius`.
+    Nodes inside the torus of centre `center` and axis `axis`, in 3-D.
     
     The section is circular: the torus is the set of points at a distance
     `≤ minor_radius` from the circle of radius `major_radius` drawn around
-    `center` in the plane normal to `axis`. **3-D only.**
+    `center` in the plane normal to `axis`.
+    
+    # Parameters
+    
+    - `mesh`: the mesh whose nodes to test.
+    - `center`: the centre of the torus.
+    - `axis`: the axis of revolution.
+    - `major_radius`: the radius of the circle the tube follows.
+    - `minor_radius`: the radius of the tube.
+    - `tol`: the precision of the test, a distance to the surface of the region;
+      `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+    
+    # Returns
+    
+    A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+    nodes kept.
+    
+    # Raises
+    
+    `RuntimeError` if the mesh is not 3-D, if a point does not have the dimension of the mesh, if `axis` is the zero vector, if a radius is negative, or if `tol` is negative.
     """
 
 def points_on_cone(mesh: Mesh, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], base_radius: builtins.float, top_radius: builtins.float = 0.0, tol: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Nodes **on** the lateral surface of the cone of axis `base → top`, radius
-    `base_radius` at `base` and `top_radius` at `top` (Cast3m `POIN … CONE`).
+    Nodes on the lateral surface of the truncated cone of axis `base → top`.
     
     The distance to the slanted surface is the perpendicular one, so the band
-    stays `tol` wide however steep the cone is. As for `points_on_cylinder`,
-    the end discs are not part of the selection.
+    stays `tol` wide however steep the cone is. As for
+    `pyrucast.mesh.points_on_cylinder`, the end discs are not part of the
+    selection.
+    
+    # Parameters
+    
+    - `mesh`: the mesh whose nodes to test.
+    - `base`, `top`: the centres of the two end sections, distinct.
+    - `base_radius`: the radius at `base`, `≥ 0`.
+    - `top_radius`: the radius at `top`, `≥ 0`; `0` gives a true cone.
+    - `tol`: the precision of the test, a distance to the surface of the region;
+      `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+    
+    # Returns
+    
+    A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+    nodes kept.
+    
+    # Raises
+    
+    `RuntimeError` if a point does not have the dimension of the mesh, if `base` and `top` coincide, if a radius is negative, or if `tol` is negative.
     """
 
 def points_on_cylinder(mesh: Mesh, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Nodes **on** the lateral surface of the finite cylinder of axis
-    `base → top` and radius `radius` (Cast3m `POIN … CYLI`).
+    Nodes on the lateral surface of the cylinder of axis `base → top`.
     
-    The end discs are **not** part of the selection — they are flat faces, and
-    `points_on_plane` cuts those. This is how you grab the bore of a tube.
+    The end discs are **not** part of the selection — they are flat faces, which
+    `pyrucast.mesh.points_on_plane` cuts. This is how you grab the bore of a tube.
+    
+    # Parameters
+    
+    - `mesh`: the mesh whose nodes to test.
+    - `base`, `top`: the centres of the two end sections, distinct.
+    - `radius`: the radius, `≥ 0`.
+    - `tol`: the precision of the test, a distance to the surface of the region;
+      `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+    
+    # Returns
+    
+    A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+    nodes kept.
+    
+    # Raises
+    
+    `RuntimeError` if a point does not have the dimension of the mesh, if `base` and `top` coincide, if `radius` is negative, or if `tol` is negative.
     """
 
 def points_on_line(mesh: Mesh, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Nodes **on** the infinite line through `a` and `b`
-    (Cast3m `POIN … DROIT`).
+    Nodes on the infinite line through `a` and `b`.
     
-    Keeps the nodes at a distance `≤ tol` from the line, with no bound along
-    it — use `points_in_cylinder` with a small radius for a selection clipped
-    to the `a → b` segment.
+    Keeps the nodes at a distance `≤ tol` from the line, with no bound along it —
+    `pyrucast.mesh.points_in_cylinder` with a small radius gives a selection
+    clipped to the segment `a → b`.
+    
+    # Parameters
+    
+    - `mesh`: the mesh whose nodes to test.
+    - `a`, `b`: two distinct points of the line.
+    - `tol`: the precision of the test, a distance to the surface of the region;
+      `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+    
+    # Returns
+    
+    A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+    nodes kept.
+    
+    # Raises
+    
+    `RuntimeError` if a point does not have the dimension of the mesh, if `a` and `b` coincide, or if `tol` is negative.
     """
 
 def points_on_plane(mesh: Mesh, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Nodes **on** the plane through `origin` with normal `normal`
-    (Cast3m `POIN … PLAN`).
+    Nodes on the plane through `origin` with normal `normal`.
     
-    Keeps the nodes within `tol` of the plane — the usual way to grab a
-    boundary face of a box mesh. `normal` need not be normalized; in 2-D the
-    plane is a line.
+    Keeps the nodes within `tol` of the plane — the usual way to grab a boundary
+    face of a box mesh. In 2-D the plane is a line.
+    
+    # Parameters
+    
+    - `mesh`: the mesh whose nodes to test.
+    - `origin`: a point of the plane.
+    - `normal`: the normal of the plane, not necessarily of unit length.
+    - `tol`: the precision of the test, a distance to the surface of the region;
+      `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+    
+    # Returns
+    
+    A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+    nodes kept.
+    
+    # Raises
+    
+    `RuntimeError` if a point does not have the dimension of the mesh, if `normal` is the zero vector, or if `tol` is negative.
     """
 
 def points_on_sphere(mesh: Mesh, center: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Nodes **on** the sphere of centre `center` and radius `radius`
-    (Cast3m `POIN … SPHE`).
+    Nodes on the sphere of centre `center` and radius `radius`.
     
     Keeps the nodes whose distance to `center` is within `tol` of `radius`, on
     either side. In 2-D this selects a circle.
+    
+    # Parameters
+    
+    - `mesh`: the mesh whose nodes to test.
+    - `center`: the centre, with the dimension of the mesh.
+    - `radius`: the radius, `≥ 0`.
+    - `tol`: the precision of the test, a distance to the surface of the region;
+      `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+    
+    # Returns
+    
+    A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+    nodes kept.
+    
+    # Raises
+    
+    `RuntimeError` if a point does not have the dimension of the mesh, if `radius` is negative, or if `tol` is negative.
     """
 
 def points_on_torus(mesh: Mesh, center: typing.Sequence[builtins.float], axis: typing.Sequence[builtins.float], major_radius: builtins.float, minor_radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Nodes **on** the torus of centre `center`, axis `axis`, major radius
-    `major_radius` and minor radius `minor_radius`.
+    Nodes on the torus of centre `center` and axis `axis`, in 3-D.
     
-    Keeps the nodes within `tol` of the tube's surface. The torus being
-    closed, there is no cap to worry about here. **3-D only.**
+    Keeps the nodes within `tol` of the tube's surface. The torus being closed,
+    there is no cap to worry about.
+    
+    # Parameters
+    
+    - `mesh`: the mesh whose nodes to test.
+    - `center`: the centre of the torus.
+    - `axis`: the axis of revolution.
+    - `major_radius`: the radius of the circle the tube follows.
+    - `minor_radius`: the radius of the tube.
+    - `tol`: the precision of the test, a distance to the surface of the region;
+      `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+    
+    # Returns
+    
+    A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+    nodes kept.
+    
+    # Raises
+    
+    `RuntimeError` if the mesh is not 3-D, if a point does not have the dimension of the mesh, if `axis` is the zero vector, if a radius is negative, or if `tol` is negative.
     """
 
 def positions(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
     r"""
-    Build a `NodeField` carrying the position of every node of `mesh`
-    — one `SubNodeField` per submesh, on the distinct nodes of its zone.
+    The positions of the nodes of `mesh`, as a field at the nodes.
     
-    One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
-    requests all the axes the mesh's `Coords` has (`["X"]` in 1-D,
-    `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D).
+    The bridge from geometry to fields: the result can be plotted, derived, or
+    written back after a computation with `pyrucast.coords.set`. Positions are
+    read in the active configuration of the `Coords`.
+    
+    # Parameters
+    
+    - `mesh`: the nodes to read.
+    - `components`: the axes to read, among `"X"`, `"Y"`, `"Z"`, one component
+      each; `None` reads every axis of the `Coords` (`["X"]` in 1-D, `["X", "Y"]`
+      in 2-D, `["X", "Y", "Z"]` in 3-D).
+    
+    # Returns
+    
+    A `NodeField` with one zone per submesh of `mesh`, on the distinct nodes of
+    that submesh.
+    
+    # Raises
+    
+    `RuntimeError` for a component other than `"X"`, `"Y"`, `"Z"`, or an axis
+    beyond the dimension of the `Coords`.
     """
 
 def project(field: typing.Any, mesh: Mesh, target: Mesh, tol: builtins.float = 1e-06) -> NodeField:
     r"""
-    `field` read at the nodes of `target`, through the cells of `mesh` — Cast3M
-    `PROI` onto a geometry. `field` is a nodal field or a field at the Gauss
-    points:
+    Read `field` at the nodes of `target`, through the cells of `mesh`.
     
-    - **nodal** (`NodeField`, `SubNodeField`): a node of `target` inside a cell
-      of `mesh` takes `Σ Nᵢ(ξ) f(nodeᵢ)`, the shape functions of that cell at
-      the node (quadratic cells interpolate quadratically). `field` is read
-      first zone first, a node of `mesh` it does not define reading zero.
-      `mesh` and `field` must share their `Coords`.
-    - **at the Gauss points** (`ElementField`, `SubElementField`): the node
-      takes the value that cell's **own** Gauss points give there — their
-      least-squares fit on the cell, the one a plot colours the cell with.
-      Nothing is averaged between cells: a line of points crossing from one
-      cell to its neighbour shows the jump between them. A point on a face
-      shared by two cells is read in one of them; to follow a field along a
-      line, put the points between the nodes. `mesh` is the field's own cells:
-      each of its submeshes must carry a zone of the field.
+    A node of `target` inside a cell of `mesh` takes the value the cell gives
+    there:
     
-    Every component is carried. A node of `target` outside `mesh` — farther
-    than `tol` outside every cell's reference element — gets zero. `mesh` and
-    `target` may live in different `Coords`, each read in its active
-    configuration. One zone per submesh of `target`, like `positions`.
+    - **a field at the nodes** (`NodeField`, `SubNodeField`): `Σ Nᵢ(ξ) f(nodeᵢ)`,
+      the shape functions of that cell at the node (a quadratic cell
+      interpolates quadratically). The field is read first zone first, a node
+      of `mesh` it does not define reading zero.
+    - **a field at the Gauss points** (`ElementField`, `SubElementField`): the
+      value that cell's **own** Gauss points give there — their least-squares
+      fit on the cell, the one a plot colours the cell with. Nothing is
+      averaged between cells: a line of points crossing from one cell to its
+      neighbour shows the jump between them. A point on a face shared by two
+      cells is read in one of them; to follow a field along a line, put the
+      points between the nodes.
     
-    An empty `field` or `target` gives an empty field; an empty `mesh` gives
-    zero at every node of `target`. Errors: `mesh` and `target` in different
-    dimensions; for a nodal field, `field` and `mesh` on different `Coords`;
-    for a field at the Gauss points, a submesh of `mesh` it has no zone on.
+    A node of `target` outside `mesh` gets zero, as a field at the nodes reads a
+    node it does not define: a patch projects onto a larger mesh. The nodes of
+    `target` are located once.
+    
+    # Parameters
+    
+    - `field`: the field to read. Every component is carried.
+    - `mesh`: the cells that interpolate. For a field at the nodes, on the same
+      `Coords` as `field`; for a field at the Gauss points, the field's own
+      cells, each submesh carrying a zone of the field.
+    - `target`: the nodes to read at. It may live in another `Coords` than
+      `mesh` (a remeshed part), each read in its active configuration.
+    - `tol`: how far outside a cell's reference element, without unit, a node
+      still counts as inside.
+    
+    # Returns
+    
+    A field at the nodes with one zone per submesh of `target`, like
+    `pyrucast.node_field.positions`. An empty `field` or `target` gives an empty
+    field; an empty `mesh` gives zero at every node of `target`.
+    
+    # Raises
+    
+    - `TypeError` if `field` is none of the four field types.
+    - `RuntimeError` if `mesh` and `target` differ in dimension, if a field at
+      the nodes and `mesh` hang from different `Coords`, or if a submesh of
+      `mesh` carries no zone of a field at the Gauss points.
     """
 
 def project_on_sphere(mesh: Mesh, center: typing.Sequence[builtins.float], radius: builtins.float) -> Mesh:
     r"""
-    Project `mesh` **radially** onto the sphere of centre `center` and radius
-    `radius`: every node — corners and mid-nodes alike — is pushed along the
-    ray from `center` through it, to the distance `radius`.
+    Push every node of `mesh` radially onto the sphere of centre `center`.
     
-    Returns a fresh copy with its own nodes (one per distinct node, so a
-    closed loop stays closed), in the same zones, types and colours; `mesh`
-    is left untouched. In a plane through `center` the sphere is a circle: a
-    contour of that plane lands on it node for node, each at its own angle —
-    the inner loop of a ring, ready for `sweep`. A node on `center` has no
-    direction and is an error.
+    Corners and mid-nodes alike move along the ray from `center` through them, to
+    the distance `radius`. In a plane through `center` the sphere is a circle: a
+    contour of that plane lands on it node for node, each at its own angle — the
+    inner loop of a ring, ready for `pyrucast.mesh.sweep`.
+    
+    # Parameters
+    
+    - `mesh`: the mesh to project, left untouched.
+    - `center`: the centre of the sphere.
+    - `radius`: the radius of the sphere.
+    
+    # Returns
+    
+    A fresh `Mesh` with its own nodes, one per distinct node (a closed loop stays
+    closed), in the same zones, types and colours.
+    
+    # Raises
+    
+    `RuntimeError` for a node on `center`, which has no direction.
     """
 
 def psca(x: typing.Any, y: typing.Any) -> typing.Any:
     r"""
-    Node-by-node (or point-by-point) scalar product of two fields — Cast3M's
-    `PSCA`. Returns a **new field** of the same flavour as the inputs, carrying
-    a single `"psca"` component whose value at each node/point is `∑_c xᵣ,c·yᵣ,c`
-    (reduction over components only, the support is kept).
+    Scalar product of two fields node by node, `pᵢ = Σ_c xᵢ,c·yᵢ,c`.
     
-    `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
-    `ElementField` / `SubElementField`), sit on the same support/decomposition,
-    and carry the same components (aligned by name).
+    The reduction runs over the components alone: the support is kept, one
+    value per node, or per Gauss point for a field at the Gauss points. The
+    components are aligned by name (their order may differ) and only those both
+    fields carry count; a support only one field carries has no counterpart and
+    gives no zone. Each value is written once, so the result does not depend on
+    the number of threads.
     
-    For the **global** scalar product (a single float over the whole field),
-    see `pyrucast.measure.xty`.
+    # Parameters
+    
+    - `x`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
+    - `y`: a field of the same type as `x`; two sub-fields must sit on the same
+      support.
+    
+    # Returns
+    
+    A new field of the type of `x`, one zone per support both fields carry,
+    with a single component `"psca"`.
+    
+    # Raises
+    
+    - `TypeError` if `y` is not of the type of `x`, or `x` none of the four.
+    - `RuntimeError` if two sub-fields sit on different supports.
+    
+    # See also
+    
+    `pyrucast.measure.xty`, the global scalar product: a single number over
+    the whole field.
     """
 
 def radiation(fespace: FiniteElementSpace, target: Model) -> Model:
     r"""
-    `model.radiation(fespace, target)` — radiation to infinity on a
-    *boundary* `fespace`: `q·n = σε(T⁴ − T_∞⁴)`, cooling the model `target`.
-    Same DOFs (`"T"`/`"q"`) as `heat_conduction`, which `target` must
-    assemble — a radiating boundary with no conduction beneath it raises —, so
-    it composes with `|`:
-    `conduction = model.heat_conduction(bulk)`
+    Radiation to infinity from a boundary, `q·n = σε(T⁴ − T_∞⁴)`.
+    
+    It cools the model `target`, whose unknowns `"T"`/`"q"` it shares, so it
+    composes with `|`:
+    `conduction = model.heat_conduction(bulk)`,
     `model = conduction | model.radiation(boundary, conduction)`.
     
     Material: `emis` (emissivity) and `T_inf` (far-field temperature), plus an
     optional `sigma` overriding the SI Stefan-Boltzmann constant. With the
-    default `sigma`, `T` is an **absolute** temperature — a fourth power has
-    no invariance to shift an origin through.
+    default `sigma`, `T` is an **absolute** temperature.
     
-    Unlike convection this law is non-linear, so it contributes three terms:
-    the linearised film `4σεT_∞³∫NᵢNⱼ` as stiffness, the exact residual
-    `∫Nᵢσε(T⁴ − T_∞⁴)` through `internal_forces`, and the consistent tangent
-    `4σεT³∫NᵢNⱼ` through `matrix.tangent(...)`, all evaluated at the face's
-    Gauss points with `T` interpolated there. Its natures are `"thermal"`
-    **and** `"radiation"`.
+    Unlike convection the law is non-linear, so it contributes three terms: the
+    linearized film `4σεT_∞³∫NᵢNⱼ` as stiffness, the exact residual
+    `∫Nᵢσε(T⁴ − T_∞⁴)` through `pyrucast.node_field.internal_forces`, and the
+    consistent tangent `4σεT³∫NᵢNⱼ` through `pyrucast.matrix.tangent`, all
+    evaluated at the face's Gauss points. Its natures are `"thermal"` **and**
+    `"radiation"`.
+    
+    # Parameters
+    
+    - `fespace`: the **boundary** FE space (an edge mesh in 2-D, a surface mesh
+      in 3-D).
+    - `target`: the model it cools, which must assemble `T` paired with `q`.
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`.
+    
+    # Raises
+    
+    `RuntimeError` if `target` assembles no `T` paired with `q`.
     """
 
 def read_gmsh(coords: Coords, path: builtins.str) -> dict:
     r"""
-    Read a gmsh `.msh` file (ASCII or binary, MSH 2.2 or 4.1) into a `dict`
-    mapping each physical group name to a `Mesh`, adding the nodes to `coords`.
+    Read a gmsh `.msh` file, one `Mesh` per physical group.
     
-    The nodes land in the `coords` you pass, so you keep the handle needed to
-    pose boundary conditions on a named region. Its dimension decides how
-    many of gmsh's three coordinates are kept (a 2-D `Coords` flattens onto
-    `xy`). All returned meshes share that single `Coords`, so a node on the
-    boundary between two named groups is the same node on both sides. Inside
-    a group's mesh there is one submesh per element type; elements with no
-    physical group land under the key `"<ungrouped>"`. The dict preserves the
-    file order.
+    ASCII or binary, MSH 2.2 or 4.1. All returned meshes share one `Coords`, so a
+    node on the boundary between two named groups is the same node on both sides.
+    Inside a group's mesh there is one submesh per element type; elements with no
+    physical group land under the key `"<ungrouped>"`. Every element type pyrucast
+    knows is read: POI1, SEG2, TRI3, QUA4, TET4, PYRA5, PENTA6, HEX8 and the
+    quadratic SEG3, TRI6, QUA8, QUA9, TET10, PENTA15, HEX20, HEX27.
     
-    Every element type pyrucast knows is read: POI1, SEG2, TRI3, QUA4, TET4,
-    PYRA5, PENTA6, HEX8 and the quadratic SEG3, TRI6, QUA8, QUA9, TET10,
-    PENTA15, HEX20, HEX27. Any other gmsh type raises, naming the codes it
-    does accept.
+    # Parameters
+    
+    - `coords`: where the nodes are added; its dimension decides how many of
+      gmsh's three coordinates are kept (a 2-D `Coords` keeps `x` and `y`).
+    - `path`: the file to read.
+    
+    # Returns
+    
+    A `dict` from physical group name to `Mesh`, in the order of the file.
+    
+    # Raises
+    
+    `RuntimeError` if the file cannot be read or parsed, or for a gmsh element
+    type pyrucast does not know.
     """
 
 def read_gmsh_str(coords: Coords, text: builtins.str) -> dict:
     r"""
-    Like `read_gmsh`, but parsing the `.msh` text already held in a string
-    instead of reading from a path. Same `dict[str, Mesh]` result.
+    Like `pyrucast.mesh.read_gmsh`, from the `.msh` text held in a string.
+    
+    # Parameters
+    
+    - `coords`: where the nodes are added.
+    - `text`: the content of a `.msh` file.
+    
+    # Returns
+    
+    A `dict` from physical group name to `Mesh`, in the order of the text.
+    
+    # Raises
+    
+    `RuntimeError` if the text cannot be parsed, or for a gmsh element type
+    pyrucast does not know.
     """
 
 def regularize(mesh: Mesh, sweeps: builtins.int = 20, angular: builtins.bool = True, in_place: builtins.bool = False) -> Mesh:
     r"""
-    Move the interior nodes of a surface mesh to improve its cells, leaving the
-    connectivity and the boundary exactly as they are.
+    Move the interior nodes of a 2-D surface mesh to improve its cells.
     
-    `sweeps` is how many passes to run. `angular=True` (the default) uses
-    angle-based smoothing, which aims at the right angles a quadrangle wants;
-    `False` uses the plain Laplacian, which aims at the one-ring's barycentre
-    and knows nothing about angles. `in_place=True` writes the new positions
-    onto your own nodes and hands the same mesh back; otherwise the moved nodes
-    are duplicated and a fresh mesh comes out, the boundary's nodes being
-    shared since they never moved.
+    The connectivity and the boundary stay exactly as they are. Two guarantees
+    hold: **no node on the boundary ever moves**, and a position is taken only
+    when every incident cell stays valid and the worst incident quality does not
+    get worse. Smoothing cannot fix a node with the wrong number of cells around
+    it — that is `pyrucast.mesh.cleanup`'s job, and running it first is usually
+    what unlocks the smoothing.
     
-    Two guarantees hold whatever the rule: **no node on the boundary ever
-    moves**, and a position is taken only when every incident cell stays valid
-    and the worst incident quality does not get worse.
+    # Parameters
     
-    Smoothing cannot change who is next to whom, so it cannot fix a node with
-    the wrong number of cells around it — the angles around a node sum to 2π
-    whatever the positions. That is `cleanup`'s job, and running it first is
-    usually what unlocks the smoothing.
+    - `mesh`: a 2-D mesh; its TRI3 and QUA4 cells are smoothed, its POI1 and SEG2
+      submeshes ignored.
+    - `sweeps`: the number of passes.
+    - `angular`: `True` uses angle-based smoothing, which aims at the right angles
+      a quadrangle wants; `False` the plain Laplacian, which aims at the
+      barycentre of the neighbours and knows nothing about angles.
+    - `in_place`: `True` writes the new positions onto your own nodes and returns
+      `mesh` itself; `False` duplicates the moved nodes into a fresh mesh, the
+      boundary's nodes being shared since they never move.
     
-    TRI3 and QUA4 only, in 2-D. POI1 and SEG2 submeshes are ignored.
+    # Returns
+    
+    A new `Mesh`, or `mesh` itself with `in_place=True`.
+    
+    # Raises
+    
+    `RuntimeError` if `mesh` is not 2-D, or has no surface cells (TRI3/QUA4).
     """
 
 def restrict(field: NodeField, mesh: Mesh) -> NodeField:
     r"""
-    Restrict `field` to the nodes used by `mesh`.
+    Restrict `field` to the nodes of `mesh`.
     
-    Returns a new `NodeField` with one zone per submesh of `mesh`, each
-    supported on the submesh's canonical POI1 node cloud (its distinct nodes,
-    materialised once and cached). Two restrictions onto the **same** `mesh`
-    share that support, so they combine directly: `restrict(a, mesh) -
-    restrict(b, mesh)` is the node-by-node difference. That support is also the
-    one a stiffness block over `mesh` uses, so `K * restrict(f, mesh)` and
-    `solve(K, f) - restrict(g, mesh)` line up too.
+    Each zone of the result lies on the POI1 cloud of a submesh of `mesh` — its
+    distinct nodes, built once and kept with the submesh. Two restrictions onto
+    the **same** `mesh` share that support, so they combine directly:
+    `restrict(a, mesh) - restrict(b, mesh)` is the node-by-node difference.
+    That support is also the one a stiffness block over `mesh` uses, so
+    `K * restrict(f, mesh)` and `solve(K, f) - restrict(g, mesh)` line up too.
     
-    Each zone carries the union of `field`'s components; nodes of `mesh` absent
-    from `field` are assigned `0.0`. Element operations on the region
-    (`gradient`, `integral`, `deformation`, `interp_to_gauss`) take `mesh` as a
-    separate argument and read the field by node id. Use `restrict_like` to
-    land on the exact support of an existing field instead of a mesh.
+    Element operations on the region (`gradient`, `integral`, `deformation`,
+    `interp_to_gauss`) take `mesh` as a separate argument and read the field by
+    node. To land on the support of an existing field rather than a mesh, use
+    `pyrucast.node_field.restrict_like`.
     
-    Errors if `mesh` and `field` are attached to different `Coords`s.
+    # Parameters
+    
+    - `field`: the field to restrict.
+    - `mesh`: the region, on the same `Coords` as `field`.
+    
+    # Returns
+    
+    A new `NodeField` with one zone per submesh of `mesh`, each carrying the
+    union of the components of `field`. A node of `mesh` the field does not
+    define gets `0.0`; the nodes outside `mesh` are dropped.
+    
+    # Raises
+    
+    `RuntimeError` if `mesh` and `field` are attached to different `Coords`.
     """
 
 def restrict_like(field: NodeField, target: NodeField) -> NodeField:
     r"""
-    Reproject `field` onto the exact support and components of `target`,
-    zone by zone.
+    Read `field` on the support and the components of `target`, zone by zone.
     
-    Unlike `restrict` (which lands on a fresh support materialised from a
-    mesh, carrying the union of `field`'s components), this reuses each zone
-    of `target` as-is — same support, same component list — so the result is
-    on the very same support as `target` and combines with it directly by the
-    arithmetic operators (`target + restrict_like(field, target)`). A
-    `(node, component)` pair is filled from `field` when it covers it, `0.0`
-    otherwise; nodes and components of `field` absent from `target` are dropped.
-    Errors if `target` and `field` are attached to different `Coords`s.
+    Unlike `pyrucast.node_field.restrict`, which lands on a support built from
+    a mesh and carries every component of `field`, this reuses each zone of
+    `target` as it is — same support, same components. The result combines with
+    `target` directly by the arithmetic operators: typically, to fold an
+    increment from `pyrucast.solver.solve`, which also carries the
+    multipliers, into a current solution (`target + restrict_like(du, target)`).
+    
+    # Parameters
+    
+    - `field`: the field to read.
+    - `target`: the field whose zones, supports and components the result
+      takes, on the same `Coords` as `field`.
+    
+    # Returns
+    
+    A new `NodeField` zone for zone like `target`. A `(node, component)` pair
+    takes the value of `field` when it defines it, `0.0` otherwise; the nodes
+    and components of `field` absent from `target` are dropped.
+    
+    # Raises
+    
+    `RuntimeError` if `target` and `field` are attached to different `Coords`.
     """
 
 def revolve(mesh: Mesh, angle: builtins.float, n_layers: builtins.int, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:
     r"""
-    Revolve `mesh` by `n_layers` layers over a total `angle` (radians) — the
-    rotational companion of `extrude`. SEG2 → QUA4, TRI3 → PENTA6,
-    QUA4 → HEX8, and in quadratic SEG3 → QUA8, TRI6 → PENTA15, QUA8 → HEX20
-    (the mid-node of an edge along the sweep sits on the arc).
+    Revolve `mesh` about an axis in `n_layers` layers, over a total `angle`.
     
-    In 2-D the revolution is about the point `center` (counterclockwise for a
-    positive `angle`) and `axis` is ignored; in 3-D it is about the line
-    through `center` directed by `axis` (right-handed), which is then
-    required. `|angle|` may not exceed a full turn, and a full turn closes the
-    ring: the last node layer is the first one again, so there is no seam.
+    The rotational companion of `pyrucast.mesh.extrude`: SEG2 → QUA4,
+    TRI3 → PENTA6, QUA4 → HEX8, and in quadratic SEG3 → QUA8, TRI6 → PENTA15,
+    QUA8 → HEX20 (the mid-node of an edge along the sweep sits on the arc). A full
+    turn closes the ring: the last layer of nodes is the first one again.
     
-    A **line** may touch the axis by one corner: that node stays put, and the
-    cells touching it close into triangles — SEG2 → TRI3, SEG3 → TRI6 —, a
-    submesh of their own after the quadrangles. A line from the axis to the rim
-    thus revolves into a disc sector: a fan of triangles at the centre, a ring
-    of quadrangles around it, one node at the centre. A surface cell may not
-    touch the axis (its prism would collapse), nor may a line lie along it.
+    A **line** may touch the axis by one corner: that node stays put, and the cells
+    touching it close into triangles — SEG2 → TRI3, SEG3 → TRI6 —, a submesh of
+    their own after the quadrangles. A line from the axis to the rim thus revolves
+    into a disc sector: a fan of triangles at the centre, a ring of quadrangles
+    around it, one node at the centre.
+    
+    # Parameters
+    
+    - `mesh`: the mesh to revolve. A surface cell may not touch the axis (its prism
+      would collapse), nor may a line lie along it.
+    - `angle`: the total angle, in radians, `|angle| ≤ 2π`; counterclockwise for a
+      positive angle in 2-D.
+    - `n_layers`: the number of layers, `≥ 1`.
+    - `center`: in 2-D, the centre of the revolution; in 3-D, a point of its axis.
+    - `axis`: in 3-D, the direction of the axis (right-handed), required; ignored
+      in 2-D.
+    
+    # Returns
+    
+    A new `Mesh`, sharing the nodes of `mesh` on its first layer.
+    
+    # Raises
+    
+    `RuntimeError` if `|angle|` exceeds a full turn, if the produced cells need 3-D
+    coordinates the mesh does not have, or for a cell the axis would collapse.
     """
 
 def rotate(mesh: Mesh, angle: builtins.float, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:
     r"""
-    Rotate `mesh` by `angle` (radians) about `center`, returning a fresh copy
-    with its own nodes (the original is left untouched).
+    Rotate `mesh` by `angle` about `center`.
     
-    In 2-D, `center` is a point and `axis` is ignored. In 3-D, the rotation is
-    about the line through `center` directed by `axis` (right-handed); `axis`
-    is required.
+    # Parameters
+    
+    - `mesh`: the mesh to turn.
+    - `angle`: the angle, in radians.
+    - `center`: in 2-D, the centre of the rotation; in 3-D, a point of its axis.
+    - `axis`: in 3-D, the direction of the axis (right-handed), required; ignored
+      in 2-D.
+    
+    # Returns
+    
+    A fresh `Mesh` with its own nodes; `mesh` is left untouched.
+    
+    # Raises
+    
+    `RuntimeError` if a point does not have the dimension of the mesh, or in 3-D
+    without `axis`.
     """
 
 def rotate_frame(field: ElementField, gradient: ElementField) -> ElementField:
     r"""
-    `field` with its material axes turned with the part: `V1*` (and `V2*` in
-    3-D) turned by the rotation `R` of the polar decomposition `F = R U` at each
-    point, `F` read from `gradient` — the field `deformation(u, fespace,
-    "gradient")` produces, computed on the **reference** configuration. Every
-    other component is copied as it is: the material is the same, only its axes
-    follow the rotation, `k = R k₀ Rᵀ`. This is what a conduction or a diffusion
-    computed on the deformed part reads.
+    Turn the material axes of `field` with the part, by the rotation of `F`.
     
-    A zone without axes (an isotropic material) comes back as it is, shared. A
-    zone carrying part of the axes only, or a gradient missing on a zone's FE
-    space, is an error.
+    The axes `V1*` (and `V2*` in 3-D) are turned by the rotation `R` of the
+    polar decomposition `F = R U` at each point, `v = R v₀`, hence `k = R k₀ Rᵀ`.
+    Every other component is copied as it is: the material is the same, only its
+    axes follow the rotation. This is what a conduction or a diffusion computed on
+    the deformed part reads.
+    
+    # Parameters
+    
+    - `field`: the material field at the Gauss points.
+    - `gradient`: the deformation gradient `F_*`, as
+      `pyrucast.element_field.deformation(u, fespace, "gradient")` produces it on
+      the **reference** configuration.
+    
+    # Returns
+    
+    A new `ElementField`. A zone without axes (an isotropic material) comes back
+    as it is, shared.
+    
+    # Raises
+    
+    `RuntimeError` if a zone carries part of the axes only, or if `gradient` has
+    no zone on the FE space of a zone of `field`.
     """
 
 def save(path: builtins.str, objects: dict) -> None:
@@ -5793,172 +8891,265 @@ def save(path: builtins.str, objects: dict) -> None:
 
 def select(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
     r"""
-    Select the part of a field's support passing a value band, zone by zone —
-    a value-range filter returning a `Mesh`.
+    The part of the support of `field` whose values lie in a band, as a `Mesh`.
     
-    `field` may be a `NodeField` / `SubNodeField` (→ POI1 submeshes of the
-    passing **nodes**) or an `ElementField` / `SubElementField` (→ submeshes
-    of the passing **cells**, each of its zone's element type; a cell passes
-    only when *all* its Gauss points do). The result has one submesh per
-    processed zone.
+    Zone by zone: a field at the nodes gives POI1 submeshes of the passing
+    **nodes**; a field at the Gauss points gives submeshes of the passing
+    **cells**, each of its zone's element type, a cell passing only when *all* its
+    Gauss points do. When several components are tested they combine with **AND**:
+    a node or a cell is kept only when *every* tested component is in the band. Its
+    sibling `pyrucast.node_field.mask` rewrites the values instead, keeping the
+    structure.
     
-    The band is set by the four comparison bounds — `ge` (`≥`), `gt` (`>`),
-    `le` (`≤`), `lt` (`<`); give at most one lower (`ge`/`gt`) and one upper
-    (`le`/`lt`), at least one overall. With several components in play they
-    are combined with **AND**: a point/cell is kept only when *every* tested
-    component is in band.
+    # Parameters
     
-    `components=None` tests every component of each zone. A `components`
-    list tests **only** those components, and only on the zones carrying
-    **all** of them — a zone missing any listed component is skipped (no
-    submesh). Errors if no bound is given, or the lower one exceeds the upper.
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
+    - `ge`, `gt`: the lower bound, `v ≥ ge` or `v > gt` — at most one of the two.
+    - `le`, `lt`: the upper bound, `v ≤ le` or `v < lt` — at most one of the two.
+      A bound left out leaves that side open; at least one bound is given.
+    - `components`: the components to test, only on the zones carrying **all** of
+      them — a zone missing one is skipped. `None` tests every component of each
+      zone.
+    
+    # Returns
+    
+    A `Mesh` with one submesh per zone processed.
+    
+    # Raises
+    
+    - `TypeError` if `field` is none of the four field types.
+    - `RuntimeError` if no bound is given, if both bounds of one side are, or if
+      the lower bound exceeds the upper one.
     """
 
 def set_positions(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
     r"""
-    Set node coordinates from `field` (absolute): for every node, the
-    active-set coordinate on axis `a` becomes `field.value(node,
-    components[a])`. `components` lists one component name per spatial axis,
-    in axis order; `None` → `["X", "Y", "Z"][:dim]`. Mutates the field's
-    `Coords` in place.
+    Set the coordinates of the nodes of `field` to its values, in absolute.
+    
+    For every node of the field, the coordinate on axis `a` of the active
+    configuration becomes the value of `components[a]`. The `Coords` of the
+    field is changed in place.
+    
+    # Parameters
+    
+    - `field`: the positions, at the nodes; every node must carry every
+      component.
+    - `components`: one component name per spatial axis, in axis order; `None`
+      → `["X", "Y", "Z"][:dim]`, the components of
+      `pyrucast.node_field.positions`.
+    
+    # Raises
+    
+    `RuntimeError` if a node of `field` lacks one of `components`, or if
+    `components` does not hold one name per axis.
     """
 
 def shell(fespace: FiniteElementSpace, formulation: builtins.str) -> Model:
     r"""
-    `model.shell(fespace, formulation)` — a **shell**: a surface carrying membrane
-    forces and bending moments, on a TRI3/QUA4 mesh in 3-D. Material `E`,
-    `nu`, `h` (thickness), plus an optional `rho`.
+    A shell: a surface carrying membrane forces and bending moments.
     
-    | `formulation` | transverse shear | when |
-    |---|---|---|
-    | `"thick"` | yes, integrated **reduced** | the general case |
-    | `"kirchhoff"` | imposed zero at discrete points | thin shells |
+    On a TRI3/QUA4 mesh in 3-D. Material `E`, `nu`, `h` (thickness), plus an
+    optional `rho`. Six unknowns per node (`u_x…u_z, r_x…r_z`), as for a 3-D
+    beam, so a shell and a space frame share nodes directly. The sixth — the
+    **drilling** rotation about the normal — is tied to the membrane's own
+    in-plane rotation, which removes the singularity a flat facet would otherwise
+    have.
     
-    Six DOFs per node (`u_x…u_z, r_x…r_z`), as for `frame3d`, so a shell and
-    a space frame share nodes directly. The sixth — the **drilling** rotation
-    about the normal — is tied to the membrane's own in-plane rotation, which
-    removes the singularity a flat facet would otherwise have without
-    resisting a rigid rotation of that facet.
+    # Parameters
     
-    `"thick"` (Reissner-Mindlin) integrates the transverse shear at
-    **reduced** quadrature: at full quadrature it would overwhelm the bending
-    term by `1/h²` as the shell thins and the element would refuse to bend at
-    all (shear locking). It takes an optional `k_s`, the shear-correction
-    factor (`5/6` by default).
+    - `fespace`: the FE space, of surface cells in a 3-D `Coords`.
+    - `formulation`:
+      - `"thick"` (Reissner-Mindlin), the general case, integrates the
+        transverse shear at **reduced** quadrature: at full quadrature it would
+        overwhelm the bending term by `1/h²` as the shell thins, and the element
+        would refuse to bend (shear locking). It takes an optional `k_s`, the
+        shear-correction factor (`5/6` by default).
+      - `"kirchhoff"` (DKT on a triangle, DKQ on a quadrangle), for thin shells,
+        has no transverse shear: `γ = 0` is imposed at the corners and along each
+        side, so the thin limit is exact by construction. It reports six
+        generalized forces rather than eight.
     
-    `"kirchhoff"` (DKT on a triangle, DKQ on a quadrangle) has no transverse
-    shear at all: `γ = 0` is imposed at the corners and along each side, so
-    the thin limit is exact by construction and there is nothing left to
-    lock. It reports six generalised forces rather than eight — a thin plate
-    has no constitutive `Q`, only a reaction.
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `formulation`.
+    - `RuntimeError` if the cells are not a surface in a 3-D `Coords`.
     """
 
 def shell_deformation(field: NodeField, fespace: FiniteElementSpace, formulation: builtins.str) -> ElementField:
     r"""
-    Generalised **strains of a shell** at the Gauss points — the geometric
-    producer of the behaviour input for `shell`.
+    Generalized strains of a shell at the Gauss points of `fespace`.
     
-    `shell_deformation(field, fespace, formulation)` with `formulation`
-    (`"thick"` or `"kirchhoff"`), which decides the bending rows and whether a
-    transverse shear is reported at all:
+    Read from the six unknowns `u_x…u_z, r_x…r_z`, all in the **local** frame of
+    the facet. `drill` is the drilling residual `θ_z − ω_z`. The transverse shear
+    is constant per element, sampled at the reduced point where the stiffness
+    integrates it: anywhere else would report a strain the element does not
+    carry. Fed to `pyrucast.element_field.integrate_behavior`, they give the
+    generalized forces (`N = D_m·eps`, `M = D_b·kappa`, `Q = D_s·gamma`, and the
+    drilling moment).
     
-    | formulation | components produced |
-    |---|---|
-    | `thick` | `eps_xx…eps_xy`, `kappa_xx…kappa_xy`, `drill`, `gamma_xz, gamma_yz` |
-    | `kirchhoff` | the same, without the two shear strains |
+    # Parameters
     
-    All in the element's **local** frame. The transverse shear is
-    element-constant, sampled at the reduced point the stiffness integrates it
-    at — anywhere else would report a strain the element does not carry.
+    - `field`: the displacements and rotations, at the nodes.
+    - `fespace`: the FE space of the shell.
+    - `formulation`: `"thick"` or `"kirchhoff"`, which decides the bending rows
+      and whether a transverse shear is reported:
     
-    Feed the result to `integrate_behavior` to obtain the generalised forces
-    (`N = D_m·eps`, `M = D_b·kappa`, `Q = D_s·gamma`, and the drilling moment).
+      | formulation | components produced |
+      |---|---|
+      | `"thick"` | `eps_xx…eps_xy`, `kappa_xx…kappa_xy`, `drill`, `gamma_xz, gamma_yz` |
+      | `"kirchhoff"` | the same, without the two shear strains |
+    
+    # Returns
+    
+    An `ElementField` on `fespace` with the components of the table.
+    
+    # Raises
+    
+    `RuntimeError` for an unknown `formulation`.
     """
 
 def sin(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise sine of a field (radians).
+    Sine of `field`, value by value, in radians.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def sinh(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise hyperbolic sine of a field.
+    Hyperbolic sine of `field`, value by value.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def skin(mesh: Mesh, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Extract the boundary surface (skin) of a volume mesh, split by flat face.
+    The boundary surface of a volume mesh, one submesh per flat face.
     
-    Works on every volume type — TET4, PYRA5, PENTA6, HEX8 and their quadratic
-    counterparts TET10, PENTA15, HEX20, HEX27.
+    A facet of a volume cell used by exactly one cell lies on the boundary;
+    sharing is decided on the facet's corners, so cells of different degrees still
+    cancel. The boundary facets, pooled across all volume submeshes, are grouped
+    into flat faces by flooding across shared edges as long as neighbouring facets
+    stay coplanar. **A facet keeps its own type**: a HEX8 yields QUA4, a TET10
+    TRI6, a HEX27 QUA9 — so the skin of a quadratic mesh is quadratic.
     
-    A volume-element facet (TET4 → 4 triangles, HEX8 → 6 quads, PENTA6 → 2
-    triangles + 3 quads, PYRA5 → 1 quad + 4 triangles) used by exactly one cell
-    lies on the boundary; sharing is decided on the facet's corners, so cells of
-    different degrees still cancel. The boundary facets (pooled across all
-    volume submeshes) are grouped into flat faces by flooding across shared
-    edges as long as neighbouring facets stay coplanar (their normals differ by
-    at most `angle_deg`, default 1°).
+    # Parameters
     
-    **A facet is emitted in its own type**: a HEX8 yields QUA4, a TET10 yields
-    TRI6, a HEX27 yields QUA9 — so the skin of a quadratic mesh is quadratic
-    and keeps its mid-side nodes. Returns a Mesh with one submesh per flat face
-    and per facet type — e.g. 6 submeshes for a cube, 5 for a prism (2 caps +
-    3 sides), 5 for a pyramid (base + 4 triangles). Facets keep their outward
-    orientation; the original nodes are reused.
+    - `mesh`: a volume mesh — TET4, PYRA5, PENTA6, HEX8 or their quadratic
+      counterparts TET10, PENTA15, HEX20, HEX27.
+    - `angle_deg`: the largest angle, in degrees, between the normals of two
+      neighbouring facets of one flat face; `None` takes 1°.
+    
+    # Returns
+    
+    A `Mesh` with one submesh per flat face and per facet type — 6 for a cube, 5
+    for a prism, 5 for a pyramid. The facets keep their outward orientation and
+    the nodes of `mesh`.
+    
+    # Raises
+    
+    `RuntimeError` if `mesh` is not a 3-D volume mesh.
     """
 
 def solve(matrix: Matrix, rhs: NodeField, method: builtins.str = 'lu', relations: builtins.str = 'lagrange', active_set: builtins.str = 'schur', cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10, verbosity: builtins.str = 'silent') -> NodeField:
     r"""
     Solve the linear system `A·x = b` for `x` (sparse direct, faer).
     
-    `matrix` is the assembled system `A`; `rhs` is the right-hand side `b` as a
-    `NodeField`, read at every row DOF of the matrix (a DOF no zone defines
-    reads zero). The imposed value of a constraint relation lives at its
-    multiplier node, component `imposed`. The matrix carries everything the
-    solve needs: its relation rows, their coefficients and their sense (`=`,
-    `>=`, `<=`), declared by the constraints that built them — no model is
-    passed alongside.
+    The matrix carries everything the solve needs: its relation rows, their
+    coefficients and their sense (`=`, `>=`, `<=`), declared by the constraints
+    that built them — no model is passed alongside. As soon as it carries an
+    inequality, an active-set loop decides which relations are saturated: an
+    active relation holds as an equation (its `lambda` is `<= 0` for `>=`, `>= 0`
+    for `<=`), an inactive one reports `lambda = 0`.
     
-    `relations` says how the constraint relations are enforced:
+    # Parameters
     
-    - `"lagrange"` (default) — by their multipliers, the saddle-point solved as
-      assembled; the multipliers come back in the solution at their nodes.
-      As soon as the matrix carries an inequality, the **active-set** loop
-      decides which relations are saturated: an active relation holds as an
-      equation (its `lambda` is `<= 0` for `>=`, `>= 0` for `<=`), an inactive
-      one reports `lambda = 0`;
-    - `"eliminate"` — each equality relation eliminates one unknown, and the
-      smaller system left, without multipliers, is solved; each relation's
-      multiplier is recovered from its eliminated unknown's row and returned at
-      its node — the very solution the multipliers give. An inequality is not
-      eliminated: it stays on the reduced system, resolved by the same
-      active-set loop, its `lambda` returned at its multiplier node. Scope:
-      non-chained, disjoint slaves.
+    - `matrix`: the assembled system `A`.
+    - `rhs`: the right-hand side `b`, read at every row of `matrix`; a row no zone
+      of `rhs` defines reads zero. The imposed value of a constraint relation
+      lives at its multiplier node, component `imposed`.
+    - `method`: the factorization. `"lu"` works on any square matrix;
+      `"cholesky"` asks that the system be symmetric **and** positive definite —
+      never a system with multipliers, usually one reduced by elimination. The
+      active-set loop factorizes by LU whatever is asked.
+    - `relations`: how the constraint relations are enforced. `"lagrange"`: by
+      their multipliers, the system solved as assembled. `"eliminate"`: each
+      equality relation eliminates one unknown and the smaller system left,
+      without multipliers, is solved; an inequality is not eliminated, it stays
+      on the reduced system and is resolved by the same active-set loop. Scope of
+      `"eliminate"`: each relation eliminates an unknown of its own, which
+      appears in no other equality relation.
+    - `active_set`: how each status of the active-set loop is factorized, read
+      only when `matrix` carries an inequality. `"schur"` factorizes the
+      inequality-free base once and updates it per status, falling back on
+      `"refactorize"` when that base is singular; `"refactorize"` factorizes the
+      full system at each status change.
+    - `cache`: reuse what a previous solve stored on `matrix` — the
+      factorization, the condensation, the active-set state and its last status —
+      and store what this one computes. The store is cleared when the matrix
+      changes. A matrix keeps one of them at a time, and a factorization serves
+      the `method` it was made with only: another `relations` or `method`
+      computes afresh and replaces it. `False` neither reads nor fills it.
+    - `max_iter`: the bound of the active-set loop, in status changes.
+    - `tol`: the sign tolerance of the active-set loop, on the multiplier and on
+      the gap.
+    - `verbosity`: how much the solve reports on stdout: `"silent"`, `"brief"` or
+      `"detailed"`.
     
-    `method` selects the factorization: `"lu"` (default) works on any square
-    matrix, `"cholesky"` asks that the system be symmetric **and** positive
-    definite — never a Lagrange saddle-point, usually a system reduced by
-    elimination. The active-set loop factorizes by LU whatever is asked.
+    # Returns
     
-    `active_set` selects how each status of the active-set loop is factorized:
-    `"schur"` (default) factorizes the inequality-free base once and updates it
-    per status (falling back when that base is singular), `"refactorize"`
-    refactorizes the full system at each status change. `max_iter` (default
-    `100`) bounds the status loop; `tol` (default `1e-10`) is its sign
-    tolerance on the multiplier and on the gap.
+    The solution, read at the columns of `matrix`: one zone per column support of
+    its blocks, each on the support of the block itself. Two solves of the same
+    model therefore share their supports, and their fields combine zone by zone.
+    The multiplier of every relation comes back at its node, component `lambda`,
+    whether the relations were kept or eliminated.
     
-    `cache` (default `True`) reuses what is stored transparently on the matrix —
-    the factorization, the condensation, the active-set state and its last
-    status — cleared automatically when the matrix changes. A matrix keeps one
-    of them at a time, and a factorization serves the `method` it was made
-    with only: another `relations` or `method` computes afresh and replaces it. `verbosity` says
-    how much the solve reports on stdout: `"silent"` (default), `"brief"` or
-    `"detailed"`.
+    # Raises
     
-    A `Ctrl+C` is honoured at the solver's phase boundaries and at each status
-    iteration; a factorization itself is a single library call and is not
-    interrupted mid-way.
+    `RuntimeError` if `matrix` has no assembled values, if the LU meets a singular
+    matrix (boundary conditions forgotten, typically), if `"cholesky"` meets a
+    matrix that is not positive definite, if a relation is out of the scope of
+    `"eliminate"`, or if the active-set loop has not converged after `max_iter`
+    status changes. `ValueError` for an unknown `method`, `relations`,
+    `active_set` or `verbosity`. `KeyboardInterrupt` on `Ctrl+C`.
+    
+    # Notes
+    
+    `Ctrl+C` is honoured between the phases of the solve and at each status
+    change; a factorization is a single library call and is not interrupted
+    mid-way.
     """
 
 def spill_stats() -> dict:
@@ -5977,208 +9168,456 @@ def spill_stats() -> dict:
 
 def sqrt(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise square root of a field (`nan` for negatives).
+    Square root of `field`, value by value.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded. A negative value gives `nan`.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def stiffness(model: Model, materials: ElementField) -> Matrix:
     r"""
     Assemble the stiffness matrix `K` of `model`.
     
-    `materials` carries the per-zone material data: every sub-model that
-    needs it picks the `SubElementField` whose FE subspace matches its own.
+    One matrix covers every unknown of the model, multipliers included: a physics
+    contributes its block, a constraint the two halves `C` and `Cᵀ` of its
+    relations. Boundary conditions have no special status — they are sub-models
+    like the others.
+    
+    # Parameters
+    
+    - `model`: the physics and the constraints to assemble.
+    - `materials`: the material data, zone by zone. Every sub-model that needs
+      some picks the zone whose FE subspace is its own; a sub-model without
+      material (a constraint) ignores it.
+    
+    # Returns
+    
+    The matrix, assembled on the configuration active at the call.
+    
+    # Raises
+    
+    `RuntimeError` if no zone of `materials` lies on the FE subspace of a
+    sub-model with the components its physics requires.
     """
 
 def strain(model: Model, solution: NodeField, materials: ElementField) -> ElementField:
     r"""
-    The input of every law of `model`, produced from the nodal `solution` — the
-    model's `B`, of which `internal_forces` is the transpose (Cast3M `EPSI`,
-    extended to every physics).
+    The input of every law of `model`, computed from the nodal `solution`.
     
-    One zone per sub-model with a law, on its behaviour space, carrying what
-    that law reads: the small-strain tensor `eps_*` of a continuum or a bar, the
-    gradient `grad_T_*` of conduction, `T` itself for radiation, the section
-    strains of a beam, the generalized strains of a shell. Each law reads its
-    own unknowns of `solution` by name, so one solution — displacement,
-    temperature, multipliers — serves the whole model; sub-models without a law
-    produce nothing. `materials` is read by the beams alone (their `Φ`). The
-    result feeds `integrate_behavior` as is.
+    The model's `B`, of which `pyrucast.node_field.internal_forces` is the
+    transpose. Each law declares which producer feeds it, applied to its own
+    unknowns on its own space:
+    
+    | sub-model | producer | zone returned |
+    |---|---|---|
+    | elasticity, plasticity, damage, bar | `deformation` | `eps_*`, or the measure of the law (`E_*`, `H_*`) |
+    | conduction, Fick | `gradient` | `grad_T_*`, `grad_c_<species>_*` |
+    | radiation | `interp_to_gauss` | `T` at the points |
+    | Bernoulli and Timoshenko beams | `beam_deformation` | `eps`, `kappa*`, `gamma*`, `torsion` |
+    | shell | `shell_deformation` | `eps_*`, `kappa_*`, `drill`, `gamma_*` |
+    
+    # Parameters
+    
+    - `model`: the laws whose input to compute.
+    - `solution`: the current solution. Each law reads its own unknowns by name,
+      so one solution — displacement, temperature, multipliers — serves the whole
+      model; an unknown it lacks reads zero.
+    - `materials`: the material field, read by the beams alone (their
+      `Φ = 12EI/(G·A_s·L²)`).
+    
+    # Returns
+    
+    An `ElementField` with one zone per sub-model carrying a law, on its behaviour
+    space; sub-models without a law (constraints, loads, exchanges) produce
+    nothing. It feeds `pyrucast.element_field.integrate_behavior` as it is.
     """
 
 def stress_measure(stress: ElementField, gradient: ElementField, target: builtins.str) -> ElementField:
     r"""
-    `stress` converted to the measure `target`, point by point, with the
-    deformation gradient `gradient` — the field `deformation(u, fespace,
-    "gradient")` produces (`F_xx, F_xy, …`).
+    Convert `stress` to the measure `target`, point by point.
     
-    `target` is `"cauchy"` (`sigma_*`, the true stress), `"kirchhoff"`
-    (`tau_* = J sigma_*`), `"pk1"` (`P_*`, the nominal stress `F S`, not
-    symmetric), `"pk2"` (`S_*`, dual of Green–Lagrange) or `"hencky"` (`T_*`,
-    dual of the Hencky strain, what a law reading Hencky writes). The measure of
-    `stress` is recognised by its names, one per zone. This is how the
-    Lagrangian stress a law writes in large transformations becomes the first
-    Piola–Kirchhoff `internal_forces` reads, or the Cauchy stress of the
-    results — the stress half of Cast3M `CONF`.
+    This is how the Lagrangian stress a law writes in large strains becomes the
+    first Piola–Kirchhoff stress `pyrucast.node_field.internal_forces` reads, or
+    the Cauchy stress of the results. A bar is recognised by its axial second
+    Piola–Kirchhoff force `S_n`: `"pk1"` turns it into the nominal force vector
+    `P_x, P_y(, P_z) = S_n F t₀`, `"cauchy"` into the true force `n = λ S_n`.
+    
+    # Parameters
+    
+    - `stress`: the stress to convert. Its measure is recognised by its names,
+      one per zone: `sigma_*`, `tau_*`, `P_*`, `S_*` or `T_*`.
+    - `gradient`: the deformation gradient `F_xx, F_xy, …` at the same points, as
+      `pyrucast.element_field.deformation(u, fespace, "gradient")` produces it.
+    - `target`: the measure wanted:
+      - `"cauchy"`: `sigma_*`, the true stress;
+      - `"kirchhoff"`: `tau_* = J sigma_*`;
+      - `"pk1"`: `P_*`, the nominal stress `F S`, not symmetric;
+      - `"pk2"`: `S_*`, dual of Green–Lagrange;
+      - `"hencky"`: `T_*`, dual of the Hencky strain, what a law reading Hencky
+        writes.
+    
+    # Returns
+    
+    An `ElementField` with the components of `target`.
+    
+    # Raises
+    
+    - `RuntimeError` if `gradient` lacks a component `F_*`.
+    - `ValueError` for an unknown `target`.
     """
 
 def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> SubElementField:
     r"""
-    Build the material `SubElementField` of one sub-model.
+    Build a uniform material field for one sub-model.
     
-    `sub_material_field(sub_model, [("k", 1.0), ...])` — fresh
-    SubElementField on the sub-model's FE subspace, pre-filled with the
-    given uniform value per declared component. Errors for physics that
-    need no material (e.g. Dirichlet).
+    A fresh zone on the FE subspace of the sub-model, filled with the given
+    values.
+    
+    # Parameters
+    
+    - `sub_model`: the sub-model whose material to build.
+    - `components_and_values`: the `(component, value)` pairs, one uniform value
+      per component, for instance `[("E", 210e9), ("nu", 0.3)]`.
+    
+    # Returns
+    
+    A `SubElementField` on the FE subspace of `sub_model`.
+    
+    # Raises
+    
+    `RuntimeError` if a component the physics requires is missing, or for a
+    physics that needs no material (a constraint).
     """
 
 def sum_to_nodes(field: ElementField) -> NodeField:
     r"""
-    A field carrying **one point per cell** gathered at the nodes by
-    **summation** (Cast3M `CHAN 'CHPO' 'SOMM'`): each node receives, per
-    component, the sum of the values of the cells it belongs to — across zones
-    too. Not a smoothing: no average, no weight. Applied to the cell measures of
-    `cell_integral`, it gives the volume each node stands for. Raises on a zone
-    with more than one point per cell (build it on a `REDUCED` space).
+    Gather a field of one point per cell at the nodes, by summation.
+    
+    Each node receives, per component, the sum of the values of the cells it
+    belongs to — across zones too. It is not a smoothing: no average, no weight.
+    Applied to the cell measures of `pyrucast.element_field.cell_integral`, it
+    gives the volume each node stands for.
+    
+    # Parameters
+    
+    - `field`: an `ElementField` with one point per cell, built on a space with
+      the `REDUCED` quadrature.
+    
+    # Returns
+    
+    A `NodeField` with the components of `field`.
+    
+    # Raises
+    
+    `RuntimeError` if a zone of `field` has more than one point per cell.
     """
 
 def sweep(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
-    Sweep two line meshes into a mesh of `element_type`, building `n_layers`
-    layers between `mesh_a` and `mesh_b`.
+    Fill the space between two line meshes with `n_layers` layers of cells.
     
-    Between **SEG2** lines, `element_type` is `"QUA4"` (default), `"TRI3"`,
-    `"QUA8"`, `"QUA9"` or `"TRI6"` — a `QUA4` mesh is always built first, then
-    converted (diagonal split for the triangles, promoted to quadratic for
-    `QUA8`/`QUA9`/`TRI6`). Between **SEG3** lines, it is `"QUA8"` (default) or
-    `"QUA9"`, built directly: the lines' own mid-nodes are re-used, so a strip
-    between two arcs follows them exactly.
+    Two **closed loops** (each ending on its own first node) give a closed ring,
+    the seam shared between its first and last cells.
     
-    Two **closed loops** (each ending on its own first node) give a closed
-    ring, the seam shared between its first and last cells; a closed loop
-    swept onto an open line is an error.
+    # Parameters
+    
+    - `mesh_a`, `mesh_b`: the two lines, with the same number of cells.
+    - `n_layers`: the number of layers, `≥ 1`.
+    - `element_type`: between SEG2 lines, `"QUA4"` (the default), `"TRI3"`,
+      `"QUA8"`, `"QUA9"` or `"TRI6"` — a QUA4 mesh is built first, then converted
+      (diagonal split for the triangles, promoted to quadratic for the others).
+      Between SEG3 lines, `"QUA8"` (the default) or `"QUA9"`, built directly: the
+      lines' own mid-nodes are reused, so a strip between two arcs follows them
+      exactly.
+    
+    # Returns
+    
+    A new `Mesh` sharing the nodes of `mesh_a` and `mesh_b`.
+    
+    # Raises
+    
+    `RuntimeError` if the two lines differ in cell count, for an unsupported
+    `element_type`, or for a closed loop swept onto an open line.
     """
 
 def sweep_solid(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
     r"""
-    Sweep two matching surface meshes into a solid mesh, building `n_layers`
-    layers between `mesh_a` and `mesh_b`. The 3-D companion of `sweep`:
-    TRI3 faces → PENTA6 prisms, QUA4 faces → HEX8 hexahedra.
+    Fill the space between two matching surface meshes with `n_layers` layers.
+    
+    The 3-D companion of `pyrucast.mesh.sweep`: TRI3 faces → PENTA6 prisms,
+    QUA4 faces → HEX8 hexahedra.
+    
+    # Parameters
+    
+    - `mesh_a`, `mesh_b`: the two surface meshes, TRI3 or QUA4, cell `i` of one
+      facing cell `i` of the other.
+    - `n_layers`: the number of layers, `≥ 1`.
+    
+    # Returns
+    
+    A new `Mesh` sharing the nodes of `mesh_a` and `mesh_b`.
+    
+    # Raises
+    
+    `RuntimeError` for a surface type other than TRI3 or QUA4, or if the two
+    meshes do not match.
     """
 
 def symmetry_line(mesh: Mesh, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float]) -> Mesh:
     r"""
-    Mirror `mesh` through the infinite line running through `a` and `b`
-    (Cast3m `SYME … DROIT`), returning a fresh copy with its own nodes (the
-    original is left untouched).
+    Mirror `mesh` through the infinite line through `a` and `b`.
     
     In 2-D this is the mirror image about the line; in 3-D it is the half-turn
-    about it (for the mirror image through a plane, use `symmetry_plane`).
-    Orientation-reversing in 2-D only, where the cells are re-ordered (as
-    `invert` does) to keep the copy's Jacobians positive.
+    about it (the mirror image through a plane is
+    `pyrucast.mesh.symmetry_plane`). It reverses orientation in 2-D only, where
+    the cells are reordered (as `pyrucast.mesh.invert` does) to keep the copy's
+    Jacobians positive.
+    
+    # Parameters
+    
+    - `mesh`: the mesh to mirror.
+    - `a`, `b`: two distinct points of the line.
+    
+    # Returns
+    
+    A fresh `Mesh` with its own nodes; `mesh` is left untouched.
+    
+    # Raises
+    
+    `RuntimeError` if `a` and `b` coincide.
     """
 
 def symmetry_plane(mesh: Mesh, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float], c: typing.Sequence[builtins.float]) -> Mesh:
     r"""
-    Mirror `mesh` through the plane running through the three points `a`, `b`
-    and `c` (Cast3m `SYME … PLAN`), returning a fresh copy with its own nodes
-    (the original is left untouched). Only the plane the three points span
-    matters, not their order; they must not be aligned.
+    Mirror `mesh` through the plane through the points `a`, `b` and `c`, in 3-D.
     
-    3-D only — in 2-D the mirror about a line is `symmetry_line`. Always
-    orientation-reversing, so the cells are re-ordered (as `invert` does) to
-    keep the copy's Jacobians positive.
+    Only the plane the three points span matters, not their order. The map always
+    reverses orientation, so the cells are reordered (as `pyrucast.mesh.invert`
+    does) to keep the copy's Jacobians positive. In 2-D the mirror about a line is
+    `pyrucast.mesh.symmetry_line`.
+    
+    # Parameters
+    
+    - `mesh`: the mesh to mirror, in 3-D.
+    - `a`, `b`, `c`: three points of the plane, not aligned.
+    
+    # Returns
+    
+    A fresh `Mesh` with its own nodes; `mesh` is left untouched.
+    
+    # Raises
+    
+    `RuntimeError` if the mesh is not 3-D, or if the three points are aligned.
     """
 
 def symmetry_point(mesh: Mesh, center: typing.Sequence[builtins.float]) -> Mesh:
     r"""
-    Mirror `mesh` through the point `center` (Cast3m `SYME … POINT`),
-    returning a fresh copy with its own nodes (the original is left
-    untouched). Every node goes to `2·center − x`.
+    Mirror `mesh` through the point `center`: every node goes to `2·center − x`.
     
-    In 3-D the map reverses orientation, so the cells are re-ordered (as
-    `invert` does) to keep the copy's Jacobians positive; in 2-D it is a plain
-    half-turn and nothing is re-ordered.
+    In 3-D the map reverses orientation, so the cells are reordered (as
+    `pyrucast.mesh.invert` does) to keep the copy's Jacobians positive; in 2-D it
+    is a plain half-turn and nothing is reordered.
+    
+    # Parameters
+    
+    - `mesh`: the mesh to mirror.
+    - `center`: the centre of symmetry, with the dimension of the mesh.
+    
+    # Returns
+    
+    A fresh `Mesh` with its own nodes; `mesh` is left untouched.
     """
 
 def tan(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise tangent of a field (radians).
+    Tangent of `field`, value by value, in radians.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def tangent(model: Model, materials: ElementField, deformation: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> Matrix:
     r"""
-    Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`
-    (Cast3M `KTAN`). `D_alg` is evaluated **at the Gauss point**, from the same
-    inputs `integrate_behavior` takes — no field of moduli is materialised, since
-    this assembler would be its only reader. `prev` is the state at A:
-    `element_field.initial_state(model, materials)` on a first step.
+    Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`.
+    
+    `D_alg` is the derivative of the step `ε(B) ↦ σ(B)`, the state at A held
+    fixed: both ends of the step are in its definition, hence the same inputs as
+    `element_field.integrate_behavior`. This is the matrix that gives a Newton
+    iteration its quadratic convergence.
+    
+    A linear physics (conduction, diffusion, exchanges, trusses, beams, shells)
+    and the constraints have no law to differentiate: their tangent is their
+    stiffness, assembled without reading `deformation`.
+    
+    # Parameters
+    
+    - `model`: the physics and the constraints to assemble.
+    - `materials`: the material data, zone by zone, as for [`stiffness`].
+    - `deformation`: the input of the laws at the end of the step, `ε(B)` — from
+      `element_field.deformation`.
+    - `prev`: the state at A, the converged output of the previous step; on a
+      first step, `element_field.initial_state(model, materials)`.
+    - `dt`: the time increment; `None` when no law depends on the rate.
+    
+    # Returns
+    
+    The matrix, assembled on the configuration active at the call.
+    
+    # Raises
+    
+    `RuntimeError` if a non-linear law of `model` has no tangent of its own
+    (`model.mazars`, `model.damage_tc`, `model.damage_sic_sic`): the call fails
+    rather than return an empty block.
+    
+    # Notes
+    
+    `D_alg` is evaluated at each Gauss point during the assembly: no field of
+    moduli is stored between the law and this function.
     """
 
 def tanh(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise hyperbolic tangent of a field.
+    Hyperbolic tangent of `field`, value by value.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def thermal_strain(temperature: ElementField, materials: ElementField, fespace: FiniteElementSpace, t_ref: builtins.float, measure: builtins.str = 'linear') -> ElementField:
     r"""
-    Thermal (free-dilation) strain `ε_th = α·(T − t_ref)` at the Gauss points of
-    `fespace` — Cast3M `EPTH`. `temperature` is a per-element field carrying
-    `"T"` (e.g. from `interp_to_gauss`); `materials` carries `"alpha"` (supplied
-    via `material_field`). Returns the strain tensor in the same layout as
-    `deformation`, so `deformation(u, fespace) - thermal_strain(...)` is the
-    mechanical strain. Backbone of uncoupled thermomechanics: the thermal load
-    is `divergence(integrate_behavior(model, ε_th, materials), "sigma")`,
-    renamed into the dual rows, and the stress is recovered as
-    `σ = D:(ε − ε_th)`.
+    Thermal strain `ε_th = α·(T − t_ref)` at the Gauss points of `fespace`.
     
-    `measure` is the strain the law reads (`"linear"`, `"green_lagrange"`,
-    `"hencky"`): the dilation of stretch `1 + α·ΔT` is given exactly in it —
-    `α·ΔT`, `½((1 + α·ΔT)² − 1)`, `ln(1 + α·ΔT)` — under its names (`eps_*`,
-    `E_*`, `H_*`).
+    The strain of free dilation, for uncoupled thermomechanics. Its layout is the
+    one of `pyrucast.element_field.deformation` — normal components `α·ΔT`, zero
+    shears, the hoop `eps_zz` included on a body of revolution —, so
+    `deformation(u, fespace) - thermal_strain(...)` is the mechanical strain
+    `ε(u) − ε_th`. No coupling is done here: the thermal load and the stress
+    `σ = D:(ε − ε_th)` are built from the other operators.
+    
+    # Parameters
+    
+    - `temperature`: a field at the Gauss points carrying `"T"`, for instance
+      from `pyrucast.element_field.interp_to_gauss`.
+    - `materials`: the material field; `alpha` is read on `fespace`, an optional
+      component of the elasticity next to `E` and `nu`.
+    - `fespace`: the FE space whose Gauss points to use.
+    - `t_ref`: the reference temperature, where the strain is zero.
+    - `measure`: the strain the law reads, `"linear"`, `"green_lagrange"` or
+      `"hencky"`. The dilation of stretch `1 + α·ΔT` is given exactly in it —
+      `α·ΔT`, `½((1 + α·ΔT)² − 1)`, `ln(1 + α·ΔT)` — under its names (`eps_*`,
+      `E_*`, `H_*`).
+    
+    # Returns
+    
+    An `ElementField` on `fespace`, the strain tensor under the names of
+    `measure`.
+    
+    # Raises
+    
+    - `RuntimeError` if `materials` has no zone on `fespace` carrying `alpha`, if
+      `temperature` lacks `"T"`, or for a `measure` that is not a strain a law
+      reads (`"gradient"`, `"jacobian"`, …).
+    - `ValueError` for an unknown `measure`.
     """
 
 def timoshenko(fespace: FiniteElementSpace) -> Model:
     r"""
-    `model.timoshenko(fespace)` — the **shear-deformable** beam, in whichever
-    configuration the mesh puts it (`SEG2` throughout):
+    Timoshenko beam, which deforms in shear, on SEG2 cells.
     
-    | `Coords` | DOFs per node | material | section forces |
+    The configuration follows the mesh:
+    
+    | `Coords` | unknowns per node | material | section forces |
     |---|---|---|---|
     | 1-D | `w`, `theta` | `E, I, G, A_s` | `M, V` |
     | 2-D | `u_x, u_y, r_z` | `+ A` | `N, M, V` |
     | 3-D | six | `E, A, I_y, I_z, J, G, A_sy, A_sz` | `N, M_y, M_z, T, V_y, V_z` |
     
-    Read the DOF names back with `model.primal_vars()`.
+    Read the unknowns back with `model.primal_vars()`. The element is the
+    **exact** one — the closed form driven by `Φ = 12EI/(G·A_s·L²)` —, so one
+    element per member suffices. Prefer `pyrucast.model.bernoulli` for a slender
+    member, where the shear compliance is negligible.
     
-    The element is the **exact** one — the closed form driven by
-    `Φ = 12EI/(G·A_s·L²)` — so one element per member suffices. Its shape
-    functions depend on the material through `Φ`, hence no space can tabulate
-    them: build the subspace with
-    `FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")`.
+    # Parameters
     
-    Prefer `bernoulli` for a slender member, where the shear compliance is
-    negligible.
+    - `fespace`: the FE space, on SEG2 cells. The shape functions depend on the
+      material through `Φ`, so no space can tabulate them: build it with
+      `FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")`.
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`.
+    
+    # Raises
+    
+    `RuntimeError` if a cell is not SEG2, or for a subspace that is not
+    `MODEL_EMBEDDED`.
     """
 
 def to_arrays(groups: dict, *, node_fields: typing.Sequence[NodeField] = [], element_fields: typing.Sequence[ElementField] = [], gauss: builtins.bool = False, order: builtins.str = 'pyrucast', first_tag: builtins.int = 1) -> dict:
     r"""
-    Lay meshes and fields out as **flat arrays** — the one exit every exchange
-    format goes through (`pyrucast.export.to_gmsh`,
-    `pyrucast.export.to_medcoupling`, the VTK writer), and the mirror of
-    `pyrucast.mesh.from_arrays`: what it returns has the shape that function
-    reads back.
+    Lay meshes and fields out as flat arrays, the shape `mesh.from_arrays` reads.
     
-    - `groups` — `dict` from group name to `Mesh`, all on one `Coords`;
-    - `node_fields` — `NodeField`s: one row per exported node, `0` where a
-      field defines nothing;
-    - `element_fields` — `ElementField`s, on the cells their zones cover:
-      the Gauss **mean** per cell, or with `gauss=True` the raw values per
-      point along with each type's rule;
-    - `order` — node numbering inside a cell: `"pyrucast"` (= VTK), `"gmsh"`,
-      `"med"`;
-    - `first_tag` — first node and cell tag (gmsh counts from 1, medcoupling
-      from 0).
+    It is the one exit every exchange format goes through
+    (`pyrucast.export.to_gmsh`, `pyrucast.export.to_medcoupling`, the VTK
+    writer), and the mirror of `pyrucast.mesh.from_arrays`. The nodes are
+    numbered in the order they first appear; a cell present in several groups
+    is written once.
     
-    Returns a `dict`:
+    # Parameters
+    
+    - `groups`: a `dict` from group name to `Mesh`, all on one `Coords`.
+    - `node_fields`: `NodeField`s, one row per exported node, `0` where a field
+      defines nothing.
+    - `element_fields`: `ElementField`s, on the cells their zones cover.
+    - `gauss`: `False` gives the Gauss **mean** per cell; `True` the raw values
+      per Gauss point, along with each type's rule.
+    - `order`: the node numbering inside a cell: `"pyrucast"` (the same as
+      VTK), `"gmsh"` or `"med"`.
+    - `first_tag`: the first node and cell tag (gmsh counts from 1,
+      medcoupling from 0).
+    
+    # Returns
+    
+    A `dict`:
     
     - `"node_tags"`, `"node_coords"` (`dim` per node), `"dim"`;
     - `"blocks"` — `(element_type, node_tags, cell_tags, groups)` per block of
@@ -6191,190 +9630,380 @@ def to_arrays(groups: dict, *, node_fields: typing.Sequence[NodeField] = [], ele
     
     Every array is an `Array`: read-only, and read **without a copy** by
     `numpy.asarray` or `memoryview`.
+    
+    # Raises
+    
+    - `TypeError` if a value of `groups` is not a `Mesh`.
+    - `ValueError` if `order` is unknown.
+    - `RuntimeError` if the groups do not all lie on one `Coords`.
     """
 
 def to_poi1(mesh: Mesh) -> Mesh:
     r"""
-    Convert a mesh to POI1, submesh by submesh.
+    The distinct nodes of `mesh`, as a POI1 mesh, submesh by submesh.
     
-    Returns a new mesh with the same number of submeshes; each output
-    submesh is a POI1 submesh holding the de-duplicated nodes of the
-    corresponding input submesh, in order of first appearance.
+    # Parameters
+    
+    - `mesh`: the mesh whose nodes to take.
+    
+    # Returns
+    
+    A POI1 `Mesh` with one zone per submesh of `mesh`, holding its distinct nodes
+    in the order they first appear.
     """
 
 def to_quadratic(mesh: Mesh) -> Mesh:
     r"""
-    Build the **quadratic** (Lagrange-2) copy of a linear mesh: each element
-    type is bumped to its quadratic sibling (TRI3→TRI6, HEX8→HEX20, …). Corner
-    nodes are re-used; one mid-edge node is created per edge (at the midpoint)
-    and shared between the cells that use it. The original mesh is untouched.
+    The quadratic (Lagrange-2) copy of the linear mesh `mesh`.
+    
+    Each element type is bumped to its quadratic sibling (TRI3 → TRI6,
+    HEX8 → HEX20, …). Corner nodes are reused; one node is created at the middle of
+    each edge and shared between the cells that use it.
+    
+    # Parameters
+    
+    - `mesh`: the linear mesh, left untouched.
+    
+    # Returns
+    
+    A new `Mesh`.
     """
 
 def transfinite(side1: Mesh, side2: Mesh, side3: Mesh, side4: Mesh, element_type: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
-    Build a structured surface bounded by four `SEG2` sides, by transfinite
-    interpolation (the Coons-patch generalization of `sweep` from two lines
-    to four). `side1`/`side3` and `side2`/`side4` are the two pairs of
-    **opposite** sides and must each have the same element count; the four
-    sides must form a closed contour, `side1 → side2 → side3 → side4 →
-    side1`, each sharing its end node with the next side's start node.
+    A structured surface bounded by four SEG2 sides, by transfinite interpolation.
     
-    `element_type` is `"QUA4"` (default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
-    `"TRI6"` — same conversion path as `sweep`.
+    The generalization of `pyrucast.mesh.sweep` from two lines to four (a Coons
+    patch).
+    
+    # Parameters
+    
+    - `side1`, `side2`, `side3`, `side4`: the four sides, forming a closed
+      contour `side1 → side2 → side3 → side4 → side1`, each ending on the start
+      node of the next. `side1`/`side3` and `side2`/`side4` are the two pairs of
+      **opposite** sides, each with the same cell count.
+    - `element_type`: `"QUA4"` (the default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
+      `"TRI6"` — the same conversion path as `pyrucast.mesh.sweep`.
+    
+    # Returns
+    
+    A new `Mesh` on the nodes of the sides plus fresh interior nodes.
+    
+    # Raises
+    
+    `RuntimeError` if the sides do not close, if opposite sides differ in cell
+    count, or for an unsupported `element_type`.
     """
 
 def translate(mesh: Mesh, vector: typing.Sequence[builtins.float]) -> Mesh:
     r"""
-    Translate `mesh` by `vector`, returning a fresh copy with its own nodes
-    (the original is left untouched). `vector` matches the mesh dimension.
+    Translate `mesh` by `vector`.
+    
+    # Parameters
+    
+    - `mesh`: the mesh to move.
+    - `vector`: the translation, with the dimension of the mesh.
+    
+    # Returns
+    
+    A fresh `Mesh` with its own nodes; `mesh` is left untouched.
+    
+    # Raises
+    
+    `RuntimeError` if `vector` does not have the dimension of the mesh.
     """
 
 def triangulate_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Mesh the interior of a closed SEG2 `contour` with `element_type` cells
-    using a constrained-Delaunay + Ruppert-refinement mesher.
+    Mesh the inside of the closed SEG2 loops of `contour`, Delaunay and Ruppert.
     
-    `contour` holds **one or more** closed SEG2 loops, each oriented by the
-    caller: a **counter-clockwise** loop is a domain's outer boundary, a
-    **clockwise** loop is a hole (contained in an outer loop). Several
-    disjoint CCW loops mesh several independent domains at once. `size` sets
-    the target element edge length; `None` uses the mean boundary edge length
-    per domain. `element_type` is "TRI3" or "QUA4" (QUA4 is quad-dominant:
-    the result may also carry a few boundary triangles). The contour may be
-    2-D or a planar loop in 3-D (meshed in its best-fit plane, lifted back).
+    A constrained Delaunay triangulation refined by Ruppert's algorithm. The
+    contour may be 2-D, or a planar loop in 3-D, meshed in its best-fit plane and
+    lifted back.
+    
+    # Parameters
+    
+    - `contour`: **one or more** closed SEG2 loops, each oriented by the caller: a
+      **counterclockwise** loop is a domain's outer boundary, a **clockwise** loop
+      a hole inside an outer loop. Several disjoint counterclockwise loops mesh
+      several independent domains at once.
+    - `element_type`: `"TRI3"`, or `"QUA4"`, quadrangle-dominant: the result may
+      also carry a few triangles at the boundary.
+    - `size`: the target edge length; `None` takes the mean boundary edge length,
+      domain by domain.
+    
+    # Returns
+    
+    A new `Mesh` on the contour's nodes plus fresh interior nodes.
+    
+    # Raises
+    
+    `RuntimeError` for a loop of fewer than three segments or not closed, or for
+    an `element_type` other than TRI3 or QUA4.
     """
 
 def triangulate_volume(envelope: Mesh, size: typing.Optional[builtins.float] = None, allow_surface_nodes: builtins.bool = False) -> Mesh:
     r"""
-    Fill the inside of a closed `TRI3` `envelope` with `TET4` cells — the 3-D
-    companion of `triangulate_surface`.
+    Fill the inside of a closed TRI3 `envelope` with TET4 cells.
     
-    The envelope's normals must point **out of the material**; a concave
-    shape is fine, and an internal cavity is simply another closed surface
-    whose normals point into the hole. Its nodes are reused as they are, and
-    nodes are added inside the solid so the cells come out well shaped.
+    The 3-D companion of `pyrucast.mesh.triangulate_surface`. A concave shape is
+    fine, and an internal cavity is simply another closed surface whose normals
+    point into the hole. The envelope's nodes are reused as they are, and nodes
+    are added inside the solid so the cells come out well shaped.
     
-    `size` is the target edge length; `None` takes the mean edge length of
-    the envelope. `allow_surface_nodes` lets the mesher cut the envelope
-    finer where it cannot otherwise fit it or make it usable: the shape is
-    kept — every added node lies on the edge or facet it divides — but the
-    skin of the result no longer matches the surface handed in, and a warning
-    on stderr says how many were added. Without it, such a surface is
-    refused rather than meshed badly.
+    # Parameters
+    
+    - `envelope`: the closed TRI3 surface, its normals pointing **out of the
+      material**.
+    - `size`: the target edge length; `None` takes the mean edge length of the
+      envelope.
+    - `allow_surface_nodes`: lets the mesher cut the envelope finer where it
+      cannot otherwise fit it or make it usable. The shape is kept — every added
+      node lies on the edge or facet it divides —, but the skin of the result no
+      longer matches the surface handed in, and a warning on stderr says how many
+      nodes were added. Without it, such a surface is refused rather than meshed
+      badly.
+    
+    # Returns
+    
+    A new `Mesh` of TET4 cells.
+    
+    # Raises
+    
+    `RuntimeError` if `envelope` is not a closed surface, or, without
+    `allow_surface_nodes`, for a surface the mesher cannot fit.
     """
 
 def truss(fespace: FiniteElementSpace, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.truss(fespace, strain_measure="linear")` — truss / bar
-    (axial-force) model spanning **every** subspace of `fespace` (SEG2 elements).
-    DOFs are the vector displacement `u_x, u_y(, u_z)`; the orientation is taken
-    from the node coordinates. Material (`E`, `A`) is supplied at assembly time.
+    A truss of bars carrying axial force only, on SEG2 cells.
     
-    `strain_measure` is the strain the law reads: `"linear"` (the default; it
-    writes the axial force `n`) or `"green_lagrange"` (large displacements: it
-    writes the second Piola–Kirchhoff axial force `S_n`, which
-    `element_field.stress_measure` turns into the nominal force vector `P_*` or
-    the true force `n`).
+    The unknowns are the displacement `u_x, u_y(, u_z)`; each bar's orientation is
+    taken from its node coordinates. Material `E`, `A`.
+    
+    # Parameters
+    
+    - `fespace`: the FE space, on SEG2 cells; one sub-model per subspace.
+    - `strain_measure`: the strain the law reads: `"linear"` (the default; it
+      writes the axial force `n`) or `"green_lagrange"` (large displacements: it
+      writes the second Piola–Kirchhoff axial force `S_n`, which
+      `pyrucast.element_field.stress_measure` turns into the nominal force vector
+      `P_*` or the true force `n`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `strain_measure`.
+    - `RuntimeError` if a cell is not SEG2, or for a measure a bar does not have
+      (`"hencky"`).
     """
 
 def update_contact(model: Model, displacement: NodeField) -> Model:
     r"""
-    `model.update_contact(model, displacement)` — the model with its contacts
-    **updated** to the positions `X + u`: `X` the active configuration, `u` read
-    in `displacement` on each contact's variables (`u_x`, `u_y`, `u_z`; a node
-    or a component it lacks reads zero). Every other sub-model is shared as it
-    is; a model without contact comes back unchanged.
+    The model with its contacts paired again on the positions `X + u`.
     
-    Each slave node is paired again with its closest master facet on `X + u`,
-    and its relation becomes the gap linearised there, written in total
-    displacement from `X`: the right-hand side the contact carries is `-g~`,
-    the gap of the new pairing measured on `X`. The multiplier nodes are kept,
-    so the unknowns `lambda` and the rows `imposed` stay the same; at `u = 0`,
-    the contact as it was built. A master facet collapsed by the displacement
-    is not detected here.
+    Each slave node is paired again with its closest master facet on `X + u`, and
+    its relation becomes the gap linearized there, written in total displacement
+    from `X`: the right-hand side the contact carries is `-g~`, the gap of the new
+    pairing measured on `X`. The multiplier nodes are kept, so the unknowns
+    `lambda` and the rows `imposed` stay the same; at `u = 0`, the contact as it
+    was built. What large displacements call for: the step-by-step loop updates
+    its contacts each time it rebuilds its operator.
     
-    What large displacements call for: the step-by-step loop updates its
-    contacts each time it rebuilds its operator. See the contact chapter of the
-    book.
+    # Parameters
+    
+    - `model`: the model whose contacts to update. Every other sub-model is
+      shared as it is; a model without contact comes back unchanged.
+    - `displacement`: `u`, read on each contact's variables (`u_x`, `u_y`,
+      `u_z`); a node or a component it lacks reads zero. `X` is the active
+      configuration.
+    
+    # Returns
+    
+    A new `Model`.
+    
+    # Notes
+    
+    A master facet collapsed by the displacement is not detected.
     """
 
 def viscoplasticity_chaboche(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.viscoplasticity_chaboche(fespace, kinematics)` — a Norton flow on the
-    shifted overstress `J(σ − X) − R − k`, with Armstrong-Frederick kinematic
-    hardening and saturating isotropic hardening. Material `E`, `nu`, `k`,
-    `K`, `n`, `C_1`, `gamma_1`, `b`, `Q`.
+    Chaboche viscoplasticity, with kinematic and isotropic hardening.
     
-    The back stress `X` is what makes the law usable under **cyclic**
-    loading: it translates the yield surface, so reverse yielding happens
-    early — the Bauschinger effect, which no isotropic law can produce. It
-    costs seven internal variables (`X_xx…X_xy`, `R`).
+    A Norton flow on the shifted overstress `J(σ − X) − R − k`, with
+    Armstrong-Frederick kinematic hardening and saturating isotropic hardening.
+    Material `E`, `nu`, `k`, `K`, `n`, `C_1`, `gamma_1`, `b`, `Q`.
+    
+    The back stress `X` is what makes the law usable under **cyclic** loading: it
+    translates the yield surface, so reverse yielding happens early — the
+    Bauschinger effect, which no isotropic law can produce. It costs seven
+    internal variables (`X_xx…X_xy`, `R`). Rate-dependent: it needs `dt`.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def viscoplasticity_lemaitre_chaboche(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.viscoplasticity_lemaitre_chaboche(fespace, kinematics)` — Chaboche
-    viscoplasticity coupled to Lemaitre's ductile **damage**: the flow is
-    driven by the effective stress `σ/(1−D)`, and `Ḋ = (Y/S)^s·ṗ`. Material
-    as above, plus `S`, `s`, `D_c`.
+    Chaboche viscoplasticity coupled to Lemaitre's ductile damage.
     
-    A damaged material flows faster, which damages it more — the coupling
-    that produces tertiary creep and, at `D_c`, rupture. Adds `damage` to the
-    internal state.
+    The flow is driven by the effective stress `σ/(1−D)`, and `Ḋ = (Y/S)^s·ṗ`.
+    Material as `pyrucast.model.viscoplasticity_chaboche`, plus `S`, `s`, `D_c`.
+    
+    A damaged material flows faster, which damages it more — the coupling that
+    produces tertiary creep and, at `D_c`, rupture. Adds `damage` to the internal
+    state. Rate-dependent: it needs `dt`.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def von_mises(model: Model, stress: ElementField, coefficients: typing.Sequence[builtins.float] = [0.5, 0.5, 0.5, 1.5, 1.5, 1.5]) -> ElementField:
     r"""
-    Equivalent stress of `stress` at the Gauss points of every continuum
-    sub-model of `model`: von Mises by default, Hill's anisotropic form with
-    `coefficients = [F, G, H, L, M, N]`:
+    Equivalent stress of `stress`: von Mises, or Hill's form with `coefficients`.
     
     `σ_eq² = F(σyy − σzz)² + G(σzz − σxx)² + H(σxx − σyy)² + 2Lσyz² + 2Mσxz² + 2Nσxy²`
     
-    The default `[0.5, 0.5, 0.5, 1.5, 1.5, 1.5]` is von Mises, `√(3 J₂)`.
-    `stress` carries the stresses the laws write (`sigma_xx`, …; the state of
-    `integrate_behavior` or the output of `elastic_stress` will do). The model
-    says which components to read: the six in 3-D; `sigma_xx`, `sigma_yy`,
-    `sigma_xy` in plane stress (`zz` is zero there); plus `sigma_zz` in plane
-    strain and on a body of revolution. Returns one zone per continuum
-    sub-model, with the single component `"von_mises"`.
+    The model says which components to read, as they depend on the kinematics:
     
-    Raises for coefficients that let the form go negative (each of `L`, `M`,
-    `N`, `F + G`, `G + H`, `H + F`, `FG + GH + HF` must be `≥ 0`), and for a
-    stress missing a component its kinematics reads — in plane strain, a
-    stress without `sigma_zz`.
+    | kinematics | components read | taken as zero |
+    |---|---|---|
+    | `full_3d` | the six `sigma_*` | — |
+    | `plane_stress` | `sigma_xx`, `sigma_yy`, `sigma_xy` | `zz`, `yz`, `xz` |
+    | `plane_strain` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `yz`, `xz` |
+    | `axisymmetric` | `sigma_xx`, `sigma_yy`, `sigma_zz` (hoop), `sigma_xy` | `yz`, `xz` |
+    
+    # Parameters
+    
+    - `model`: the continuum sub-models whose kinematics say what to read.
+    - `stress`: the stresses the laws write (`sigma_xx`, …); the output of
+      `pyrucast.element_field.elastic_stress` or the state of
+      `pyrucast.element_field.integrate_behavior` will do, whatever else they
+      carry.
+    - `coefficients`: `[F, G, H, L, M, N]`; the default
+      `[0.5, 0.5, 0.5, 1.5, 1.5, 1.5]` is von Mises, `√(3 J₂)`.
+    
+    # Returns
+    
+    An `ElementField` with one zone per continuum sub-model, on its Gauss points,
+    and the single component `"von_mises"`.
+    
+    # Raises
+    
+    `RuntimeError` for coefficients that let the form go negative (each of `L`,
+    `M`, `N`, `F + G`, `G + H`, `H + F`, `FG + GH + HF` must be `≥ 0`), and for a
+    stress missing a component its kinematics reads — in plane strain, a stress
+    without `sigma_zz`, which plastic laws carry and an elastic stress does not.
     """
 
 def xtx(x: typing.Any, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:
     r"""
-    Squared Euclidean norm `xᵀx = Σ v²` of a field (Cast3M `XTX`) — the sum of
-    squares over every value of the field, a node that several zones carry
-    counted once. Accepts a `NodeField`, `SubNodeField`, `ElementField` or
-    `SubElementField`.
+    Squared Euclidean norm `xᵀx = Σ v²` of a field.
     
-    With `components` given, the sum is restricted to those components only
-    (the rest ignored); by default every component is taken.
+    The sum of the squares of every value of the field; a node that several
+    zones carry counts once. Restricted to some components, it measures the
+    norm of a residual on a subset of the degrees of freedom.
+    
+    # Parameters
+    
+    - `x`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
+    - `components`: the components to sum, the others ignored; `None` takes
+      every component. A component absent from a zone is ignored there.
+    
+    # Returns
+    
+    The squared norm, a `float`.
+    
+    # Raises
+    
+    - `TypeError` if `x` is none of the four field types.
+    - `RuntimeError` if no zone of `x` carries any of `components`.
+    
+    # Notes
+    
+    The sum is gathered in parallel: the last bit of the result may change with
+    the number of threads.
     """
 
 def xty(x: typing.Any, y: typing.Any) -> builtins.float:
     r"""
-    Global scalar product `∑ xᵢ · yᵢ` of two **whole** fields — Cast3M's `XTY`.
+    Global scalar product `Σ xᵢ·yᵢ` of two whole fields, a single number.
     
-    `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
-    `ElementField` / `SubElementField`). The sum runs over the supports both
-    carry and, on each, over the components both carry (aligned by name), a
-    node that several zones carry counted once; a support or a component on one
-    side only has no counterpart and adds nothing. Two sub-fields must sit on
-    the same support. Returns a single float — the field inner product used for
-    energies (`F·u`), residual norms, etc.
+    The inner product of fields used for energies (`F·u`) and residual norms.
+    The sum runs over the supports both fields carry and, on each, over the
+    components both carry, aligned by name (their order may differ); a node
+    that several zones carry counts once. A support or a component on one side
+    only has no counterpart and adds nothing.
     
-    For the **node-by-node** scalar product (a field, one value per node),
-    see `pyrucast.field.psca`.
+    # Parameters
+    
+    - `x`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
+    - `y`: a field of the same type as `x`; two sub-fields must sit on the same
+      support.
+    
+    # Returns
+    
+    The scalar product, a `float`.
+    
+    # Raises
+    
+    - `TypeError` if `y` is not of the type of `x`, or `x` none of the four.
+    - `RuntimeError` if two sub-fields sit on different supports.
+    
+    # Notes
+    
+    The sum is gathered in parallel: the last bit of the result may change with
+    the number of threads.
+    
+    # See also
+    
+    `pyrucast.field.psca`, the scalar product node by node: a field, one value
+    per node.
     """
 

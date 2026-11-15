@@ -135,7 +135,7 @@ Le premier problème n'a que deux conditions aux limites : l'alésage tenu à
 250 °C, et un flux sortant de −40 kW/m² sur la face gauche. Aucun numéro de
 nœud n'apparaît dans le script : les régions sont découpées
 **géométriquement**, ici par **forme**, avec la famille
-[`pyrucast.mesh.points_*`](../operateurs/maillage.md).
+[`pyrucast.mesh.points_*`](../algorithmes/maillage.md).
 
 ### L'alésage, sur un cylindre
 

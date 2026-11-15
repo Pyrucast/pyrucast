@@ -302,10 +302,23 @@ pub fn save(path: &str, objects: &Bound<'_, PyDict>) -> PyResult<()> {
     Ok(())
 }
 
-/// Read back what [`save`] wrote, as a dictionary.
+/// Read back what `pyrucast.save` wrote, as a dictionary.
 ///
 /// The objects are **new**: nothing already alive in your session is touched,
-/// they are simply added alongside.
+/// they are simply added alongside. Objects that shared a support when saved
+/// share one again.
+///
+/// # Parameters
+///
+/// - `path`: the file `pyrucast.save` wrote.
+///
+/// # Returns
+///
+/// A `dict` with the keys and the objects given to `pyrucast.save`.
+///
+/// # Raises
+///
+/// `RuntimeError` if the file cannot be read, or is not a pyrucast archive.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn load(py: Python<'_>, path: &str) -> PyResult<Py<PyDict>> {

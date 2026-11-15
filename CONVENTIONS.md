@@ -798,6 +798,48 @@ applied, with the TeX MathJax finds in the built page, and flags on the source
 alone the escapes Markdown eats without a trace and the lines it reads as a
 block.
 
+## Docstrings of the Python API
+
+The docstring of a public function is the **only** place its contract is
+written: the book's operator reference is generated from it
+(`script/book_pyapi.py`), and `help()` and the editor show it as it is. The
+book keeps, in French, what is not contract: how the function works inside,
+the theory, the figures.
+
+A docstring is written in the `///` of its binding (`src/py/ops/*.rs`, the
+`python:` literal of a `physics_operator!` call) or in the Python function
+itself (`_gmsh.py`, `_med.py`), in English, in Markdown:
+
+- **The first line** is one sentence of at most 80 characters, ending with a
+  period, alone in its paragraph: it is the row of the summary table.
+- Then the description, then these sections, each optional, in this order:
+  `# Parameters`, `# Returns`, `# Raises`, `# Notes`, `# See also`. The types
+  are not repeated: the signature gives them.
+- **Every parameter is cited** between backticks at least once, usually as a
+  bullet of `# Parameters`.
+- `# Raises` names the exception type Python sees and the cases, checked by
+  running them: `PyrucastError::Message` becomes `RuntimeError`, an unknown
+  option string `ValueError`, a wrong argument type `TypeError`.
+- Formulas in Unicode between backticks — no TeX, no figure: a docstring is
+  read in a terminal.
+- No comparison with another code, and no French book page cited by its title.
+  A public function is cited by its full name, `pyrucast.mesh.skin`, which the
+  reference turns into a link.
+
+Two names tie a function to the book:
+
+- **its example**: an anchor `module-function` (`# ANCHOR: mesh-skin`) in any
+  `tests/python/test_doc_*.py`, one per function, with English comments. An
+  example that belongs to no page lives in `tests/python/test_doc_reference.py`.
+- **its algorithm page**: the page declares it, with `{{#pyalgo mesh.skin}}`
+  under the heading of the section that tells how it works. The docstring
+  carries no link to the book.
+
+`doc_lint.py docstrings` checks the writing rule; `doc_lint.py reference` that
+every function is rendered once, listed once in the summary by theme, and that
+every `module-function` anchor and every `pyalgo` name designate a function
+that exists.
+
 ## A waiver carries a reason
 
 Every sketch page, every item without an example, every exclusion from a guard

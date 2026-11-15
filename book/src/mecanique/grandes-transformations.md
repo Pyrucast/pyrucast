@@ -32,12 +32,12 @@ sur `H` est le cadre de Miehe, Apel et Lambrecht.
 Le paramètre existe pour `elasticity`, pour les dix lois de plasticité et pour
 les trois lois d'endommagement. Deux combinaisons sont refusées : une mesure qui
 n'est pas une entrée de loi (`gradient`, Cauchy–Green, Euler–Almansi, `J`, que
-[`deformation`](../operateurs/champs.md)
+[`deformation`](../algorithmes/champs.md)
 sait pourtant produire) et Hencky en contraintes planes, où `ln C` demande
 `C_zz`, que seule la loi connaît.
 
 La dilatation thermique suit la mesure :
-[`thermal_strain`](../operateurs/champs.md)
+[`thermal_strain`](../algorithmes/champs.md)
 reçoit `measure` et donne l'étirement isotrope `1 + αΔT` exactement dans
 chacune — `αΔT`, `½((1 + αΔT)² − 1)`, `ln(1 + αΔT)` — sous les noms que lit
 la loi.
@@ -72,7 +72,7 @@ P = F\\,S .
 qui fait de `internal_forces` l'adjoint de `strain` au point `u`. Avec `F = I`,
 on retrouve le `B` habituel. En pratique, la loi rend `S`, on la convertit
 en `P` (la contrainte nominale, **non symétrique**), et
-[`internal_forces`](../operateurs/assemblage.md) applique son `Bᵀ` sur la
+[`internal_forces`](../reference/node_field.md#node_field-internal_forces) applique son `Bᵀ` sur la
 configuration de référence : c'est la même boucle qu'en petites déformations,
 qui lit simplement un tenseur plein (`P_xx, P_xy, P_yx, P_yy`).
 
@@ -92,7 +92,7 @@ noms ; la cible est nommée par la contrainte qu'on veut :
 | `"hencky"` (`T`) | `T_*` | `S̃_ab / θ_ab` | `H = ½ ln C` (Hencky) |
 
 ```python
-{{#include ../../../tests/python/test_doc_grandes_transformations.py:cauchy}}
+{{#include ../../../tests/python/test_doc_grandes_transformations.py:element_field-stress_measure}}
 ```
 
 **Hencky.** La duale `T` de `H = ½ ln C` se ramène à `S` par `S = T : ∂H/∂E`.
@@ -133,10 +133,10 @@ la courante active le temps d'un bloc, puis rétablit celle d'avant, même si le
 bloc échoue :
 
 ```python
-{{#include ../../../tests/python/test_doc_grandes_transformations.py:configuration_courante}}
+{{#include ../../../tests/python/test_doc_grandes_transformations.py:coords-displace_from}}
 ```
 
-[`displace_from`](../operateurs/champs.md) pose la
+[`displace_from`](../algorithmes/champs.md) pose la
 configuration courante **en absolu**, `X + u`, à partir de la référence :
 rappelée avec un autre `u`, elle repart de `X`, et rien ne s'accumule — ce
 qu'exigent un sous-pas repris ou une itération accélérée. La configuration
@@ -166,6 +166,8 @@ s'écrit `phi_n = −p`. Sur la plaque étirée, la paroi du bas mesure 2,4 et r
 n'entre que dans le résidu, recalculée à chaque itéré.
 
 ## La rigidité géométrique
+
+{{#pyalgo matrix.geometric}}
 
 L'opérateur de Newton se construit sur la configuration courante avec les
 fonctions existantes : la rigidité élastique `stiffness`, et la rigidité
@@ -243,7 +245,7 @@ L'étirement `U` ne touche ni les axes ni les valeurs. `rotate_frame` tourne les
 axes d'un champ de matériau, avec `F` calculé **sur la référence** :
 
 ```python
-{{#include ../../../tests/python/test_doc_grandes_transformations.py:axes}}
+{{#include ../../../tests/python/test_doc_grandes_transformations.py:element_field-rotate_frame}}
 ```
 
 La **capacité** seule reste sur la référence : la masse se conserve,
@@ -251,7 +253,7 @@ La **capacité** seule reste sur la référence : la masse se conserve,
 L'opérateur réunit la conduction et les échanges, assemblés sur la
 configuration courante, et la capacité, assemblée sur la référence : une
 matrice garde les valeurs de la configuration où elle a été assemblée, et
-[la somme](../operateurs/assemblage.md#la-somme) les additionne telles quelles.
+[la somme](../matrix.md#calculer-avec-des-matrices) les additionne telles quelles.
 
 ## Dans le pas à pas
 

@@ -1,4 +1,4 @@
-# Opérateurs géométriques
+# Localisation et projection
 
 Le module `ops::geom` est **réservé** aux **mesures géométriques** : tout ce qui
 prend un [`Mesh`](../mesh.md) / `SubMesh` (et éventuellement un champ de

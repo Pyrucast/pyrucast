@@ -75,7 +75,7 @@ Sur une barre en conduction, \\(T(0) = 0\\) par Dirichlet et
 \\(T(1) - T(0) = 1\\) par une MPC : d'où \\(T = x\\).
 
 ```python
-{{#include ../../../tests/python/test_doc_contraintes.py:mpc_complet}}
+{{#include ../../../tests/python/test_doc_contraintes.py:model-mpc}}
 ```
 
 `examples/mpc_periodicite.py` pose une périodicité.

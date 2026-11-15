@@ -85,7 +85,7 @@ l'hexaèdre à 27 nœuds — voir [Éléments finis supportés](../elements/inde
 **Maillage.** Des mailleurs intégrés — lignes et arcs, balayages,
 triangulation de surfaces et de volumes, pavage en quadrangles, couche limite
 d'hexaèdres — et la lecture des maillages gmsh et MED : voir
-[Maillage](../operateurs/maillage.md) et [Mailler une géométrie](../mailler.md).
+[Maillage](../algorithmes/maillage.md) et [Mailler une géométrie](../mailler.md).
 
 **Résultats.** [Tracés](../visualization.md) dans une fenêtre ou en PNG/SVG,
 export VTK, [sauvegarde](../sauvegarde.md) d'une session dans un fichier
@@ -99,8 +99,9 @@ export VTK, [sauvegarde](../sauvegarde.md) d'une session dans un fichier
   frappe.
 - **Ce livre** : les parties [Objets](../objets.md),
   [Détails des physiques](../physiques.md) et
-  [Détail des opérateurs](../operateurs.md) décrivent chaque brique, avec sa
-  théorie.
+  [Opérateurs](../operateurs.md) décrivent chaque brique, avec sa théorie ;
+  la référence des opérateurs donne, fonction par fonction, ses arguments et un
+  exemple.
 - **La référence de l'API Rust** :
   <https://pyrucast.github.io/pyrucast/rust/>.
 - **Des exemples** complets, un par sujet : dossier

@@ -80,6 +80,8 @@ donne à Newton sa convergence quadratique.
 opérateur constant, celui d'un Newton modifié. La tangente
 \\(\int B^{\mathsf T} D_\text{alg} B\\) est celle d'un Newton complet.
 
+{{#pyalgo matrix.tangent}}
+
 ## Variables
 
 Selon la cinématique :
@@ -123,13 +125,13 @@ Une maille étirée à \\(\varepsilon_{xx} = 2\cdot10^{-3}\\), au-delà de
 \\(\sigma_y/E\\). La contrainte équivalente reste à \\(\sigma_y\\) :
 
 ```python
-{{#include ../../../tests/python/test_doc_mecanique.py:plasticite}}
+{{#include ../../../tests/python/test_doc_mecanique.py:model-plasticity_perfect}}
 ```
 
 Avec écrouissage, elle vaut \\(\sigma_y + H\\,p\\) :
 
 ```python
-{{#include ../../../tests/python/test_doc_mecanique.py:ecrouissage}}
+{{#include ../../../tests/python/test_doc_mecanique.py:model-plasticity_isotropic}}
 ```
 
 La boucle de Newton complète (pas de charge, résidu

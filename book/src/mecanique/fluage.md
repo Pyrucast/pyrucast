@@ -146,7 +146,7 @@ Une déformation maintenue sous Norton : sans `dt`, l'intégration est refusée 
 avec, la contrainte se relaxe d'un pas à l'autre.
 
 ```python
-{{#include ../../../tests/python/test_doc_mecanique.py:fluage}}
+{{#include ../../../tests/python/test_doc_mecanique.py:model-creep_norton}}
 ```
 
 Les paramètres sont des composantes du matériau. Une dépendance à la

@@ -80,7 +80,7 @@ Une barre de longueur 2, de module 200 000 et de section 0,01, tirée par une
 force de 1000 : \\(u = F\\,L/(E\\,A) = 1\\).
 
 ```python
-{{#include ../../../tests/python/test_doc_mecanique.py:barre}}
+{{#include ../../../tests/python/test_doc_mecanique.py:model-truss}}
 ```
 
 ## Côté Rust

@@ -73,7 +73,7 @@ profil est \\(T = x\\), et les multiplicateurs sont les flux \\(\pm1\\) aux
 deux bouts.
 
 ```python
-{{#include ../../../tests/python/test_doc_contraintes.py:dirichlet_complet}}
+{{#include ../../../tests/python/test_doc_contraintes.py:model-dirichlet}}
 ```
 
 ## Côté Rust

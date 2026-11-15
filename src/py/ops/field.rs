@@ -21,17 +21,35 @@ pub(crate) fn extract_names(arg: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     ))
 }
 
-/// Node-by-node (or point-by-point) scalar product of two fields — Cast3M's
-/// `PSCA`. Returns a **new field** of the same flavour as the inputs, carrying
-/// a single `"psca"` component whose value at each node/point is `∑_c xᵣ,c·yᵣ,c`
-/// (reduction over components only, the support is kept).
+/// Scalar product of two fields node by node, `pᵢ = Σ_c xᵢ,c·yᵢ,c`.
 ///
-/// `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
-/// `ElementField` / `SubElementField`), sit on the same support/decomposition,
-/// and carry the same components (aligned by name).
+/// The reduction runs over the components alone: the support is kept, one
+/// value per node, or per Gauss point for a field at the Gauss points. The
+/// components are aligned by name (their order may differ) and only those both
+/// fields carry count; a support only one field carries has no counterpart and
+/// gives no zone. Each value is written once, so the result does not depend on
+/// the number of threads.
 ///
-/// For the **global** scalar product (a single float over the whole field),
-/// see `pyrucast.measure.xty`.
+/// # Parameters
+///
+/// - `x`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
+/// - `y`: a field of the same type as `x`; two sub-fields must sit on the same
+///   support.
+///
+/// # Returns
+///
+/// A new field of the type of `x`, one zone per support both fields carry,
+/// with a single component `"psca"`.
+///
+/// # Raises
+///
+/// - `TypeError` if `y` is not of the type of `x`, or `x` none of the four.
+/// - `RuntimeError` if two sub-fields sit on different supports.
+///
+/// # See also
+///
+/// `pyrucast.measure.xty`, the global scalar product: a single number over
+/// the whole field.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn psca(py: Python<'_>, x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
@@ -155,46 +173,222 @@ macro_rules! define_polymorphic_pyfunction {
 }
 
 define_polymorphic_pyfunction! {
-    /// Element-wise absolute value of a field.
+    /// Absolute value of `field`, value by value.
+    ///
+    /// Every value of every component is mapped by the function, as numpy does: the
+    /// result is not guarded.
+    ///
+    /// # Parameters
+    ///
+    /// - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+    ///   `SubElementField`.
+    ///
+    /// # Returns
+    ///
+    /// A new field of the type of `field`, with the same structure.
+    ///
+    /// # Raises
+    ///
+    /// `TypeError` if `field` is none of the four field types.
     abs
 }
 define_polymorphic_pyfunction! {
-    /// Element-wise square root of a field (`nan` for negatives).
+    /// Square root of `field`, value by value.
+    ///
+    /// Every value of every component is mapped by the function, as numpy does: the
+    /// result is not guarded. A negative value gives `nan`.
+    ///
+    /// # Parameters
+    ///
+    /// - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+    ///   `SubElementField`.
+    ///
+    /// # Returns
+    ///
+    /// A new field of the type of `field`, with the same structure.
+    ///
+    /// # Raises
+    ///
+    /// `TypeError` if `field` is none of the four field types.
     sqrt
 }
 define_polymorphic_pyfunction! {
-    /// Element-wise exponential `eˣ` of a field.
+    /// Exponential `eˣ` of `field`, value by value.
+    ///
+    /// Every value of every component is mapped by the function, as numpy does: the
+    /// result is not guarded.
+    ///
+    /// # Parameters
+    ///
+    /// - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+    ///   `SubElementField`.
+    ///
+    /// # Returns
+    ///
+    /// A new field of the type of `field`, with the same structure.
+    ///
+    /// # Raises
+    ///
+    /// `TypeError` if `field` is none of the four field types.
     exp
 }
 define_polymorphic_pyfunction! {
-    /// Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
+    /// Natural logarithm of `field`, value by value.
+    ///
+    /// Every value of every component is mapped by the function, as numpy does: the
+    /// result is not guarded. Zero gives `-inf`, a negative value `nan`.
+    ///
+    /// # Parameters
+    ///
+    /// - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+    ///   `SubElementField`.
+    ///
+    /// # Returns
+    ///
+    /// A new field of the type of `field`, with the same structure.
+    ///
+    /// # Raises
+    ///
+    /// `TypeError` if `field` is none of the four field types.
     log
 }
 define_polymorphic_pyfunction! {
-    /// Element-wise base-10 logarithm of a field.
+    /// Base-10 logarithm of `field`, value by value.
+    ///
+    /// Every value of every component is mapped by the function, as numpy does: the
+    /// result is not guarded. Zero gives `-inf`, a negative value `nan`.
+    ///
+    /// # Parameters
+    ///
+    /// - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+    ///   `SubElementField`.
+    ///
+    /// # Returns
+    ///
+    /// A new field of the type of `field`, with the same structure.
+    ///
+    /// # Raises
+    ///
+    /// `TypeError` if `field` is none of the four field types.
     log10
 }
 define_polymorphic_pyfunction! {
-    /// Element-wise cosine of a field (radians).
+    /// Cosine of `field`, value by value, in radians.
+    ///
+    /// Every value of every component is mapped by the function, as numpy does: the
+    /// result is not guarded.
+    ///
+    /// # Parameters
+    ///
+    /// - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+    ///   `SubElementField`.
+    ///
+    /// # Returns
+    ///
+    /// A new field of the type of `field`, with the same structure.
+    ///
+    /// # Raises
+    ///
+    /// `TypeError` if `field` is none of the four field types.
     cos
 }
 define_polymorphic_pyfunction! {
-    /// Element-wise sine of a field (radians).
+    /// Sine of `field`, value by value, in radians.
+    ///
+    /// Every value of every component is mapped by the function, as numpy does: the
+    /// result is not guarded.
+    ///
+    /// # Parameters
+    ///
+    /// - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+    ///   `SubElementField`.
+    ///
+    /// # Returns
+    ///
+    /// A new field of the type of `field`, with the same structure.
+    ///
+    /// # Raises
+    ///
+    /// `TypeError` if `field` is none of the four field types.
     sin
 }
 define_polymorphic_pyfunction! {
-    /// Element-wise tangent of a field (radians).
+    /// Tangent of `field`, value by value, in radians.
+    ///
+    /// Every value of every component is mapped by the function, as numpy does: the
+    /// result is not guarded.
+    ///
+    /// # Parameters
+    ///
+    /// - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+    ///   `SubElementField`.
+    ///
+    /// # Returns
+    ///
+    /// A new field of the type of `field`, with the same structure.
+    ///
+    /// # Raises
+    ///
+    /// `TypeError` if `field` is none of the four field types.
     tan
 }
 define_polymorphic_pyfunction! {
-    /// Element-wise hyperbolic sine of a field.
+    /// Hyperbolic sine of `field`, value by value.
+    ///
+    /// Every value of every component is mapped by the function, as numpy does: the
+    /// result is not guarded.
+    ///
+    /// # Parameters
+    ///
+    /// - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+    ///   `SubElementField`.
+    ///
+    /// # Returns
+    ///
+    /// A new field of the type of `field`, with the same structure.
+    ///
+    /// # Raises
+    ///
+    /// `TypeError` if `field` is none of the four field types.
     sinh
 }
 define_polymorphic_pyfunction! {
-    /// Element-wise hyperbolic cosine of a field.
+    /// Hyperbolic cosine of `field`, value by value.
+    ///
+    /// Every value of every component is mapped by the function, as numpy does: the
+    /// result is not guarded.
+    ///
+    /// # Parameters
+    ///
+    /// - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+    ///   `SubElementField`.
+    ///
+    /// # Returns
+    ///
+    /// A new field of the type of `field`, with the same structure.
+    ///
+    /// # Raises
+    ///
+    /// `TypeError` if `field` is none of the four field types.
     cosh
 }
 define_polymorphic_pyfunction! {
-    /// Element-wise hyperbolic tangent of a field.
+    /// Hyperbolic tangent of `field`, value by value.
+    ///
+    /// Every value of every component is mapped by the function, as numpy does: the
+    /// result is not guarded.
+    ///
+    /// # Parameters
+    ///
+    /// - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+    ///   `SubElementField`.
+    ///
+    /// # Returns
+    ///
+    /// A new field of the type of `field`, with the same structure.
+    ///
+    /// # Raises
+    ///
+    /// `TypeError` if `field` is none of the four field types.
     tanh
 }

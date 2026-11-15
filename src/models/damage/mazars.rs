@@ -273,5 +273,5 @@ crate::physics_operator! {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn mazars(fespace, kinematics: Kinematics) = crate::ops::model::damage, DamageLaw::Mazars;
-    python: "`model.mazars(fespace, kinematics)` — Mazars isotropic damage spanning every\nsubspace of `fespace`. `kinematics` is `\"plane_stress\"` / `\"plane_strain\"` /\n`\"axisymmetric\"` (2-D) or `\"solid\"` (3-D). Same DOFs as elasticity; material\n(`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at\nassembly / integration time. The behaviour integration (`COMP`) carries\nthe scalar history variable `kappa` (`VAR0`→`VAR1`) and outputs `damage`."
+    python: "Mazars isotropic damage of a quasi-brittle material, such as concrete.\n\nSame unknowns as `pyrucast.model.elasticity`. Material `E`, `nu`, `eps_d0`,\n`A_t`, `B_t`, `A_c`, `B_c`. The state carries the scalar history variable\n`kappa` and the output `damage`."
 }

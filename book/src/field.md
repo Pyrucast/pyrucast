@@ -86,7 +86,7 @@ qui pèse chaque valeur par la taille des mailles : c'est
 familles, et comptent de même un nœud une fois : `pyrucast.measure.xtx(champ)`,
 la somme des carrés des valeurs, et `pyrucast.measure.xty(a, b)`, la somme des
 produits des valeurs que `a` et `b` portent sur les mêmes supports et sous les
-mêmes noms (voir [Opérateurs sur les champs](operateurs/champs.md#réduction)).
+mêmes noms (voir [Opérateurs sur les champs](algorithmes/champs.md#réduction)).
 
 ## Calculer avec des champs
 
@@ -173,7 +173,7 @@ Pour additionner deux régions, on les ramène d'abord sur les mêmes supports.
 `restrict(champ, maillage)` pose un champ aux nœuds sur les zones de
 `maillage`, et deux champs restreints au même maillage ont les mêmes supports ;
 `restrict_like(b, a)` pose `b` sur les supports de `a` (voir [Opérateurs sur
-les champs](operateurs/champs.md#restriction-fusion-consolidation)). Un nœud
+les champs](algorithmes/champs.md#restriction-fusion-consolidation)). Un nœud
 que le champ restreint ne portait pas y vaut 0.
 
 ```python
@@ -195,7 +195,7 @@ Elles ne protègent rien non plus : `log` d'un nombre négatif donne `nan`.
 `champ >= s`, `champ > s`, `champ <= s` et `champ < s` rendent un **masque** :
 un champ de mêmes zones et de mêmes composantes, qui vaut 1 où la condition
 tient et 0 ailleurs (c'est `mask`, voir [Opérateurs sur les
-champs](operateurs/champs.md#masque-par-valeur)). `==` et `!=` ne comparent pas
+champs](algorithmes/champs.md#masque-par-valeur)). `==` et `!=` ne comparent pas
 les valeurs : `champ == 0.0` vaut `False`.
 
 ```python

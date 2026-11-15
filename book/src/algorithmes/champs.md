@@ -1,4 +1,4 @@
-# Opérateurs sur les champs
+# Calcul sur les champs
 
 Les modules `ops::node_field`, `ops::element_field`, `ops::coords`,
 `ops::measure` et `ops::field` **dérivent et transforment** les
@@ -10,17 +10,18 @@ de Gauss. Ces opérateurs croisent des conteneurs (maillage + champ, espace EF
 par composante, elle, reste **sur les types de champ** (cf. [Champ](../field.md)).
 
 Les autres thèmes d'opérateurs ont leur propre page : construction du matériau
-([Construction](construction.md)), [Assemblage](assemblage.md) (dont le
-chargement réparti `flux`), [Comportement](comportement.md), [Solveur](solveur.md).
+([Construction](champs-materiau.md)), l'assemblage
+([`pyrucast.matrix`](../reference/matrix.md)), le chargement réparti
+([Flux imposé](../echanges.md#flux-imposé)), [Comportement](comportement.md), [Résolution](solveur.md).
 
 ## Coordonnées et déplacement
 
 | Python | Effet |
 |---|---|
-| `positions(mesh, components=None)` | un `NodeField` portant les coordonnées des nœuds (`"X"`, `"Y"`, `"Z"`), une zone par sous-maillage. `None` ⇒ tous les axes présents dans la dimension du `Coords`. |
-| `coords.set(field, components=None)` | **écrit** les coordonnées du `Coords` actif depuis un champ `"X"/"Y"/"Z"`. |
-| `displace(field, components=None)` | **ajoute** un champ de déplacement aux coordonnées (chaque nœud distinct traité **une seule fois**). On applique ce que porte le champ, et rien d'autre : un nœud qui ne porte aucune des composantes, comme un nœud multiplicateur d'une solution, ne bouge pas, et une composante absente vaut 0. |
-| `coords.displace_from(field, reference, target, components=None)` | **pose** la configuration `target` en `X + u`, en absolu à partir de la configuration `reference` : rappelée, elle repart de `X`, rien ne s'accumule. La configuration active ne change pas (Cast3M `FORM`). On applique ce que porte le champ, et rien d'autre : un nœud qui ne porte aucune des composantes reste à sa position de référence, une composante absente vaut 0, et la solution d'un `solve` se donne telle quelle. |
+| [`node_field.positions(mesh, …)`](../reference/node_field.md#node_field-positions) | un `NodeField` portant les coordonnées des nœuds (`"X"`, `"Y"`, `"Z"`), une zone par sous-maillage. |
+| [`coords.set(field, …)`](../reference/coords.md#coords-set) | **écrit** les coordonnées de la configuration active depuis un champ `"X"/"Y"/"Z"`. |
+| [`coords.displace(field, …)`](../reference/coords.md#coords-displace) | **ajoute** un champ de déplacement aux coordonnées de la configuration active. |
+| [`coords.displace_from(field, reference, target, …)`](../reference/coords.md#coords-displace_from) | **pose** la configuration `target` en `X + u`, en absolu à partir de la configuration `reference` : rappelée, elle repart de `X`, rien ne s'accumule. |
 | `Coords.in_config(config)` (méthode) | `with coords.in_config(i):` le bloc calcule sur la configuration `config` ; celle d'avant redevient active à la sortie, même après une exception. Voir [Coords](../coords.md#plusieurs-configurations). |
 
 `positions` est le pont géométrie → champ : on en tire un `NodeField` qu'on
@@ -34,11 +35,11 @@ actif le temps d'un calcul par `in_config` : voir
 
 | Python | Effet |
 |---|---|
-| `restrict(field, mesh)` | restreint un `NodeField` aux nœuds de `mesh` (une zone par sous-maillage cible). Le support est le **nuage POI1 canonique** du sous-maillage (`to_poi1`, matérialisé une fois et **mis en cache**) : deux restrictions sur le **même** `mesh` partagent le support ⇒ `restrict(a,mesh) - restrict(b,mesh)` se soustrait directement, et s'aligne avec `K·restrict(f,mesh)` / `solve(K,f)`. Pour les ops élément (`gradient`, `integral`, …), repasser `mesh` à côté. `0.0` pour les nœuds non couverts ; nœuds hors de `mesh` abandonnés. Erreur si `mesh` n'est pas sur le même `Coords`. |
-| `restrict_like(field, target)` | reprojette `field` sur le support **et** les composantes de `target`, zone par zone (mêmes slots que `target`) ⇒ le résultat se combine directement avec `target` par les opérateurs `+ - * /`. Nœuds/composantes de `field` absents de `target` abandonnés ; `0.0` si non couverts. Typiquement pour replier un incrément de `solve` (qui porte aussi les multiplicateurs) dans une solution courante. Erreur si `Coords` différents. |
-| `merge(a, b)` | union structurelle de deux `NodeField`, consolidée — c'est l'**alias nommé** de `a \| b`. |
-| `node_field.consolidate(field)` | fusionne les zones de **même support** (handle identique) en vérifiant la cohérence des valeurs partagées. |
-| `element_field.consolidate(field)` | fusionne les zones d'une même `FiniteElementSpace` (union des composantes) — le pendant de `|`, qui les laisse côte à côte. |
+| [`node_field.restrict(field, mesh)`](../reference/node_field.md#node_field-restrict) | restreint un `NodeField` aux nœuds de `mesh`, sur un support que partagent toutes les restrictions au même `mesh`. |
+| [`node_field.restrict_like(field, target)`](../reference/node_field.md#node_field-restrict_like) | relit `field` sur le support **et** les composantes de `target`, pour le combiner directement avec lui. |
+| [`node_field.merge(a, b)`](../reference/node_field.md#node_field-merge) | union de deux `NodeField`, consolidée — c'est le nom de `a \| b`. |
+| [`node_field.consolidate(field)`](../reference/node_field.md#node_field-consolidate) | fusionne les zones de **même support** en vérifiant la cohérence des valeurs partagées. |
+| [`element_field.consolidate(field)`](../reference/element_field.md#element_field-consolidate) | fusionne les zones d'une même `FiniteElementSpace` (union des composantes) — le pendant de `|`, qui les laisse côte à côte. |
 
 La consolidation d'un `NodeField` est exactement la **finalisation** de l'union
 `|` : après déduplication par handle, les zones définies sur le même `SubMesh`
@@ -53,6 +54,8 @@ physique sur une fespace partagée (`k` thermique + `E`/`nu`/`alpha` mécanique)
 un champ matériau unique lu par chaque physique.
 
 ## Projection sur un autre maillage
+
+{{#pyalgo node_field.project}}
 
 `project(field, mesh, target, tol=1e-6)` (aussi `field.project(mesh, target)`)
 porte un champ nodal aux nœuds de `target` en l'interpolant par les **mailles
@@ -71,7 +74,7 @@ maillage plus grand. Le résultat a une zone par sous-maillage de `target`,
 comme `positions`. Les nœuds de `target` sont localisés une seule fois.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:projection}}
+{{#include ../../../tests/python/test_doc_ops_champs.py:node_field-project}}
 ```
 
 **Un champ aux points de Gauss se projette aussi.** Avec un `ElementField`,
@@ -135,7 +138,7 @@ n'est moyenné ni fusionné).
   composante testée est dans la bande.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:select}}
+{{#include ../../../tests/python/test_doc_ops_champs.py:mesh-select}}
 ```
 
 ## Masque par valeur
@@ -149,7 +152,7 @@ Gauss.
 
 | Python | Effet |
 |---|---|
-| `mask(field, ge=None, gt=None, le=None, lt=None, components=None)` | champ `0/1` de même structure que l'entrée. |
+| [`node_field.mask(field, …)`](../reference/node_field.md#node_field-mask), [`element_field.mask(field, …)`](../reference/element_field.md#element_field-mask) | champ `0/1` de même structure que l'entrée. |
 
 - **Pas de ET entre composantes** (contrairement à `select`) : chaque valeur est
   testée pour elle-même.
@@ -239,6 +242,8 @@ pendant nodal de `element_pointwise`.
 
 ### `interp_to_gauss(field, fespace)` → `ElementField`
 
+{{#pyalgo element_field.interp_to_gauss}}
+
 Interpole un champ **nodal** vers les points de Gauss (valeurs, pas dérivées) :
 
 \\[
@@ -252,6 +257,8 @@ température nodale aux points de Gauss avant `thermal_strain`.
 
 ### `gradient(field, fespace)` → `ElementField`
 
+{{#pyalgo element_field.gradient}}
+
 Gradient d'un champ nodal aux points de Gauss, cellule par cellule :
 
 \\[
@@ -261,6 +268,8 @@ Gradient d'un champ nodal aux points de Gauss, cellule par cellule :
 Une composante de sortie `<comp>_<axe>` par couple (composante d'entrée, axe).
 
 ### `deformation(u, fespace, measure="linear")` → `ElementField`
+
+{{#pyalgo element_field.deformation}}
 
 Déformation d'un champ de déplacement aux points de Gauss, dans la **mesure**
 choisie. `u` doit porter exactement `space_dim` composantes (déplacement selon
@@ -306,10 +315,12 @@ vérifie à chaque itéré en grands déplacements. Aucune autre mesure ne le vo
 Green–Lagrange et Hencky se calculent sans broncher sur une maille retournée.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:mesures}}
+{{#include ../../../tests/python/test_doc_ops_champs.py:element_field-deformation}}
 ```
 
 ### `thermal_strain(temperature, materials, fespace, t_ref, measure="linear")` → `ElementField`
+
+{{#pyalgo element_field.thermal_strain}}
 
 Déformation thermique de libre dilatation (Cast3M `EPTH`), pour la
 thermomécanique **non couplée** :
@@ -336,6 +347,8 @@ exactement, `½((1 + αΔT)² − 1)` en Green–Lagrange (`E_*`), `ln(1 + αΔT
 Hencky (`H_*`) — cf. [Grandes transformations](../mecanique/grandes-transformations.md).
 
 ### `elastic_stress(model, strain, materials)` / `elastic_strain(model, stress, materials)` → `ElementField`
+
+{{#pyalgo element_field.elastic_stress element_field.elastic_strain}}
 
 L'**opérateur élastique** d'un modèle aux points de Gauss, dans les deux sens
 (Cast3M `ELAS`) :
@@ -370,10 +383,12 @@ les deux sens ne font pas la même opération, et l'état que rend
 `integrate_behavior` porte **à la fois** des `sigma_*` et des `eps_*`.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:elastique}}
+{{#include ../../../tests/python/test_doc_ops_champs.py:element_field-elastic_stress}}
 ```
 
 ### `von_mises(model, stress, coefficients=[0.5, 0.5, 0.5, 1.5, 1.5, 1.5])` → `ElementField`
+
+{{#pyalgo element_field.von_mises}}
 
 La **contrainte équivalente** aux points de Gauss : von Mises par défaut, la
 forme anisotrope de Hill avec ses six coefficients `[F, G, H, L, M, N]` :
@@ -398,18 +413,16 @@ dit lesquelles lire, car elles dépendent de la cinématique :
 | `axisymmetric` | `sigma_xx`, `sigma_yy`, `sigma_zz` (orthoradiale), `sigma_xy` | `yz`, `xz` |
 
 Le résultat a une zone par sous-modèle continu, sur ses points de Gauss, et une
-seule composante, `von_mises`. Une erreur nomme ce qui manque : des
-coefficients qui laisseraient la forme devenir négative (chacun de `L`, `M`,
-`N`, `F + G`, `G + H`, `H + F` et `FG + GH + HF` doit être `≥ 0`), ou une
-contrainte sans `sigma_zz` en déformations planes — les lois plastiques le
-portent, une contrainte élastique non. Elle n'existe pas en méthode : elle ne
+seule composante, `von_mises`. Elle n'existe pas en méthode : elle ne
 s'applique qu'à un champ de contraintes.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:von_mises}}
+{{#include ../../../tests/python/test_doc_ops_champs.py:element_field-von_mises}}
 ```
 
 ### `stress_measure(stress, gradient, target)` → `ElementField`
+
+{{#pyalgo element_field.stress_measure}}
 
 Une contrainte convertie, point par point, d'une mesure à l'autre, avec le
 gradient de la transformation `F` (`deformation(u, fespace, "gradient")`) :
@@ -428,6 +441,8 @@ Formules et exemples :
 
 ### `rotate_frame(field, gradient)` → `ElementField`
 
+{{#pyalgo element_field.rotate_frame}}
+
 Un champ de matériau dont les axes (`V1X, V1Y` en 2D, `V1X…V2Z` en 3D) tournent
 avec la pièce, point par point, de la rotation `R` de la décomposition polaire
 `F = R U` : `v = R v₀`, d'où `k = R k₀ Rᵀ`. `F` est lu dans `gradient`, que
@@ -441,6 +456,8 @@ déformée. Pas de méthode : elle exige des axes et un gradient nommés. Exempl
 
 ### `divergence(field)` → `NodeField`
 
+{{#pyalgo node_field.divergence}}
+
 Divergence **faible** (consistante) d'un champ vectoriel par éléments — l'adjoint
 de `gradient` :
 
@@ -450,15 +467,13 @@ d_i = \int_\Omega \nabla N_i \cdot F\\, d\Omega
 \\]
 
 accumulé par nœud. C'est l'opérateur `Bᵀ`, transposé du gradient : il vérifie
-`⟨∇f, F⟩ = ⟨f, div F⟩`. Un tenseur se lit à ses noms : symétrique
-(`A_xx, A_xy, A_yy`), ou **plein** s'il porte aussi `A_yx` — comme la
-contrainte nominale `P` des grandes transformations. Le champ d'entrée doit porter exactement `space_dim`
-composantes (`F_x, F_y, F_z`) ; la sortie porte une composante `"div"`, et un
-nœud partagé par plusieurs sous-espaces reçoit la **somme** de leurs
-contributions. Ce sont des **quantités intégrées**, pas les valeurs
-ponctuelles de `∇·F` (pas de projection L²).
+`⟨∇f, F⟩ = ⟨f, div F⟩`. Ce sont des **quantités intégrées**, pas les valeurs
+ponctuelles de `∇·F` (pas de projection L²). Le rang de la grandeur se lit à
+ses noms : voir [`node_field.divergence`](../reference/node_field.md#node_field-divergence).
 
 ### `cell_integral(field, target)` → `ElementField` et `sum_to_nodes(field)` → `NodeField`
+
+{{#pyalgo element_field.cell_integral node_field.sum_to_nodes}}
 
 Deux briques par maille (Cast3M `INTG 'ELEM'` et `CHAN 'CHPO' 'SOMM'`) :
 
@@ -478,10 +493,12 @@ mettre ses résidus à une échelle comparable (l'accélération d'Anderson pond
 par `(Σ_e |Ω_e|)^{-1/2}`).
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:par_maille}}
+{{#include ../../../tests/python/test_doc_ops_champs.py:node_field-sum_to_nodes}}
 ```
 
 ### `beam_deformation(field, fespace, material)` → `ElementField`
+
+{{#pyalgo element_field.beam_deformation}}
 
 Déformations **généralisées** d'une poutre — [Bernoulli](../mecanique/bernoulli.md)
 comme [Timoshenko](../mecanique/timoshenko.md) — à partir d'un champ de
@@ -509,6 +526,8 @@ qu'on ait à lui dire laquelle. Le résultat se donne au
 
 ### `shell_deformation(field, fespace, formulation)` → `ElementField`
 
+{{#pyalgo element_field.shell_deformation}}
+
 Déformations généralisées d'une [coque](../mecanique/coques.md), depuis les six
 DDL `u_x…u_z, r_x…r_z`. `formulation` vaut `"thick"` ou
 `"kirchhoff"` : les lignes de membrane, de vrillage et de cisaillement sont
@@ -530,6 +549,8 @@ bloquer, lue de l'autre côté. L'échantillonner ailleurs rapporterait une
 déformation que l'élément ne porte pas.
 
 ## Le `B` du modèle : `strain(model, solution, materials)` → `ElementField`
+
+{{#pyalgo element_field.strain}}
 
 Les producteurs ci-dessus connaissent un espace EF, pas une loi. `strain` est
 leur pendant au niveau du **modèle** : il demande à chaque loi quel producteur
@@ -604,36 +625,25 @@ gradient thermique en est un abus assumé, comme les `internal_forces` d'un
 problème thermique.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:strain_modele}}
+{{#include ../../../tests/python/test_doc_ops_champs.py:element_field-strain}}
 ```
 
 ## Maths élément par élément
 
-Onze fonctions appliquent une fonction scalaire à **chaque valeur** d'un champ
-et renvoient un **nouveau** champ du même type (style numpy). Elles acceptent
-indifféremment les quatre saveurs de champ — `NodeField`, `SubNodeField`,
-`ElementField`, `SubElementField` — et dispatchent par type.
-
-| Python | Effet |
-|---|---|
-| `abs(field)` | valeur absolue |
-| `sqrt(field)` | racine carrée (`nan` pour les négatifs) |
-| `exp(field)` | exponentielle `eˣ` |
-| `log(field)` | logarithme népérien (`-inf`/`nan` pour ≤ 0) |
-| `log10(field)` | logarithme base 10 |
-| `cos(field)` / `sin(field)` / `tan(field)` | trigonométrie (radians) |
-| `sinh(field)` / `cosh(field)` / `tanh(field)` | trigonométrie hyperbolique |
-
-Les résultats sont **non bornés**, comme en numpy : aucune protection sur le
-domaine (`log` de ≤ 0 donne `-inf`/`nan`, `sqrt` d'un négatif donne `nan`). Ces
-fonctions se combinent à l'arithmétique scalaire des champs (`f + s`, `f * s`,
-cf. [Champ](../field.md)) pour bâtir des expressions par composante.
+Onze fonctions de [`pyrucast.field`](../reference/field.md) (`abs`, `sqrt`,
+`exp`, `log`, `log10`, `cos`, `sin`, `tan`, `sinh`, `cosh`, `tanh`) appliquent
+une fonction scalaire à **chaque valeur** d'un champ et renvoient un **nouveau**
+champ du même type, comme numpy, sans protection sur le domaine. Elles se
+combinent à l'arithmétique scalaire des champs (`f + s`, `f * s`, cf.
+[Champ](../field.md)) pour bâtir des expressions par composante.
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_champs.py:maths}}
 ```
 
 ## Réduction
+
+{{#pyalgo measure.xty measure.integral measure.xtx}}
 
 Deux produits scalaires, à ne pas confondre — ils diffèrent par **ce qui est
 réduit** et donc par le **type du résultat** :
@@ -657,22 +667,17 @@ que plusieurs zones portent compte une fois dans `xty`.
 
 ### `xty(x, y)` → `float`
 
-Produit scalaire **global** des deux champs entiers :
+Produit scalaire **global** des deux champs entiers
+([`measure.xty`](../reference/measure.md#measure-xty)) :
 
 \\[
 x \cdot y = \sum_i \sum_c x_{i,c}\\, y_{i,c},
 \\]
 
 la somme parcourant **toutes** les valeurs, un nœud que plusieurs zones portent
-compté une fois. Le résultat est un unique `float` :
-le produit scalaire qui sert au calcul d'énergie (`F·u`), aux normes de résidu,
-etc. L'addition flottante n'étant pas associative, le total dépend du nombre de
-threads jusqu'au dernier ULP — comme le solveur, ce n'est pas reproductible
-bit à bit.
-
-```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:xty}}
-```
+compté une fois. L'addition flottante n'étant pas associative, le total dépend
+du nombre de threads jusqu'au dernier ULP — comme le solveur, ce n'est pas
+reproductible bit à bit.
 
 ### `psca(x, y)` → champ (même saveur que les entrées)
 
@@ -683,36 +688,23 @@ Produit scalaire **nœud par nœud** (ou point par point) — réduction sur les
 p_i = \sum_c x_{i,c}\\, y_{i,c}.
 \\]
 
-Le résultat est un nouveau champ de la même saveur que les entrées, portant une
-seule composante `"psca"` : la valeur du produit scalaire à chaque nœud. Chaque
-sortie est écrite une fois (par nœud) ⇒ indépendant du nombre de threads.
-
-```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:psca}}
-```
+Le résultat porte une seule composante `"psca"` (voir
+[`field.psca`](../reference/field.md#field-psca)). Chaque sortie est écrite une
+fois (par nœud) ⇒ indépendant du nombre de threads.
 
 ### `integral(field, component, fespace=None)` → `float`
 
-Intègre un champ sur son support par la **quadrature éléments finis**,
-`∫_Ω f dΩ` — le total d'une composante (p.ex. la **résultante** d'une *densité*
-de force distribuée) :
+Intègre un champ sur son support par la **quadrature éléments finis**
+([`measure.integral`](../reference/measure.md#measure-integral)) :
 
 \\[
 \int_\Omega f \\, d\Omega \\;=\\; \sum_{\text{cell}} \sum_g f(\text{cell}, g)\\, |J|_g\\, w_g .
 \\]
 
-- sur un **`NodeField`** : les valeurs nodales sont relevées aux points de Gauss
-  par les fonctions de forme, `∫ Σ_i f_i N_i dΩ` — `fespace` est **requis** ;
-- sur un **`ElementField`** : les valeurs (déjà aux points de Gauss) sont
-  intégrées directement — `fespace` est ignoré.
-
-Comme `xty`, la somme flottante dépend du nombre de threads jusqu'au dernier ULP.
-En interne, la réduction parallèle sur les cellules passe par le driver
-`kernel::reduce_cells`.
-
-```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:integral}}
-```
+Un `NodeField` est d'abord relevé aux points de Gauss par les fonctions de
+forme ; un `ElementField` y est déjà. Comme `xty`, la somme flottante dépend du
+nombre de threads jusqu'au dernier ULP. En interne, la réduction parallèle sur
+les cellules passe par le driver `kernel::reduce_cells`.
 
 ### Somme et `xtx`
 
@@ -742,11 +734,8 @@ grandeur physique — il faut alors nommer la composante. Pour la liste des
 extremums composante par composante, une compréhension suffit :
 `{c: f.min(c) for c in f.components()}`.
 
-Par défaut `xtx` somme **toutes** les composantes. En passant `components`, on
-restreint la somme à celles-là (les autres sont ignorées) — utile pour mesurer
-la norme d'un résidu sur un sous-jeu de degrés de liberté. Une composante
-absente d'une zone y est simplement ignorée ; l'appel n'échoue que si **aucune**
-zone ne porte l'une des composantes demandées.
+Pour `xtx` et ses arguments, voir
+[`measure.xtx`](../reference/measure.md#measure-xtx).
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_champs.py:sommes}}

@@ -14,7 +14,7 @@ donc exactement une **liste de nœuds**, et c'est elle qui sert de support aux
 [champs aux nœuds](node-field.md).
 
 Cette page décrit l'**objet** maillage. Pour **construire** un maillage, on
-passe en général par les [opérateurs de maillage](operateurs/maillage.md)
+passe en général par les [opérateurs de maillage](algorithmes/maillage.md)
 (`line`, `extrude`, `pave_surface`…, cf. [Mailler une géométrie](mailler.md)) ;
 la construction à la main, maille par maille, sert surtout aux petits cas et
 aux tests.
@@ -140,7 +140,7 @@ un nouveau nuage.
 Pour repartir d'une zone scellée, on en prend une **copie** :
 `mesh.duplicate()` rend un maillage neuf, non scellé, de même connectivité,
 sur les **mêmes** nœuds (seules leurs références augmentent). L'opérateur
-[`pyrucast.mesh.copy(mesh, new_nodes=…)`](operateurs/maillage.md#copie-sur-place--copy)
+[`pyrucast.mesh.copy(mesh, new_nodes=…)`](algorithmes/maillage-copies.md#copie-sur-place--copy)
 fait de même, avec en plus le choix de créer des nœuds neufs aux mêmes
 positions.
 

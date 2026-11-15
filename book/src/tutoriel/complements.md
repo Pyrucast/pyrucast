@@ -29,8 +29,8 @@ sur un `Coords.axisymmetric()`, le plan méridien d'un corps de révolution :
 voir [Coordonnées](../coords.md#repère-de-révolution).
 
 Pour la matrice de masse cohérente et la rigidité géométrique (flambage
-linéarisé), voir [Assemblage par `MatrixKind`](../operateurs/assemblage.md)
-— `pyrucast.matrix.mass`/`lump`/`geometric`/`tangent`.
+linéarisé), voir [`pyrucast.matrix`](../reference/matrix.md) :
+`mass`, `lump`, `geometric`, `tangent`.
 
 ## Mailler en volume
 

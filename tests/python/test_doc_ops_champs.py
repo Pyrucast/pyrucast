@@ -53,13 +53,13 @@ temperature = _champ_nodal(
 )
 sigma = pyrucast.ElementField(fes, ["vm"])
 sigma[0].set_uniform("vm", 300e6)
-# ANCHOR: select
+# ANCHOR: mesh-select
 # Nodes whose temperature lies between 20 and 80 °C (inclusive bounds).
 chauds = pyrucast.mesh.select(temperature, ge=20.0, le=80.0)
 
-# Cellules dont la contrainte de von Mises dépasse un seuil (borne basse seule).
+# Cells whose von Mises stress exceeds a threshold (lower bound alone).
 critiques = pyrucast.mesh.select(sigma, ge=250e6, components=["vm"])
-# ANCHOR_END: select
+# ANCHOR_END: mesh-select
 assert chauds.cell_count == 3  # 50, 30, 70
 assert critiques.cell_count == 2
 
@@ -140,7 +140,7 @@ temperature = _champ_nodal(
 )
 signal = _champ_nodal(mesh, n, ["s"], [[-1.0], [2.0], [-3.0], [4.0], [-5.0], [6.0]])
 # ANCHOR: maths
-# Atténuation exponentielle d'un champ de température.
+# Exponential attenuation of a temperature field.
 attenue = pyrucast.field.exp(temperature * -0.1)
 
 # Magnitude of a field (combined with scalar field arithmetic).
@@ -158,21 +158,21 @@ _, mesh, _, n = _plaque()
 support = pyrucast.mesh.poi1_from_nodes(n)
 forces = _champ_nodal(mesh, n, ["f_x", "f_y"], [[1.0, 2.0]] * 6, support)
 deplacements = _champ_nodal(mesh, n, ["f_x", "f_y"], [[0.5, 0.5]] * 6, support)
-# ANCHOR: xty
+# ANCHOR: measure-xty
 # External strain energy: work of the nodal forces in the displacement field
 # (same components, same mesh).
 energie = pyrucast.measure.xty(forces, deplacements)
-# ANCHOR_END: xty
+# ANCHOR_END: measure-xty
 assert energie == 6 * (1.0 * 0.5 + 2.0 * 0.5)
 
 # ── psca ───────────────────────────────────────────────────
 
 _, mesh, _, n = _plaque()
 vitesse = _champ_nodal(mesh, n, ["v_x", "v_y"], [[3.0, 4.0]] * 6)
-# ANCHOR: psca
+# ANCHOR: field-psca
 # Squared norm of a vector field, node by node.
 norme2 = pyrucast.field.psca(vitesse, vitesse)  # one-component field, "psca"
-# ANCHOR_END: psca
+# ANCHOR_END: field-psca
 assert norme2[0][n[0], "psca"] == 25.0
 
 # ── integral ───────────────────────────────────────────────
@@ -180,12 +180,12 @@ assert norme2[0][n[0], "psca"] == 25.0
 _, mesh, fes, n = _plaque()
 densite = _champ_nodal(mesh, n, ["f_y"], [[1.0]] * 6)
 champ_unite = _champ_nodal(mesh, n, ["u"], [[1.0]] * 6)
-# ANCHOR: integral
+# ANCHOR: measure-integral
 # Resultant of a surface force density f_y on a plate (through N_i).
 r_y = pyrucast.measure.integral(densite, "f_y", fespace=fes)
 # Measure of the domain: ∫ 1 dΩ.
 aire = pyrucast.measure.integral(champ_unite, "u", fespace=fes)
-# ANCHOR_END: integral
+# ANCHOR_END: measure-integral
 assert abs(aire - 2.0) < 1e-12
 assert abs(r_y - 2.0) < 1e-12
 
@@ -198,15 +198,17 @@ residu = _champ_nodal(mesh, n, ["f_x", "f_y"], [[3.0, 4.0]] * 6)
 # Resultant of a nodal force field, component by component.
 rx = forces.sum("f_x")
 ry = forces.sum("f_y")
-# Squared norm of the residual, for a convergence test.
-r2 = pyrucast.measure.xtx(residu)
-# The same norm, restricted to the translation components alone.
-r2_uy = pyrucast.measure.xtx(residu, components=["f_y"])
 # Extrema of a named component…
 fy_max = forces.max("f_y")
 # …or, without an argument, of the whole field, components pooled.
 partout = forces.min()
 # ANCHOR_END: sommes
+# ANCHOR: measure-xtx
+# Squared norm of the residual, for a convergence test.
+r2 = pyrucast.measure.xtx(residu)
+# The same norm, restricted to the component f_y.
+r2_uy = pyrucast.measure.xtx(residu, components=["f_y"])
+# ANCHOR_END: measure-xtx
 assert rx == 6.0 and ry == 12.0
 assert r2 == 6 * 25.0
 assert r2_uy == 6 * 16.0
@@ -218,14 +220,14 @@ assert partout == 1.0
 _, mesh, fes, n = _plaque()
 # Uniform stretch λ = 1.1 along x: u_x = 0.1·x.
 u = _champ_nodal(mesh, n, ["u_x", "u_y"], [[0.1 * p.position()[0], 0.0] for p in n])
-# ANCHOR: mesures
+# ANCHOR: element_field-deformation
 # Linearized strain, the default: eps_xx, eps_xy, eps_yy.
 eps = pyrucast.element_field.deformation(u, fes)
 # Finite measures share the call; each has its own prefix.
 E = pyrucast.element_field.deformation(u, fes, "green_lagrange")  # E_xx…
 F = pyrucast.element_field.deformation(u, fes, "F")  # F_xx, F_xy, F_yx, F_yy
 H = pyrucast.element_field.deformation(u, fes, "hencky")  # H_xx…
-# ANCHOR_END: mesures
+# ANCHOR_END: element_field-deformation
 assert abs(eps[0].value(0, 0, "eps_xx") - 0.1) < 1e-12
 assert abs(E[0].value(0, 0, "E_xx") - 0.105) < 1e-12
 assert F[0].components() == ["F_xx", "F_xy", "F_yx", "F_yy"]
@@ -241,12 +243,12 @@ materiaux = pyrucast.element_field.material_field(
 )
 dilatation = pyrucast.ElementField(fes, ["eps_xx", "eps_xy", "eps_yy"])
 dilatation[0].set_uniform("eps_xx", 1e-3)
-# ANCHOR: elastique
+# ANCHOR: element_field-elastic_stress
 # The stress an imposed strain would cause if nothing yielded: D:ε.
 sigma = pyrucast.element_field.elastic_stress(plasticite, dilatation, materiaux)
 # And back: the elastic strain carrying a stress, D⁻¹:σ.
 retour = pyrucast.element_field.elastic_strain(plasticite, sigma, materiaux)
-# ANCHOR_END: elastique
+# ANCHOR_END: element_field-elastic_stress
 assert abs(sigma[0].value(0, 0, "sigma_xx") - 2e8) < 1e-3  # far beyond sigma_y
 assert abs(retour[0].value(0, 0, "eps_xx") - 1e-3) < 1e-15
 
@@ -255,7 +257,7 @@ assert abs(retour[0].value(0, 0, "eps_xx") - 1e-3) < 1e-15
 contraintes = pyrucast.ElementField(fes, ["sigma_xx", "sigma_yy", "sigma_xy"])
 contraintes[0].set_uniform("sigma_xx", 120e6)
 contraintes[0].set_uniform("sigma_xy", 40e6)
-# ANCHOR: von_mises
+# ANCHOR: element_field-von_mises
 # von Mises at each Gauss point, from the stresses the law writes; the model
 # says which ones to read (here a plane stress: σzz = 0).
 vm = pyrucast.element_field.von_mises(plasticite, contraintes)
@@ -263,7 +265,7 @@ vm = pyrucast.element_field.von_mises(plasticite, contraintes)
 hill = pyrucast.element_field.von_mises(
     plasticite, contraintes, [0.6, 0.4, 0.5, 1.5, 1.5, 2.0]
 )
-# ANCHOR_END: von_mises
+# ANCHOR_END: element_field-von_mises
 # √(σxx² + 3 σxy²) in plane stress.
 assert abs(vm[0].value(0, 0, "von_mises") - math.sqrt(120e6**2 + 3 * 40e6**2)) < 1e-3
 # G σxx² + H σxx² + 2 N σxy² with σyy = σzz = 0.
@@ -275,13 +277,13 @@ assert abs(hill[0].value(0, 0, "von_mises") - attendu) < 1e-3
 _, mesh, fes, n = _plaque()
 un = pyrucast.ElementField(fes, ["un"])
 un[0].set_uniform("un", 1.0)
-# ANCHOR: par_maille
+# ANCHOR: node_field-sum_to_nodes
 # One point per cell, at its centroid: where per-cell values live.
 centres = pyrucast.FiniteElementSpace(mesh, quadrature="REDUCED")
 aires = pyrucast.element_field.cell_integral(un, centres)  # ∫ 1 = the cell's area
 # Each node receives the sum over the cells around it.
 volumes = pyrucast.node_field.sum_to_nodes(aires)
-# ANCHOR_END: par_maille
+# ANCHOR_END: node_field-sum_to_nodes
 assert abs(aires[0].value(1, 0, "un") - 1.0) < 1e-12
 assert abs(volumes.value(n[1], "un") - 2.0) < 1e-12  # shared by both cells
 assert abs(volumes.value(n[0], "un") - 1.0) < 1e-12
@@ -305,14 +307,14 @@ solution = _champ_nodal(
         for x in (0.0, 1.0, 2.0)
     ],
 )
-# ANCHOR: strain_modele
+# ANCHOR: element_field-strain
 # B: each law gets its own input from one solution — a strain for the solid,
 # a temperature gradient for conduction.
 eps = couple.strain(solution, materiaux)
-repos = couple.initial_state(materiaux)  # l'état de départ des deux lois
+repos = couple.initial_state(materiaux)  # the starting state of both laws
 etat = couple.integrate_behavior(eps, materiaux, repos)  # the laws
 f_int = couple.internal_forces(etat, solution, materiaux)  # Bᵀ: back to the nodes
-# ANCHOR_END: strain_modele
+# ANCHOR_END: element_field-strain
 assert [z.components() for z in eps] == [
     ["eps_xx", "eps_xy", "eps_yy"],
     ["grad_T_x", "grad_T_y"],
@@ -333,17 +335,16 @@ temperature = _champ_nodal(
     mesh, n, ["T"], [[t] for t in (10.0, 50.0, 90.0, 30.0, 70.0, 100.0)]
 )
 
-# ANCHOR: projection
-# La température de la plaque portée aux nœuds d'un autre maillage — ici d'un
-# autre Coords, comme une pièce remaillée — par les fonctions de forme des
-# mailles de la plaque. Un nœud hors de la plaque reçoit 0 : on projette aussi
-# un patch sur un maillage plus grand.
+# ANCHOR: node_field-project
+# The temperature of the plate carried to the nodes of another mesh — here in
+# another Coords, as a remeshed part — by the shape functions of the plate's
+# cells. A node outside the plate gets 0: a patch projects onto a larger mesh.
 autre = pyrucast.Coords(2)
 cibles = [autre.add_node(p) for p in ([0.5, 0.5], [1.5, 0.25], [3.0, 0.5])]
 nuage = pyrucast.mesh.poi1_from_nodes(cibles)
 portee = pyrucast.node_field.project(temperature, mesh, nuage)  # tol=1e-6
-# La même, en méthode : temperature.project(mesh, nuage)
-# ANCHOR_END: projection
+# The same, as a method: temperature.project(mesh, nuage)
+# ANCHOR_END: node_field-project
 # Bilinear in each cell: the middle of the first is the mean of its corners,
 # (10 + 50 + 70 + 30) / 4; in the second, 70 + ¼ (85 − 70) at y = ¼.
 assert abs(portee.value(cibles[0], "T") - 40.0) < 1e-12

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Documentation guards — six checks, no compilation.
+"""Documentation guards — nine checks, no compilation.
 
 Called by `script/check_doc.{sh,ps1}`, after `cargo doc` and `mdbook build`
 (whose outputs it reads). The rules it enforces are written in `CONVENTIONS.md`, part
@@ -29,6 +29,18 @@ Called by `script/check_doc.{sh,ps1}`, after `cargo doc` and `mdbook build`
                   heading, turns a prime into a curly quote — 99 equations
                   out of 1181 were damaged in October 2026, without a word.
 
+7. `reference`  — the generated operator reference is whole: every public
+                  function is rendered once and listed once in the thematic
+                  summary, and every name a directive or an example anchor
+                  writes designates a function that exists
+                  (`script/book_pyapi.py`).
+8. `stub`       — the committed `.pyi` says what the installed module says:
+                  names, parameters, docstrings. The reference is read from
+                  the stub, so a stale stub is a stale book.
+9. `docstrings` — the writing rule of a docstring (CONVENTIONS.md): a first
+                  line that fits a row of the summary, known sections in
+                  order, every parameter cited. Ratchet, like `api-python`.
+
 Every waiver ledger carries a **reason** and its hygiene test, which fails on
 a stale entry — the pattern of
 `tests/python/test_mirror_completeness.py`, reused rather than reinvented.
@@ -37,6 +49,7 @@ a stale entry — the pattern of
     python script/doc_lint.py includes   # a single check
     python script/doc_lint.py --ratchet         # rewrites doc_coverage.txt
     python script/doc_lint.py --ratchet-python  # rewrites python_coverage.txt
+    python script/doc_lint.py --ratchet-docstrings  # rewrites docstring_debt.txt
 """
 
 from __future__ import annotations
@@ -50,11 +63,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+import book_pyapi
+
 ROOT = Path(__file__).resolve().parent.parent
 BOOK = ROOT / "book" / "src"
 BOOK_HTML = ROOT / "book" / "book"
 LEDGER = ROOT / "script" / "doc_coverage.txt"
 LEDGER_PY = ROOT / "script" / "python_coverage.txt"
+LEDGER_DOCSTRINGS = ROOT / "script" / "docstring_debt.txt"
+STUB = ROOT / "python" / "pyrucast" / "_pyrucast" / "__init__.pyi"
 EXEMPLES_PY = ROOT / "tests" / "python"
 
 # ── Registres ───────────────────────────────────────────────────────────────
@@ -951,6 +968,245 @@ def check_equations():
     return erreurs
 
 
+# ── 7. The generated operator reference is whole ────────────────────────────
+
+
+def check_reference():
+    """What `script/book_pyapi.py` cannot see while expanding one page: a
+    function no page renders, one the thematic summary forgot or lists twice,
+    an example anchor named after a function that is gone.
+
+    And what nothing else reports: mdBook *skips* a preprocessor whose
+    `supports` call fails — a `python` that is a Python 2, say — and builds
+    the book with its directives left as text, exit code 0. So the built
+    pages are read back: each one holds the entries of its module."""
+    erreurs = book_pyapi.audit(ROOT)
+    api = book_pyapi.load_api(ROOT)
+    layout = book_pyapi.read_layout(book_pyapi.pages_on_disk(ROOT))
+    for module, (_, names) in api.modules.items():
+        for page in layout.homes.get(module, []):
+            construite = (BOOK_HTML / page).with_suffix(".html")
+            if not construite.exists():
+                erreurs.append(f"{page}: HTML missing — run `mdbook build book`")
+                continue
+            recu = construite.read_text(encoding="utf-8")
+            ancres = [f"{module}-{n}" for n in names]
+            absentes = [a for a in ancres if f'id="{a}"' not in recu]
+            if absentes:
+                erreurs.append(
+                    f"{page}: the built page lacks {len(absentes)} of its "
+                    f"{len(ancres)} entries (`{absentes[0]}`…) — `mdbook build "
+                    "book` skipped the `pyapi` preprocessor (is `python` a "
+                    "Python 3?) or the book is stale"
+                )
+    return erreurs
+
+
+# ── 8. The committed stub says what the installed module says ───────────────
+
+
+def parameter_names(node):
+    args = node.args
+    names = [a.arg for a in args.posonlyargs + args.args + args.kwonlyargs]
+    return [n for n in names if n not in ("self", "cls")]
+
+
+def check_stub():
+    """The stub is generated (`cargo run --bin stub_gen --features stub-gen`)
+    and committed; the book's reference is read from it. Nothing else notices
+    a binding whose `///` changed without the stub being regenerated.
+
+    Compared, entry by entry: that it exists on both sides, its parameter
+    names in order, its docstring. Left out: the dunder methods, whose
+    docstring Python supplies itself, and the property setters, whose
+    docstring no runtime object carries.
+    """
+    try:
+        import pyrucast._pyrucast as live
+    except ImportError:
+        return ["module `pyrucast` not installed — run `maturin develop` first"]
+
+    errors = []
+
+    def compare(path, node, obj, with_parameters=True):
+        if (ast.get_docstring(node) or "") != (inspect.getdoc(obj) or ""):
+            errors.append(f"{path}: docstring differs between stub and module")
+        if not with_parameters:
+            return
+        try:
+            names = [
+                n for n in inspect.signature(obj).parameters if n not in ("self", "cls")
+            ]
+        except (TypeError, ValueError):
+            errors.append(f"{path}: the installed module exposes no signature")
+            return
+        if names != parameter_names(node):
+            errors.append(
+                f"{path}: parameters differ — stub ({', '.join(parameter_names(node))}), "
+                f"module ({', '.join(names)})"
+            )
+
+    tree = ast.parse(STUB.read_text(encoding="utf-8"))
+    functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+    classes = {n.name: n for n in tree.body if isinstance(n, ast.ClassDef)}
+    public = [n for n in dir(live) if not n.startswith("_")]
+    live_classes = {n for n in public if inspect.isclass(getattr(live, n))}
+    live_functions = {
+        n for n in public if n not in live_classes and callable(getattr(live, n))
+    }
+    for name in sorted(set(functions) ^ live_functions):
+        side = "stub" if name in functions else "module"
+        errors.append(f"{name}: function present in the {side} only")
+    for name in sorted(set(classes) ^ live_classes):
+        side = "stub" if name in classes else "module"
+        errors.append(f"{name}: class present in the {side} only")
+
+    for name in sorted(set(functions) & live_functions):
+        compare(name, functions[name], getattr(live, name))
+    for name in sorted(set(classes) & live_classes):
+        cls = getattr(live, name)
+        members = {}
+        for node in classes[name].body:
+            if not isinstance(node, ast.FunctionDef) or node.name.startswith("_"):
+                continue
+            decorators = [ast.unparse(d) for d in node.decorator_list]
+            if any(d.endswith(".setter") for d in decorators):
+                continue
+            members[node.name] = (node, "property" in decorators)
+        live_members = {
+            n
+            for n in dir(cls)
+            if not n.startswith("_")
+            and (
+                callable(getattr(cls, n, None))
+                or inspect.isdatadescriptor(inspect.getattr_static(cls, n))
+            )
+        }
+        for member in sorted(set(members) ^ live_members):
+            side = "stub" if member in members else "module"
+            errors.append(f"{name}.{member}: present in the {side} only")
+        for member in sorted(set(members) & live_members):
+            node, is_property = members[member]
+            compare(
+                f"{name}.{member}",
+                node,
+                inspect.getattr_static(cls, member)
+                if is_property
+                else getattr(cls, member),
+                with_parameters=not is_property,
+            )
+    if errors:
+        # Carried by the last error rather than counted as one more.
+        errors[-1] += (
+            "\n    → regenerate the stub (`cargo run --bin stub_gen --features "
+            "stub-gen`) or rebuild the module (`script/dev.sh`), whichever is stale"
+        )
+    return errors
+
+
+# ── 9. The writing rule of a docstring ──────────────────────────────────────
+
+HEADING = re.compile(r"^(#+)\s*(.*?)\s*$")
+INLINE_CODE = re.compile(r"`+([^`\n]+)`+")
+
+
+def docstring_defects(entry):
+    """Where the docstring of `entry` departs from the rule of CONVENTIONS.md,
+    part "Docstrings of the Python API". The first line is a row of the
+    summary table, hence its length; the sections are the ones the reference
+    knows how to lay out, hence the closed list."""
+    if not entry.doc:
+        return ["no docstring"]
+    defects = []
+    first = entry.doc.partition("\n\n")[0]
+    if "\n" in first:
+        defects.append("first paragraph spans several lines — one sentence, alone")
+    elif len(first) > book_pyapi.SUMMARY_WIDTH:
+        defects.append(
+            f"first line is {len(first)} characters long "
+            f"(at most {book_pyapi.SUMMARY_WIDTH})"
+        )
+    if not first.rstrip().endswith("."):
+        defects.append("first paragraph does not end with a period")
+
+    sections, fenced, prose = [], False, []
+    for line in entry.doc.split("\n"):
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        prose.append(line)
+        heading = HEADING.match(line)
+        if heading:
+            level, title = heading.groups()
+            if level != "#" or title not in book_pyapi.SECTIONS:
+                defects.append(
+                    f"heading `{line.strip()}` — only "
+                    + ", ".join(f"`# {s}`" for s in book_pyapi.SECTIONS)
+                )
+            else:
+                sections.append(title)
+    order = [s for s in book_pyapi.SECTIONS if s in sections]
+    if sections != order:
+        defects.append(
+            f"sections out of order or repeated: {', '.join(sections)} "
+            f"— expected {', '.join(order)}"
+        )
+
+    text = "\n".join(prose)
+    cited = " ".join(INLINE_CODE.findall(text))
+    missing = [
+        p for p in entry.params if not re.search(rf"(?<![\w.]){re.escape(p)}\b", cited)
+    ]
+    if missing:
+        defects.append(
+            "parameter(s) never cited between backticks: " + ", ".join(missing)
+        )
+    if "$" in text or re.search(r"\\[(\[]", text):
+        defects.append("TeX — write the formula in Unicode, between backticks")
+    if "![" in text:
+        defects.append("figure — a docstring is read in a terminal")
+    return defects
+
+
+def check_docstrings(ratchet=False):
+    """Ratchet on the writing rule: a function off the ledger obeys it, and a
+    function on the ledger that now obeys it must leave the ledger."""
+    api = book_pyapi.load_api(ROOT)
+    defects = {key: docstring_defects(e) for key, e in api.entries.items()}
+    debtors = {key for key, found in defects.items() if found}
+
+    if ratchet:
+        LEDGER_DOCSTRINGS.write_text(
+            "# Public functions whose docstring does not follow the writing rule.\n"
+            "# Ratchet ledger: it can only SHRINK.\n"
+            "# Regenerate: python script/doc_lint.py --ratchet-docstrings\n"
+            + "".join(f"{n}\n" for n in sorted(debtors)),
+            encoding="utf-8",
+        )
+        return []
+
+    known = set()
+    if LEDGER_DOCSTRINGS.exists():
+        known = {
+            line.strip()
+            for line in LEDGER_DOCSTRINGS.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        }
+
+    errors = []
+    for key in sorted(debtors - known):
+        errors.extend(f"{key}: {d}" for d in defects[key])
+    for key in sorted(known - debtors):
+        what = "follows the rule" if key in defects else "is no public function"
+        errors.append(
+            f"{key}: {what} — remove it from script/{LEDGER_DOCSTRINGS.name} "
+            "(the ledger must keep only the real debt)."
+        )
+    return errors
+
+
 # ── Point d'entrée ──────────────────────────────────────────────────────────
 
 VERIFICATIONS = {
@@ -960,20 +1216,25 @@ VERIFICATIONS = {
     "doctests": ("doctest coverage ratchet", check_doctests),
     "api-python": ("Python API citation ratchet", check_api_python),
     "equations": ("equations reach MathJax intact", check_equations),
+    "reference": ("generated operator reference is whole", check_reference),
+    "stub": ("committed stub matches the installed module", check_stub),
+    "docstrings": ("docstring writing rule ratchet", check_docstrings),
+}
+
+RATCHETS = {
+    "--ratchet": check_doctests,
+    "--ratchet-python": check_api_python,
+    "--ratchet-docstrings": check_docstrings,
 }
 
 
 def main(argv):
-    if "--ratchet-python" in argv:
-        erreurs = check_api_python(ratchet=True)
-        for e in erreurs:
-            print(f"    {e}", file=sys.stderr)
-        return 1 if erreurs else 0
-    if "--ratchet" in argv:
-        erreurs = check_doctests(ratchet=True)
-        for e in erreurs:
-            print(f"    {e}", file=sys.stderr)
-        return 1 if erreurs else 0
+    for drapeau, fonction in RATCHETS.items():
+        if drapeau in argv:
+            erreurs = fonction(ratchet=True)
+            for e in erreurs:
+                print(f"    {e}", file=sys.stderr)
+            return 1 if erreurs else 0
     demandees = [a for a in argv if not a.startswith("-")] or list(VERIFICATIONS)
     inconnues = [d for d in demandees if d not in VERIFICATIONS]
     if inconnues:

@@ -1,4 +1,4 @@
-"""Résolution de systèmes linéaires — miroir de ``ops::solver`` (Rust).
+"""Solving linear systems — mirror of ``ops::solver`` (Rust).
 
 Solves ``A · x = b`` from the matrix alone: its relation rows, their
 coefficients and their sense come with it. One entry, ``solve``: the

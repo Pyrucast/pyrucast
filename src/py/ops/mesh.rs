@@ -21,7 +21,15 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyrucast_macros::py_op;
 
-/// Build a points (POI1) mesh holding every live node of `coords`.
+/// A POI1 mesh holding every live node of `coords`.
+///
+/// # Parameters
+///
+/// - `coords`: the coordinates whose nodes to take.
+///
+/// # Returns
+///
+/// A POI1 `Mesh` of one zone.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn from_live_nodes(coords: PyRef<PyCoords>) -> PyResult<PyMesh> {
@@ -29,10 +37,22 @@ pub fn from_live_nodes(coords: PyRef<PyCoords>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: mesh })
 }
 
-/// Build a points (POI1) mesh with one point per node in `nodes`.
+/// A POI1 mesh with one point per node of `nodes`, in their order.
 ///
-/// The `Coords` comes from the nodes themselves — every `Node` carries its
-/// own — so no `Coords` argument is needed. Errors if `nodes` is empty.
+/// The `Coords` comes from the nodes themselves — every `Node` carries its own —,
+/// so no `Coords` argument is needed.
+///
+/// # Parameters
+///
+/// - `nodes`: the nodes, all of one `Coords`.
+///
+/// # Returns
+///
+/// A POI1 `Mesh` of one zone.
+///
+/// # Raises
+///
+/// `RuntimeError` if `nodes` is empty.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn poi1_from_nodes(nodes: Vec<PyRef<PyNode>>) -> PyResult<PyMesh> {
@@ -41,11 +61,16 @@ pub fn poi1_from_nodes(nodes: Vec<PyRef<PyNode>>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: mesh })
 }
 
-/// Convert a mesh to POI1, submesh by submesh.
+/// The distinct nodes of `mesh`, as a POI1 mesh, submesh by submesh.
 ///
-/// Returns a new mesh with the same number of submeshes; each output
-/// submesh is a POI1 submesh holding the de-duplicated nodes of the
-/// corresponding input submesh, in order of first appearance.
+/// # Parameters
+///
+/// - `mesh`: the mesh whose nodes to take.
+///
+/// # Returns
+///
+/// A POI1 `Mesh` with one zone per submesh of `mesh`, holding its distinct nodes
+/// in the order they first appear.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -54,14 +79,19 @@ pub fn to_poi1(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Build a POI1 mesh of per-element centroids (centres of gravity), submesh
-/// by submesh.
+/// A POI1 mesh of one fresh node at the centroid of each cell of `mesh`.
 ///
-/// Returns a new mesh with the same number of submeshes; each output submesh
-/// is a POI1 submesh with one **fresh** node per element of the corresponding
-/// input submesh, placed at the element's centroid. A POI1 input is therefore
-/// copied to colocated fresh nodes — handy to mint Lagrange-multiplier support
-/// nodes from a set of constrained points.
+/// A POI1 input is therefore copied to fresh nodes at the same places — handy to
+/// create the support nodes of Lagrange multipliers from a set of constrained
+/// points.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh whose cells to take.
+///
+/// # Returns
+///
+/// A POI1 `Mesh` with one zone per submesh of `mesh`, one fresh node per cell.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -70,15 +100,25 @@ pub fn barycenter(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Keep the elements of `mesh` resting on the nodes of `points`
-/// (Cast3m `ELEM … APPUYE`).
+/// Keep the cells of `mesh` resting on the nodes of `points`.
 ///
-/// Only the node set referenced by `points` matters (typically a POI1
-/// points mesh). With `strict=True` a cell is kept when **all** its nodes
-/// are in the set (`APPUYE STRICTEMENT`); with `strict=False` when **at
-/// least one** is (`APPUYE`). The result mirrors `mesh` submesh by submesh
-/// (same types, possibly-empty zones). Both meshes must share the same
-/// `Coords`.
+/// Only the set of nodes `points` references matters, typically a POI1 mesh.
+///
+/// # Parameters
+///
+/// - `mesh`: the cells to filter.
+/// - `points`: the nodes, on the same `Coords` as `mesh`.
+/// - `strict`: `True` keeps a cell when **all** its nodes are in the set;
+///   `False` when **at least one** is.
+///
+/// # Returns
+///
+/// A `Mesh` mirroring `mesh` submesh by submesh — same types, possibly empty
+/// zones.
+///
+/// # Raises
+///
+/// `RuntimeError` if `mesh` and `points` are not attached to the same `Coords`.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -97,10 +137,27 @@ pub fn elements_on(mesh: PyRef<PyMesh>, points: PyRef<PyMesh>, strict: bool) -> 
 // diagonal. The odd one out is the *nearest* node, which returns a single
 // node and lives on the class: `mesh.nearest_node(point)`.
 
-/// Nodes **inside** the sphere of centre `center` and radius `radius`.
+/// Nodes inside the sphere of centre `center` and radius `radius`.
 ///
 /// Keeps the nodes at a distance `≤ radius + tol` from `center`. In 2-D the
-/// sphere is a disc — `center` just has to match the mesh dimension.
+/// sphere is a disc.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh whose nodes to test.
+/// - `center`: the centre, with the dimension of the mesh.
+/// - `radius`: the radius, `≥ 0`.
+/// - `tol`: the precision of the test, a distance to the surface of the region;
+///   `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+///
+/// # Returns
+///
+/// A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+/// nodes kept.
+///
+/// # Raises
+///
+/// `RuntimeError` if a point does not have the dimension of the mesh, if `radius` is negative, or if `tol` is negative.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -115,11 +172,27 @@ pub fn points_in_sphere(
     Ok(PyMesh { inner: result })
 }
 
-/// Nodes **on** the sphere of centre `center` and radius `radius`
-/// (Cast3m `POIN … SPHE`).
+/// Nodes on the sphere of centre `center` and radius `radius`.
 ///
 /// Keeps the nodes whose distance to `center` is within `tol` of `radius`, on
 /// either side. In 2-D this selects a circle.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh whose nodes to test.
+/// - `center`: the centre, with the dimension of the mesh.
+/// - `radius`: the radius, `≥ 0`.
+/// - `tol`: the precision of the test, a distance to the surface of the region;
+///   `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+///
+/// # Returns
+///
+/// A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+/// nodes kept.
+///
+/// # Raises
+///
+/// `RuntimeError` if a point does not have the dimension of the mesh, if `radius` is negative, or if `tol` is negative.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -134,12 +207,27 @@ pub fn points_on_sphere(
     Ok(PyMesh { inner: result })
 }
 
-/// Nodes **on** the plane through `origin` with normal `normal`
-/// (Cast3m `POIN … PLAN`).
+/// Nodes on the plane through `origin` with normal `normal`.
 ///
-/// Keeps the nodes within `tol` of the plane — the usual way to grab a
-/// boundary face of a box mesh. `normal` need not be normalized; in 2-D the
-/// plane is a line.
+/// Keeps the nodes within `tol` of the plane — the usual way to grab a boundary
+/// face of a box mesh. In 2-D the plane is a line.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh whose nodes to test.
+/// - `origin`: a point of the plane.
+/// - `normal`: the normal of the plane, not necessarily of unit length.
+/// - `tol`: the precision of the test, a distance to the surface of the region;
+///   `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+///
+/// # Returns
+///
+/// A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+/// nodes kept.
+///
+/// # Raises
+///
+/// `RuntimeError` if a point does not have the dimension of the mesh, if `normal` is the zero vector, or if `tol` is negative.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -154,11 +242,27 @@ pub fn points_on_plane(
     Ok(PyMesh { inner: result })
 }
 
-/// Nodes **below** the plane through `origin` with normal `normal` — the
-/// half-space the normal points away from, plane included.
+/// Nodes below the plane through `origin`: the side `normal` points away from.
 ///
-/// There is no `points_above_plane`: flip the normal and this is the other
-/// half-space.
+/// The half-space includes the plane. There is no `points_above_plane`: flip the
+/// normal and this is the other half-space.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh whose nodes to test.
+/// - `origin`: a point of the plane.
+/// - `normal`: the normal of the plane, pointing to the side left out.
+/// - `tol`: the precision of the test, a distance to the surface of the region;
+///   `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+///
+/// # Returns
+///
+/// A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+/// nodes kept.
+///
+/// # Raises
+///
+/// `RuntimeError` if a point does not have the dimension of the mesh, if `normal` is the zero vector, or if `tol` is negative.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -173,12 +277,27 @@ pub fn points_below_plane(
     Ok(PyMesh { inner: result })
 }
 
-/// Nodes **on** the infinite line through `a` and `b`
-/// (Cast3m `POIN … DROIT`).
+/// Nodes on the infinite line through `a` and `b`.
 ///
-/// Keeps the nodes at a distance `≤ tol` from the line, with no bound along
-/// it — use `points_in_cylinder` with a small radius for a selection clipped
-/// to the `a → b` segment.
+/// Keeps the nodes at a distance `≤ tol` from the line, with no bound along it —
+/// `pyrucast.mesh.points_in_cylinder` with a small radius gives a selection
+/// clipped to the segment `a → b`.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh whose nodes to test.
+/// - `a`, `b`: two distinct points of the line.
+/// - `tol`: the precision of the test, a distance to the surface of the region;
+///   `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+///
+/// # Returns
+///
+/// A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+/// nodes kept.
+///
+/// # Raises
+///
+/// `RuntimeError` if a point does not have the dimension of the mesh, if `a` and `b` coincide, or if `tol` is negative.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -193,11 +312,27 @@ pub fn points_on_line(
     Ok(PyMesh { inner: result })
 }
 
-/// Nodes **inside** the finite cylinder of axis `base → top` and radius
-/// `radius`.
+/// Nodes inside the finite cylinder of axis `base → top` and radius `radius`.
 ///
-/// The cylinder is capped: a node is kept when it is within `radius + tol` of
-/// the axis **and** its axial coordinate falls between the two end sections.
+/// The cylinder is capped: a node is kept when it is within `radius + tol` of the
+/// axis **and** its axial coordinate falls between the two end sections.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh whose nodes to test.
+/// - `base`, `top`: the centres of the two end sections, distinct.
+/// - `radius`: the radius, `≥ 0`.
+/// - `tol`: the precision of the test, a distance to the surface of the region;
+///   `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+///
+/// # Returns
+///
+/// A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+/// nodes kept.
+///
+/// # Raises
+///
+/// `RuntimeError` if a point does not have the dimension of the mesh, if `base` and `top` coincide, if `radius` is negative, or if `tol` is negative.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -213,11 +348,27 @@ pub fn points_in_cylinder(
     Ok(PyMesh { inner: result })
 }
 
-/// Nodes **on** the lateral surface of the finite cylinder of axis
-/// `base → top` and radius `radius` (Cast3m `POIN … CYLI`).
+/// Nodes on the lateral surface of the cylinder of axis `base → top`.
 ///
-/// The end discs are **not** part of the selection — they are flat faces, and
-/// `points_on_plane` cuts those. This is how you grab the bore of a tube.
+/// The end discs are **not** part of the selection — they are flat faces, which
+/// `pyrucast.mesh.points_on_plane` cuts. This is how you grab the bore of a tube.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh whose nodes to test.
+/// - `base`, `top`: the centres of the two end sections, distinct.
+/// - `radius`: the radius, `≥ 0`.
+/// - `tol`: the precision of the test, a distance to the surface of the region;
+///   `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+///
+/// # Returns
+///
+/// A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+/// nodes kept.
+///
+/// # Raises
+///
+/// `RuntimeError` if a point does not have the dimension of the mesh, if `base` and `top` coincide, if `radius` is negative, or if `tol` is negative.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -233,12 +384,29 @@ pub fn points_on_cylinder(
     Ok(PyMesh { inner: result })
 }
 
-/// Nodes **inside** the cone of axis `base → top`, radius `base_radius` at
-/// `base` and `top_radius` at `top`.
+/// Nodes inside the truncated cone of axis `base → top`.
 ///
-/// The shape is a truncated cone: `top_radius=0` (the default) gives a true
-/// cone whose apex is `top`, `top_radius=base_radius` a cylinder. Capped like
-/// `points_in_cylinder`.
+/// Its radius is `base_radius` at `base` and `top_radius` at `top`: the default
+/// `top_radius=0` gives a true cone whose apex is `top`, `top_radius=base_radius`
+/// a cylinder. Capped like `pyrucast.mesh.points_in_cylinder`.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh whose nodes to test.
+/// - `base`, `top`: the centres of the two end sections, distinct.
+/// - `base_radius`: the radius at `base`, `≥ 0`.
+/// - `top_radius`: the radius at `top`, `≥ 0`.
+/// - `tol`: the precision of the test, a distance to the surface of the region;
+///   `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+///
+/// # Returns
+///
+/// A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+/// nodes kept.
+///
+/// # Raises
+///
+/// `RuntimeError` if a point does not have the dimension of the mesh, if `base` and `top` coincide, if a radius is negative, or if `tol` is negative.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -256,12 +424,30 @@ pub fn points_in_cone(
     Ok(PyMesh { inner: result })
 }
 
-/// Nodes **on** the lateral surface of the cone of axis `base → top`, radius
-/// `base_radius` at `base` and `top_radius` at `top` (Cast3m `POIN … CONE`).
+/// Nodes on the lateral surface of the truncated cone of axis `base → top`.
 ///
 /// The distance to the slanted surface is the perpendicular one, so the band
-/// stays `tol` wide however steep the cone is. As for `points_on_cylinder`,
-/// the end discs are not part of the selection.
+/// stays `tol` wide however steep the cone is. As for
+/// `pyrucast.mesh.points_on_cylinder`, the end discs are not part of the
+/// selection.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh whose nodes to test.
+/// - `base`, `top`: the centres of the two end sections, distinct.
+/// - `base_radius`: the radius at `base`, `≥ 0`.
+/// - `top_radius`: the radius at `top`, `≥ 0`; `0` gives a true cone.
+/// - `tol`: the precision of the test, a distance to the surface of the region;
+///   `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+///
+/// # Returns
+///
+/// A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+/// nodes kept.
+///
+/// # Raises
+///
+/// `RuntimeError` if a point does not have the dimension of the mesh, if `base` and `top` coincide, if a radius is negative, or if `tol` is negative.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -279,12 +465,30 @@ pub fn points_on_cone(
     Ok(PyMesh { inner: result })
 }
 
-/// Nodes **inside** the torus of centre `center`, axis `axis`, major radius
-/// `major_radius` and minor radius `minor_radius`.
+/// Nodes inside the torus of centre `center` and axis `axis`, in 3-D.
 ///
 /// The section is circular: the torus is the set of points at a distance
 /// `≤ minor_radius` from the circle of radius `major_radius` drawn around
-/// `center` in the plane normal to `axis`. **3-D only.**
+/// `center` in the plane normal to `axis`.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh whose nodes to test.
+/// - `center`: the centre of the torus.
+/// - `axis`: the axis of revolution.
+/// - `major_radius`: the radius of the circle the tube follows.
+/// - `minor_radius`: the radius of the tube.
+/// - `tol`: the precision of the test, a distance to the surface of the region;
+///   `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+///
+/// # Returns
+///
+/// A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+/// nodes kept.
+///
+/// # Raises
+///
+/// `RuntimeError` if the mesh is not 3-D, if a point does not have the dimension of the mesh, if `axis` is the zero vector, if a radius is negative, or if `tol` is negative.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -308,11 +512,29 @@ pub fn points_in_torus(
     Ok(PyMesh { inner: result })
 }
 
-/// Nodes **on** the torus of centre `center`, axis `axis`, major radius
-/// `major_radius` and minor radius `minor_radius`.
+/// Nodes on the torus of centre `center` and axis `axis`, in 3-D.
 ///
-/// Keeps the nodes within `tol` of the tube's surface. The torus being
-/// closed, there is no cap to worry about here. **3-D only.**
+/// Keeps the nodes within `tol` of the tube's surface. The torus being closed,
+/// there is no cap to worry about.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh whose nodes to test.
+/// - `center`: the centre of the torus.
+/// - `axis`: the axis of revolution.
+/// - `major_radius`: the radius of the circle the tube follows.
+/// - `minor_radius`: the radius of the tube.
+/// - `tol`: the precision of the test, a distance to the surface of the region;
+///   `None` takes `1e-6 ×` the diagonal of the mesh's bounding box.
+///
+/// # Returns
+///
+/// A POI1 `Mesh` with one zone per zone of `mesh`, possibly empty, holding the
+/// nodes kept.
+///
+/// # Raises
+///
+/// `RuntimeError` if the mesh is not 3-D, if a point does not have the dimension of the mesh, if `axis` is the zero vector, if a radius is negative, or if `tol` is negative.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -336,13 +558,23 @@ pub fn points_on_torus(
     Ok(PyMesh { inner: result })
 }
 
-/// Fuse submeshes of the same element type into one, dropping duplicate cells
-/// (identical node sequences).
+/// Fuse the submeshes of `mesh` of one element type, dropping duplicate cells.
 ///
-/// Types appear in their first-seen order; the face colour of the first
-/// submesh of each type is kept. `mesh` itself is left untouched.
+/// A duplicate cell has the same node sequence as another. Types appear in the
+/// order they are first seen; the face colour of the first submesh of each type is
+/// kept.
 ///
-/// Errors if `mesh` has no submesh (no `Coords` to attach to).
+/// # Parameters
+///
+/// - `mesh`: the mesh to consolidate, left untouched.
+///
+/// # Returns
+///
+/// A new `Mesh`, one submesh per element type.
+///
+/// # Raises
+///
+/// `RuntimeError` if `mesh` has no submesh (no `Coords` to attach to).
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -353,34 +585,40 @@ pub fn consolidate(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     })
 }
 
-/// Weld together nodes closer than `tol`, redirecting the connectivity to one
-/// representative per cluster.
+/// Weld together the nodes of `mesh` closer than `tol`.
 ///
-/// Returns a new mesh mirroring `mesh` (same submeshes, types and colours)
-/// with welded-away nodes redirected to their cluster representative — the
+/// The connectivity is redirected to one representative per cluster — the
 /// smallest-id node of the cluster, which keeps its own coordinates (no
-/// averaging). Cells that collapse onto a repeated node (a degenerate segment,
-/// triangle, …) are dropped. `tol` must be ≥ 0; `tol = 0` welds only exactly
-/// coincident nodes. `mesh` itself is left untouched.
+/// averaging). A cluster is a connected component of the relation "closer than
+/// `tol`": the weld propagates from node to node, so on a chain a—b—c where a and
+/// c are further apart than `tol`, all three still end up as one — which is why a
+/// `tol` of the order of the element size collapses a whole region rather than a
+/// seam. Every call prints a one-line tally on stdout once the weld is done —
+/// nodes welded, cells dropped, tolerance used.
 ///
-/// A cluster is a connected component of the « closer than `tol` » relation:
-/// the weld propagates from node to node, so on a chain a—b—c where a and c
-/// are further apart than `tol`, all three still end up as one — which is why
-/// a `tol` of the order of the element size collapses a whole region rather
-/// than a seam.
+/// # Parameters
 ///
-/// With `in_place=True` the connectivity of `mesh`'s **own** submeshes is
-/// rewritten instead — the assumed side effect — and the very same mesh object
-/// is returned. Since the union `mesh_a | mesh_b` shares its submeshes rather
-/// than copying them, welding that union in place welds `mesh_a` and `mesh_b`
-/// themselves: afterwards they really do share their interface nodes. The mesh
-/// structure is preserved (same submeshes, same cells in the same order), so a
-/// cell that *would* collapse is an error here instead of being dropped, as is
-/// a submesh already sealed by a finite-element space, field or matrix. Both
-/// are checked before anything is written: a rejected call changes nothing.
+/// - `mesh`: the mesh to weld.
+/// - `tol`: the distance, `≥ 0`; `0` welds only coincident nodes.
+/// - `in_place`: `False` builds a new mesh, where cells that collapse onto a
+///   repeated node (a degenerate segment, triangle, …) are dropped. `True`
+///   rewrites the connectivity of `mesh`'s **own** submeshes instead and returns
+///   `mesh` itself. Since the union `mesh_a | mesh_b` shares its submeshes, welding
+///   that union in place welds `mesh_a` and `mesh_b` themselves: afterwards they
+///   share their interface nodes. The structure is kept (same submeshes, same
+///   cells in the same order), so a cell that would collapse is an error, as is a
+///   submesh already sealed by a finite-element space, a field or a matrix; both
+///   are checked before anything is written.
 ///
-/// Every call prints a one-line tally on stdout once the weld is done — nodes
-/// welded, cells dropped, tolerance used.
+/// # Returns
+///
+/// A new `Mesh` mirroring `mesh` (same submeshes, types and colours), or `mesh`
+/// itself with `in_place=True`.
+///
+/// # Raises
+///
+/// `RuntimeError` if `tol` is negative, or, with `in_place=True`, for a cell that
+/// would collapse or a sealed submesh.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, tol, in_place=false))]
@@ -399,20 +637,31 @@ pub fn merge_nodes(
     Py::new(py, PyMesh { inner: result })
 }
 
-/// Extract the boundary of a surface mesh (TRI3/QUA4) as SEG2 loops.
+/// The boundary of a surface mesh, as SEG2 loops.
 ///
-/// An element edge used by exactly one cell is a boundary edge; the boundary
-/// edges (pooled across all surface submeshes) are chained into closed loops.
-/// Returns a Mesh with one SEG2 submesh per loop — a single loop for a
-/// simply-connected domain, several when the domain has holes or disjoint
-/// pieces. Loops keep the CCW boundary orientation (outer loop CCW, holes
-/// CW), so the result can feed straight back into `triangulate_surface`.
+/// An edge used by exactly one cell is a boundary edge; the boundary edges, pooled
+/// across all surface submeshes, are chained into closed loops. The loops keep the
+/// counterclockwise boundary orientation (outer loop counterclockwise, holes
+/// clockwise), so the result feeds straight back into
+/// `pyrucast.mesh.triangulate_surface`.
 ///
-/// With `angle_deg` given, each loop is further split into open **arêtes** at
-/// its corner nodes — where the boundary turns by more than `angle_deg`
-/// degrees — one SEG2 submesh per arête (as `skin` splits a volume's skin into
-/// flat faces). A loop with no such corner stays a single closed loop.
-/// `angle_deg=None` (the default) keeps every boundary as one closed loop.
+/// # Parameters
+///
+/// - `mesh`: a surface mesh, TRI3, QUA4, TRI6, QUA8 or QUA9.
+/// - `angle_deg`: when given, each loop is split into open **sides** at its
+///   corners — where the boundary turns by more than `angle_deg` degrees —, as
+///   `pyrucast.mesh.skin` splits a volume's skin into flat faces; a loop with no
+///   such corner stays whole. `None` keeps every loop whole.
+///
+/// # Returns
+///
+/// A `Mesh` with one SEG2 submesh per loop — or per side —, on the nodes of
+/// `mesh`: a single loop for a simply connected domain, several with holes or
+/// disjoint pieces.
+///
+/// # Raises
+///
+/// `RuntimeError` if `mesh` is not a surface mesh.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -422,25 +671,31 @@ pub fn border(mesh: PyRef<PyMesh>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Extract the boundary surface (skin) of a volume mesh, split by flat face.
+/// The boundary surface of a volume mesh, one submesh per flat face.
 ///
-/// Works on every volume type — TET4, PYRA5, PENTA6, HEX8 and their quadratic
-/// counterparts TET10, PENTA15, HEX20, HEX27.
+/// A facet of a volume cell used by exactly one cell lies on the boundary;
+/// sharing is decided on the facet's corners, so cells of different degrees still
+/// cancel. The boundary facets, pooled across all volume submeshes, are grouped
+/// into flat faces by flooding across shared edges as long as neighbouring facets
+/// stay coplanar. **A facet keeps its own type**: a HEX8 yields QUA4, a TET10
+/// TRI6, a HEX27 QUA9 — so the skin of a quadratic mesh is quadratic.
 ///
-/// A volume-element facet (TET4 → 4 triangles, HEX8 → 6 quads, PENTA6 → 2
-/// triangles + 3 quads, PYRA5 → 1 quad + 4 triangles) used by exactly one cell
-/// lies on the boundary; sharing is decided on the facet's corners, so cells of
-/// different degrees still cancel. The boundary facets (pooled across all
-/// volume submeshes) are grouped into flat faces by flooding across shared
-/// edges as long as neighbouring facets stay coplanar (their normals differ by
-/// at most `angle_deg`, default 1°).
+/// # Parameters
 ///
-/// **A facet is emitted in its own type**: a HEX8 yields QUA4, a TET10 yields
-/// TRI6, a HEX27 yields QUA9 — so the skin of a quadratic mesh is quadratic
-/// and keeps its mid-side nodes. Returns a Mesh with one submesh per flat face
-/// and per facet type — e.g. 6 submeshes for a cube, 5 for a prism (2 caps +
-/// 3 sides), 5 for a pyramid (base + 4 triangles). Facets keep their outward
-/// orientation; the original nodes are reused.
+/// - `mesh`: a volume mesh — TET4, PYRA5, PENTA6, HEX8 or their quadratic
+///   counterparts TET10, PENTA15, HEX20, HEX27.
+/// - `angle_deg`: the largest angle, in degrees, between the normals of two
+///   neighbouring facets of one flat face; `None` takes 1°.
+///
+/// # Returns
+///
+/// A `Mesh` with one submesh per flat face and per facet type — 6 for a cube, 5
+/// for a prism, 5 for a pyramid. The facets keep their outward orientation and
+/// the nodes of `mesh`.
+///
+/// # Raises
+///
+/// `RuntimeError` if `mesh` is not a 3-D volume mesh.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -453,15 +708,22 @@ pub fn skin(mesh: PyRef<PyMesh>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Harmonise the orientation of a mesh's cells (cast3m `ORIE`).
+/// Make the orientation of the cells of `mesh` consistent.
 ///
-/// Cells sharing a facet are made consistently oriented — all normals of a
-/// surface point the same way, all segments of a curve run head-to-tail, all
-/// volume cells share one handedness — in any dimension (SEG/TRI/QUA/TET/
-/// PENTA/HEX, linear or quadratic). Each connected component is seeded by its
-/// lowest-indexed cell, which keeps its orientation; the absolute sense is not
-/// chosen (use `invert` to flip a whole mesh, e.g. a hole's boundary). Returns
-/// a fresh mesh sharing the input's nodes.
+/// Cells sharing a facet are oriented alike — all normals of a surface point the
+/// same way, all segments of a curve run head to tail, all volume cells share one
+/// handedness —, in any dimension, linear or quadratic. Each connected component
+/// is seeded by its lowest-indexed cell, which keeps its orientation; the
+/// absolute sense is not chosen (`pyrucast.mesh.invert` flips a whole mesh, a
+/// hole's boundary for instance).
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh to orient.
+///
+/// # Returns
+///
+/// A fresh `Mesh` sharing the nodes of `mesh`, which is left untouched.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -470,15 +732,26 @@ pub fn orient(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Re-order the cells of a line mesh into a continuous chain.
+/// Reorder the cells of a line mesh into a continuous chain.
 ///
-/// The complement of `orient`: where `orient` fixes the *direction* of the
-/// cells, `chain` fixes their *order* — each SEG2/SEG3 submesh is sorted so
-/// that consecutive cells share a node (and flipped where needed), so reading
-/// the connectivity walks the curve from one end to the other. Each submesh is
-/// chained on its own and must be one continuous chain, open or closed: a node
-/// carrying three segments (branching) or disjoint pieces raise an error.
-/// Returns a fresh mesh sharing the input's nodes.
+/// The complement of `pyrucast.mesh.orient`: where `orient` fixes the
+/// *direction* of the cells, `chain` fixes their *order* — each submesh is sorted
+/// so that consecutive cells share a node, flipped where needed, so reading the
+/// connectivity walks the curve from one end to the other.
+///
+/// # Parameters
+///
+/// - `mesh`: a line mesh, SEG2 or SEG3; each submesh is chained on its own and
+///   must be one continuous chain, open or closed.
+///
+/// # Returns
+///
+/// A fresh `Mesh` sharing the nodes of `mesh`.
+///
+/// # Raises
+///
+/// `RuntimeError` if `mesh` is not a line mesh, for a node carrying three
+/// segments (a branch), or for disjoint pieces in one submesh.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -487,12 +760,19 @@ pub fn chain(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Reverse the orientation of every cell of a mesh (cast3m `INVE`).
+/// Reverse the orientation of every cell of `mesh`.
 ///
-/// Flips each cell's winding/traversal/handedness (POI1 cells are unchanged),
-/// in any dimension. Combined with `orient`, this selects the inside/outside
-/// sense of a closed contour or surface. Returns a fresh mesh sharing the
-/// input's nodes.
+/// Flips each cell's winding, direction or handedness, in any dimension (POI1
+/// cells are unchanged). With `pyrucast.mesh.orient`, it chooses the inside or
+/// outside sense of a closed contour or surface.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh to flip.
+///
+/// # Returns
+///
+/// A fresh `Mesh` sharing the nodes of `mesh`, which is left untouched.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -501,9 +781,23 @@ pub fn invert(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Build a line of `n_elems` elements from node `a` to node `b`.
+/// A straight line of `n_elems` cells from node `a` to node `b`.
 ///
-/// `element_type` is `"SEG2"` (default) or `"SEG3"`.
+/// # Parameters
+///
+/// - `a`, `b`: the end nodes, of one `Coords`.
+/// - `n_elems`: the number of cells, `≥ 1`.
+/// - `element_type`: `"SEG2"` (the default) or `"SEG3"`.
+///
+/// # Returns
+///
+/// A `Mesh` of one zone, with fresh nodes between `a` and `b`.
+///
+/// # Raises
+///
+/// - `ValueError` for an unknown `element_type`.
+/// - `RuntimeError` if `n_elems` is zero, or if `a` and `b` belong to different
+///   `Coords`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (a, b, n_elems, element_type=None))]
@@ -518,11 +812,24 @@ pub fn line(
     Ok(PyMesh { inner: mesh })
 }
 
-/// Build a closed circle mesh of `n_elems` elements, centred on `center`,
-/// lying in the plane defined by the 3-component `normal`, with the given
-/// `radius`.
+/// A closed circle of `n_elems` cells, centred on `center`.
 ///
-/// `element_type` is `"SEG2"` (default) or `"SEG3"`.
+/// # Parameters
+///
+/// - `center`: the centre node.
+/// - `normal`: the normal of the circle's plane, three components even in 2-D.
+/// - `radius`: the radius.
+/// - `n_elems`: the number of cells.
+/// - `element_type`: `"SEG2"` (the default) or `"SEG3"`.
+///
+/// # Returns
+///
+/// A `Mesh` of one zone, on fresh nodes.
+///
+/// # Raises
+///
+/// - `ValueError` for an unknown `element_type`.
+/// - `RuntimeError` if `normal` does not have three components.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (center, normal, radius, n_elems, element_type=None))]
@@ -538,11 +845,26 @@ pub fn circle(
     Ok(PyMesh { inner: mesh })
 }
 
-/// Build an open arc of `n_elems` elements from `a` to `b`, following the
-/// circle centred on `center` that passes through both (the shorter arc is
-/// built).
+/// An open arc of `n_elems` cells from `a` to `b`, centred on `center`.
 ///
-/// `element_type` is `"SEG2"` (default) or `"SEG3"`.
+/// The circle passes through both ends; the shorter arc is built.
+///
+/// # Parameters
+///
+/// - `a`, `b`: the end nodes.
+/// - `center`: the centre node of the circle.
+/// - `n_elems`: the number of cells, `≥ 1`.
+/// - `element_type`: `"SEG2"` (the default) or `"SEG3"`.
+///
+/// # Returns
+///
+/// A `Mesh` of one zone, with fresh nodes between `a` and `b`.
+///
+/// # Raises
+///
+/// - `ValueError` for an unknown `element_type`.
+/// - `RuntimeError` if `a`, `center` and `b` are aligned (the plane of the arc is
+///   undefined).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (a, center, b, n_elems, element_type=None))]
@@ -564,19 +886,30 @@ pub fn arc(
     Ok(PyMesh { inner: mesh })
 }
 
-/// Sweep two line meshes into a mesh of `element_type`, building `n_layers`
-/// layers between `mesh_a` and `mesh_b`.
+/// Fill the space between two line meshes with `n_layers` layers of cells.
 ///
-/// Between **SEG2** lines, `element_type` is `"QUA4"` (default), `"TRI3"`,
-/// `"QUA8"`, `"QUA9"` or `"TRI6"` — a `QUA4` mesh is always built first, then
-/// converted (diagonal split for the triangles, promoted to quadratic for
-/// `QUA8`/`QUA9`/`TRI6`). Between **SEG3** lines, it is `"QUA8"` (default) or
-/// `"QUA9"`, built directly: the lines' own mid-nodes are re-used, so a strip
-/// between two arcs follows them exactly.
+/// Two **closed loops** (each ending on its own first node) give a closed ring,
+/// the seam shared between its first and last cells.
 ///
-/// Two **closed loops** (each ending on its own first node) give a closed
-/// ring, the seam shared between its first and last cells; a closed loop
-/// swept onto an open line is an error.
+/// # Parameters
+///
+/// - `mesh_a`, `mesh_b`: the two lines, with the same number of cells.
+/// - `n_layers`: the number of layers, `≥ 1`.
+/// - `element_type`: between SEG2 lines, `"QUA4"` (the default), `"TRI3"`,
+///   `"QUA8"`, `"QUA9"` or `"TRI6"` — a QUA4 mesh is built first, then converted
+///   (diagonal split for the triangles, promoted to quadratic for the others).
+///   Between SEG3 lines, `"QUA8"` (the default) or `"QUA9"`, built directly: the
+///   lines' own mid-nodes are reused, so a strip between two arcs follows them
+///   exactly.
+///
+/// # Returns
+///
+/// A new `Mesh` sharing the nodes of `mesh_a` and `mesh_b`.
+///
+/// # Raises
+///
+/// `RuntimeError` if the two lines differ in cell count, for an unsupported
+/// `element_type`, or for a closed loop swept onto an open line.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -597,15 +930,28 @@ pub fn sweep(
     Ok(PyMesh { inner: mesh })
 }
 
-/// Build a structured surface bounded by four `SEG2` sides, by transfinite
-/// interpolation (the Coons-patch generalization of `sweep` from two lines
-/// to four). `side1`/`side3` and `side2`/`side4` are the two pairs of
-/// **opposite** sides and must each have the same element count; the four
-/// sides must form a closed contour, `side1 → side2 → side3 → side4 →
-/// side1`, each sharing its end node with the next side's start node.
+/// A structured surface bounded by four SEG2 sides, by transfinite interpolation.
 ///
-/// `element_type` is `"QUA4"` (default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
-/// `"TRI6"` — same conversion path as `sweep`.
+/// The generalization of `pyrucast.mesh.sweep` from two lines to four (a Coons
+/// patch).
+///
+/// # Parameters
+///
+/// - `side1`, `side2`, `side3`, `side4`: the four sides, forming a closed
+///   contour `side1 → side2 → side3 → side4 → side1`, each ending on the start
+///   node of the next. `side1`/`side3` and `side2`/`side4` are the two pairs of
+///   **opposite** sides, each with the same cell count.
+/// - `element_type`: `"QUA4"` (the default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
+///   `"TRI6"` — the same conversion path as `pyrucast.mesh.sweep`.
+///
+/// # Returns
+///
+/// A new `Mesh` on the nodes of the sides plus fresh interior nodes.
+///
+/// # Raises
+///
+/// `RuntimeError` if the sides do not close, if opposite sides differ in cell
+/// count, or for an unsupported `element_type`.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -628,8 +974,24 @@ pub fn transfinite(
     Ok(PyMesh { inner: mesh })
 }
 
-/// Extrude `mesh` by `n_layers` layers along `direction` (the total
-/// displacement vector). SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
+/// Extrude `mesh` along `direction` in `n_layers` layers.
+///
+/// SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh to extrude.
+/// - `direction`: the total displacement vector, with the dimension of the mesh.
+/// - `n_layers`: the number of layers, `≥ 1`.
+///
+/// # Returns
+///
+/// A new `Mesh`, sharing the nodes of `mesh` on its first layer.
+///
+/// # Raises
+///
+/// `RuntimeError` if `n_layers` is zero, or if the produced cells need 3-D
+/// coordinates the mesh does not have (a surface extruded in 2-D).
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -638,23 +1000,38 @@ pub fn extrude(mesh: PyRef<PyMesh>, direction: Vec<f64>, n_layers: usize) -> PyR
     Ok(PyMesh { inner: result })
 }
 
-/// Revolve `mesh` by `n_layers` layers over a total `angle` (radians) — the
-/// rotational companion of `extrude`. SEG2 → QUA4, TRI3 → PENTA6,
-/// QUA4 → HEX8, and in quadratic SEG3 → QUA8, TRI6 → PENTA15, QUA8 → HEX20
-/// (the mid-node of an edge along the sweep sits on the arc).
+/// Revolve `mesh` about an axis in `n_layers` layers, over a total `angle`.
 ///
-/// In 2-D the revolution is about the point `center` (counterclockwise for a
-/// positive `angle`) and `axis` is ignored; in 3-D it is about the line
-/// through `center` directed by `axis` (right-handed), which is then
-/// required. `|angle|` may not exceed a full turn, and a full turn closes the
-/// ring: the last node layer is the first one again, so there is no seam.
+/// The rotational companion of `pyrucast.mesh.extrude`: SEG2 → QUA4,
+/// TRI3 → PENTA6, QUA4 → HEX8, and in quadratic SEG3 → QUA8, TRI6 → PENTA15,
+/// QUA8 → HEX20 (the mid-node of an edge along the sweep sits on the arc). A full
+/// turn closes the ring: the last layer of nodes is the first one again.
 ///
-/// A **line** may touch the axis by one corner: that node stays put, and the
-/// cells touching it close into triangles — SEG2 → TRI3, SEG3 → TRI6 —, a
-/// submesh of their own after the quadrangles. A line from the axis to the rim
-/// thus revolves into a disc sector: a fan of triangles at the centre, a ring
-/// of quadrangles around it, one node at the centre. A surface cell may not
-/// touch the axis (its prism would collapse), nor may a line lie along it.
+/// A **line** may touch the axis by one corner: that node stays put, and the cells
+/// touching it close into triangles — SEG2 → TRI3, SEG3 → TRI6 —, a submesh of
+/// their own after the quadrangles. A line from the axis to the rim thus revolves
+/// into a disc sector: a fan of triangles at the centre, a ring of quadrangles
+/// around it, one node at the centre.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh to revolve. A surface cell may not touch the axis (its prism
+///   would collapse), nor may a line lie along it.
+/// - `angle`: the total angle, in radians, `|angle| ≤ 2π`; counterclockwise for a
+///   positive angle in 2-D.
+/// - `n_layers`: the number of layers, `≥ 1`.
+/// - `center`: in 2-D, the centre of the revolution; in 3-D, a point of its axis.
+/// - `axis`: in 3-D, the direction of the axis (right-handed), required; ignored
+///   in 2-D.
+///
+/// # Returns
+///
+/// A new `Mesh`, sharing the nodes of `mesh` on its first layer.
+///
+/// # Raises
+///
+/// `RuntimeError` if `|angle|` exceeds a full turn, if the produced cells need 3-D
+/// coordinates the mesh does not have, or for a cell the axis would collapse.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -670,9 +1047,25 @@ pub fn revolve(
     Ok(PyMesh { inner: result })
 }
 
-/// Sweep two matching surface meshes into a solid mesh, building `n_layers`
-/// layers between `mesh_a` and `mesh_b`. The 3-D companion of `sweep`:
-/// TRI3 faces → PENTA6 prisms, QUA4 faces → HEX8 hexahedra.
+/// Fill the space between two matching surface meshes with `n_layers` layers.
+///
+/// The 3-D companion of `pyrucast.mesh.sweep`: TRI3 faces → PENTA6 prisms,
+/// QUA4 faces → HEX8 hexahedra.
+///
+/// # Parameters
+///
+/// - `mesh_a`, `mesh_b`: the two surface meshes, TRI3 or QUA4, cell `i` of one
+///   facing cell `i` of the other.
+/// - `n_layers`: the number of layers, `≥ 1`.
+///
+/// # Returns
+///
+/// A new `Mesh` sharing the nodes of `mesh_a` and `mesh_b`.
+///
+/// # Raises
+///
+/// `RuntimeError` for a surface type other than TRI3 or QUA4, or if the two
+/// meshes do not match.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -685,10 +1078,19 @@ pub fn sweep_solid(
     Ok(PyMesh { inner: mesh })
 }
 
-/// Build the **quadratic** (Lagrange-2) copy of a linear mesh: each element
-/// type is bumped to its quadratic sibling (TRI3→TRI6, HEX8→HEX20, …). Corner
-/// nodes are re-used; one mid-edge node is created per edge (at the midpoint)
-/// and shared between the cells that use it. The original mesh is untouched.
+/// The quadratic (Lagrange-2) copy of the linear mesh `mesh`.
+///
+/// Each element type is bumped to its quadratic sibling (TRI3 → TRI6,
+/// HEX8 → HEX20, …). Corner nodes are reused; one node is created at the middle of
+/// each edge and shared between the cells that use it.
+///
+/// # Parameters
+///
+/// - `mesh`: the linear mesh, left untouched.
+///
+/// # Returns
+///
+/// A new `Mesh`.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -697,14 +1099,27 @@ pub fn to_quadratic(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Convert every submesh of `mesh` to `element_type`, splitting each cell into
-/// cells of the target type **without moving or adding any node** on the
-/// existing corners. Supported: identity (already the target type — copied
-/// verbatim), `"QUA4"` → `"TRI3"` (two triangles per quad, `(0,2)` diagonal),
-/// and `"HEX8"` → `"TET4"` (six tetrahedra per hex, a conforming space-filling
-/// split). Corner nodes are re-used; face colours are preserved. To promote to
-/// a quadratic type (`TRI3`→`TRI6`, …), which creates mid-edge nodes, use
-/// `to_quadratic`. The original mesh is untouched.
+/// Split every cell of `mesh` into cells of `element_type`, adding no node.
+///
+/// Supported: the identity (already the target type, copied as it is),
+/// `"QUA4"` → `"TRI3"` (two triangles per quadrangle, diagonal `(0, 2)`), and
+/// `"HEX8"` → `"TET4"` (six tetrahedra per hexahedron, a conforming split).
+/// Corner nodes are reused; face colours are kept. To promote to a quadratic type,
+/// which creates mid-edge nodes, use `pyrucast.mesh.to_quadratic`.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh to convert, left untouched.
+/// - `element_type`: the target element type.
+///
+/// # Returns
+///
+/// A new `Mesh` on the nodes of `mesh`.
+///
+/// # Raises
+///
+/// - `ValueError` for an unknown `element_type`.
+/// - `RuntimeError` for a conversion that is not supported.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -713,19 +1128,23 @@ pub fn convert(mesh: PyRef<PyMesh>, element_type: ElementType) -> PyResult<PyMes
     Ok(PyMesh { inner: result })
 }
 
-/// Copy `mesh`, either onto **fresh nodes** placed at the same spots
-/// (`new_nodes=True`, the default) or onto the very same nodes
-/// (`new_nodes=False`, only the connectivity is copied).
+/// Copy `mesh`, onto fresh nodes or onto the same nodes.
 ///
-/// Both modes keep the submesh order, element types, cell order and face
-/// colours, and hand back a mesh that is **never sealed** — editable even
-/// when the source has been frozen by a finite-element space, a field or a
-/// matrix. The original is left untouched.
+/// Both modes keep the submesh order, element types, cell order and face colours,
+/// and hand back a mesh that is **never sealed** — editable even when the source
+/// has been frozen by a finite-element space, a field or a matrix.
 ///
-/// With `new_nodes=True` each distinct node of `mesh` yields one fresh node at
-/// the same position (nodes shared between cells stay shared), so the two
-/// meshes no longer move together. With `new_nodes=False` they share their
-/// nodes: moving one moves it in both.
+/// # Parameters
+///
+/// - `mesh`: the mesh to copy, left untouched.
+/// - `new_nodes`: `True` gives each distinct node of `mesh` one fresh node at the
+///   same position (nodes shared between cells stay shared), so the two meshes
+///   no longer move together. `False` copies the connectivity only: the two
+///   meshes share their nodes, and moving one moves it in both.
+///
+/// # Returns
+///
+/// A new `Mesh`.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -735,16 +1154,27 @@ pub fn copy(mesh: PyRef<PyMesh>, new_nodes: bool) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Project `mesh` **radially** onto the sphere of centre `center` and radius
-/// `radius`: every node — corners and mid-nodes alike — is pushed along the
-/// ray from `center` through it, to the distance `radius`.
+/// Push every node of `mesh` radially onto the sphere of centre `center`.
 ///
-/// Returns a fresh copy with its own nodes (one per distinct node, so a
-/// closed loop stays closed), in the same zones, types and colours; `mesh`
-/// is left untouched. In a plane through `center` the sphere is a circle: a
-/// contour of that plane lands on it node for node, each at its own angle —
-/// the inner loop of a ring, ready for `sweep`. A node on `center` has no
-/// direction and is an error.
+/// Corners and mid-nodes alike move along the ray from `center` through them, to
+/// the distance `radius`. In a plane through `center` the sphere is a circle: a
+/// contour of that plane lands on it node for node, each at its own angle — the
+/// inner loop of a ring, ready for `pyrucast.mesh.sweep`.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh to project, left untouched.
+/// - `center`: the centre of the sphere.
+/// - `radius`: the radius of the sphere.
+///
+/// # Returns
+///
+/// A fresh `Mesh` with its own nodes, one per distinct node (a closed loop stays
+/// closed), in the same zones, types and colours.
+///
+/// # Raises
+///
+/// `RuntimeError` for a node on `center`, which has no direction.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -753,8 +1183,20 @@ pub fn project_on_sphere(mesh: PyRef<PyMesh>, center: Vec<f64>, radius: f64) -> 
     Ok(PyMesh { inner: result })
 }
 
-/// Translate `mesh` by `vector`, returning a fresh copy with its own nodes
-/// (the original is left untouched). `vector` matches the mesh dimension.
+/// Translate `mesh` by `vector`.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh to move.
+/// - `vector`: the translation, with the dimension of the mesh.
+///
+/// # Returns
+///
+/// A fresh `Mesh` with its own nodes; `mesh` is left untouched.
+///
+/// # Raises
+///
+/// `RuntimeError` if `vector` does not have the dimension of the mesh.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -763,12 +1205,24 @@ pub fn translate(mesh: PyRef<PyMesh>, vector: Vec<f64>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Rotate `mesh` by `angle` (radians) about `center`, returning a fresh copy
-/// with its own nodes (the original is left untouched).
+/// Rotate `mesh` by `angle` about `center`.
 ///
-/// In 2-D, `center` is a point and `axis` is ignored. In 3-D, the rotation is
-/// about the line through `center` directed by `axis` (right-handed); `axis`
-/// is required.
+/// # Parameters
+///
+/// - `mesh`: the mesh to turn.
+/// - `angle`: the angle, in radians.
+/// - `center`: in 2-D, the centre of the rotation; in 3-D, a point of its axis.
+/// - `axis`: in 3-D, the direction of the axis (right-handed), required; ignored
+///   in 2-D.
+///
+/// # Returns
+///
+/// A fresh `Mesh` with its own nodes; `mesh` is left untouched.
+///
+/// # Raises
+///
+/// `RuntimeError` if a point does not have the dimension of the mesh, or in 3-D
+/// without `axis`.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -783,13 +1237,20 @@ pub fn rotate(
     Ok(PyMesh { inner: result })
 }
 
-/// Mirror `mesh` through the point `center` (Cast3m `SYME … POINT`),
-/// returning a fresh copy with its own nodes (the original is left
-/// untouched). Every node goes to `2·center − x`.
+/// Mirror `mesh` through the point `center`: every node goes to `2·center − x`.
 ///
-/// In 3-D the map reverses orientation, so the cells are re-ordered (as
-/// `invert` does) to keep the copy's Jacobians positive; in 2-D it is a plain
-/// half-turn and nothing is re-ordered.
+/// In 3-D the map reverses orientation, so the cells are reordered (as
+/// `pyrucast.mesh.invert` does) to keep the copy's Jacobians positive; in 2-D it
+/// is a plain half-turn and nothing is reordered.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh to mirror.
+/// - `center`: the centre of symmetry, with the dimension of the mesh.
+///
+/// # Returns
+///
+/// A fresh `Mesh` with its own nodes; `mesh` is left untouched.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -798,14 +1259,26 @@ pub fn symmetry_point(mesh: PyRef<PyMesh>, center: Vec<f64>) -> PyResult<PyMesh>
     Ok(PyMesh { inner: result })
 }
 
-/// Mirror `mesh` through the infinite line running through `a` and `b`
-/// (Cast3m `SYME … DROIT`), returning a fresh copy with its own nodes (the
-/// original is left untouched).
+/// Mirror `mesh` through the infinite line through `a` and `b`.
 ///
 /// In 2-D this is the mirror image about the line; in 3-D it is the half-turn
-/// about it (for the mirror image through a plane, use `symmetry_plane`).
-/// Orientation-reversing in 2-D only, where the cells are re-ordered (as
-/// `invert` does) to keep the copy's Jacobians positive.
+/// about it (the mirror image through a plane is
+/// `pyrucast.mesh.symmetry_plane`). It reverses orientation in 2-D only, where
+/// the cells are reordered (as `pyrucast.mesh.invert` does) to keep the copy's
+/// Jacobians positive.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh to mirror.
+/// - `a`, `b`: two distinct points of the line.
+///
+/// # Returns
+///
+/// A fresh `Mesh` with its own nodes; `mesh` is left untouched.
+///
+/// # Raises
+///
+/// `RuntimeError` if `a` and `b` coincide.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -814,14 +1287,25 @@ pub fn symmetry_line(mesh: PyRef<PyMesh>, a: Vec<f64>, b: Vec<f64>) -> PyResult<
     Ok(PyMesh { inner: result })
 }
 
-/// Mirror `mesh` through the plane running through the three points `a`, `b`
-/// and `c` (Cast3m `SYME … PLAN`), returning a fresh copy with its own nodes
-/// (the original is left untouched). Only the plane the three points span
-/// matters, not their order; they must not be aligned.
+/// Mirror `mesh` through the plane through the points `a`, `b` and `c`, in 3-D.
 ///
-/// 3-D only — in 2-D the mirror about a line is `symmetry_line`. Always
-/// orientation-reversing, so the cells are re-ordered (as `invert` does) to
-/// keep the copy's Jacobians positive.
+/// Only the plane the three points span matters, not their order. The map always
+/// reverses orientation, so the cells are reordered (as `pyrucast.mesh.invert`
+/// does) to keep the copy's Jacobians positive. In 2-D the mirror about a line is
+/// `pyrucast.mesh.symmetry_line`.
+///
+/// # Parameters
+///
+/// - `mesh`: the mesh to mirror, in 3-D.
+/// - `a`, `b`, `c`: three points of the plane, not aligned.
+///
+/// # Returns
+///
+/// A fresh `Mesh` with its own nodes; `mesh` is left untouched.
+///
+/// # Raises
+///
+/// `RuntimeError` if the mesh is not 3-D, or if the three points are aligned.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -835,17 +1319,31 @@ pub fn symmetry_plane(
     Ok(PyMesh { inner: result })
 }
 
-/// Mesh the interior of a closed SEG2 `contour` with `element_type` cells
-/// using a constrained-Delaunay + Ruppert-refinement mesher.
+/// Mesh the inside of the closed SEG2 loops of `contour`, Delaunay and Ruppert.
 ///
-/// `contour` holds **one or more** closed SEG2 loops, each oriented by the
-/// caller: a **counter-clockwise** loop is a domain's outer boundary, a
-/// **clockwise** loop is a hole (contained in an outer loop). Several
-/// disjoint CCW loops mesh several independent domains at once. `size` sets
-/// the target element edge length; `None` uses the mean boundary edge length
-/// per domain. `element_type` is "TRI3" or "QUA4" (QUA4 is quad-dominant:
-/// the result may also carry a few boundary triangles). The contour may be
-/// 2-D or a planar loop in 3-D (meshed in its best-fit plane, lifted back).
+/// A constrained Delaunay triangulation refined by Ruppert's algorithm. The
+/// contour may be 2-D, or a planar loop in 3-D, meshed in its best-fit plane and
+/// lifted back.
+///
+/// # Parameters
+///
+/// - `contour`: **one or more** closed SEG2 loops, each oriented by the caller: a
+///   **counterclockwise** loop is a domain's outer boundary, a **clockwise** loop
+///   a hole inside an outer loop. Several disjoint counterclockwise loops mesh
+///   several independent domains at once.
+/// - `element_type`: `"TRI3"`, or `"QUA4"`, quadrangle-dominant: the result may
+///   also carry a few triangles at the boundary.
+/// - `size`: the target edge length; `None` takes the mean boundary edge length,
+///   domain by domain.
+///
+/// # Returns
+///
+/// A new `Mesh` on the contour's nodes plus fresh interior nodes.
+///
+/// # Raises
+///
+/// `RuntimeError` for a loop of fewer than three segments or not closed, or for
+/// an `element_type` other than TRI3 or QUA4.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -866,54 +1364,59 @@ pub fn triangulate_surface(
     Ok(PyMesh { inner: mesh })
 }
 
-/// Pave the inside of a closed contour with quadrangles, in rows walking
-/// inward from the boundary.
+/// Pave the inside of closed loops with quadrangles, in rows walking inward.
 ///
-/// The quadrangle-oriented companion of `triangulate_surface`, and the one to
-/// reach for when the mesh is going to be computed on: paving lays QUA4 cells
-/// down directly, in rows that follow the contour, instead of triangulating
-/// and pairing triangles up afterwards.
+/// The quadrangle companion of `pyrucast.mesh.triangulate_surface`, and the one
+/// to reach for when the mesh is going to be computed on: it lays quadrangles
+/// down directly, in rows that follow the contour, instead of triangulating and
+/// pairing triangles up afterwards. The contour is untouchable: its nodes come
+/// back at their own positions and no node is ever added on a boundary edge. A
+/// contour the paver cannot work with is therefore reported rather than worked
+/// around.
 ///
-/// `contour` holds **one or more** closed SEG2 loops, oriented by the caller
-/// exactly as for `triangulate_surface`: a **counter-clockwise** loop is a
-/// domain's outer boundary, a **clockwise** loop is a hole. Several disjoint
-/// CCW loops pave several independent domains at once. `size` sets the target
-/// element edge length; `None` uses the mean boundary edge length per domain.
-/// `element_type` is "QUA4", "QUA8" or "QUA9". The contour may be 2-D or a
-/// planar loop in 3-D (paved in its best-fit plane, then lifted back).
+/// # Parameters
 ///
-/// The contour is untouchable: its nodes come back at their own positions and
-/// no node is ever added on a boundary edge. A contour the paver cannot work
-/// with is therefore reported rather than worked around — `prefer_quads=True` on a
-/// loop with an odd number of segments raises, since a polygon with an odd
-/// number of sides has no filling by quadrangles alone and evening the count
-/// out would mean adding a boundary node; so does a contour so coarse for the
-/// requested size that the front folds onto itself.
+/// - `contour`: **one or more** closed SEG2 loops, oriented as for
+///   `pyrucast.mesh.triangulate_surface`: a **counterclockwise** loop is a
+///   domain's outer boundary, a **clockwise** loop a hole. Several disjoint
+///   counterclockwise loops mesh several independent domains at once. It may be
+///   2-D, or a planar loop in 3-D, meshed in its best-fit plane and lifted back.
+/// - `element_type`: `"QUA4"`, `"QUA8"` or `"QUA9"`.
+/// - `size`: the target edge length; `None` takes the mean boundary edge length,
+///   domain by domain.
+/// - `prefer_quads`: `False` lets an odd loop cost one triangle, returned in a
+///   separate TRI3 submesh along with the few cells a distorted leftover polygon
+///   could not make square. `True` removes the first kind, not the second, and
+///   raises on a loop with an odd number of segments: a polygon with an odd
+///   number of sides has no filling by quadrangles alone, and evening the count
+///   would mean adding a boundary node.
+/// - `relax`: what the front may do to itself between two rows. After each row
+///   the fresh chain is smoothed, which keeps the front from kinking — and, being
+///   a Laplacian, rounds its corners off. A front sheds nodes only at its
+///   **corners**, so once they are rounded away it keeps every node it has while
+///   its perimeter shrinks, and the middle comes out finer than asked: a plain
+///   20 × 20 square at size 1 gives 600 cells instead of 400.
+///   - `"free"` (`None`, the default): a node moves wherever the smoothing
+///     points. The only mode that never lets the front kink.
+///   - `"along"`: the same step, kept only **along** the front: the spacing is
+///     evened out, the shape is not. The square then comes out as the 400 exact
+///     squares anyone would draw.
+///   - `"none"`: the front stays exactly where the row put it.
 ///
-/// With `prefer_quads=False` (the default) an odd loop simply costs one triangle,
-/// returned in a separate TRI3 submesh, along with the few cells a distorted
-/// leftover polygon could not make square. `prefer_quads=True` removes the
-/// first kind, not the second: fewer triangles, none guaranteed.
+///   `"along"` and `"none"` win on anything with corners to keep and can kink on
+///   a curve, where there is nothing to preserve and everything to straighten.
 ///
-/// `relax` chooses what the front is allowed to do to itself between two rows.
-/// After each row the fresh chain is smoothed, which keeps the front from
-/// kinking — and, being a Laplacian, rounds its corners off. That costs more
-/// than it looks: a front sheds nodes only at its **corners**, so once they are
-/// rounded away it keeps every node it has while its perimeter shrinks, and the
-/// middle of the domain comes out finer than asked. A plain 20 × 20 square at
-/// size 1 gives 600 cells instead of 400.
+/// # Returns
 ///
-/// - `"free"` (the default) — the historical behaviour: a node moves wherever
-///   the smoothing points. The only mode that never lets the front kink.
-/// - `"along"` — the same step, kept only **along** the front: the spacing is
-///   evened out, the shape is not. The square then comes out as the 400 exact
-///   squares anyone would draw.
-/// - `"none"` — the front stays exactly where the row put it.
+/// A new `Mesh` on the contour's nodes plus fresh interior nodes.
 ///
-/// There is no best answer, which is why it is a choice: `"along"` and
-/// `"none"` win on anything with corners to keep and can kink on a curve, where
-/// there is nothing to preserve and everything to straighten. A run that fails
-/// to converge raises rather than grinding on.
+/// # Raises
+///
+/// - `ValueError` for an unknown `relax`.
+/// - `RuntimeError` for an `element_type` other than QUA4, QUA8 or QUA9, with
+///   `prefer_quads=True` on an odd loop, or for a contour too coarse for the size
+///   asked, where the front folds onto itself.
+/// - `RuntimeError` also for a run that fails to converge.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -938,27 +1441,34 @@ pub fn pave_surface(
     Ok(PyMesh { inner: mesh })
 }
 
-/// Move the interior nodes of a surface mesh to improve its cells, leaving the
-/// connectivity and the boundary exactly as they are.
+/// Move the interior nodes of a 2-D surface mesh to improve its cells.
 ///
-/// `sweeps` is how many passes to run. `angular=True` (the default) uses
-/// angle-based smoothing, which aims at the right angles a quadrangle wants;
-/// `False` uses the plain Laplacian, which aims at the one-ring's barycentre
-/// and knows nothing about angles. `in_place=True` writes the new positions
-/// onto your own nodes and hands the same mesh back; otherwise the moved nodes
-/// are duplicated and a fresh mesh comes out, the boundary's nodes being
-/// shared since they never moved.
+/// The connectivity and the boundary stay exactly as they are. Two guarantees
+/// hold: **no node on the boundary ever moves**, and a position is taken only
+/// when every incident cell stays valid and the worst incident quality does not
+/// get worse. Smoothing cannot fix a node with the wrong number of cells around
+/// it — that is `pyrucast.mesh.cleanup`'s job, and running it first is usually
+/// what unlocks the smoothing.
 ///
-/// Two guarantees hold whatever the rule: **no node on the boundary ever
-/// moves**, and a position is taken only when every incident cell stays valid
-/// and the worst incident quality does not get worse.
+/// # Parameters
 ///
-/// Smoothing cannot change who is next to whom, so it cannot fix a node with
-/// the wrong number of cells around it — the angles around a node sum to 2π
-/// whatever the positions. That is `cleanup`'s job, and running it first is
-/// usually what unlocks the smoothing.
+/// - `mesh`: a 2-D mesh; its TRI3 and QUA4 cells are smoothed, its POI1 and SEG2
+///   submeshes ignored.
+/// - `sweeps`: the number of passes.
+/// - `angular`: `True` uses angle-based smoothing, which aims at the right angles
+///   a quadrangle wants; `False` the plain Laplacian, which aims at the
+///   barycentre of the neighbours and knows nothing about angles.
+/// - `in_place`: `True` writes the new positions onto your own nodes and returns
+///   `mesh` itself; `False` duplicates the moved nodes into a fresh mesh, the
+///   boundary's nodes being shared since they never move.
 ///
-/// TRI3 and QUA4 only, in 2-D. POI1 and SEG2 submeshes are ignored.
+/// # Returns
+///
+/// A new `Mesh`, or `mesh` itself with `in_place=True`.
+///
+/// # Raises
+///
+/// `RuntimeError` if `mesh` is not 2-D, or has no surface cells (TRI3/QUA4).
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -973,53 +1483,52 @@ pub fn regularize(
     Ok(PyMesh { inner: out })
 }
 
-/// Fix the connectivity of a surface mesh: remove its doublets, give up the
-/// nodes that have only three cells around them, and switch the diagonals that
-/// lower the valence error.
+/// Fix the connectivity of a 2-D surface mesh: doublets and wrong valences.
 ///
-/// **No node of the contour ever moves**, and none is ever given up: the mesh
-/// keeps exactly the boundary it came with.
+/// It removes the doublets, gives up the nodes that have only three cells around
+/// them, and switches the diagonals that lower the valence error. **No node of
+/// the contour ever moves**, and none is ever given up: the mesh keeps exactly
+/// the boundary it came with. Smoothing cannot fix these: the angles around a
+/// node sum to 2π whatever the positions. Turning a lone triangle into a
+/// quadrangle is `pyrucast.mesh.merge_triangles`'s job.
 ///
-/// A **doublet** is an interior node with only two quadrangles around it,
-/// which therefore share two edges; the node sits in a wedge no smoothing can
-/// open. A node of the **wrong valence** wants four cells and has three or
-/// five, giving corners of 120° or 72° on average — and the angles around a
-/// node sum to 2π whatever the positions, so smoothing will never square them.
+/// # Parameters
 ///
-/// Two moves answer that:
+/// - `mesh`: a 2-D surface mesh, TRI3 and QUA4, never modified.
 ///
-/// - the **diagonal switch**, for a node of valence five or more: two
-///   quadrangles sharing an edge form a hexagon, which splits across any of
-///   its three diagonals. It changes no node and no boundary, and is applied
-///   only when it strictly lowers the valence error and leaves both cells
-///   convex.
-/// - the **collapse**, for an interior node with only three cells: round a
-///   node carrying `q` quadrangles and `t` triangles the star is bounded by a
-///   polygon of `n = 2q + t` sides, and an `n`-gon decomposes with no interior
-///   node into `q'` quadrangles and `t'` triangles such that `2q' + t' = n - 2`
-///   — always a cell fewer than the star. So the node is given up along with
-///   that cell: 3 quadrangles become 2, and 1 quadrangle with 2 triangles
-///   becomes a single quadrangle. It is the only move that removes a node,
-///   changes how many cells there are, or moves anything: removing a node
-///   leaves the ring round it stretched, so the move is judged after relaxing
-///   that ring, and the relaxation is kept along with it. A move that does not
-///   improve the neighbourhood's worst cell is undone whole.
+/// # Returns
 ///
-/// - the **pair collapse**, for two interior nodes sharing an edge with at
-///   least one short of a cell: neither can be given up alone without trading
-///   one irregular node for two, but together they carry `val(a) + val(b) - 2`
-///   cells — a hexagon's worth at 3-3, a heptagon's at 3-4 — and both re-cut
-///   with two cells fewer. Two nodes and two cells go at once, and a triangle
-///   in the star is carried across rather than created.
+/// A new `Mesh`, wound the way `mesh` was, clockwise or not. Your own nodes come
+/// back untouched, apart from those on a ring a collapse relaxed, which are
+/// duplicated.
 ///
-/// Triangles are read for incidence and reshaped, and they only ever leave two
-/// at a time — their number has the parity of the boundary's edge count, which
-/// nothing here may change. Turning a lone triangle into a quadrangle is
-/// `merge_triangles`'s job.
+/// # Raises
 ///
-/// Your own nodes come back untouched apart from those on a ring a collapse
-/// relaxed, which are duplicated — the mesh you hand in is never modified. The
-/// result comes back wound the way it went in, clockwise or not.
+/// `RuntimeError` if `mesh` is not 2-D, or has no surface cells (TRI3/QUA4).
+///
+/// # Notes
+///
+/// A **doublet** is an interior node with only two quadrangles around it, which
+/// therefore share two edges. A node of the **wrong valence** wants four cells
+/// and has three or five. Three moves answer that:
+///
+/// - the **diagonal switch**, for a node of valence five or more: two quadrangles
+///   sharing an edge form a hexagon, which splits across any of its three
+///   diagonals. It is applied only when it strictly lowers the valence error and
+///   leaves both cells convex.
+/// - the **collapse**, for an interior node with only three cells: round a node
+///   carrying `q` quadrangles and `t` triangles the star is bounded by a polygon
+///   of `n = 2q + t` sides, which decomposes with no interior node into `q'`
+///   quadrangles and `t'` triangles such that `2q' + t' = n − 2` — always a cell
+///   fewer. So the node is given up along with that cell. Removing a node leaves
+///   the ring round it stretched, so the move is judged after relaxing that ring;
+///   a move that does not improve the neighbourhood's worst cell is undone whole.
+/// - the **pair collapse**, for two interior nodes sharing an edge with at least
+///   one short of a cell: together they carry `val(a) + val(b) − 2` cells and
+///   both re-cut with two cells fewer.
+///
+/// Triangles only ever leave two at a time: their number has the parity of the
+/// boundary's edge count, which nothing here may change.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -1028,7 +1537,19 @@ pub fn cleanup(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: out })
 }
 
-/// Remove the triangles from a quadrangle-dominant mesh, in pairs.
+/// Remove the triangles from a quadrangle-dominant mesh `mesh`, in pairs.
+///
+/// # Parameters
+///
+/// - `mesh`: a 2-D surface mesh, TRI3 and QUA4.
+///
+/// # Returns
+///
+/// A new `Mesh`.
+///
+/// # Raises
+///
+/// `RuntimeError` if `mesh` is not 2-D, or has no surface cells (TRI3/QUA4).
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -1037,41 +1558,58 @@ pub fn merge_triangles(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: out })
 }
 
-/// Mesh the inside of a closed contour with a structured grid core and a
-/// frontal band — the regular-mesh companion of `pave_surface`.
+/// Mesh the inside of closed loops with a structured grid core and a frontal band.
 ///
-/// Same input, same output, same promise that the contour is untouchable: only
-/// the interior is obtained differently. `pave_surface` walks a front inward
-/// until two of its rows meet, and that meeting line carries the valence
-/// defects, the leftover triangles and the flattest cells — even on a plain
-/// rectangle, which comes out as an onion with four diagonal seams.
-/// `grid_surface` lays a tensor grid instead, and leaves the front only what
-/// the grid could not reach.
+/// The regular companion of `pyrucast.mesh.pave_surface`, with the same input,
+/// output and untouchable contour. `pave_surface` walks a front inward until two
+/// of its rows meet, and that meeting line carries the valence defects, the
+/// leftover triangles and the flattest cells — even a plain rectangle comes out
+/// as an onion with four diagonal seams. `grid_surface` lays a tensor grid
+/// instead, and leaves the front only what the grid could not reach.
 ///
 /// The grid's lines are taken from the contour: every axis-aligned edge long
 /// enough to be a feature pins a line, and the gaps are subdivided at about
-/// `size`. A grid node landing on a contour node **is** that node, so the core
-/// reaches the boundary rather than stopping short of it. On a rectilinear
-/// domain laid out for the grid there is no band at all and the mesh is the
-/// grid: every cell a rectangle, every Jacobian 1, no triangle.
+/// `size`. A grid node landing on a contour node **is** that node. On a
+/// rectilinear domain laid out for the grid there is no band at all: every cell
+/// a rectangle, no triangle. That is the one thing asked of the caller: **break
+/// every side at the shape's own corners and let each piece take a whole number
+/// of cells**. A contour that does not just gets more band and less grid, down to
+/// the quality of `pave_surface` in the worst case.
 ///
-/// That last part is the one thing asked of the caller. A grid can only meet a
-/// contour whose nodes fall on grid lines, so **break every side at the
-/// shape's own corners and let each piece take a whole number of cells**. A
-/// contour that does not is not an error — it just gets more band and less
-/// grid, down to the quality of `pave_surface` in the worst case.
+/// # Parameters
 ///
-/// `band` is extra clearance in cells between the core and the contour. Zero
-/// is the useful value; raise it only for a contour the grid cannot meet, such
-/// as a curve, where giving the front a couple of cells to work in beats
-/// letting it fight for a sliver.
+/// - `contour`: **one or more** closed SEG2 loops, oriented as for
+///   `pyrucast.mesh.triangulate_surface`: a **counterclockwise** loop is a
+///   domain's outer boundary, a **clockwise** loop a hole. Several disjoint
+///   counterclockwise loops mesh several independent domains at once. It may be
+///   2-D, or a planar loop in 3-D, meshed in its best-fit plane and lifted back.
+/// - `element_type`: `"QUA4"`, `"QUA8"` or `"QUA9"`.
+/// - `size`: the target edge length; `None` takes the mean boundary edge length,
+///   domain by domain.
+/// - `band`: extra clearance, in cells, between the core and the contour. Zero is
+///   the useful value; raise it only for a contour the grid cannot meet, such as
+///   a curve, where giving the front a couple of cells to work in beats letting
+///   it fight for a sliver.
+/// - `prefer_quads`: `False` lets an odd loop cost one triangle, returned in a
+///   separate TRI3 submesh along with the few cells a distorted leftover polygon
+///   could not make square. `True` removes the first kind, not the second, and
+///   raises on a loop with an odd number of segments: a polygon with an odd
+///   number of sides has no filling by quadrangles alone, and evening the count
+///   would mean adding a boundary node.
+/// - `relax`: what the front may do to itself between two rows — `"free"`
+///   (`None`, the default), `"along"` or `"none"`; see
+///   `pyrucast.mesh.pave_surface`.
 ///
-/// `relax` chooses what the front may do to itself between two rows: `"free"`
-/// (the default, and the historical behaviour), `"along"` — the smoothing kept
-/// only along the front, which keeps its corners and with them the front's
-/// ability to shed nodes as it contracts — or `"none"`. See `pave_surface`,
-/// which shares the band with this operator and where the choice is spelled
-/// out.
+/// # Returns
+///
+/// A new `Mesh` on the contour's nodes plus fresh interior nodes.
+///
+/// # Raises
+///
+/// - `ValueError` for an unknown `relax`.
+/// - `RuntimeError` for an `element_type` other than QUA4, QUA8 or QUA9, with
+///   `prefer_quads=True` on an odd loop, or for a contour too coarse for the size
+///   asked, where the front folds onto itself.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -1097,37 +1635,56 @@ pub fn grid_surface(
     Ok(PyMesh { inner: mesh })
 }
 
-/// Mesh the inside of a closed contour with a structured grid core and a
-/// frontal band, taking the grid's lines **one per contour node**.
+/// Mesh the inside of closed loops with a grid core, a line per contour node.
 ///
-/// The second of the two grid meshers, and the sibling of `grid_surface`, which
-/// it does not replace: same input, same output, same untouchable contour, and
-/// neither wins everywhere.
-///
-/// `grid_surface` pins a line on the coordinate each aligned side lies on, and
-/// subdivides between two lines by whichever side spans them end to end. Every
+/// The sibling of `pyrucast.mesh.grid_surface`, which it does not replace: same
+/// input, output and untouchable contour, and neither wins everywhere.
+/// `grid_surface` pins a line on the coordinate each aligned side lies on; every
 /// line is straight. `grid_surface2` gives every node of the contour the line
-/// that crosses it, collapses the bands too thin to be cells — welding each of
-/// their edges onto the contour node at one end, or onto its midpoint — and
-/// lets a grid node within a quarter cell of a contour node move onto it.
+/// that crosses it, collapses the bands too thin to be cells, and lets a grid
+/// node within a quarter cell of a contour node move onto it. A row is therefore
+/// a polyline, so one row can meet two facing walls at two different heights: a
+/// wall cut into ten can face a wall cut into eleven.
 ///
-/// A row is therefore a polyline rather than a line, and that is the point: one
-/// row can meet two facing walls at two different heights, so a wall cut into
-/// ten can face a wall cut into eleven. `grid_surface` has to pick one of them
-/// and sends the other to the band.
+/// **Reach for it on a rectilinear shape**, all the more so when its sides were
+/// not cut at the corners facing them; **reach for `grid_surface` on anything
+/// curved**. Measured worst cell, `grid_surface` then `grid_surface2`: plate with
+/// a step off the grid 0.405 / 0.963, L with arbitrary dimensions 0.437 / 0.979,
+/// crenellated profile 0.323 / 0.651, house with a pitched roof 0.420 / 0.548. On
+/// a **circle** the order reverses hard — 0.288 against 0.005 —: nothing dictates
+/// a grid line over most of a curve.
 ///
-/// **Reach for `grid_surface2` on a rectilinear shape**, all the more so when
-/// its sides were not cut at the corners facing them; **reach for
-/// `grid_surface` on anything curved**, where the contour's nodes only tell you
-/// where its vertices happened to fall. Measured worst cell, `grid_surface`
-/// then `grid_surface2`: plate with a step off the grid 0.405 / 0.963, L with
-/// arbitrary dimensions 0.437 / 0.979, crenellated profile with its base in one
-/// run 0.323 / 0.651, house with a pitched roof 0.420 / 0.548. On a **circle**
-/// the order reverses hard — 0.288 against 0.005 — and `grid_surface2` should
-/// not be used: nothing dictates a grid line over most of a curve. The book's
-/// *Mailler une géométrie* page puts all four surface meshers side by side.
+/// # Parameters
 ///
-/// `size`, `band` and `relax` mean what they mean for `grid_surface`.
+/// - `contour`: **one or more** closed SEG2 loops, oriented as for
+///   `pyrucast.mesh.triangulate_surface`: a **counterclockwise** loop is a
+///   domain's outer boundary, a **clockwise** loop a hole. Several disjoint
+///   counterclockwise loops mesh several independent domains at once. It may be
+///   2-D, or a planar loop in 3-D, meshed in its best-fit plane and lifted back.
+/// - `element_type`: `"QUA4"`, `"QUA8"` or `"QUA9"`.
+/// - `size`: the target edge length; `None` takes the mean boundary edge length,
+///   domain by domain.
+/// - `band`: as for `pyrucast.mesh.grid_surface`.
+/// - `prefer_quads`: `False` lets an odd loop cost one triangle, returned in a
+///   separate TRI3 submesh along with the few cells a distorted leftover polygon
+///   could not make square. `True` removes the first kind, not the second, and
+///   raises on a loop with an odd number of segments: a polygon with an odd
+///   number of sides has no filling by quadrangles alone, and evening the count
+///   would mean adding a boundary node.
+/// - `relax`: what the front may do to itself between two rows — `"free"`
+///   (`None`, the default), `"along"` or `"none"`; see
+///   `pyrucast.mesh.pave_surface`.
+///
+/// # Returns
+///
+/// A new `Mesh` on the contour's nodes plus fresh interior nodes.
+///
+/// # Raises
+///
+/// - `ValueError` for an unknown `relax`.
+/// - `RuntimeError` for an `element_type` other than QUA4, QUA8 or QUA9, with
+///   `prefer_quads=True` on an odd loop, or for a contour too coarse for the size
+///   asked, where the front folds onto itself.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -1153,24 +1710,32 @@ pub fn grid_surface2(
     Ok(PyMesh { inner: mesh })
 }
 
-/// Mesh the inside of a closed envelope with a hexahedral boundary layer over
-/// a tetrahedral core — the 3-D companion of `pave_surface`.
+/// Mesh a closed envelope: a hexahedral boundary layer over a tetrahedral core.
 ///
-/// Puts hexahedra where they matter, in the layer against the boundary where
-/// gradients are steepest and an element's shape decides the accuracy, and
-/// leaves the smooth interior to tetrahedra.
+/// The 3-D companion of `pyrucast.mesh.pave_surface`. Hexahedra go where they
+/// matter, in the layer against the boundary where gradients are steepest; the
+/// smooth interior is left to tetrahedra. Pyramids join the two: the layer's
+/// inner faces are squares and a tetrahedron has none, so without them the mesh
+/// could not be conforming.
 ///
-/// `layers` boundary layers are grown inward, each `thickness` deep;
-/// `thickness=None` takes the envelope's mean edge length, which gives roughly
-/// cube-shaped cells. `size` is the target element size for the tetrahedral
-/// core. The envelope is a closed surface of QUA4 and/or TRI3 facets whose
-/// normals point **out of the material**, exactly as for `triangulate_volume`;
-/// its nodes are reused as they are.
+/// # Parameters
 ///
-/// The result carries a QUA4-born HEX8 submesh, a TRI3-born PENTA6 one, a
-/// PYRA5 one and a TET4 one, each present only if non-empty. The pyramids are
-/// the junction: the layer's inner faces are squares and a tetrahedron has
-/// none, so without them the mesh could not be conforming.
+/// - `envelope`: a closed surface of QUA4 and/or TRI3 facets, its normals pointing
+///   **out of the material**; its nodes are reused as they are.
+/// - `layers`: the number of boundary layers, grown inward.
+/// - `thickness`: the depth of each layer; `None` takes the envelope's mean edge
+///   length, which gives roughly cube-shaped cells.
+/// - `size`: the target cell size of the tetrahedral core.
+///
+/// # Returns
+///
+/// A new `Mesh` with a HEX8 submesh (born of the QUA4 facets), a PENTA6 one (born
+/// of the TRI3 facets), a PYRA5 one and a TET4 one, each present only if not
+/// empty.
+///
+/// # Raises
+///
+/// `RuntimeError` if `envelope` is not closed.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -1193,21 +1758,34 @@ pub fn pave_volume(
     Ok(PyMesh { inner: mesh })
 }
 
-/// Fill the inside of a closed `TRI3` `envelope` with `TET4` cells — the 3-D
-/// companion of `triangulate_surface`.
+/// Fill the inside of a closed TRI3 `envelope` with TET4 cells.
 ///
-/// The envelope's normals must point **out of the material**; a concave
-/// shape is fine, and an internal cavity is simply another closed surface
-/// whose normals point into the hole. Its nodes are reused as they are, and
-/// nodes are added inside the solid so the cells come out well shaped.
+/// The 3-D companion of `pyrucast.mesh.triangulate_surface`. A concave shape is
+/// fine, and an internal cavity is simply another closed surface whose normals
+/// point into the hole. The envelope's nodes are reused as they are, and nodes
+/// are added inside the solid so the cells come out well shaped.
 ///
-/// `size` is the target edge length; `None` takes the mean edge length of
-/// the envelope. `allow_surface_nodes` lets the mesher cut the envelope
-/// finer where it cannot otherwise fit it or make it usable: the shape is
-/// kept — every added node lies on the edge or facet it divides — but the
-/// skin of the result no longer matches the surface handed in, and a warning
-/// on stderr says how many were added. Without it, such a surface is
-/// refused rather than meshed badly.
+/// # Parameters
+///
+/// - `envelope`: the closed TRI3 surface, its normals pointing **out of the
+///   material**.
+/// - `size`: the target edge length; `None` takes the mean edge length of the
+///   envelope.
+/// - `allow_surface_nodes`: lets the mesher cut the envelope finer where it
+///   cannot otherwise fit it or make it usable. The shape is kept — every added
+///   node lies on the edge or facet it divides —, but the skin of the result no
+///   longer matches the surface handed in, and a warning on stderr says how many
+///   nodes were added. Without it, such a surface is refused rather than meshed
+///   badly.
+///
+/// # Returns
+///
+/// A new `Mesh` of TET4 cells.
+///
+/// # Raises
+///
+/// `RuntimeError` if `envelope` is not a closed surface, or, without
+/// `allow_surface_nodes`, for a surface the mesher cannot fit.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -1241,22 +1819,50 @@ fn groups_to_dict<'py>(
     Ok(dict)
 }
 
-/// Map a gmsh element-type code to pyrucast's element-type name — the
-/// translation `pyrucast.mesh.from_gmsh` applies to every block before
-/// handing it to `from_arrays`. Raises for a gmsh type pyrucast has no
-/// counterpart for (third order and above, …).
+/// The pyrucast element type of a gmsh element-type code.
+///
+/// The translation `pyrucast.mesh.from_gmsh` applies to every block before
+/// handing it to `pyrucast.mesh.from_arrays`.
+///
+/// # Parameters
+///
+/// - `code`: the gmsh code, `2` for a 3-node triangle.
+///
+/// # Returns
+///
+/// The name of the pyrucast element type, `"TRI3"` for `2`.
+///
+/// # Raises
+///
+/// `RuntimeError` for a gmsh type pyrucast has no counterpart for (third order and
+/// above, …).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn element_type_from_gmsh(code: u32) -> PyResult<&'static str> {
     Ok(crate::ops::mesh::gmsh::element_type_from_gmsh(code)?.name())
 }
 
-/// pyrucast's Gauss rule for `element_type`, carried into an external
-/// reference element — `ref_nodes`, its nodes numbered in `order`
-/// (`"pyrucast"`, `"gmsh"`, `"med"`), `dim` coordinates each. Returns
-/// `(xi, weights)`, the points in pyrucast's order, the weights scaled by the
-/// ratio of the reference measures. Raises if the external element is not an
-/// affine image of pyrucast's under that numbering.
+/// Pyrucast's Gauss rule for `element_type`, carried into an external element.
+///
+/// The points are mapped into the external reference element and the weights
+/// scaled by the ratio of the reference measures.
+///
+/// # Parameters
+///
+/// - `element_type`: the element type.
+/// - `ref_nodes`: the nodes of the external reference element, `dim` coordinates
+///   each, numbered in `order`.
+/// - `order`: the numbering of `ref_nodes`: `"pyrucast"`, `"gmsh"` or `"med"`.
+///
+/// # Returns
+///
+/// `(xi, weights)`: the points, in pyrucast's order, and their weights.
+///
+/// # Raises
+///
+/// - `ValueError` for an unknown `element_type` or `order`.
+/// - `RuntimeError` if the external element is not an affine image of pyrucast's
+///   under that numbering.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn gauss_to_external(
@@ -1272,10 +1878,24 @@ pub fn gauss_to_external(
     )?)
 }
 
-/// For each of pyrucast's Gauss points of `element_type`, the index of the
-/// same point in the external rule `(xi, weights)` declared in the external
-/// reference element `ref_nodes` (numbered in `order`). Raises when the two
-/// rules are not the same quadrature.
+/// Where each Gauss point of `element_type` sits in an external rule.
+///
+/// # Parameters
+///
+/// - `element_type`: the element type.
+/// - `ref_nodes`: the nodes of the external reference element, numbered in
+///   `order`.
+/// - `xi`, `weights`: the external rule, declared in that element.
+/// - `order`: the numbering of `ref_nodes`: `"pyrucast"`, `"gmsh"` or `"med"`.
+///
+/// # Returns
+///
+/// For each Gauss point of pyrucast, the index of the same point in `xi`.
+///
+/// # Raises
+///
+/// - `ValueError` for an unknown `element_type` or `order`.
+/// - `RuntimeError` if the two rules are not the same quadrature.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn match_gauss(
@@ -1295,37 +1915,49 @@ pub fn match_gauss(
     )?)
 }
 
-/// Build meshes and fields from **flat arrays** — the one import every
-/// exchange format goes through (`pyrucast.mesh.from_gmsh` and
-/// `pyrucast.mesh.from_medcoupling` are built on it).
+/// Build meshes and fields from flat arrays, the shape `export.to_arrays` returns.
 ///
-/// - `node_tags` — one integer tag per node (`uint64` or `int64`);
-/// - `node_coords` — 1 to 3 coordinates per tag, in the same order; the
-///   dimension of `coords` decides how many are kept (padded with zeros);
-/// - `blocks` — a sequence of `(element_type, node_tags, cell_tags, groups)`,
-///   one per block of cells sharing a type and a combination of groups: the
-///   pyrucast type name (`"TET4"`), the flat connectivity in node tags, one
-///   tag per cell (or an empty sequence when no cell field names the block),
-///   and the group names the cells belong to. A 3-tuple without `cell_tags`
-///   is accepted too;
-/// - `node_fields` — a sequence of `(components, node_tags, values)`,
-///   `len(node_tags) * len(components)` values, node-major;
-/// - `cell_fields` — a sequence of `(components, cell_tags, values, layout)`:
+/// The one import every exchange format goes through
+/// (`pyrucast.mesh.from_gmsh` and `pyrucast.mesh.from_medcoupling` are built on
+/// it). Only the nodes a cell references are created. numpy arrays are read
+/// **without being copied**, through the buffer protocol; plain Python lists work
+/// too, at the cost of a conversion.
+///
+/// # Parameters
+///
+/// - `coords`: where the nodes are added; its dimension decides how many
+///   coordinates are kept.
+/// - `node_tags`: one integer tag per node (`uint64` or `int64`).
+/// - `node_coords`: 1 to 3 coordinates per tag, in the same order, padded with
+///   zeros.
+/// - `blocks`: a sequence of `(element_type, node_tags, cell_tags, groups)`, one
+///   per block of cells sharing a type and a combination of groups: the pyrucast
+///   type name (`"TET4"`), the flat connectivity in node tags, one tag per cell
+///   (or an empty sequence when no cell field names the block), and the names of
+///   the groups the cells belong to. A 3-tuple without `cell_tags` is accepted
+///   too.
+/// - `node_fields`: a sequence of `(components, node_tags, values)`,
+///   `len(node_tags) * len(components)` values, node-major. A node field keeps
+///   the nodes the mesh created.
+/// - `cell_fields`: a sequence of `(components, cell_tags, values, layout)`.
 ///   `layout` is `"cell"` (one value per cell and component) or a sequence of
 ///   Gauss rules `(element_type, ref_nodes, xi, weights)` in the format's own
-///   reference element — one value per point, component and cell, the points
-///   in the order of the rule, which must be pyrucast's;
-/// - `order` — the node numbering inside a cell: `"pyrucast"` (= VTK),
+///   reference element — one value per point, component and cell, the points in
+///   the order of the rule, which must be pyrucast's. A cell field gets a zone on
+///   every group all of whose cells it defines.
+/// - `order`: the node numbering inside a cell: `"pyrucast"` (the same as VTK),
 ///   `"gmsh"` or `"med"`.
 ///
-/// Returns `(meshes, node_fields, element_fields)`: a `dict` from group name
-/// to `Mesh` (all sharing `coords`, in order of first appearance), then the
-/// fields in the order they were given. Only nodes referenced by a cell are
-/// created; a node field keeps the nodes the mesh created; a cell field gets
-/// a zone on every group all of whose cells it defines.
+/// # Returns
 ///
-/// numpy arrays are read **without being copied**, through the buffer
-/// protocol; plain Python lists work too, at the cost of a conversion.
+/// `(meshes, node_fields, element_fields)`: a `dict` from group name to `Mesh`
+/// (all on `coords`, in order of first appearance), then the fields in the order
+/// they were given.
+///
+/// # Raises
+///
+/// - `ValueError` for an unknown `order` or element type.
+/// - `RuntimeError` for a cell referencing a node tag that is not given.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (coords, node_tags, node_coords, blocks, *, node_fields = Vec::new(), cell_fields = Vec::new(), order = "pyrucast"))]
@@ -1595,22 +2227,29 @@ impl<'py> ExchangeInputs<'py> {
     }
 }
 
-/// Read a gmsh `.msh` file (ASCII or binary, MSH 2.2 or 4.1) into a `dict`
-/// mapping each physical group name to a `Mesh`, adding the nodes to `coords`.
+/// Read a gmsh `.msh` file, one `Mesh` per physical group.
 ///
-/// The nodes land in the `coords` you pass, so you keep the handle needed to
-/// pose boundary conditions on a named region. Its dimension decides how
-/// many of gmsh's three coordinates are kept (a 2-D `Coords` flattens onto
-/// `xy`). All returned meshes share that single `Coords`, so a node on the
-/// boundary between two named groups is the same node on both sides. Inside
-/// a group's mesh there is one submesh per element type; elements with no
-/// physical group land under the key `"<ungrouped>"`. The dict preserves the
-/// file order.
+/// ASCII or binary, MSH 2.2 or 4.1. All returned meshes share one `Coords`, so a
+/// node on the boundary between two named groups is the same node on both sides.
+/// Inside a group's mesh there is one submesh per element type; elements with no
+/// physical group land under the key `"<ungrouped>"`. Every element type pyrucast
+/// knows is read: POI1, SEG2, TRI3, QUA4, TET4, PYRA5, PENTA6, HEX8 and the
+/// quadratic SEG3, TRI6, QUA8, QUA9, TET10, PENTA15, HEX20, HEX27.
 ///
-/// Every element type pyrucast knows is read: POI1, SEG2, TRI3, QUA4, TET4,
-/// PYRA5, PENTA6, HEX8 and the quadratic SEG3, TRI6, QUA8, QUA9, TET10,
-/// PENTA15, HEX20, HEX27. Any other gmsh type raises, naming the codes it
-/// does accept.
+/// # Parameters
+///
+/// - `coords`: where the nodes are added; its dimension decides how many of
+///   gmsh's three coordinates are kept (a 2-D `Coords` keeps `x` and `y`).
+/// - `path`: the file to read.
+///
+/// # Returns
+///
+/// A `dict` from physical group name to `Mesh`, in the order of the file.
+///
+/// # Raises
+///
+/// `RuntimeError` if the file cannot be read or parsed, or for a gmsh element
+/// type pyrucast does not know.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn read_gmsh<'py>(
@@ -1622,8 +2261,21 @@ pub fn read_gmsh<'py>(
     groups_to_dict(py, groups)
 }
 
-/// Like `read_gmsh`, but parsing the `.msh` text already held in a string
-/// instead of reading from a path. Same `dict[str, Mesh]` result.
+/// Like `pyrucast.mesh.read_gmsh`, from the `.msh` text held in a string.
+///
+/// # Parameters
+///
+/// - `coords`: where the nodes are added.
+/// - `text`: the content of a `.msh` file.
+///
+/// # Returns
+///
+/// A `dict` from physical group name to `Mesh`, in the order of the text.
+///
+/// # Raises
+///
+/// `RuntimeError` if the text cannot be parsed, or for a gmsh element type
+/// pyrucast does not know.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn read_gmsh_str<'py>(
@@ -1635,25 +2287,35 @@ pub fn read_gmsh_str<'py>(
     groups_to_dict(py, groups)
 }
 
-/// Select the part of a field's support passing a value band, zone by zone —
-/// a value-range filter returning a `Mesh`.
+/// The part of the support of `field` whose values lie in a band, as a `Mesh`.
 ///
-/// `field` may be a `NodeField` / `SubNodeField` (→ POI1 submeshes of the
-/// passing **nodes**) or an `ElementField` / `SubElementField` (→ submeshes
-/// of the passing **cells**, each of its zone's element type; a cell passes
-/// only when *all* its Gauss points do). The result has one submesh per
-/// processed zone.
+/// Zone by zone: a field at the nodes gives POI1 submeshes of the passing
+/// **nodes**; a field at the Gauss points gives submeshes of the passing
+/// **cells**, each of its zone's element type, a cell passing only when *all* its
+/// Gauss points do. When several components are tested they combine with **AND**:
+/// a node or a cell is kept only when *every* tested component is in the band. Its
+/// sibling `pyrucast.node_field.mask` rewrites the values instead, keeping the
+/// structure.
 ///
-/// The band is set by the four comparison bounds — `ge` (`≥`), `gt` (`>`),
-/// `le` (`≤`), `lt` (`<`); give at most one lower (`ge`/`gt`) and one upper
-/// (`le`/`lt`), at least one overall. With several components in play they
-/// are combined with **AND**: a point/cell is kept only when *every* tested
-/// component is in band.
+/// # Parameters
 ///
-/// `components=None` tests every component of each zone. A `components`
-/// list tests **only** those components, and only on the zones carrying
-/// **all** of them — a zone missing any listed component is skipped (no
-/// submesh). Errors if no bound is given, or the lower one exceeds the upper.
+/// - `field`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
+/// - `ge`, `gt`: the lower bound, `v ≥ ge` or `v > gt` — at most one of the two.
+/// - `le`, `lt`: the upper bound, `v ≤ le` or `v < lt` — at most one of the two.
+///   A bound left out leaves that side open; at least one bound is given.
+/// - `components`: the components to test, only on the zones carrying **all** of
+///   them — a zone missing one is skipped. `None` tests every component of each
+///   zone.
+///
+/// # Returns
+///
+/// A `Mesh` with one submesh per zone processed.
+///
+/// # Raises
+///
+/// - `TypeError` if `field` is none of the four field types.
+/// - `RuntimeError` if no bound is given, if both bounds of one side are, or if
+///   the lower bound exceeds the upper one.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (field, ge=None, gt=None, le=None, lt=None, components=None))]
@@ -1812,7 +2474,7 @@ pub fn select_sub_cells(
     })
 }
 
-// ─── Méthodes de délégation ────────────────────────────────────────────────
+// ─── Delegation methods ────────────────────────────────────────────────────
 //
 // The "subject" face of the operators above (`CONVENTIONS.md`, § "Le verbe
 // exposé aussi en méthode"). They now come from `#[py_op]`, placed on the free
@@ -1827,34 +2489,40 @@ pub fn select_sub_cells(
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyMesh {
-    /// Weld together nodes closer than `tol`, redirecting the connectivity to one
-    /// representative per cluster.
+    /// Weld together the nodes of `mesh` closer than `tol`.
     ///
-    /// Returns a new mesh mirroring `mesh` (same submeshes, types and colours)
-    /// with welded-away nodes redirected to their cluster representative — the
+    /// The connectivity is redirected to one representative per cluster — the
     /// smallest-id node of the cluster, which keeps its own coordinates (no
-    /// averaging). Cells that collapse onto a repeated node (a degenerate segment,
-    /// triangle, …) are dropped. `tol` must be ≥ 0; `tol = 0` welds only exactly
-    /// coincident nodes. `mesh` itself is left untouched.
+    /// averaging). A cluster is a connected component of the relation "closer than
+    /// `tol`": the weld propagates from node to node, so on a chain a—b—c where a and
+    /// c are further apart than `tol`, all three still end up as one — which is why a
+    /// `tol` of the order of the element size collapses a whole region rather than a
+    /// seam. Every call prints a one-line tally on stdout once the weld is done —
+    /// nodes welded, cells dropped, tolerance used.
     ///
-    /// A cluster is a connected component of the « closer than `tol` » relation:
-    /// the weld propagates from node to node, so on a chain a—b—c where a and c
-    /// are further apart than `tol`, all three still end up as one — which is why
-    /// a `tol` of the order of the element size collapses a whole region rather
-    /// than a seam.
+    /// # Parameters
     ///
-    /// With `in_place=True` the connectivity of `mesh`'s **own** submeshes is
-    /// rewritten instead — the assumed side effect — and the very same mesh object
-    /// is returned. Since the union `mesh_a | mesh_b` shares its submeshes rather
-    /// than copying them, welding that union in place welds `mesh_a` and `mesh_b`
-    /// themselves: afterwards they really do share their interface nodes. The mesh
-    /// structure is preserved (same submeshes, same cells in the same order), so a
-    /// cell that *would* collapse is an error here instead of being dropped, as is
-    /// a submesh already sealed by a finite-element space, field or matrix. Both
-    /// are checked before anything is written: a rejected call changes nothing.
+    /// - `mesh`: the mesh to weld.
+    /// - `tol`: the distance, `≥ 0`; `0` welds only coincident nodes.
+    /// - `in_place`: `False` builds a new mesh, where cells that collapse onto a
+    ///   repeated node (a degenerate segment, triangle, …) are dropped. `True`
+    ///   rewrites the connectivity of `mesh`'s **own** submeshes instead and returns
+    ///   `mesh` itself. Since the union `mesh_a | mesh_b` shares its submeshes, welding
+    ///   that union in place welds `mesh_a` and `mesh_b` themselves: afterwards they
+    ///   share their interface nodes. The structure is kept (same submeshes, same
+    ///   cells in the same order), so a cell that would collapse is an error, as is a
+    ///   submesh already sealed by a finite-element space, a field or a matrix; both
+    ///   are checked before anything is written.
     ///
-    /// Every call prints a one-line tally on stdout once the weld is done — nodes
-    /// welded, cells dropped, tolerance used.
+    /// # Returns
+    ///
+    /// A new `Mesh` mirroring `mesh` (same submeshes, types and colours), or `mesh`
+    /// itself with `in_place=True`.
+    ///
+    /// # Raises
+    ///
+    /// `RuntimeError` if `tol` is negative, or, with `in_place=True`, for a cell that
+    /// would collapse or a sealed submesh.
     #[pyo3(signature = (tol, in_place=false))]
     fn merge_nodes(
         slf: Py<Self>,

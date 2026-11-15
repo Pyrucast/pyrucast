@@ -134,8 +134,8 @@ En axisymétrie, `eps_zz` et `sigma_zz` sont les composantes orthoradiales.
 | tangente | analytique : le module élastique \\(D\\), d'où la raideur |
 | forces internes | \\(\int B^{\mathsf T}\sigma\\) |
 
-La raideur géométrique est décrite avec les
-[opérateurs d'assemblage](../operateurs/assemblage.md).
+La raideur géométrique est décrite dans
+[Grandes transformations](grandes-transformations.md#la-rigidité-géométrique).
 
 ## Exemple
 
@@ -145,7 +145,7 @@ son bord droit. La solution est exacte : \\(u_x = S\\,x/E\\),
 \\(u_y = -\nu\\,S\\,y/E\\) :
 
 ```python
-{{#include ../../../tests/python/test_doc_mecanique.py:elasticite}}
+{{#include ../../../tests/python/test_doc_mecanique.py:model-elasticity}}
 ```
 
 ## Côté Rust
