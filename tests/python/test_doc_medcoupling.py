@@ -51,14 +51,14 @@ donnees = pyrucast.export.to_medcoupling(
 donnees.write("plaque.med", 2)  # a medcoupling object: its own writer
 # ANCHOR_END: export-to_medcoupling
 
-# ANCHOR: from_medcoupling
+# ANCHOR: mesh-from_medcoupling
 coords = pyrucast.Coords(dim=2)
 regions, champs = pyrucast.mesh.from_medcoupling(coords, "plaque.med")
 print(sorted(regions))  # ['bas', 'plaque'] — one Mesh per MED group
 print(type(champs["T"]).__name__)  # Evolution: two time steps
 print(champs["T"].shared_abscissas())  # [0.0, 60.0]
 print(type(champs["sxx"]).__name__)  # ElementField, on pyrucast's Gauss points
-# ANCHOR_END: from_medcoupling
+# ANCHOR_END: mesh-from_medcoupling
 
 assert sorted(regions) == ["bas", "plaque"]
 assert regions["plaque"].cell_counts() == plaque.cell_counts()

@@ -21,10 +21,10 @@ pytestmark = pytest.mark.gmsh
 gmsh.initialize()
 gmsh.option.setNumber("General.Terminal", 0)
 
-# ANCHOR: from_gmsh
+# ANCHOR: mesh-from_gmsh
 import pyrucast
 
-# — la géométrie et le maillage restent l'affaire de gmsh —
+# — geometry and meshing remain gmsh's business —
 gmsh.model.occ.addBox(0, 0, 0, 1, 1, 1)
 gmsh.model.occ.synchronize()
 gmsh.model.addPhysicalGroup(2, [1], name="encastrement")
@@ -41,7 +41,7 @@ print(regions["encastrement"].element_types())  # ['TRI3']
 print(coords.node_count)  # the model's nodes, shared by both
 
 gmsh.finalize()  # pyrucast owns its data: the mesh outlives it
-# ANCHOR_END: from_gmsh
+# ANCHOR_END: mesh-from_gmsh
 
 assert piece.element_types() == ["TET4"]
 assert regions["encastrement"].element_types() == ["TRI3"]

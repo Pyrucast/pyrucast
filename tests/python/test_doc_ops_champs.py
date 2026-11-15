@@ -53,13 +53,13 @@ temperature = _champ_nodal(
 )
 sigma = pyrucast.ElementField(fes, ["vm"])
 sigma[0].set_uniform("vm", 300e6)
-# ANCHOR: select
+# ANCHOR: mesh-select
 # Nodes whose temperature lies between 20 and 80 °C (inclusive bounds).
 chauds = pyrucast.mesh.select(temperature, ge=20.0, le=80.0)
 
-# Cellules dont la contrainte de von Mises dépasse un seuil (borne basse seule).
+# Cells whose von Mises stress exceeds a threshold (lower bound alone).
 critiques = pyrucast.mesh.select(sigma, ge=250e6, components=["vm"])
-# ANCHOR_END: select
+# ANCHOR_END: mesh-select
 assert chauds.cell_count == 3  # 50, 30, 70
 assert critiques.cell_count == 2
 

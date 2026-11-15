@@ -71,11 +71,11 @@ cellules partagent leurs nœuds. Les contraintes s'en servent pour créer leurs
 nœuds-multiplicateurs, un par relation (cf. [Dirichlet](../contraintes/dirichlet.md)).
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:barycenter}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-barycenter}}
 ```
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:line}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-line}}
 ```
 
 **En quadratique, le maillage garde son degré.** Une ligne `SEG3` s'extrude en
@@ -112,7 +112,7 @@ chose, il est ensuite **converti** :
   composées).
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:sweep}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-sweep}}
 ```
 
 Entre deux lignes **`SEG3`**, la surface est construite directement en `QUA8`
@@ -157,7 +157,7 @@ sur le bord, quelle que soit leur forme (pas seulement des droites). Comme
 `"TRI3"`/`"QUA8"`/`"QUA9"`/`"TRI6"`.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:transfinite}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-transfinite}}
 ```
 
 > **Différence avec Cast3M.** `DALL` accepte des côtés opposés avec un
@@ -189,7 +189,7 @@ donc de nouveau modifiable même si l'original a été consommé par un espace
 méthode `duplicate()`, qui est le cas `new_nodes=False`.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:copie}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-copy}}
 ```
 
 ## Copies rigides : `translate`, `rotate` et les symétries
@@ -259,7 +259,7 @@ nœud du trou en face de chaque nœud du contour, ce que [`sweep`](#sweep--une-s
 demande.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:project_on_sphere}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-project_on_sphere}}
 ```
 
 `radius` doit être positif et fini, `center` avoir la dimension du maillage.
@@ -285,7 +285,7 @@ Associé à `translate` / `rotate`, il construit une tranche de solide entre une
 surface et sa copie déplacée :
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:sweep_solid}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-sweep_solid}}
 ```
 
 ## Révolution : `revolve`
@@ -336,7 +336,7 @@ exactement comme un `extrude` à contre-normale : passez par `orient` sur le
 résultat, ou révolutionnez d'un angle positif depuis la source symétrisée.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:revolve}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-revolve}}
 ```
 
 `revolve` fait d'un coup ce que `rotate` + `sweep_solid` font tranche par
@@ -367,7 +367,7 @@ l'espace éléments finis prend de lui-même (cf.
 [Espace éléments finis](../fe-space.md)) :
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:to_quadratic}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-to_quadratic}}
 ```
 
 ## Changement de type d'élément : `convert`
@@ -393,7 +393,7 @@ modifié. Tout autre couple `(source, cible)` lève une erreur : passer à un ty
 relève de [`to_quadratic`](#passage-à-lordre-quadratique--to_quadratic).
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:convert}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-convert}}
 ```
 
 ## Maillage d'un contour fermé : `triangulate_surface`
@@ -483,7 +483,7 @@ l'angle visé : affiner alors le contour d'entrée plutôt que la taille cible.
 ### Exemple Python
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:triangulate_surface}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-triangulate_surface}}
 ```
 
 ### Refus final
@@ -776,7 +776,7 @@ une erreur qui le dit, plutôt que de rendre un maillage fait de ce qui restait.
 ### Exemple Python
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:pave_surface}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-pave_surface}}
 ```
 
 ### Interruption
@@ -981,7 +981,7 @@ plus de bande et moins de grille.
 ### Exemple Python
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:grid_surface}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-grid_surface}}
 ```
 
 ### Qualité
@@ -1152,7 +1152,7 @@ le hasard de l'endroit où ses sommets sont tombés.
 ### Exemple Python
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:grid_surface2}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-grid_surface2}}
 ```
 
 ## Améliorer un maillage existant : `regularize`, `cleanup`, `merge_triangles`
@@ -1539,7 +1539,7 @@ chacun présent seulement s'il n'est pas vide.
 ### Exemple Python
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:pave_volume}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-pave_volume}}
 ```
 
 ### Pièges
@@ -1622,7 +1622,7 @@ et la principale source d'échec.
 ## Mailleur volumique : `triangulate_volume`
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:triangulate_volume}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-triangulate_volume}}
 ```
 
 Le **compagnon 3D** de `triangulate_surface` : il remplit l'intérieur d'une
@@ -1964,7 +1964,7 @@ donc **réalimenter directement** `triangulate_surface`. Les nœuds d'origine
 sont réutilisés (et re-référencés).
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:border}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-border}}
 ```
 
 ### Découpe par angle (`angle_deg`)
@@ -2025,7 +2025,7 @@ base carrée et quatre triangles). Les facettes conservent leur orientation
 sortante ; les nœuds d'origine sont réutilisés (et re-référencés).
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:skin}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-skin}}
 ```
 
 Un `angle_deg` plus grand regroupe des faces plus courbées (un cylindre facetté
@@ -2084,7 +2084,7 @@ orientation) sont inchangés. Appliqué deux fois, `invert` redonne le maillage 
 départ.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:orient}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-orient}}
 ```
 
 Côté Rust, `ops::mesh::orient(&mesh)` et `ops::mesh::invert(&mesh)`.
@@ -2128,7 +2128,7 @@ de son plus petit numéro de nœud, dans le sens du segment qui l'a déjà pour
 queue.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:chain}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-chain}}
 ```
 
 Côté Rust, `ops::mesh::chain(&mesh)` — ou la méthode `mesh.chain()`.
@@ -2161,7 +2161,7 @@ nœud n'a de sens qu'au sein d'une `Coords`), sinon une erreur est levée. Un
 `points` vide ne retient rien.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:elements_on}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-elements_on}}
 ```
 
 Côté Rust, `ops::mesh::elements_on(&mesh, &points, strict)`.
@@ -2291,7 +2291,7 @@ connectivité du résultat et deviennent récupérables par le GC de la `Coords`
 une fois plus rien ne les référence.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:merge_nodes}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-merge_nodes}}
 ```
 
 **Bilan à l'écran.** Chaque appel imprime une ligne sur la sortie standard —
@@ -2371,7 +2371,7 @@ laquelle lire (il garde ainsi la main sur les nœuds) ; le résultat est un
 `dict` Python qui associe à **chaque groupe physique** son `Mesh` :
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:read_gmsh}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-read_gmsh}}
 ```
 
 ### Groupes, types et `Coords` partagée
@@ -2455,7 +2455,7 @@ son métier —, puis on appelle `from_gmsh` pour récupérer le résultat, **sa
 passer par un fichier** :
 
 ```python
-{{#include ../../../tests/python/test_doc_gmsh.py:from_gmsh}}
+{{#include ../../../tests/python/test_doc_gmsh.py:mesh-from_gmsh}}
 ```
 
 pyrucast **lit** gmsh, il ne le pilote pas : aucune fonction pyrucast ne crée de
@@ -2524,7 +2524,7 @@ l'écrit au travers de **medcoupling**, la bibliothèque MED de Salome
 `to_medcoupling`) l'importe.
 
 ```python
-{{#include ../../../tests/python/test_doc_medcoupling.py:from_medcoupling}}
+{{#include ../../../tests/python/test_doc_medcoupling.py:mesh-from_medcoupling}}
 ```
 
 La source est un chemin vers un `.med`, un `medcoupling.MEDFileData` ou un
@@ -2572,7 +2572,7 @@ générique** que partagent tous les formats — utilisable directement quand on
 tient déjà les tableaux :
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:from_arrays}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-from_arrays}}
 ```
 
 Le format est commun à tous les échanges :

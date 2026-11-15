@@ -138,7 +138,7 @@ n'est moyenné ni fusionné).
   composante testée est dans la bande.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:select}}
+{{#include ../../../tests/python/test_doc_ops_champs.py:mesh-select}}
 ```
 
 ## Masque par valeur
