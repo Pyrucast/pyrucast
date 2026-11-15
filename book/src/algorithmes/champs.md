@@ -1,4 +1,4 @@
-# Opérateurs sur les champs
+# Calcul sur les champs
 
 Les modules `ops::node_field`, `ops::element_field`, `ops::coords`,
 `ops::measure` et `ops::field` **dérivent et transforment** les
@@ -10,9 +10,9 @@ de Gauss. Ces opérateurs croisent des conteneurs (maillage + champ, espace EF
 par composante, elle, reste **sur les types de champ** (cf. [Champ](../field.md)).
 
 Les autres thèmes d'opérateurs ont leur propre page : construction du matériau
-([Construction](construction.md)), l'assemblage
+([Construction](champs-materiau.md)), l'assemblage
 ([`pyrucast.matrix`](../reference/matrix.md)), le chargement réparti
-([Flux imposé](../echanges.md#flux-imposé)), [Comportement](comportement.md), [Résolution](../algorithmes/solveur.md).
+([Flux imposé](../echanges.md#flux-imposé)), [Comportement](comportement.md), [Résolution](solveur.md).
 
 ## Coordonnées et déplacement
 

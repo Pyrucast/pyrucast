@@ -90,7 +90,8 @@ jamais de la page où on veut l'afficher.
 | une chaîne Rust complète (une physique) | `tests/<sujet>.rs`, entre ancres | un `include` ancré | `cargo test` |
 | une chaîne Python complète | `examples/<sujet>.py` | un `include`, entier ou ancré | `run_examples` |
 | un parcours pédagogique | `tutoriel/<sujet>.py`, entre ancres | un `include` ancré | `run_examples` |
-| l'usage d'un opérateur en Python | `tests/python/test_doc_<famille>.py`, entre ancres | un `include` ancré | `pytest` |
+| l'usage d'un opérateur en Python | `tests/python/test_doc_<famille>.py`, entre ancres ; l'ancre `module-fonction` (`mesh-skin`) le rattache à la fonction, `test_doc_reference.py` accueille ceux d'aucune page | un `include` ancré, et la référence sous la fonction | `pytest` |
+| le contrat d'une fonction Python (arguments, retour, erreurs) | sa docstring, en anglais | la référence, fabriquée à partir d'elle | `doc_lint.py docstrings` |
 | ce qui n'est **pas du code** (signature annotée, pseudo-code) | la page elle-même | ` ```text ` — pas de coloration, donc pas de promesse | rien, et c'est assumé |
 
 Un piège vérifié à la première migration : **le préfixe `test_` n'est pas
@@ -159,6 +160,36 @@ quelque chose compile déjà ce fichier ?**
 Il n'y a aujourd'hui aucun fichier du second cas dans ce dépôt, et il n'y a pas
 de raison d'en créer : un fichier d'exemple qui mérite d'être compilé mérite
 d'être un test.
+
+## La référence des opérateurs
+
+Le contrat d'une fonction Python — ce que l'appelant doit savoir : arguments,
+retour, erreurs — n'est écrit **qu'une fois**, dans sa docstring, en anglais.
+Les pages de la partie *Référence* n'en contiennent pas un mot : chacune tient
+en une ligne, `\{{#pymodule mesh}}`, que remplace au moment de construire le
+book un petit programme, `script/book_pyapi.py`, déclaré dans `book/book.toml`
+comme préprocesseur de mdBook. Il lit la docstring dans le stub commité
+(`python/pyrucast/_pyrucast/__init__.pyi`), sans importer le module compilé :
+la construction du site n'a rien à compiler.
+
+Trois mots remplacés au moment de construire :
+
+| directive | où | devient |
+|---|---|---|
+| `\{{#pymodule mesh}}` | une page de référence | une entrée par fonction : prototype complet, docstring, méthodes jumelles, lien vers l'algorithme, exemple |
+| `\{{#pysummary mesh.line mesh.arc}}` | la page de sommaire, sous un titre de thème | un tableau : prototype abrégé et première ligne de la docstring |
+| `\{{#pyalgo mesh.skin}}` | une page d'algorithme, sous le titre de la section qui raconte la fonction | la ligne « Fonctions décrites » ; la référence renvoie ici |
+
+Seul le rangement par thème du sommaire est écrit à la main. Le garde-fou
+`reference` vérifie qu'aucune fonction n'y manque, et la règle d'écriture des
+docstrings est dans `CONVENTIONS.md`, partie « Docstrings of the Python API ».
+
+**Le préprocesseur exige Python 3.** `book.toml` l'appelle par `python`. Là où
+`python` désigne un Python 2 — c'est le cas hors environnement virtuel sur
+certaines machines —, mdBook saute le préprocesseur **sans échouer** et la
+référence sort avec ses directives brutes. On construit donc avec le Python du
+venv en tête du `PATH` (`PATH="$PWD/.venv/bin:$PATH" mdbook build book`), et
+le garde-fou `reference` relit le book construit pour attraper ce cas.
 
 ## La règle d'or
 

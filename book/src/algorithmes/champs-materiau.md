@@ -1,4 +1,4 @@
-# Opérateurs de construction
+# Champs matériau
 
 Les **champs matériau** prêts pour l'assemblage vivent dans
 `ops::element_field`, avec les autres producteurs de champs aux points de

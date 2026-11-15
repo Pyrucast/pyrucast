@@ -32,12 +32,12 @@ sur `H` est le cadre de Miehe, Apel et Lambrecht.
 Le paramètre existe pour `elasticity`, pour les dix lois de plasticité et pour
 les trois lois d'endommagement. Deux combinaisons sont refusées : une mesure qui
 n'est pas une entrée de loi (`gradient`, Cauchy–Green, Euler–Almansi, `J`, que
-[`deformation`](../operateurs/champs.md)
+[`deformation`](../algorithmes/champs.md)
 sait pourtant produire) et Hencky en contraintes planes, où `ln C` demande
 `C_zz`, que seule la loi connaît.
 
 La dilatation thermique suit la mesure :
-[`thermal_strain`](../operateurs/champs.md)
+[`thermal_strain`](../algorithmes/champs.md)
 reçoit `measure` et donne l'étirement isotrope `1 + αΔT` exactement dans
 chacune — `αΔT`, `½((1 + αΔT)² − 1)`, `ln(1 + αΔT)` — sous les noms que lit
 la loi.
@@ -136,7 +136,7 @@ bloc échoue :
 {{#include ../../../tests/python/test_doc_grandes_transformations.py:coords-displace_from}}
 ```
 
-[`displace_from`](../operateurs/champs.md) pose la
+[`displace_from`](../algorithmes/champs.md) pose la
 configuration courante **en absolu**, `X + u`, à partir de la référence :
 rappelée avec un autre `u`, elle repart de `X`, et rien ne s'accumule — ce
 qu'exigent un sous-pas repris ou une itération accélérée. La configuration

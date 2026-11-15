@@ -323,7 +323,7 @@ d'*export* (`src/ops/export`), pendant « écriture » du lecteur `read_gmsh`.
 L'écrivain VTK n'est qu'un **formateur** : la mise à plat (quels points, quelles
 cellules dans quel ordre, quelles valeurs) vient de `to_arrays`, la sortie que
 partagent tous les échanges (voir
-[`to_arrays`](operateurs/maillage.md#le-chemin-inverse--to_arrays)). Les
+[`to_arrays`](algorithmes/maillage-echanges.md#le-chemin-inverse--to_arrays)). Les
 fichiers ASCII produits sont identiques, octet pour octet, à ceux de la
 première version.
 
@@ -372,8 +372,8 @@ variantes `vtk_*_string` qui rendent le texte ASCII sans toucher au disque.
 {{#pyalgo export.to_gmsh export.to_medcoupling}}
 
 Les deux sens des échanges passent par le même format à plat. Pour la lecture,
-voir [`from_gmsh`](operateurs/maillage.md#déléguer-le-maillage-à-gmsh--from_gmsh)
-et [`from_medcoupling`](operateurs/maillage.md#lire-un-fichier-med--from_medcoupling).
+voir [`from_gmsh`](algorithmes/maillage-echanges.md#déléguer-le-maillage-à-gmsh--from_gmsh)
+et [`from_medcoupling`](algorithmes/maillage-echanges.md#lire-un-fichier-med--from_medcoupling).
 
 `to_gmsh` pousse maillages et champs dans la session gmsh en cours, comme un
 nouveau modèle : chaque clé devient un groupe physique, chaque champ une vue.

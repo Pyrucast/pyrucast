@@ -1,4 +1,4 @@
-# Opérateurs de comportement
+# Intégration du comportement
 
 Le module `ops::element_field::behavior` **intègre la loi de comportement** d'un
 [`Model`](../model.md) — le `COMP` de cast3m (« intégrer le comportement ») ;
