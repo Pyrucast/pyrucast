@@ -64,47 +64,58 @@ macro_rules! field_unary {
 
 field_unary!(
     /// Element-wise absolute value.
-    abs, f64::abs
+    abs,
+    f64::abs
 );
 field_unary!(
     /// Element-wise square root (`nan` for negative values).
-    sqrt, f64::sqrt
+    sqrt,
+    f64::sqrt
 );
 field_unary!(
     /// Element-wise exponential `eˣ`.
-    exp, f64::exp
+    exp,
+    f64::exp
 );
 field_unary!(
     /// Element-wise natural logarithm (`-inf` / `nan` for values ≤ 0).
-    log, f64::ln
+    log,
+    f64::ln
 );
 field_unary!(
     /// Element-wise base-10 logarithm.
-    log10, f64::log10
+    log10,
+    f64::log10
 );
 field_unary!(
     /// Element-wise cosine (argument in radians).
-    cos, f64::cos
+    cos,
+    f64::cos
 );
 field_unary!(
     /// Element-wise sine (argument in radians).
-    sin, f64::sin
+    sin,
+    f64::sin
 );
 field_unary!(
     /// Element-wise tangent (argument in radians).
-    tan, f64::tan
+    tan,
+    f64::tan
 );
 field_unary!(
     /// Element-wise hyperbolic sine.
-    sinh, f64::sinh
+    sinh,
+    f64::sinh
 );
 field_unary!(
     /// Element-wise hyperbolic cosine.
-    cosh, f64::cosh
+    cosh,
+    f64::cosh
 );
 field_unary!(
     /// Element-wise hyperbolic tangent.
-    tanh, f64::tanh
+    tanh,
+    f64::tanh
 );
 
 #[cfg(test)]
