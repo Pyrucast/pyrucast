@@ -68,6 +68,12 @@ jobs:
       - name: Builder le book
         run: mdbook build book
 
+      - name: Vérifier que la référence a été fabriquée
+        # mdBook saute sans échouer un préprocesseur qui ne démarre pas : le
+        # book se publierait avec ses directives laissées telles quelles. Ce
+        # garde-fou relit les pages construites (bibliothèque standard seule).
+        run: python script/doc_lint.py reference
+
       - name: Builder la doc Rust (rustdoc)
         # Rust pur (features par défaut) : ni pyo3 ni libpython requis.
         run: cargo doc --no-deps --lib

@@ -974,8 +974,32 @@ def check_equations():
 def check_reference():
     """What `script/book_pyapi.py` cannot see while expanding one page: a
     function no page renders, one the thematic summary forgot or lists twice,
-    an example anchor named after a function that is gone."""
-    return book_pyapi.audit(ROOT)
+    an example anchor named after a function that is gone.
+
+    And what nothing else reports: mdBook *skips* a preprocessor whose
+    `supports` call fails — a `python` that is a Python 2, say — and builds
+    the book with its directives left as text, exit code 0. So the built
+    pages are read back: each one holds the entries of its module."""
+    erreurs = book_pyapi.audit(ROOT)
+    api = book_pyapi.load_api(ROOT)
+    layout = book_pyapi.read_layout(book_pyapi.pages_on_disk(ROOT))
+    for module, (_, names) in api.modules.items():
+        for page in layout.homes.get(module, []):
+            construite = (BOOK_HTML / page).with_suffix(".html")
+            if not construite.exists():
+                erreurs.append(f"{page}: HTML missing — run `mdbook build book`")
+                continue
+            recu = construite.read_text(encoding="utf-8")
+            ancres = [f"{module}-{n}" for n in names]
+            absentes = [a for a in ancres if f'id="{a}"' not in recu]
+            if absentes:
+                erreurs.append(
+                    f"{page}: the built page lacks {len(absentes)} of its "
+                    f"{len(ancres)} entries (`{absentes[0]}`…) — `mdbook build "
+                    "book` skipped the `pyapi` preprocessor (is `python` a "
+                    "Python 3?) or the book is stale"
+                )
+    return erreurs
 
 
 # ── 8. The committed stub says what the installed module says ───────────────

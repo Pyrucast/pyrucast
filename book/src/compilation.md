@@ -338,7 +338,7 @@ puis lance `script/doc_lint.py`, neuf vérifications de texte :
 | `doctests` | cliquet : la couverture des doctests ne peut que monter |
 | `api-python` | cliquet : toute entrée Python est citée par un exemple exécuté |
 | `equations` | chaque équation arrive intacte à MathJax |
-| `reference` | toute fonction publique est rendue une fois dans la référence et listée une fois dans le sommaire |
+| `reference` | toute fonction publique est rendue une fois dans la référence et listée une fois dans le sommaire ; les pages construites la contiennent (mdBook saute sans rien dire un préprocesseur qui ne démarre pas, par exemple si `python` désigne un Python 2) |
 | `stub` | le stub commité dit ce que dit le module installé : noms, arguments, docstrings |
 | `docstrings` | cliquet : une docstring suit la règle d'écriture |
 
