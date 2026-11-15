@@ -473,5 +473,5 @@ crate::physics_operator! {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn drucker_prager(fespace, kinematics: Kinematics) = crate::ops::model::plasticity, PlasticLaw::DruckerPrager;
-    python: "`model.drucker_prager(fespace, kinematics)` — pressure-sensitive plasticity\nwith **non-associated** flow: `f = q + α·I₁ − k`, plastic potential\n`g = q + ψ·I₁`. Material `E`, `nu`, `alpha` (friction), `k` (cohesion),\n`psi` (dilatancy).\n\n`ψ = α` recovers associated flow; `ψ < α` is the usual choice for soils\nand rocks, whose measured dilatancy is far below what friction alone\nwould imply. A non-associated law has a **non-symmetric** tangent.\nReturns beyond the cone's apex (`I₁ = k/α`) collapse onto the tip."
+    python: "Drucker-Prager pressure-sensitive plasticity, with non-associated flow.\n\n`f = q + α·I₁ − k`, plastic potential `g = q + ψ·I₁`. Material `E`, `nu`,\n`alpha` (friction), `k` (cohesion), `psi` (dilatancy).\n\n`ψ = α` recovers associated flow; `ψ < α` is the usual choice for soils and\nrocks, whose measured dilatancy is far below what friction alone would imply.\nA non-associated law has a **non-symmetric** tangent. Returns beyond the\ncone's apex (`I₁ = k/α`) collapse onto the tip."
 }

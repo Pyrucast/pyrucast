@@ -276,10 +276,10 @@ assert len(materials) == 1
 # ── boundary transfer ──────────────────────────────────────
 
 _, _, bord_fes, _ = _barre_thermique()
-# ANCHOR: boundary_transfer
+# ANCHOR: model-boundary_transfer
 conduction = pyrucast.model.heat_conduction(bord_fes)
 film = pyrucast.model.boundary_transfer(bord_fes, conduction, ["T"])
-# ANCHOR_END: boundary_transfer
+# ANCHOR_END: model-boundary_transfer
 assert film[0].physics() == ["thermal"]
 
 # ── Diffusion ───────────────────────────────────────────────────────────────
@@ -288,14 +288,14 @@ assert film[0].physics() == ["thermal"]
 # ── fick couple ────────────────────────────────────────────
 
 _, _, fes, _ = _plaque_2d()
-# ANCHOR: fick
+# ANCHOR: model-fick
 model = pyrucast.model.fick(fes, "H2") | pyrucast.model.heat_conduction(fes)
 materials = pyrucast.element_field.material_field(model, [("D_H2", 2.0), ("k", 5.0)])
 k = pyrucast.matrix.stiffness(model, materials)
 
 len(model.filter("diffusion"))  # 1
 len(model.filter("thermal"))  # 1
-# ANCHOR_END: fick
+# ANCHOR_END: model-fick
 assert len(model.filter("diffusion")) == 1
 assert len(model.filter("thermal")) == 1
 
@@ -311,13 +311,13 @@ def _plaque_et_bord():
 # ── radiation ──────────────────────────────────────────────
 
 volume, bord, _, _ = _plaque_et_bord()
-# ANCHOR: radiation
+# ANCHOR: model-radiation
 conduction = pyrucast.model.heat_conduction(volume)
 model = conduction | pyrucast.model.radiation(bord, conduction)
 materials = pyrucast.element_field.material_field(
     model, [("k", 20.0), ("emis", 0.8), ("T_inf", 300.0)]
 )
-# ANCHOR_END: radiation
+# ANCHOR_END: model-radiation
 assert len(model) == 2
 
 
@@ -343,7 +343,7 @@ def _deux_corps_en_vis_a_vis():
 # ── interface transfer ─────────────────────────────────────
 
 gauche, droite, face_gauche, face_droite = _deux_corps_en_vis_a_vis()
-# ANCHOR: interface_transfer
+# ANCHOR: model-interface_transfer
 corps = pyrucast.model.fick(gauche, "H2") | pyrucast.model.fick(droite, "H2")
 model = corps | pyrucast.model.interface_transfer(
     face_gauche, face_droite, corps, ["c_H2"]
@@ -351,7 +351,7 @@ model = corps | pyrucast.model.interface_transfer(
 materials = pyrucast.element_field.material_field(
     model, [("D_H2", 2.0), ("h_c_H2", 5.0)]
 )
-# ANCHOR_END: interface_transfer
+# ANCHOR_END: model-interface_transfer
 assert len(model) == 3
 
 # ── echanges ───────────────────────────────────────────────
@@ -361,7 +361,7 @@ gauche, droite, face_gauche, face_droite = _deux_corps_en_vis_a_vis()
 semelle = peau
 # ANCHOR: echanges
 # Thermal film: enters the stiffness of the conduction it cools, and
-# en prend la nature.
+# takes its nature.
 conduction = pyrucast.model.heat_conduction(fes)
 model = conduction | pyrucast.model.boundary_transfer(peau, conduction, ["T"])
 materials = pyrucast.element_field.material_field(

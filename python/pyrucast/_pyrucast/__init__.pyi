@@ -2869,23 +2869,31 @@ class Model:
         """
     def update_contact(self, displacement: NodeField) -> Model:
         r"""
-        `model.update_contact(model, displacement)` — the model with its contacts
-        **updated** to the positions `X + u`: `X` the active configuration, `u` read
-        in `displacement` on each contact's variables (`u_x`, `u_y`, `u_z`; a node
-        or a component it lacks reads zero). Every other sub-model is shared as it
-        is; a model without contact comes back unchanged.
+        The model with its contacts paired again on the positions `X + u`.
         
-        Each slave node is paired again with its closest master facet on `X + u`,
-        and its relation becomes the gap linearised there, written in total
-        displacement from `X`: the right-hand side the contact carries is `-g~`,
-        the gap of the new pairing measured on `X`. The multiplier nodes are kept,
-        so the unknowns `lambda` and the rows `imposed` stay the same; at `u = 0`,
-        the contact as it was built. A master facet collapsed by the displacement
-        is not detected here.
+        Each slave node is paired again with its closest master facet on `X + u`, and
+        its relation becomes the gap linearized there, written in total displacement
+        from `X`: the right-hand side the contact carries is `-g~`, the gap of the new
+        pairing measured on `X`. The multiplier nodes are kept, so the unknowns
+        `lambda` and the rows `imposed` stay the same; at `u = 0`, the contact as it
+        was built. What large displacements call for: the step-by-step loop updates
+        its contacts each time it rebuilds its operator.
         
-        What large displacements call for: the step-by-step loop updates its
-        contacts each time it rebuilds its operator. See the contact chapter of the
-        book.
+        # Parameters
+        
+        - `model`: the model whose contacts to update. Every other sub-model is
+          shared as it is; a model without contact comes back unchanged.
+        - `displacement`: `u`, read on each contact's variables (`u_x`, `u_y`,
+          `u_z`); a node or a component it lacks reads zero. `X` is the active
+          configuration.
+        
+        # Returns
+        
+        A new `Model`.
+        
+        # Notes
+        
+        A master facet collapsed by the displacement is not detected.
         """
     def internal_forces(self, state: ElementField, solution: NodeField, materials: ElementField) -> NodeField:
         r"""
@@ -5365,27 +5373,34 @@ def beam_deformation(field: NodeField, fespace: FiniteElementSpace, material: El
 
 def bernoulli(fespace: FiniteElementSpace) -> Model:
     r"""
-    `model.bernoulli(fespace)` — the classical **Euler-Bernoulli** beam,
-    where plane sections stay normal to the deflected axis and there is no
-    transverse shear at all.
+    Euler-Bernoulli beam, without transverse shear, on SEG2 cells.
     
-    The configuration follows the mesh: a 1-D `Coords` gives a pure-bending
-    beam (DOFs `w`, `theta`; material `E`, `I`), a 2-D one a plane frame
-    (`u_x, u_y, r_z`; `+ A`), a 3-D one a space frame (six DOFs;
-    `+ I_y, I_z, J, G`). Read them back with `model.primal_vars()`.
+    Plane sections stay normal to the deflected axis. The configuration follows
+    the mesh: a 1-D `Coords` gives a pure-bending beam (unknowns `w`, `theta`;
+    material `E`, `I`), a 2-D one a plane frame (`u_x, u_y, r_z`; `+ A`), a 3-D
+    one a space frame (six unknowns; `+ I_y, I_z, J, G`). Read them back with
+    `model.primal_vars()`.
     
-    The deflection is interpolated by **cubic Hermite** functions, so the
-    subspace must be `HERMITE3` — build it with
-    `FiniteElementSpace(mesh, interpolation="HERMITE3")`. That basis is what
-    makes the element **nodally exact** wherever the interior carries no
-    distributed load, so one element per member suffices for a frame; a
-    Lagrange subspace would carry a linear deflection, of zero curvature, and
-    is refused.
+    The cubic Hermite basis makes the element **nodally exact** wherever the
+    interior carries no distributed load, so one element per member suffices for
+    a frame. Prefer `pyrucast.model.timoshenko` for a stocky member, where the
+    shear compliance matters: reaching Bernoulli by making the shear area huge
+    would work in exact arithmetic and lock in floating point.
     
-    Prefer `timoshenko` for a stocky member, where the shear compliance
-    matters. Reaching Bernoulli by making the shear area huge would work in
-    exact arithmetic and lock in floating point, which is why this is a
-    physics of its own rather than a limiting case.
+    # Parameters
+    
+    - `fespace`: the FE space, on SEG2 cells with the `HERMITE3` interpolation —
+      `FiniteElementSpace(mesh, interpolation="HERMITE3")`. A Lagrange subspace
+      would carry a linear deflection, of zero curvature, and is refused.
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`.
+    
+    # Raises
+    
+    `RuntimeError` if a cell is not SEG2, or for a subspace that is not
+    `HERMITE3`.
     """
 
 def border(mesh: Mesh, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
@@ -5408,14 +5423,10 @@ def border(mesh: Mesh, angle_deg: typing.Optional[builtins.float] = None) -> Mes
 
 def boundary_transfer(fespace: FiniteElementSpace, target: Model, variables: typing.Sequence[builtins.str]) -> Model:
     r"""
-    `model.boundary_transfer(fespace, target, variables)` — surface
-    exchange with an **imposed ambient** (Robin / film) spanning every
-    subspace of a *boundary* `fespace` (edge mesh in 2-D, surface mesh in
-    3-D), coupling into the model `target`.
+    Surface exchange with an imposed ambient (Robin, film), coupling into `target`.
     
-    `variables` lists the exchanged unknowns of `target`; each couples into
-    the dual row `target` pairs it with — naming the bulk physics' own DOFs is
-    what makes the boundary term couple into it:
+    Naming the bulk physics' own unknowns is what makes the boundary term couple
+    into it:
     
     | `target` | `variables` | you get |
     |---|---|---|
@@ -5423,16 +5434,28 @@ def boundary_transfer(fespace: FiniteElementSpace, target: Model, variables: typ
     | `fick(..., "H2")` | `["c_H2"]` | a surface mass-transfer law |
     | `elasticity` | `["u_x", "u_y"]` | a Winkler elastic foundation |
     
-    Neither the dual row nor the nature (`"thermal"`, `"diffusion"`,
-    `"mechanical"`) is an argument: both are read from `target`. A variable
-    `target` does not declare, or variables of two natures, raise.
-    
     Material, per variable: the coefficient `h_<variable>` and the ambient
     `a_ext_<variable>`. The film `h∫NᵢNⱼ` goes into the stiffness, the ambient
-    term `h·a_ext·∫Nᵢ dΓ` comes out of `node_field.external_forces(...)`.
+    term `h·a_ext·∫Nᵢ dΓ` comes out of `pyrucast.node_field.external_forces`.
     Compose with `|`:
-    `conduction = model.heat_conduction(bulk)`
     `model = conduction | model.boundary_transfer(skin, conduction, ["T"])`.
+    
+    # Parameters
+    
+    - `fespace`: the **boundary** FE space (an edge mesh in 2-D, a surface mesh
+      in 3-D).
+    - `target`: the model it couples into. The dual row of each variable and the
+      nature (`"thermal"`, `"diffusion"`, `"mechanical"`) are read from it.
+    - `variables`: the exchanged unknowns of `target`.
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`.
+    
+    # Raises
+    
+    `RuntimeError` for a variable `target` does not declare, or for variables of
+    two natures.
     """
 
 def cell_integral(field: ElementField, target: FiniteElementSpace) -> ElementField:
@@ -5592,23 +5615,34 @@ def consolidate_node(field: NodeField) -> NodeField:
 
 def contact(slave: Mesh, master: Mesh, target: Model, variables: typing.Sequence[builtins.str]) -> Model:
     r"""
-    `model.contact(slave, master, target, variables)` — node-to-surface contact
-    (a single sub-model): prevent the nodes of `slave` from penetrating the
-    oriented `master` surface mesh, one **unilateral** relation (`≥`) per slave
-    node.
+    Node-to-surface contact: keep the nodes of `slave` out of the `master` surface.
     
-    Each slave node is paired at build with its closest master facet
-    (projection weights, facet normal, initial signed gap); the pairing is
-    then fixed (linearised, frictionless contact). The master surface must
-    be consistently oriented with its normal pointing toward the slave
-    body. `target` is the model being constrained; `variables` lists its
-    displacement primals, one per space dimension in ambient order (e.g.
-    `["u_x", "u_y"]`), each dual row read from it. Each relation gets a
-    multiplier node of its own, minted beside its slave node.
+    One **unilateral** relation (`≥`) per slave node, a single sub-model. Each
+    slave node is paired at build with its closest master facet (projection
+    weights, facet normal, initial signed gap); the pairing is then fixed
+    (linearized, frictionless contact) until `pyrucast.model.update_contact`
+    pairs it again. Each relation gets a multiplier node of its own, minted
+    beside its slave node. The initial-gap right-hand side `-g0` is a load the
+    contact carries: `pyrucast.node_field.external_forces` returns it with the
+    other loads of the model. Solve with `pyrucast.solver.solve`, which runs its
+    active-set loop.
     
-    Solve with `solve`. The initial-gap right-hand side `-g0` is a load the
-    contact carries: `node_field.external_forces` returns it with the other
-    loads of the model. See the contact chapter of the book.
+    # Parameters
+    
+    - `slave`: the nodes that must not penetrate.
+    - `master`: the surface mesh, consistently oriented, its normal pointing
+      toward the slave body.
+    - `target`: the model being constrained; the dual rows are read from it.
+    - `variables`: the displacement primals of `target`, one per spatial axis in
+      ambient order (`["u_x", "u_y"]`).
+    
+    # Returns
+    
+    A `Model` of one constraint sub-model.
+    
+    # Raises
+    
+    `RuntimeError` if a variable is not a primal of `target`.
     """
 
 def convert(mesh: Mesh, element_type: builtins.str) -> Mesh:
@@ -5684,83 +5718,183 @@ def cosh(field: typing.Any) -> typing.Any:
 
 def creep_blackburn(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.creep_blackburn(fespace, kinematics)` — a **saturating primary** creep
-    stage plus a steady secondary one, with Blackburn's `sinh` stress
-    dependence (which spans decades of stress where a power law cannot).
-    Material `E`, `nu`, `A_1`, `alpha_1`, `r_1`, `B_s`, `beta_s`.
+    Blackburn creep: a saturating primary stage plus a steady secondary one.
     
-    The primary strain is tracked as its own internal variable (`p_prim`), so
-    the law integrates correctly under a varying load.
+    Blackburn's `sinh` stress dependence spans decades of stress where a power law
+    cannot. Material `E`, `nu`, `A_1`, `alpha_1`, `r_1`, `B_s`, `beta_s`. The
+    primary strain is its own internal variable (`p_prim`), so the law integrates
+    correctly under a varying load. Rate-dependent: it needs `dt`.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def creep_lemaitre(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.creep_lemaitre(fespace, kinematics)` — Lemaitre primary creep by
-    **strain** hardening, `ṗ = (q/K)^N · p^(−M)`. Material `E`, `nu`, `K`,
-    `N`, `M`.
+    Lemaitre primary creep by strain hardening, `ṗ = (q/K)^N · p^(−M)`.
     
-    The accumulated strain itself slows the flow, producing a decelerating
-    primary stage with no explicit time dependence — which is what makes it
-    usable under a varying load, where a time-hardening form would be wrong.
+    Material `E`, `nu`, `K`, `N`, `M`. The accumulated strain itself slows the
+    flow, producing a decelerating primary stage with no explicit time dependence
+    — which is what makes it usable under a varying load, where a time-hardening
+    form would be wrong. Rate-dependent: it needs `dt`.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def creep_norton(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.creep_norton(fespace, kinematics)` — Norton-Odqvist secondary creep,
-    `ṗ = (q/K)^n`. Material `E`, `nu`, `K`, `n`.
+    Norton-Odqvist secondary creep, `ṗ = (q/K)^n`.
     
-    There is **no yield threshold**: any stress creeps, however slowly. Like
-    every rate-dependent law it needs the time increment —
-    `integrate_behavior(..., dt=...)` — and raises without one, because
-    integrating a creep law as if it were instantaneous would give a
-    plausible wrong answer.
+    Material `E`, `nu`, `K`, `n`. There is **no yield threshold**: any stress
+    creeps, however slowly. Like every rate-dependent law it needs the time
+    increment, `integrate_behavior(..., dt=...)`, and raises without one:
+    integrating a creep law as if it were instantaneous would give a plausible
+    wrong answer.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def damage_sic_sic(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.damage_sic_sic(fespace, kinematics)` — **orthotropic** damage of a
-    woven SiC/SiC ceramic-matrix composite: one damage per weave direction.
-    Material `E`, `nu`, then `eps_0_i`, `eps_c_i`, `d_max_i` for `i = 1..3`,
-    plus the material axes (`V1X, V1Y[, V1Z, V2X…]`).
+    Orthotropic damage of a woven SiC/SiC composite, one damage per direction.
     
-    The matrix cracks in planes normal to the tows while the fibres keep
-    carrying load, so the stiffness falls **by direction** and by very
-    different amounts — which no scalar damage can express. The directions
-    are the same material axes an orthotropic elasticity uses, so a curved
-    part gets them right cell by cell.
+    Material `E`, `nu`, then `eps_0_i`, `eps_c_i`, `d_max_i` for `i = 1..3`, plus
+    the material axes (`V1X, V1Y[, V1Z, V2X…]`).
+    
+    The matrix cracks in planes normal to the tows while the fibres keep carrying
+    load, so the stiffness falls **by direction** and by very different amounts —
+    which no scalar damage can express. The directions are the same material axes
+    an orthotropic elasticity uses, so a curved part gets them right cell by cell.
     
     Each damage **saturates** at `d_max_i` rather than reaching one: matrix
     cracking does not take the whole stiffness, and a law that let it would
     predict a collapse that does not happen. State: `kappa_1..3`, `d_1..3`.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def damage_tc(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.damage_tc(fespace, kinematics)` — **two** damage variables, tension
-    and compression apart: `σ = (1−d⁺)σ̃⁺ + (1−d⁻)σ̃⁻`. Material `E`, `nu`,
-    `f_t`, `f_c`, `A_t`, `A_c`.
+    Damage with two variables, tension and compression apart.
+    
+    `σ = (1−d⁺)σ̃⁺ + (1−d⁻)σ̃⁻`. Material `E`, `nu`, `f_t`, `f_c`, `A_t`, `A_c`.
     
     Mazars blends its two branches into one scalar, so a material damaged in
-    compression is equally damaged in tension and a crack that **closes**
-    cannot carry load again. Keeping the two apart recovers the compressive
-    stiffness on closure — the unilateral effect — which is what makes the
-    law usable under cyclic loading. State: `r_plus`, `r_minus`, `d_plus`,
-    `d_minus`.
+    compression is equally damaged in tension and a crack that **closes** cannot
+    carry load again. Keeping the two apart recovers the compressive stiffness on
+    closure — the unilateral effect — which is what makes the law usable under
+    cyclic loading. State: `r_plus`, `r_minus`, `d_plus`, `d_minus`.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str = 'linear') -> ElementField:
@@ -5814,27 +5948,36 @@ def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str
 
 def dirichlet(imposed_mesh: Mesh, target: Model, variable: builtins.str, sense: builtins.str = '=') -> Model:
     r"""
-    `model.dirichlet(imposed_mesh, target, variable, sense="=")` — Dirichlet
-    constraint (a single sub-model) holding `variable` on the nodes of
-    `imposed_mesh`, via Lagrange multipliers.
+    Hold `variable` at imposed values on the nodes of `imposed_mesh`.
     
-    `imposed_mesh` is the POI1 mesh of constrained nodes, one relation per
-    node. `target` is the model being constrained: `variable` must be one of
-    its primals, and its dual row is read from it — the `T → q` map is the
-    target's business, not something to retype. Each relation gets a multiplier
-    node of its own, minted beside its constrained node (`Model.multiplier_mesh()`
-    gives them back); its names are those of every constraint relation, `lambda`
-    and `imposed`. The imposed value `u_d` is written in the load field at the
-    multiplier node's `imposed` component — `Model.constraint_rhs` does it from
-    the constrained node.
-    
-    **One variable, and one only** — compose for a clamp:
+    A Dirichlet constraint, a single sub-model, through Lagrange multipliers. Each
+    relation, one per node, gets a multiplier node of its own, minted beside its
+    constrained node (`Model.multiplier_mesh()` gives them back), with the names
+    of every constraint relation, `lambda` and `imposed`. The imposed value `u_d`
+    is written in the load field at the multiplier node's `imposed` component —
+    `Model.constraint_rhs` does it from the constrained node. One variable, and
+    one only — compose for a clamp:
     `dirichlet(nodes, m, "u_x") | dirichlet(nodes, m, "u_y")`.
     
-    `sense` (`"="`, the default, `">="` or `"<="`) turns the constraint
-    unilateral (`u ≥ u_d` / `u ≤ u_d`): the matrix carries the sense, and
-    `solve` runs its active-set loop. See the model chapter of the book for the
-    full semantics.
+    # Parameters
+    
+    - `imposed_mesh`: the POI1 mesh of the constrained nodes.
+    - `target`: the model being constrained; the dual row of `variable` is read
+      from it.
+    - `variable`: the unknown of `target` to hold, one of its primals.
+    - `sense`: `"="` (the default), `">="` or `"<="`. The last two make the
+      constraint unilateral (`u ≥ u_d`, `u ≤ u_d`): the matrix carries the sense,
+      and `pyrucast.solver.solve` runs its active-set loop.
+    
+    # Returns
+    
+    A `Model` of one constraint sub-model.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `sense`.
+    - `RuntimeError` if `imposed_mesh` is not POI1, or if `variable` is not a
+      primal of `target`.
     """
 
 def displace(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
@@ -5924,18 +6067,39 @@ def divergence(field: ElementField, prefix: builtins.str) -> NodeField:
 
 def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.drucker_prager(fespace, kinematics)` — pressure-sensitive plasticity
-    with **non-associated** flow: `f = q + α·I₁ − k`, plastic potential
-    `g = q + ψ·I₁`. Material `E`, `nu`, `alpha` (friction), `k` (cohesion),
-    `psi` (dilatancy).
+    Drucker-Prager pressure-sensitive plasticity, with non-associated flow.
     
-    `ψ = α` recovers associated flow; `ψ < α` is the usual choice for soils
-    and rocks, whose measured dilatancy is far below what friction alone
-    would imply. A non-associated law has a **non-symmetric** tangent.
-    Returns beyond the cone's apex (`I₁ = k/α`) collapse onto the tip.
+    `f = q + α·I₁ − k`, plastic potential `g = q + ψ·I₁`. Material `E`, `nu`,
+    `alpha` (friction), `k` (cohesion), `psi` (dilatancy).
+    
+    `ψ = α` recovers associated flow; `ψ < α` is the usual choice for soils and
+    rocks, whose measured dilatancy is far below what friction alone would imply.
+    A non-associated law has a **non-symmetric** tangent. Returns beyond the
+    cone's apex (`I₁ = k/α`) collapse onto the tip.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def elastic_strain(model: Model, stress: ElementField, materials: ElementField) -> ElementField:
@@ -5997,27 +6161,40 @@ def elastic_stress(model: Model, strain: ElementField, materials: ElementField) 
 
 def elasticity(fespace: FiniteElementSpace, kinematics: builtins.str, symmetry: builtins.str = 'isotropic', strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.elasticity(fespace, kinematics, symmetry="isotropic",
-    strain_measure="linear")` — linear-elasticity model spanning every subspace of
-    `fespace`. `kinematics` is `"plane_stress"`, `"plane_strain"` or
-    `"axisymmetric"` (2-D), or `"full_3d"` (3-D). DOFs are the vector
-    displacement `u_x, u_y(, u_z)`; material is supplied at assembly time.
+    Linear elasticity, spanning every subspace of `fespace`.
     
-    `"axisymmetric"` requires a geometry built with `Coords.axisymmetric()`
-    (`x = r`, `y = z`): the hoop strain `ε_θθ = u_r / r` comes from the kinematics,
-    the `2πr` integration measure from the geometry, and the two must agree.
+    The unknowns are the displacement `u_x, u_y(, u_z)`, the dual rows the forces
+    `f_x, f_y(, f_z)`. On an axisymmetric geometry (`x = r`, `y = z`), the hoop
+    strain `ε_θθ = u_r / r` comes from the kinematics and the `2πr` integration
+    measure from the geometry: the two must agree.
     
-    `symmetry` is the **material** axis, independent of the kinematic one:
-    `"isotropic"` (the default, material `E`, `nu`), `"orthotropic"`
-    (`E_1, E_2, E_3, nu_12, nu_13, nu_23, G_12, G_13, G_23`) or
-    `"anisotropic"` (the 21 constants `C_11 … C_66`). The two oriented ones
-    also require the material axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z`
-    in 3-D — which are orthonormalised internally.
+    # Parameters
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains,
-    the default), `"green_lagrange"` (large rotations: Hooke on `E` is
-    Saint-Venant–Kirchhoff) or `"hencky"` (`½ ln C`). The stress it writes is
-    the dual, named after it: `sigma_*`, `S_*` or `T_*`.
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `symmetry`: the **material** symmetry, independent of the kinematics:
+      `"isotropic"` (material `E`, `nu`), `"orthotropic"` (`E_1, E_2, E_3, nu_12,
+      nu_13, nu_23, G_12, G_13, G_23`) or `"anisotropic"` (the 21 constants
+      `C_11 … C_66`). The two oriented ones also require the material axes —
+      `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z` in 3-D —, orthonormalised internally.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations: Hooke on `E` is
+      Saint-Venant–Kirchhoff) or `"hencky"` (`½ ln C`). The stress it writes is
+      the dual, named after it: `sigma_*`, `S_*` or `T_*`.
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics`, `symmetry` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads.
     """
 
 def element_type_from_gmsh(code: builtins.int) -> builtins.str:
@@ -6042,20 +6219,32 @@ def elements_on(mesh: Mesh, points: Mesh, strict: builtins.bool = True) -> Mesh:
 
 def embedded(immersed: Mesh, host: Mesh, target: Model, variables: typing.Sequence[builtins.str], tol: builtins.float = 1e-06) -> Model:
     r"""
-    `model.embedded(immersed, host, target, variables, tol=1e-6)` — embedded
-    (immersed) constraint (a single sub-model) tying each node of `immersed` to
-    the interpolation of `host` at that node, via Lagrange multipliers.
+    Tie each node of `immersed` to the interpolation of `host` at that node.
     
-    `immersed` and `host` are meshes sharing one Coords (e.g. a bar embedded in
-    a volume). `target` is the model being constrained; `variables` lists the
-    primals of `target` to tie (e.g. `["u_x", "u_y", "u_z"]`), each dual row
-    read from it. The coupling weights are the host shape functions at each
-    immersed node, computed once at build by locating the node in the host (an
-    immersed node outside the host is an error); `tol` is the location
-    tolerance, a gap in the host's **reference** element, without dimension.
-    Each relation — one per immersed node and variable — gets a multiplier node
-    of its own; the right-hand side defaults to `0` (a rigid tie). See the
-    constraints chapter of the book.
+    An embedded constraint, a single sub-model, through Lagrange multipliers — a
+    bar embedded in a volume, for instance. The coupling weights are the host
+    shape functions at each immersed node, computed once at build by locating the
+    node in the host. Each relation — one per immersed node and variable — gets a
+    multiplier node of its own; the right-hand side defaults to `0`, a rigid tie.
+    
+    # Parameters
+    
+    - `immersed`: the immersed nodes' mesh, on the same `Coords` as `host`.
+    - `host`: the mesh they are immersed in.
+    - `target`: the model being constrained; the dual rows are read from it.
+    - `variables`: the primals of `target` to tie, `["u_x", "u_y", "u_z"]` for
+      instance.
+    - `tol`: the location tolerance, a gap in the host's **reference** element,
+      without dimension.
+    
+    # Returns
+    
+    A `Model` of one constraint sub-model.
+    
+    # Raises
+    
+    `RuntimeError` if an immersed node lies outside the host, or if a variable is
+    not a primal of `target`.
     """
 
 def exp(field: typing.Any) -> typing.Any:
@@ -6148,47 +6337,63 @@ def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: bu
 
 def fick(fespace: FiniteElementSpace, species: builtins.str, symmetry: builtins.str = 'isotropic') -> Model:
     r"""
-    `model.fick(fespace, species, symmetry="isotropic")` — Fickian diffusion of
-    one named **species**, spanning every subspace of `fespace`.
+    Fickian diffusion of one named species, spanning every subspace of `fespace`.
     
-    Every name carries the species: DOFs are `c_<species>` (primal) and
-    `j_<species>` (dual), the diffusivity is `D_<species>`, the reported flux
-    `j_<species>_x…`. Two species therefore share a mesh without colliding —
-    and no bare `c` can be mistaken for anything else. Its physics nature is
-    `"diffusion"`, so `model.filter("diffusion")` isolates it from a thermal
-    or mechanical model it is composed with.
+    Every name carries the species: the unknown is `c_<species>`, the dual row
+    `j_<species>`, the diffusivity `D_<species>`, the reported flux
+    `j_<species>_x…`. Two species therefore share a mesh without colliding. Its
+    physics nature is `"diffusion"`, so `model.filter("diffusion")` isolates it
+    from a thermal or mechanical model it is composed with.
     
-    `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
-    `"anisotropic"`, selecting the diffusivity the material field must carry:
-    `D_<species>`, `D_<species>_1 …`, or the symmetric `D_<species>_11 …` —
-    the oriented ones plus the material axes `V1X, V1Y, …`. Those axes and
-    the optional storage `poro` keep **bare** names: they belong to the
-    medium, not to what diffuses through it.
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `species`: the name of the species, `"H2"` for `c_H2`.
+    - `symmetry`: the diffusivity the material field must carry: `"isotropic"`
+      (`D_<species>`), `"orthotropic"` (`D_<species>_1 …`) or `"anisotropic"`
+      (the symmetric `D_<species>_11 …`), the oriented ones plus the material
+      axes `V1X, V1Y, …`. Those axes and the optional storage `poro` keep
+      **bare** names: they belong to the medium, not to what diffuses through it.
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`.
+    
+    # Raises
+    
+    `ValueError` for an unknown `symmetry`.
     """
 
 def flux(fespace: FiniteElementSpace, target: Model, dual: builtins.str) -> Model:
     r"""
-    `model.flux(fespace, target, dual)` — a **distributed load**: the
-    consistent nodal forces `∫ φ N dΓ` of a given density, fed into the dual row
-    `dual` (`"q"` for a heat source, `"f_x"` for a traction) of the model
-    `target`, which gives it its kind and attests that the row is assembled by
-    someone.
+    A distributed load: the consistent nodal forces `∫ φ N dΓ` of a density.
     
-    Material: `phi_<dual>` — the density, uniform or varying per Gauss point as
-    the field provides.
+    It brings no unknown and writes into the dual row of another physics, which
+    gives it its kind and attests that the row is assembled by someone. Material:
+    `phi_<dual>` — the density, uniform or varying per Gauss point. Its derivative
+    with respect to the solution is taken as **zero**: it feeds no matrix, only
+    the right-hand side, read by `pyrucast.node_field.external_forces`.
     
-    The row `"n"` is the **normal** mode, a pressure: `phi_n` acts along the
-    normal of the cell, `∫ φ n N dΓ`, into every displacement row of the target
-    (`f_x`, `f_y`, `f_z`). The normal is that of the active configuration —
-    evaluated on a configuration laid at `X + u` (`coords.displace_from`), the
-    load follows the wall. For a contour travelled counter-clockwise the normal
-    of a segment points out of the material: a pressure `p` pushing on the wall
-    is then `phi_n = -p`.
+    # Parameters
     
-    Its derivative with respect to the solution is taken as **zero**: it feeds no
-    matrix, only the right-hand side, read by
-    `node_field.external_forces(model, materials)`. That is what sets it apart
-    from a physics: it brings no unknown and writes into the dual row of another.
+    - `fespace`: the FE space the density lives on.
+    - `target`: the model it loads.
+    - `dual`: the dual row of `target` to load (`"q"` for a heat source, `"f_x"`
+      for a traction). The row `"n"` is the **normal** mode, a pressure: `phi_n`
+      acts along the normal of the cell, `∫ φ n N dΓ`, into every displacement
+      row of `target`. The normal is that of the active configuration — on a
+      configuration laid at `X + u` (`pyrucast.coords.displace_from`), the load
+      follows the wall. For a contour travelled counter-clockwise the normal of a
+      segment points out of the material: a pressure `p` pushing on the wall is
+      then `phi_n = -p`.
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`.
+    
+    # Raises
+    
+    `RuntimeError` if `dual` is not a dual row of `target`.
     """
 
 def from_arrays(coords: Coords, node_tags: typing.Any, node_coords: typing.Any, blocks: typing.Any, *, node_fields: typing.Sequence[typing.Any] = [], cell_fields: typing.Sequence[typing.Any] = [], order: builtins.str = 'pyrucast') -> tuple[dict, builtins.list[NodeField], builtins.list[ElementField]]:
@@ -6362,36 +6567,71 @@ def grid_surface2(contour: Mesh, element_type: builtins.str, size: typing.Option
 
 def gurson(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.gurson(fespace, kinematics)` — Gurson-Tvergaard-Needleman plasticity
-    of a **porous** metal, where the porosity shrinks the yield surface.
-    Material `E`, `nu`, `sigma_y`, `q_1`, `q_2`, `q_3`, `f_0`, `f_c`, `f_f`.
+    Gurson-Tvergaard-Needleman plasticity of a porous metal.
     
-    A ductile metal fails because voids grow and coalesce, not because a
-    stress is reached. The `cosh` term makes the surface **pressure
-    sensitive**, so voids grow under triaxial tension and close under
-    compression — which a J2 law cannot express, and which is why it can
-    never predict ductile rupture. Beyond `f_c` the effective porosity
-    accelerates towards `1/q_1`, modelling coalescence.
+    The porosity shrinks the yield surface. Material `E`, `nu`, `sigma_y`, `q_1`,
+    `q_2`, `q_3`, `f_0`, `f_c`, `f_f`.
     
-    The porosity is exposed as the internal variable `porosity`, starting
-    from `f_0`. Void **nucleation** is not modelled — only growth.
+    A ductile metal fails because voids grow and coalesce, not because a stress is
+    reached. The `cosh` term makes the surface **pressure sensitive**, so voids
+    grow under triaxial tension and close under compression — which a J2 law
+    cannot express. Beyond `f_c` the effective porosity accelerates towards
+    `1/q_1`, modelling coalescence.
+    
+    The porosity is the internal variable `porosity`, starting from `f_0`
+    (`pyrucast.element_field.initial_state` reads it). Void **nucleation** is not
+    modelled — only growth.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def heat_conduction(fespace: FiniteElementSpace, symmetry: builtins.str = 'isotropic') -> Model:
     r"""
-    `model.heat_conduction(fespace, symmetry="isotropic")` — heat-conduction
-    model spanning **every** subspace of `fespace` (one zone per subspace). A
-    single-subspace space gives the unit case; several give one zone each. Compose
-    heterogeneous physics with `|`: `model.heat_conduction(fes) | model.dirichlet(...)`.
+    Heat conduction, spanning every subspace of `fespace`.
     
-    `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
-    `"anisotropic"`, and selects which conductivity the material field must
-    carry: the scalar `k`, the principal `k_1, k_2, k_3`, or the symmetric
-    tensor `k_11 … k_33`. The two oriented ones also require the material
-    axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z` in 3-D.
+    The unknown is the temperature `T`, the dual row the heat flow `q`. Compose
+    heterogeneous physics with `|`:
+    `model.heat_conduction(fes) | model.dirichlet(...)`.
+    
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `symmetry`: the conductivity the material field must carry:
+      `"isotropic"` (the scalar `k`), `"orthotropic"` (the principal
+      `k_1, k_2, k_3`) or `"anisotropic"` (the symmetric tensor `k_11 … k_33`).
+      The two oriented ones also require the material axes — `V1X, V1Y` in 2-D,
+      `V1X…V1Z, V2X…V2Z` in 3-D.
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly time.
+    
+    # Raises
+    
+    `ValueError` for an unknown `symmetry`.
     """
 
 def initial_state(model: Model, materials: ElementField) -> ElementField:
@@ -6486,26 +6726,35 @@ def integrate_behavior(model: Model, deformation: ElementField, materials: Eleme
 
 def interface_transfer(side_a: FiniteElementSpace, side_b: FiniteElementSpace, target: Model, variables: typing.Sequence[builtins.str], tol: builtins.float = 1e-09) -> Model:
     r"""
-    `model.interface_transfer(side_a, side_b, target, variables, tol=1e-9)` —
-    the exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
-    that do **not** share their nodes, coupling into the model `target`.
+    Exchange `j·n = h(c₁ − c₂)` across an interface whose two sides share no node.
     
-    `variables` lists the exchanged unknowns of `target`, each coupling into
-    the dual row `target` pairs it with: `["c_H2"]` on a `fick` model for a
-    coating, `["T"]` on a `heat_conduction` for a contact resistance, the
-    displacements on an `elasticity` for a bonded joint of finite stiffness.
-    Neither the dual row nor the nature is an argument: both are read from
-    `target`, and a variable `target` does not declare — or variables of two
-    natures — raise. `h_<variable>` is supplied at assembly time.
+    This is what lets the field **jump** across the interface: with a shared node
+    it could not. The jump is `q/h` for a flux density `q`. The coefficient
+    `h_<variable>` is supplied at assembly time.
     
-    `side_a` and `side_b` are the two facing **boundary** FE spaces, which
-    must be conforming — same element type, same cell count, and local node
-    `k` of a cell facing local node `k` of its counterpart, within `tol`, a
-    **distance** in the length unit of the mesh. A non-matching interface
-    raises rather than being projected.
+    # Parameters
     
-    This is what lets the field **jump** across the interface: with a shared
-    node it could not. The jump is `q/h` for a flux density `q`.
+    - `side_a`, `side_b`: the two facing **boundary** FE spaces. They must be
+      conforming — same element type, same cell count, and local node `k` of a
+      cell facing local node `k` of its counterpart, within `tol`. A non-matching
+      interface raises rather than being projected.
+    - `target`: the model it couples into; the dual row of each variable and the
+      nature are read from it.
+    - `variables`: the exchanged unknowns of `target`, each coupling into the
+      dual row `target` pairs it with: `["c_H2"]` on a `fick` model for a
+      coating, `["T"]` on a `heat_conduction` for a contact resistance, the
+      displacements on an `elasticity` for a bonded joint of finite stiffness.
+    - `tol`: the matching tolerance, a **distance** in the length unit of the
+      mesh.
+    
+    # Returns
+    
+    A `Model` coupling the two sides.
+    
+    # Raises
+    
+    `RuntimeError` if the two sides do not match, for a variable `target` does
+    not declare, or for variables of two natures.
     """
 
 def internal_forces(model: Model, state: ElementField, solution: NodeField, materials: ElementField) -> NodeField:
@@ -6815,15 +7064,35 @@ def material_field_per_sub_model(model: Model, components_and_values_per_sub_mod
 
 def mazars(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.mazars(fespace, kinematics)` — Mazars isotropic damage spanning every
-    subspace of `fespace`. `kinematics` is `"plane_stress"` / `"plane_strain"` /
-    `"axisymmetric"` (2-D) or `"solid"` (3-D). Same DOFs as elasticity; material
-    (`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at
-    assembly / integration time. The behaviour integration (`COMP`) carries
-    the scalar history variable `kappa` (`VAR0`→`VAR1`) and outputs `damage`.
+    Mazars isotropic damage of a quasi-brittle material, such as concrete.
+    
+    Same unknowns as `pyrucast.model.elasticity`. Material `E`, `nu`, `eps_d0`,
+    `A_t`, `B_t`, `A_c`, `B_c`. The state carries the scalar history variable
+    `kappa` and the output `damage`.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def merge(a: NodeField, b: NodeField) -> NodeField:
@@ -6888,20 +7157,34 @@ def merge_triangles(mesh: Mesh) -> Mesh:
 
 def mpc(terms: typing.Sequence[tuple[Mesh, builtins.str, builtins.float]], target: Model, sense: builtins.str = '=') -> Model:
     r"""
-    `model.mpc(terms, target, sense="=")` — multi-point constraint (a single
-    sub-model) imposing, per relation, `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange
-    multipliers.
+    Impose a linear relation `Σₖ aₖ·u(nodeₖ, varₖ) = g` between nodes, per relation.
     
-    `terms` is a list of `(mesh, variable, coefficient)` tuples: each `mesh` is
-    a POI1 mesh (one node per relation), paired element-for-element with the
-    others (relation `r` = cell `r` of every mesh); each `variable` is a primal
-    of `target`, the model being constrained — the union of two models to tie
-    two bodies — whose dual row is read from it. Each relation gets a
-    multiplier node of its own, minted beside the node of the first term; `g`
-    is written in the load field at its `imposed` component (default `0`).
-    `sense` (`"="`, the default, `">="` or `"<="`) turns the relations
-    unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`): the matrix carries the sense, and
-    `solve` runs its active-set loop. See the constraints chapter of the book.
+    A multi-point constraint, a single sub-model, through Lagrange multipliers.
+    Each relation gets a multiplier node of its own, minted beside the node of the
+    first term; `g` is written in the load field at its `imposed` component
+    (default `0`).
+    
+    # Parameters
+    
+    - `terms`: a list of `(mesh, variable, coefficient)` tuples. Each `mesh` is a
+      POI1 mesh, one node per relation, paired cell for cell with the others
+      (relation `r` = cell `r` of every mesh); each `variable` is a primal of
+      `target`.
+    - `target`: the model being constrained — the union of two models to tie two
+      bodies —; the dual rows are read from it.
+    - `sense`: `"="` (the default), `">="` or `"<="`. The last two make the
+      relations unilateral (`Σ aₖ·uₖ ≥ g`, `≤ g`): the matrix carries the sense,
+      and `pyrucast.solver.solve` runs its active-set loop.
+    
+    # Returns
+    
+    A `Model` of one constraint sub-model.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `sense`.
+    - `RuntimeError` if the meshes of `terms` do not hold the same number of
+      nodes, or if a variable is not a primal of `target`.
     """
 
 def orient(mesh: Mesh) -> Mesh:
@@ -6919,17 +7202,37 @@ def orient(mesh: Mesh) -> Mesh:
 
 def ottosen(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.ottosen(fespace, kinematics)` — Ottosen's four-parameter criterion for
-    concrete, whose strength depends on the pressure **and** on the Lode
-    angle (so tension and compression differ). Material `E`, `nu`, `a`, `b`,
-    `k_1`, `k_2`, `sigma_c`.
+    Ottosen's four-parameter criterion for concrete.
     
-    Integrated by a cutting-plane return with a numerically differentiated
-    normal: the criterion is exact, and the gradient — long enough that a
-    hand-derived one could not be checked — is a central difference.
+    Its strength depends on the pressure **and** on the Lode angle, so tension and
+    compression differ. Material `E`, `nu`, `a`, `b`, `k_1`, `k_2`, `sigma_c`.
+    
+    Integrated by a cutting-plane return with a numerically differentiated normal:
+    the criterion is exact, and the gradient is a central difference.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def pave_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, prefer_quads: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
@@ -7008,28 +7311,67 @@ def pave_volume(envelope: Mesh, layers: builtins.int = 1, thickness: typing.Opti
 
 def plasticity_isotropic(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.plasticity_isotropic(fespace, kinematics)` — von Mises with **linear
-    isotropic hardening**, `σ_y(p) = σ_y + H·p`. Material `E`, `nu`,
-    `sigma_y`, `H`; everything else as `plasticity_perfect` (`H = 0` would
-    give it back exactly).
+    Von Mises plasticity with linear isotropic hardening, `σ_y(p) = σ_y + H·p`.
+    
+    Material `E`, `nu`, `sigma_y`, `H`; everything else as
+    `pyrucast.model.plasticity_perfect`, which `H = 0` gives back exactly.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def plasticity_perfect(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.plasticity_perfect(fespace, kinematics)` — **perfect** (non-hardening)
-    von Mises elastoplasticity spanning every subspace of `fespace`. `kinematics`
-    is `"plane_stress"` / `"plane_strain"` / `"axisymmetric"` (2-D) or
-    `"solid"` (3-D). Same DOFs as elasticity (`u_x, u_y(, u_z)`); material
-    (`E`, `nu`, `sigma_y`) is supplied at assembly / integration time. The
-    behaviour integration (`COMP`) carries the plastic-strain +
-    cumulated-`p` internal state (`VAR0`→`VAR1`) and emits the consistent
-    tangent `D_alg`.
+    Perfect (non-hardening) von Mises elastoplasticity.
+    
+    Same unknowns as `pyrucast.model.elasticity`. Material `E`, `nu`, `sigma_y`.
+    The state carries the plastic strain and the cumulated plastic strain `p`;
+    the law gives its consistent tangent to `pyrucast.matrix.tangent`.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:
@@ -7263,25 +7605,37 @@ def psca(x: typing.Any, y: typing.Any) -> typing.Any:
 
 def radiation(fespace: FiniteElementSpace, target: Model) -> Model:
     r"""
-    `model.radiation(fespace, target)` — radiation to infinity on a
-    *boundary* `fespace`: `q·n = σε(T⁴ − T_∞⁴)`, cooling the model `target`.
-    Same DOFs (`"T"`/`"q"`) as `heat_conduction`, which `target` must
-    assemble — a radiating boundary with no conduction beneath it raises —, so
-    it composes with `|`:
-    `conduction = model.heat_conduction(bulk)`
+    Radiation to infinity from a boundary, `q·n = σε(T⁴ − T_∞⁴)`.
+    
+    It cools the model `target`, whose unknowns `"T"`/`"q"` it shares, so it
+    composes with `|`:
+    `conduction = model.heat_conduction(bulk)`,
     `model = conduction | model.radiation(boundary, conduction)`.
     
     Material: `emis` (emissivity) and `T_inf` (far-field temperature), plus an
     optional `sigma` overriding the SI Stefan-Boltzmann constant. With the
-    default `sigma`, `T` is an **absolute** temperature — a fourth power has
-    no invariance to shift an origin through.
+    default `sigma`, `T` is an **absolute** temperature.
     
-    Unlike convection this law is non-linear, so it contributes three terms:
-    the linearised film `4σεT_∞³∫NᵢNⱼ` as stiffness, the exact residual
-    `∫Nᵢσε(T⁴ − T_∞⁴)` through `internal_forces`, and the consistent tangent
-    `4σεT³∫NᵢNⱼ` through `matrix.tangent(...)`, all evaluated at the face's
-    Gauss points with `T` interpolated there. Its natures are `"thermal"`
-    **and** `"radiation"`.
+    Unlike convection the law is non-linear, so it contributes three terms: the
+    linearized film `4σεT_∞³∫NᵢNⱼ` as stiffness, the exact residual
+    `∫Nᵢσε(T⁴ − T_∞⁴)` through `pyrucast.node_field.internal_forces`, and the
+    consistent tangent `4σεT³∫NᵢNⱼ` through `pyrucast.matrix.tangent`, all
+    evaluated at the face's Gauss points. Its natures are `"thermal"` **and**
+    `"radiation"`.
+    
+    # Parameters
+    
+    - `fespace`: the **boundary** FE space (an edge mesh in 2-D, a surface mesh
+      in 3-D).
+    - `target`: the model it cools, which must assemble `T` paired with `q`.
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`.
+    
+    # Raises
+    
+    `RuntimeError` if `target` assembles no `T` paired with `q`.
     """
 
 def read_gmsh(coords: Coords, path: builtins.str) -> dict:
@@ -7519,32 +7873,37 @@ def set_positions(field: NodeField, components: typing.Optional[typing.Sequence[
 
 def shell(fespace: FiniteElementSpace, formulation: builtins.str) -> Model:
     r"""
-    `model.shell(fespace, formulation)` — a **shell**: a surface carrying membrane
-    forces and bending moments, on a TRI3/QUA4 mesh in 3-D. Material `E`,
-    `nu`, `h` (thickness), plus an optional `rho`.
+    A shell: a surface carrying membrane forces and bending moments.
     
-    | `formulation` | transverse shear | when |
-    |---|---|---|
-    | `"thick"` | yes, integrated **reduced** | the general case |
-    | `"kirchhoff"` | imposed zero at discrete points | thin shells |
+    On a TRI3/QUA4 mesh in 3-D. Material `E`, `nu`, `h` (thickness), plus an
+    optional `rho`. Six unknowns per node (`u_x…u_z, r_x…r_z`), as for a 3-D
+    beam, so a shell and a space frame share nodes directly. The sixth — the
+    **drilling** rotation about the normal — is tied to the membrane's own
+    in-plane rotation, which removes the singularity a flat facet would otherwise
+    have.
     
-    Six DOFs per node (`u_x…u_z, r_x…r_z`), as for `frame3d`, so a shell and
-    a space frame share nodes directly. The sixth — the **drilling** rotation
-    about the normal — is tied to the membrane's own in-plane rotation, which
-    removes the singularity a flat facet would otherwise have without
-    resisting a rigid rotation of that facet.
+    # Parameters
     
-    `"thick"` (Reissner-Mindlin) integrates the transverse shear at
-    **reduced** quadrature: at full quadrature it would overwhelm the bending
-    term by `1/h²` as the shell thins and the element would refuse to bend at
-    all (shear locking). It takes an optional `k_s`, the shear-correction
-    factor (`5/6` by default).
+    - `fespace`: the FE space, of surface cells in a 3-D `Coords`.
+    - `formulation`:
+      - `"thick"` (Reissner-Mindlin), the general case, integrates the
+        transverse shear at **reduced** quadrature: at full quadrature it would
+        overwhelm the bending term by `1/h²` as the shell thins, and the element
+        would refuse to bend (shear locking). It takes an optional `k_s`, the
+        shear-correction factor (`5/6` by default).
+      - `"kirchhoff"` (DKT on a triangle, DKQ on a quadrangle), for thin shells,
+        has no transverse shear: `γ = 0` is imposed at the corners and along each
+        side, so the thin limit is exact by construction. It reports six
+        generalized forces rather than eight.
     
-    `"kirchhoff"` (DKT on a triangle, DKQ on a quadrangle) has no transverse
-    shear at all: `γ = 0` is imposed at the corners and along each side, so
-    the thin limit is exact by construction and there is nothing left to
-    lock. It reports six generalised forces rather than eight — a thin plate
-    has no constitutive `Q`, only a reaction.
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `formulation`.
+    - `RuntimeError` if the cells are not a surface in a 3-D `Coords`.
     """
 
 def shell_deformation(field: NodeField, fespace: FiniteElementSpace, formulation: builtins.str) -> ElementField:
@@ -8065,25 +8424,35 @@ def thermal_strain(temperature: ElementField, materials: ElementField, fespace: 
 
 def timoshenko(fespace: FiniteElementSpace) -> Model:
     r"""
-    `model.timoshenko(fespace)` — the **shear-deformable** beam, in whichever
-    configuration the mesh puts it (`SEG2` throughout):
+    Timoshenko beam, which deforms in shear, on SEG2 cells.
     
-    | `Coords` | DOFs per node | material | section forces |
+    The configuration follows the mesh:
+    
+    | `Coords` | unknowns per node | material | section forces |
     |---|---|---|---|
     | 1-D | `w`, `theta` | `E, I, G, A_s` | `M, V` |
     | 2-D | `u_x, u_y, r_z` | `+ A` | `N, M, V` |
     | 3-D | six | `E, A, I_y, I_z, J, G, A_sy, A_sz` | `N, M_y, M_z, T, V_y, V_z` |
     
-    Read the DOF names back with `model.primal_vars()`.
+    Read the unknowns back with `model.primal_vars()`. The element is the
+    **exact** one — the closed form driven by `Φ = 12EI/(G·A_s·L²)` —, so one
+    element per member suffices. Prefer `pyrucast.model.bernoulli` for a slender
+    member, where the shear compliance is negligible.
     
-    The element is the **exact** one — the closed form driven by
-    `Φ = 12EI/(G·A_s·L²)` — so one element per member suffices. Its shape
-    functions depend on the material through `Φ`, hence no space can tabulate
-    them: build the subspace with
-    `FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")`.
+    # Parameters
     
-    Prefer `bernoulli` for a slender member, where the shear compliance is
-    negligible.
+    - `fespace`: the FE space, on SEG2 cells. The shape functions depend on the
+      material through `Φ`, so no space can tabulate them: build it with
+      `FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")`.
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`.
+    
+    # Raises
+    
+    `RuntimeError` if a cell is not SEG2, or for a subspace that is not
+    `MODEL_EMBEDDED`.
     """
 
 def to_arrays(groups: dict, *, node_fields: typing.Sequence[NodeField] = [], element_fields: typing.Sequence[ElementField] = [], gauss: builtins.bool = False, order: builtins.str = 'pyrucast', first_tag: builtins.int = 1) -> dict:
@@ -8204,68 +8573,132 @@ def triangulate_volume(envelope: Mesh, size: typing.Optional[builtins.float] = N
 
 def truss(fespace: FiniteElementSpace, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.truss(fespace, strain_measure="linear")` — truss / bar
-    (axial-force) model spanning **every** subspace of `fespace` (SEG2 elements).
-    DOFs are the vector displacement `u_x, u_y(, u_z)`; the orientation is taken
-    from the node coordinates. Material (`E`, `A`) is supplied at assembly time.
+    A truss of bars carrying axial force only, on SEG2 cells.
     
-    `strain_measure` is the strain the law reads: `"linear"` (the default; it
-    writes the axial force `n`) or `"green_lagrange"` (large displacements: it
-    writes the second Piola–Kirchhoff axial force `S_n`, which
-    `element_field.stress_measure` turns into the nominal force vector `P_*` or
-    the true force `n`).
+    The unknowns are the displacement `u_x, u_y(, u_z)`; each bar's orientation is
+    taken from its node coordinates. Material `E`, `A`.
+    
+    # Parameters
+    
+    - `fespace`: the FE space, on SEG2 cells; one sub-model per subspace.
+    - `strain_measure`: the strain the law reads: `"linear"` (the default; it
+      writes the axial force `n`) or `"green_lagrange"` (large displacements: it
+      writes the second Piola–Kirchhoff axial force `S_n`, which
+      `pyrucast.element_field.stress_measure` turns into the nominal force vector
+      `P_*` or the true force `n`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `strain_measure`.
+    - `RuntimeError` if a cell is not SEG2, or for a measure a bar does not have
+      (`"hencky"`).
     """
 
 def update_contact(model: Model, displacement: NodeField) -> Model:
     r"""
-    `model.update_contact(model, displacement)` — the model with its contacts
-    **updated** to the positions `X + u`: `X` the active configuration, `u` read
-    in `displacement` on each contact's variables (`u_x`, `u_y`, `u_z`; a node
-    or a component it lacks reads zero). Every other sub-model is shared as it
-    is; a model without contact comes back unchanged.
+    The model with its contacts paired again on the positions `X + u`.
     
-    Each slave node is paired again with its closest master facet on `X + u`,
-    and its relation becomes the gap linearised there, written in total
-    displacement from `X`: the right-hand side the contact carries is `-g~`,
-    the gap of the new pairing measured on `X`. The multiplier nodes are kept,
-    so the unknowns `lambda` and the rows `imposed` stay the same; at `u = 0`,
-    the contact as it was built. A master facet collapsed by the displacement
-    is not detected here.
+    Each slave node is paired again with its closest master facet on `X + u`, and
+    its relation becomes the gap linearized there, written in total displacement
+    from `X`: the right-hand side the contact carries is `-g~`, the gap of the new
+    pairing measured on `X`. The multiplier nodes are kept, so the unknowns
+    `lambda` and the rows `imposed` stay the same; at `u = 0`, the contact as it
+    was built. What large displacements call for: the step-by-step loop updates
+    its contacts each time it rebuilds its operator.
     
-    What large displacements call for: the step-by-step loop updates its
-    contacts each time it rebuilds its operator. See the contact chapter of the
-    book.
+    # Parameters
+    
+    - `model`: the model whose contacts to update. Every other sub-model is
+      shared as it is; a model without contact comes back unchanged.
+    - `displacement`: `u`, read on each contact's variables (`u_x`, `u_y`,
+      `u_z`); a node or a component it lacks reads zero. `X` is the active
+      configuration.
+    
+    # Returns
+    
+    A new `Model`.
+    
+    # Notes
+    
+    A master facet collapsed by the displacement is not detected.
     """
 
 def viscoplasticity_chaboche(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.viscoplasticity_chaboche(fespace, kinematics)` — a Norton flow on the
-    shifted overstress `J(σ − X) − R − k`, with Armstrong-Frederick kinematic
-    hardening and saturating isotropic hardening. Material `E`, `nu`, `k`,
-    `K`, `n`, `C_1`, `gamma_1`, `b`, `Q`.
+    Chaboche viscoplasticity, with kinematic and isotropic hardening.
     
-    The back stress `X` is what makes the law usable under **cyclic**
-    loading: it translates the yield surface, so reverse yielding happens
-    early — the Bauschinger effect, which no isotropic law can produce. It
-    costs seven internal variables (`X_xx…X_xy`, `R`).
+    A Norton flow on the shifted overstress `J(σ − X) − R − k`, with
+    Armstrong-Frederick kinematic hardening and saturating isotropic hardening.
+    Material `E`, `nu`, `k`, `K`, `n`, `C_1`, `gamma_1`, `b`, `Q`.
+    
+    The back stress `X` is what makes the law usable under **cyclic** loading: it
+    translates the yield surface, so reverse yielding happens early — the
+    Bauschinger effect, which no isotropic law can produce. It costs seven
+    internal variables (`X_xx…X_xy`, `R`). Rate-dependent: it needs `dt`.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def viscoplasticity_lemaitre_chaboche(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.viscoplasticity_lemaitre_chaboche(fespace, kinematics)` — Chaboche
-    viscoplasticity coupled to Lemaitre's ductile **damage**: the flow is
-    driven by the effective stress `σ/(1−D)`, and `Ḋ = (Y/S)^s·ṗ`. Material
-    as above, plus `S`, `s`, `D_c`.
+    Chaboche viscoplasticity coupled to Lemaitre's ductile damage.
     
-    A damaged material flows faster, which damages it more — the coupling
-    that produces tertiary creep and, at `D_c`, rupture. Adds `damage` to the
-    internal state.
+    The flow is driven by the effective stress `σ/(1−D)`, and `Ḋ = (Y/S)^s·ṗ`.
+    Material as `pyrucast.model.viscoplasticity_chaboche`, plus `S`, `s`, `D_c`.
+    
+    A damaged material flows faster, which damages it more — the coupling that
+    produces tertiary creep and, at `D_c`, rupture. Adds `damage` to the internal
+    state. Rate-dependent: it needs `dt`.
     
     
-    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
+    # Parameters
+    
+    - `fespace`: the FE space; one sub-model per subspace.
+    - `kinematics`: `"plane_stress"`, `"plane_strain"` or `"axisymmetric"` on a
+      2-D space, `"full_3d"` (also `"solid"`) on a 3-D one. `"axisymmetric"`
+      requires a geometry built with `Coords.axisymmetric()`.
+    - `strain_measure`: the strain the law reads: `"linear"` (small strains, the
+      default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic
+      strains); the stress it writes is the dual, named after it (`sigma_*`,
+      `S_*`, `T_*`).
+    
+    # Returns
+    
+    A `Model` with one sub-model per subspace of `fespace`; the material is
+    supplied at assembly and integration time.
+    
+    # Raises
+    
+    - `ValueError` for an unknown `kinematics` or `strain_measure`.
+    - `RuntimeError` if `kinematics` does not match the dimension of the space,
+      if `"axisymmetric"` meets a geometry that is not, or for a measure that is
+      not a strain a law reads (`"gradient"`, `"jacobian"`, …).
     """
 
 def von_mises(model: Model, stress: ElementField, coefficients: typing.Sequence[builtins.float] = [0.5, 0.5, 0.5, 1.5, 1.5, 1.5]) -> ElementField:

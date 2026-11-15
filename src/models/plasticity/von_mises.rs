@@ -310,7 +310,7 @@ crate::physics_operator! {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn plasticity_perfect(fespace, kinematics: Kinematics) = crate::ops::model::plasticity, PlasticLaw::Perfect;
-    python: "`model.plasticity_perfect(fespace, kinematics)` — **perfect** (non-hardening)\nvon Mises elastoplasticity spanning every subspace of `fespace`. `kinematics`\nis `\"plane_stress\"` / `\"plane_strain\"` / `\"axisymmetric\"` (2-D) or\n`\"solid\"` (3-D). Same DOFs as elasticity (`u_x, u_y(, u_z)`); material\n(`E`, `nu`, `sigma_y`) is supplied at assembly / integration time. The\nbehaviour integration (`COMP`) carries the plastic-strain +\ncumulated-`p` internal state (`VAR0`→`VAR1`) and emits the consistent\ntangent `D_alg`."
+    python: "Perfect (non-hardening) von Mises elastoplasticity.\n\nSame unknowns as `pyrucast.model.elasticity`. Material `E`, `nu`, `sigma_y`.\nThe state carries the plastic strain and the cumulated plastic strain `p`;\nthe law gives its consistent tangent to `pyrucast.matrix.tangent`."
 }
 
 crate::physics_operator! {
@@ -340,5 +340,5 @@ crate::physics_operator! {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn plasticity_isotropic(fespace, kinematics: Kinematics) = crate::ops::model::plasticity, PlasticLaw::Isotropic;
-    python: "`model.plasticity_isotropic(fespace, kinematics)` — von Mises with **linear\nisotropic hardening**, `σ_y(p) = σ_y + H·p`. Material `E`, `nu`,\n`sigma_y`, `H`; everything else as `plasticity_perfect` (`H = 0` would\ngive it back exactly)."
+    python: "Von Mises plasticity with linear isotropic hardening, `σ_y(p) = σ_y + H·p`.\n\nMaterial `E`, `nu`, `sigma_y`, `H`; everything else as\n`pyrucast.model.plasticity_perfect`, which `H = 0` gives back exactly."
 }

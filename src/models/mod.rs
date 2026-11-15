@@ -2335,6 +2335,11 @@ macro_rules! physics_operator {
     // strain measure, so the arm adds it after the declared arguments: Rust
     // passes it explicitly, the Python face takes it as `strain_measure`,
     // `"linear"` unless said otherwise — one name, each language its idiom.
+    //
+    // Every facade also takes the same `kinematics`, so the Python docstring
+    // ends with sections the arm writes once for all — the parameters
+    // `fespace`, `kinematics` and `strain_measure`, the return, the errors —:
+    // `python:` gives only the first line and the law's own description.
     (
         $(#[$rust_doc:meta])*
         pub fn $name:ident(fespace $(, $arg:ident : $ty:ty)* $(,)?) = $target:path, $fixed:expr;
@@ -2359,10 +2364,7 @@ macro_rules! physics_operator {
             use super::*;
 
             #[doc = $py_doc]
-            #[doc = "\n\n`strain_measure` is the strain the law reads: `\"linear\"` (small \
-                     strains, the default), `\"green_lagrange\"` (large rotations) or \
-                     `\"hencky\"` (large plastic strains); the stress it writes is the \
-                     dual, named after it (`sigma_*`, `S_*`, `T_*`)."]
+            #[doc = "\n\n# Parameters\n\n- `fespace`: the FE space; one sub-model per subspace.\n- `kinematics`: `\"plane_stress\"`, `\"plane_strain\"` or `\"axisymmetric\"` on a\n  2-D space, `\"full_3d\"` (also `\"solid\"`) on a 3-D one. `\"axisymmetric\"`\n  requires a geometry built with `Coords.axisymmetric()`.\n- `strain_measure`: the strain the law reads: `\"linear\"` (small strains, the\n  default), `\"green_lagrange\"` (large rotations) or `\"hencky\"` (large plastic\n  strains); the stress it writes is the dual, named after it (`sigma_*`,\n  `S_*`, `T_*`).\n\n# Returns\n\nA `Model` with one sub-model per subspace of `fespace`; the material is\nsupplied at assembly and integration time.\n\n# Raises\n\n- `ValueError` for an unknown `kinematics` or `strain_measure`.\n- `RuntimeError` if `kinematics` does not match the dimension of the space,\n  if `\"axisymmetric\"` meets a geometry that is not, or for a measure that is\n  not a strain a law reads (`\"gradient\"`, `\"jacobian\"`, …)."]
             #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pyfunction)]
             #[::pyo3::pyfunction]
             #[pyo3(signature = (
