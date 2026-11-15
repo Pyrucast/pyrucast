@@ -2606,12 +2606,14 @@ maille.
 
 ### Le chemin inverse : `to_arrays`
 
+{{#pyalgo export.to_arrays}}
+
 `pyrucast.export.to_arrays` rend la même forme, à partir de maillages et de
 champs pyrucast — c'est la sortie que partagent l'export VTK, `to_gmsh` et
 `to_medcoupling` :
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:to_arrays}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:export-to_arrays}}
 ```
 
 - les nœuds sont numérotés dans l'ordre de première apparition, à partir de

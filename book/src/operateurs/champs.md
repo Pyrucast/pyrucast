@@ -19,9 +19,9 @@ Les autres thèmes d'opérateurs ont leur propre page : construction du matéria
 | Python | Effet |
 |---|---|
 | `positions(mesh, components=None)` | un `NodeField` portant les coordonnées des nœuds (`"X"`, `"Y"`, `"Z"`), une zone par sous-maillage. `None` ⇒ tous les axes présents dans la dimension du `Coords`. |
-| `coords.set(field, components=None)` | **écrit** les coordonnées du `Coords` actif depuis un champ `"X"/"Y"/"Z"`. |
-| `displace(field, components=None)` | **ajoute** un champ de déplacement aux coordonnées (chaque nœud distinct traité **une seule fois**). On applique ce que porte le champ, et rien d'autre : un nœud qui ne porte aucune des composantes, comme un nœud multiplicateur d'une solution, ne bouge pas, et une composante absente vaut 0. |
-| `coords.displace_from(field, reference, target, components=None)` | **pose** la configuration `target` en `X + u`, en absolu à partir de la configuration `reference` : rappelée, elle repart de `X`, rien ne s'accumule. La configuration active ne change pas (Cast3M `FORM`). On applique ce que porte le champ, et rien d'autre : un nœud qui ne porte aucune des composantes reste à sa position de référence, une composante absente vaut 0, et la solution d'un `solve` se donne telle quelle. |
+| [`coords.set(field, …)`](../reference/coords.md#coords-set) | **écrit** les coordonnées de la configuration active depuis un champ `"X"/"Y"/"Z"`. |
+| [`coords.displace(field, …)`](../reference/coords.md#coords-displace) | **ajoute** un champ de déplacement aux coordonnées de la configuration active. |
+| [`coords.displace_from(field, reference, target, …)`](../reference/coords.md#coords-displace_from) | **pose** la configuration `target` en `X + u`, en absolu à partir de la configuration `reference` : rappelée, elle repart de `X`, rien ne s'accumule. |
 | `Coords.in_config(config)` (méthode) | `with coords.in_config(i):` le bloc calcule sur la configuration `config` ; celle d'avant redevient active à la sortie, même après une exception. Voir [Coords](../coords.md#plusieurs-configurations). |
 
 `positions` est le pont géométrie → champ : on en tire un `NodeField` qu'on
@@ -636,6 +636,8 @@ cf. [Champ](../field.md)) pour bâtir des expressions par composante.
 
 ## Réduction
 
+{{#pyalgo measure.xty measure.integral measure.xtx}}
+
 Deux produits scalaires, à ne pas confondre — ils diffèrent par **ce qui est
 réduit** et donc par le **type du résultat** :
 
@@ -658,22 +660,17 @@ que plusieurs zones portent compte une fois dans `xty`.
 
 ### `xty(x, y)` → `float`
 
-Produit scalaire **global** des deux champs entiers :
+Produit scalaire **global** des deux champs entiers
+([`measure.xty`](../reference/measure.md#measure-xty)) :
 
 \\[
 x \cdot y = \sum_i \sum_c x_{i,c}\\, y_{i,c},
 \\]
 
 la somme parcourant **toutes** les valeurs, un nœud que plusieurs zones portent
-compté une fois. Le résultat est un unique `float` :
-le produit scalaire qui sert au calcul d'énergie (`F·u`), aux normes de résidu,
-etc. L'addition flottante n'étant pas associative, le total dépend du nombre de
-threads jusqu'au dernier ULP — comme le solveur, ce n'est pas reproductible
-bit à bit.
-
-```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:xty}}
-```
+compté une fois. L'addition flottante n'étant pas associative, le total dépend
+du nombre de threads jusqu'au dernier ULP — comme le solveur, ce n'est pas
+reproductible bit à bit.
 
 ### `psca(x, y)` → champ (même saveur que les entrées)
 
@@ -694,26 +691,17 @@ sortie est écrite une fois (par nœud) ⇒ indépendant du nombre de threads.
 
 ### `integral(field, component, fespace=None)` → `float`
 
-Intègre un champ sur son support par la **quadrature éléments finis**,
-`∫_Ω f dΩ` — le total d'une composante (p.ex. la **résultante** d'une *densité*
-de force distribuée) :
+Intègre un champ sur son support par la **quadrature éléments finis**
+([`measure.integral`](../reference/measure.md#measure-integral)) :
 
 \\[
 \int_\Omega f \\, d\Omega \\;=\\; \sum_{\text{cell}} \sum_g f(\text{cell}, g)\\, |J|_g\\, w_g .
 \\]
 
-- sur un **`NodeField`** : les valeurs nodales sont relevées aux points de Gauss
-  par les fonctions de forme, `∫ Σ_i f_i N_i dΩ` — `fespace` est **requis** ;
-- sur un **`ElementField`** : les valeurs (déjà aux points de Gauss) sont
-  intégrées directement — `fespace` est ignoré.
-
-Comme `xty`, la somme flottante dépend du nombre de threads jusqu'au dernier ULP.
-En interne, la réduction parallèle sur les cellules passe par le driver
-`kernel::reduce_cells`.
-
-```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:integral}}
-```
+Un `NodeField` est d'abord relevé aux points de Gauss par les fonctions de
+forme ; un `ElementField` y est déjà. Comme `xty`, la somme flottante dépend du
+nombre de threads jusqu'au dernier ULP. En interne, la réduction parallèle sur
+les cellules passe par le driver `kernel::reduce_cells`.
 
 ### Somme et `xtx`
 
@@ -743,11 +731,8 @@ grandeur physique — il faut alors nommer la composante. Pour la liste des
 extremums composante par composante, une compréhension suffit :
 `{c: f.min(c) for c in f.components()}`.
 
-Par défaut `xtx` somme **toutes** les composantes. En passant `components`, on
-restreint la somme à celles-là (les autres sont ignorées) — utile pour mesurer
-la norme d'un résidu sur un sous-jeu de degrés de liberté. Une composante
-absente d'une zone y est simplement ignorée ; l'appel n'échoue que si **aucune**
-zone ne porte l'une des composantes demandées.
+Pour `xtx` et ses arguments, voir
+[`measure.xtx`](../reference/measure.md#measure-xtx).
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_champs.py:sommes}}

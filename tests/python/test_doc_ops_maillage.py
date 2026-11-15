@@ -893,7 +893,7 @@ assert regions["plate"].element_types() == ["TRI3"]
 assert regions["plate"].cell_count == 2
 assert coords.node_count == 4
 
-# ANCHOR: to_arrays
+# ANCHOR: export-to_arrays
 # The way back: the same flat shape, ready for any other tool.
 sortie = pyrucast.export.to_arrays(regions)
 print(list(sortie["node_tags"]))  # [1, 2, 3, 4]
@@ -903,7 +903,7 @@ print(sortie["blocks"][1][0], list(sortie["blocks"][1][1]))  # TRI3 [1, 2, 3, 1,
 tags = sortie["node_tags"]
 print(isinstance(tags, pyrucast.Array), tags.format)  # True l — int64
 print(tags.tolist())  # [1, 2, 3, 4]
-# ANCHOR_END: to_arrays
+# ANCHOR_END: export-to_arrays
 
 # ANCHOR: gauss_codes
 # The translations the exchange adapters rely on.

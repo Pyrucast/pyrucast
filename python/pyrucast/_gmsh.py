@@ -233,20 +233,32 @@ def _gmsh_codes():
 
 
 def to_gmsh(meshes, fields=None, *, model_name="pyrucast"):
-    """Push pyrucast meshes and fields into the running gmsh session, as a new
-    model named ``model_name`` — to look at them in the gmsh GUI, or to save
-    them with ``gmsh.write``.
+    """Push meshes and fields into the running gmsh session, as a new model.
 
-    - ``meshes`` — ``dict[str, Mesh]`` on one ``Coords``: each key becomes a
-      physical group (``"<ungrouped>"`` excepted). A cell present in several
+    To look at them in the gmsh GUI, or to save them with `gmsh.write`. gmsh
+    must be initialized (`gmsh.initialize()`).
+
+    # Parameters
+
+    - `meshes`: a `dict[str, Mesh]` on one `Coords`. Each key becomes a
+      physical group (`"<ungrouped>"` excepted); a cell present in several
       meshes is written once, on a discrete entity carrying all its groups.
-    - ``fields`` — ``dict[str, NodeField | ElementField | Evolution]``: each
-      becomes a view — ``NodeData`` for a node field, ``ElementData`` (the
-      Gauss mean per cell) for an element field, one time step per tabulated
-      value of an ``Evolution``. gmsh draws 1, 3 or 9 components; a field of
-      another count gets one view per component, ``name_component``.
+    - `fields`: a `dict[str, NodeField | ElementField | Evolution]`, each
+      becoming a view — `NodeData` for a node field, `ElementData` (the Gauss
+      mean per cell) for an element field, one time step per tabulated value
+      of an `Evolution`. gmsh draws 1, 3 or 9 components; a field of another
+      count gets one view per component, `name_component`.
+    - `model_name`: the name of the new gmsh model.
 
-    gmsh must be initialized. Returns the model name.
+    # Returns
+
+    `model_name`.
+
+    # Raises
+
+    - `ImportError` if the `gmsh` module is not installed.
+    - `RuntimeError` if gmsh is not initialized, or if the meshes do not all
+      lie on one `Coords`.
     """
     gmsh = _import_gmsh()
     fields = fields or {}

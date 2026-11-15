@@ -40,7 +40,7 @@ for _z in range(len(temperature)):
         temperature[_z].set(_i, 0, 20.0 + _i)
 contraintes = pyrucast.ElementField(pyrucast.FiniteElementSpace(plaque), ["sxx"])
 
-# ANCHOR: to_medcoupling
+# ANCHOR: export-to_medcoupling
 # Each key becomes a MED group; an Evolution gives one time step per value.
 chauffe = pyrucast.Evolution([(0.0, froid), (60.0, temperature)])
 donnees = pyrucast.export.to_medcoupling(
@@ -49,7 +49,7 @@ donnees = pyrucast.export.to_medcoupling(
     mesh_name="plaque",
 )
 donnees.write("plaque.med", 2)  # a medcoupling object: its own writer
-# ANCHOR_END: to_medcoupling
+# ANCHOR_END: export-to_medcoupling
 
 # ANCHOR: from_medcoupling
 coords = pyrucast.Coords(dim=2)

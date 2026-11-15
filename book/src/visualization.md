@@ -295,13 +295,15 @@ La caméra se recentre à chaque bascule : le corps balayé est centré sur l'ax
 
 ## Export vers ParaView (`export_vtk`)
 
+{{#pyalgo export.export_vtk}}
+
 Pour les maillages industriels — ou simplement pour exploiter les filtres de
 **ParaView** — `export_vtk` écrit un fichier **VTK legacy**
 (`UNSTRUCTURED_GRID`) que ParaView lit nativement. C'est l'opérateur
 d'*export* (`src/ops/export`), pendant « écriture » du lecteur `read_gmsh`.
 
 ```python
-{{#include ../../tests/python/test_doc_visualization.py:vtk}}
+{{#include ../../tests/python/test_doc_visualization.py:export-export_vtk}}
 ```
 
 - Chaque sous-maillage est écrit ; les types d'éléments se traduisent un pour
@@ -367,29 +369,25 @@ variantes `vtk_*_string` qui rendent le texte ASCII sans toucher au disque.
 
 ## Échanger avec gmsh et Salome (`to_gmsh`, `to_medcoupling`)
 
+{{#pyalgo export.to_gmsh export.to_medcoupling}}
+
 Les deux sens des échanges passent par le même format à plat. Pour la lecture,
 voir [`from_gmsh`](operateurs/maillage.md#déléguer-le-maillage-à-gmsh--from_gmsh)
 et [`from_medcoupling`](operateurs/maillage.md#lire-un-fichier-med--from_medcoupling).
 
 `to_gmsh` pousse maillages et champs dans la session gmsh en cours, comme un
-nouveau modèle : chaque clé devient un groupe physique, chaque champ une vue —
-`NodeData` pour un champ aux nœuds, `ElementData` (moyenne par maille) pour un
-champ aux éléments, un pas par valeur d'une `Evolution`. gmsh dessine 1, 3 ou
-9 composantes : un champ d'un autre nombre donne une vue par composante.
+nouveau modèle : chaque clé devient un groupe physique, chaque champ une vue.
 
 ```python
-{{#include ../../tests/python/test_doc_gmsh.py:to_gmsh}}
+{{#include ../../tests/python/test_doc_gmsh.py:export-to_gmsh}}
 ```
 
 `to_medcoupling` construit un `medcoupling.MEDFileData`, qu'on écrit avec sa
-propre méthode `write` : chaque clé devient un groupe MED (un maillage POI1, un
-groupe de **nœuds**), un champ aux nœuds `ON_NODES`, un champ aux éléments
-`ON_GAUSS_PT` avec sa règle déclarée dans l'élément de référence MED
-(`gauss=False` : `ON_CELLS`, la moyenne par maille), un profil quand le champ
-ne couvre pas tout un niveau, une `Evolution` un pas de temps par valeur.
+propre méthode `write` : chaque clé devient un groupe MED, chaque champ un
+champ MED, aux points de Gauss pour un champ aux éléments.
 
 ```python
-{{#include ../../tests/python/test_doc_medcoupling.py:to_medcoupling}}
+{{#include ../../tests/python/test_doc_medcoupling.py:export-to_medcoupling}}
 ```
 
 > **Limite de medcoupling pour `TRI6`, `PENTA15` et `HEX20` aux points de

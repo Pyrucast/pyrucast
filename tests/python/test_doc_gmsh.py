@@ -60,7 +60,7 @@ for _z in range(len(temperature)):
     for _i in range(temperature[_z].node_count):
         temperature[_z].set(_i, 0, float(_i))
 
-# ANCHOR: to_gmsh
+# ANCHOR: export-to_gmsh
 # A new gmsh model: the meshes as physical groups, the fields as views.
 pyrucast.export.to_gmsh({"piece": piece}, {"T": temperature}, model_name="calcul")
 gmsh.write("calcul.msh")  # or gmsh.fltk.run() to look at it
@@ -69,7 +69,7 @@ gmsh.view.write(gmsh.view.getTags()[0], "temperature.pos")
 # from_gmsh reads the views back: a NodeData view is a NodeField.
 _, champs = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=3))
 print(sorted(champs))  # ['T']
-# ANCHOR_END: to_gmsh
+# ANCHOR_END: export-to_gmsh
 
 gmsh.finalize()
 os.chdir(_CWD)

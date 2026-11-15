@@ -158,11 +158,11 @@ _, mesh, _, n = _plaque()
 support = pyrucast.mesh.poi1_from_nodes(n)
 forces = _champ_nodal(mesh, n, ["f_x", "f_y"], [[1.0, 2.0]] * 6, support)
 deplacements = _champ_nodal(mesh, n, ["f_x", "f_y"], [[0.5, 0.5]] * 6, support)
-# ANCHOR: xty
+# ANCHOR: measure-xty
 # External strain energy: work of the nodal forces in the displacement field
 # (same components, same mesh).
 energie = pyrucast.measure.xty(forces, deplacements)
-# ANCHOR_END: xty
+# ANCHOR_END: measure-xty
 assert energie == 6 * (1.0 * 0.5 + 2.0 * 0.5)
 
 # ── psca ───────────────────────────────────────────────────
@@ -180,12 +180,12 @@ assert norme2[0][n[0], "psca"] == 25.0
 _, mesh, fes, n = _plaque()
 densite = _champ_nodal(mesh, n, ["f_y"], [[1.0]] * 6)
 champ_unite = _champ_nodal(mesh, n, ["u"], [[1.0]] * 6)
-# ANCHOR: integral
+# ANCHOR: measure-integral
 # Resultant of a surface force density f_y on a plate (through N_i).
 r_y = pyrucast.measure.integral(densite, "f_y", fespace=fes)
 # Measure of the domain: ∫ 1 dΩ.
 aire = pyrucast.measure.integral(champ_unite, "u", fespace=fes)
-# ANCHOR_END: integral
+# ANCHOR_END: measure-integral
 assert abs(aire - 2.0) < 1e-12
 assert abs(r_y - 2.0) < 1e-12
 
@@ -198,15 +198,17 @@ residu = _champ_nodal(mesh, n, ["f_x", "f_y"], [[3.0, 4.0]] * 6)
 # Resultant of a nodal force field, component by component.
 rx = forces.sum("f_x")
 ry = forces.sum("f_y")
-# Squared norm of the residual, for a convergence test.
-r2 = pyrucast.measure.xtx(residu)
-# The same norm, restricted to the translation components alone.
-r2_uy = pyrucast.measure.xtx(residu, components=["f_y"])
 # Extrema of a named component…
 fy_max = forces.max("f_y")
 # …or, without an argument, of the whole field, components pooled.
 partout = forces.min()
 # ANCHOR_END: sommes
+# ANCHOR: measure-xtx
+# Squared norm of the residual, for a convergence test.
+r2 = pyrucast.measure.xtx(residu)
+# The same norm, restricted to the component f_y.
+r2_uy = pyrucast.measure.xtx(residu, components=["f_y"])
+# ANCHOR_END: measure-xtx
 assert rx == 6.0 and ry == 12.0
 assert r2 == 6 * 25.0
 assert r2_uy == 6 * 16.0

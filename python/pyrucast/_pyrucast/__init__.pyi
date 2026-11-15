@@ -2909,23 +2909,34 @@ class NodeField:
         """
     def along(self, line: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Evolution:
         r"""
-        The values of `field` along `line`, one curve per component: the value
-        against the distance travelled along the line.
+        The values of `field` along `line`, one curve per component.
         
-        `line` is a POI1 mesh, read in the order of its cells, zone after zone:
-        that order is the path. The abscissa of a point is the length of the
-        path up to it — the sum of the straight distances from one point to the
-        next —, `0` at the first point; its ordinate, the value of the
-        component at that node (a node the field does not define reads zero).
-        `components=None` takes every component of the field, in its order;
-        each gives one `SubEvolution` of the returned `Evolution`, its
-        `ordinate_type` the component's name. A field of another mesh, or a
-        field at the Gauss points, is brought onto the line's points first with
-        `pyrucast.node_field.project`.
+        Each curve gives the value against the distance travelled along the line.
+        The order of the cells of `line`, zone after zone, is the path. The
+        abscissa of a point is the length of the path up to it — the sum of the
+        straight distances from one point to the next —, `0` at the first point;
+        its ordinate is the value of the component at that node (a node the field
+        does not define reads zero).
         
-        Raises when `line` is not POI1, when two consecutive points coincide,
-        for a component the field does not carry, and when the field and
-        `line` hang from different `Coords`.
+        # Parameters
+        
+        - `field`: the field to read, at the nodes. A field of another mesh, or a
+          field at the Gauss points, is first brought onto the points of the line
+          with `pyrucast.node_field.project`.
+        - `line`: the path, a POI1 mesh on the same `Coords` as `field`.
+        - `components`: the components to read, one curve each; `None` takes every
+          component of the field, in its order.
+        
+        # Returns
+        
+        An `Evolution` with one `SubEvolution` per component, in the order of
+        `components`, whose `ordinate_type` is the component's name.
+        
+        # Raises
+        
+        `RuntimeError` if `line` is not POI1, if two consecutive points coincide
+        (the abscissa would repeat), if `field` does not carry one of
+        `components`, or if `field` and `line` hang from different `Coords`.
         """
     def abs(self) -> NodeField:
         r"""
@@ -4263,23 +4274,34 @@ def abs(field: typing.Any) -> typing.Any:
 
 def along(field: NodeField, line: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Evolution:
     r"""
-    The values of `field` along `line`, one curve per component: the value
-    against the distance travelled along the line.
+    The values of `field` along `line`, one curve per component.
     
-    `line` is a POI1 mesh, read in the order of its cells, zone after zone:
-    that order is the path. The abscissa of a point is the length of the
-    path up to it — the sum of the straight distances from one point to the
-    next —, `0` at the first point; its ordinate, the value of the
-    component at that node (a node the field does not define reads zero).
-    `components=None` takes every component of the field, in its order;
-    each gives one `SubEvolution` of the returned `Evolution`, its
-    `ordinate_type` the component's name. A field of another mesh, or a
-    field at the Gauss points, is brought onto the line's points first with
-    `pyrucast.node_field.project`.
+    Each curve gives the value against the distance travelled along the line.
+    The order of the cells of `line`, zone after zone, is the path. The
+    abscissa of a point is the length of the path up to it — the sum of the
+    straight distances from one point to the next —, `0` at the first point;
+    its ordinate is the value of the component at that node (a node the field
+    does not define reads zero).
     
-    Raises when `line` is not POI1, when two consecutive points coincide,
-    for a component the field does not carry, and when the field and
-    `line` hang from different `Coords`.
+    # Parameters
+    
+    - `field`: the field to read, at the nodes. A field of another mesh, or a
+      field at the Gauss points, is first brought onto the points of the line
+      with `pyrucast.node_field.project`.
+    - `line`: the path, a POI1 mesh on the same `Coords` as `field`.
+    - `components`: the components to read, one curve each; `None` takes every
+      component of the field, in its order.
+    
+    # Returns
+    
+    An `Evolution` with one `SubEvolution` per component, in the order of
+    `components`, whose `ordinate_type` is the component's name.
+    
+    # Raises
+    
+    `RuntimeError` if `line` is not POI1, if two consecutive points coincide
+    (the abscissa would repeat), if `field` does not carry one of
+    `components`, or if `field` and `line` hang from different `Coords`.
     """
 
 def arc(a: Node, center: Node, b: Node, n_elems: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
@@ -4708,25 +4730,57 @@ def dirichlet(imposed_mesh: Mesh, target: Model, variable: builtins.str, sense: 
 
 def displace(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
     r"""
-    Displace nodes by `field` (incremental): `coord[a] += field.value(node,
-    components[a])` on the active coordinate set. `components` lists one
-    displacement-component name per spatial axis, in axis order; `None` →
-    `["u_x", "u_y", "u_z"][:dim]`. Mutates the field's `Coords` in place. What
-    the field carries is applied, and nothing else: a node carrying none of the
-    components (a multiplier node of a solution) does not move, and a
-    component a node lacks moves it by 0 along that axis.
+    Move the nodes of `field` by its values, an increment: `x += u`.
+    
+    The increment is added to the active configuration of the field's
+    `Coords`, in place, each distinct node once. What the field carries is
+    applied, and nothing else: a node carrying none of the components (a
+    multiplier node of a solution) does not move, and a component a node lacks
+    moves it by 0 along that axis.
+    
+    # Parameters
+    
+    - `field`: the displacement, at the nodes.
+    - `components`: one displacement component per spatial axis, in axis
+      order; `None` → `["u_x", "u_y", "u_z"][:dim]`.
+    
+    # Raises
+    
+    `RuntimeError` if `components` does not hold one name per axis.
+    
+    # See also
+    
+    `pyrucast.coords.displace_from`, which lays a configuration at `X + u`
+    without accumulating.
     """
 
 def displace_from(field: NodeField, reference: builtins.int, target: builtins.int, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
     r"""
-    Lay configuration `target` of the field's `Coords` at configuration
-    `reference` displaced by `field`: `x = X + u`, in absolute — called again,
-    it lands at `X + u` again, nothing accumulates. What the field carries is
-    applied, and nothing else: a node it does not define, or that carries none
-    of the components (a multiplier node of a solution), stays at its reference
-    position, and a component a node lacks counts as 0. The active configuration
-    is left as it is. `components` names one displacement component per axis;
-    `None` → `["u_x", "u_y", "u_z"][:dim]`.
+    Lay configuration `target` at `reference` displaced by `field`: `x = X + u`.
+    
+    The position is absolute: called again, it lands at `X + u` again, nothing
+    accumulates. What the field carries is applied, and nothing else: a node it
+    does not define, or that carries none of the components (a multiplier node
+    of a solution), stays at its reference position, and a component a node
+    lacks counts as 0 — the output of `pyrucast.solver.solve` is given as it
+    is. The active configuration is left as it is; `Coords.in_config` computes
+    on `target`.
+    
+    # Parameters
+    
+    - `field`: the displacement `u`, at the nodes.
+    - `reference`: the index of the configuration holding `X`, left unchanged.
+    - `target`: the index of the configuration to write, another than
+      `reference`; what it held before is replaced.
+    - `components`: one displacement component per spatial axis, in axis
+      order; `None` → `["u_x", "u_y", "u_z"][:dim]`.
+    
+    # Raises
+    
+    `RuntimeError` if `reference` or `target` is not a configuration of the
+    `Coords`, if `target` is `reference`, if `components` does not hold one name
+    per axis, or if a node would get a negative radius on an axisymmetric
+    `Coords`.
     """
 
 def divergence(field: ElementField, prefix: builtins.str) -> NodeField:
@@ -4857,21 +4911,34 @@ def exp(field: typing.Any) -> typing.Any:
 
 def export_vtk(mesh: Mesh, path: builtins.str, field: typing.Optional[typing.Any] = None, binary: builtins.bool = False) -> None:
     r"""
-    Write `mesh` to a legacy **VTK** file (`UNSTRUCTURED_GRID`) that ParaView
-    reads natively — as text, or with `binary=True` as raw big-endian numbers
-    (much smaller and faster to read for a large mesh).
+    Write `mesh`, and a field if given, to a legacy VTK file for ParaView.
     
-    With `field=None` only the geometry is written. Pass a `NodeField` to add
-    it as `POINT_DATA` (one scalar array per component, the nodal value at
-    each point) or an `ElementField` to add it as `CELL_DATA` (one array per
-    component, the per-cell mean of that cell's Gauss values). An element
-    field must come from a space built on **this** mesh, so its cells line up.
+    The file is an `UNSTRUCTURED_GRID` that ParaView reads natively. Every
+    sub-mesh is written; a 2-D `Coords` is completed with `z = 0`.
     
-    Pass an `Evolution` of node or element fields to write a **time series**:
-    `path` is then the index, a `.vtk.series` file ParaView opens as one
-    dataset with a time slider, and each tabulated value goes to its own file
-    next to it, `stem_0000.vtk`, `stem_0001.vtk`, … — `stem` being the name
-    of `path` up to its first dot.
+    # Parameters
+    
+    - `mesh`: the mesh to write.
+    - `path`: the file to write. For an `Evolution`, the index of the series, a
+      `.vtk.series` file.
+    - `field`: what to write on the mesh:
+      - `None`: the geometry alone;
+      - a `NodeField`: `POINT_DATA`, one scalar array per component, the nodal
+        value at each point (`0` where the field defines nothing);
+      - an `ElementField`: `CELL_DATA`, one array per component, the mean of the
+        Gauss values of each cell. The field must come from a space built on
+        **this** mesh, so that its cells line up;
+      - an `Evolution` of node or element fields: a **time series**. Each
+        tabulated value goes to its own file next to `path`, `stem_0000.vtk`,
+        `stem_0001.vtk`, … — `stem` being the name of `path` up to its first
+        dot —, and ParaView opens the index as one dataset with a time slider.
+    - `binary`: `False` writes text; `True` writes raw big-endian numbers, much
+      smaller and faster to read for a large mesh.
+    
+    # Raises
+    
+    - `TypeError` if `field` is none of the types above.
+    - `RuntimeError` if a file cannot be written.
     """
 
 def external_forces(model: Model, materials: ElementField) -> NodeField:
@@ -5147,17 +5214,37 @@ def initial_state(model: Model, materials: ElementField) -> ElementField:
 
 def integral(field: typing.Any, component: builtins.str, fespace: typing.Optional[FiniteElementSpace] = None) -> builtins.float:
     r"""
-    Integral `∫_Ω f dΩ` of a field over its support, using the finite-element
-    quadrature — the total of one `component` (e.g. the resultant of a
-    distributed force **density**).
+    Integrate one component of a field over its support, `∫_Ω f dΩ`.
     
-    - `NodeField`: interpolates with the shape functions, `∫ Σ_i f_i N_i dΩ` —
-      `fespace` is **required**.
-    - `ElementField`: integrates the Gauss-point values directly,
-      `Σ_cell Σ_g f·|J|·w` — `fespace` is ignored.
+    The integral uses the finite-element quadrature: it is the total of the
+    component — the resultant of a distributed force **density**, or the measure
+    of the domain for a field equal to 1. For a field of nodal forces, already
+    integrated, the resultant is a plain sum instead: `field.sum(component)`.
     
-    For a field of already-integrated **nodal** forces, the resultant is a plain
-    sum instead: `field.sum(component)`.
+    # Parameters
+    
+    - `field`: a `NodeField` or an `ElementField`. A `NodeField` is interpolated
+      with the shape functions, `∫ Σ_i f_i N_i dΩ`; an `ElementField` is
+      integrated from its Gauss-point values, `Σ_cell Σ_g f·|J|·w`.
+    - `component`: the component to integrate.
+    - `fespace`: the FE space that interpolates a `NodeField` and gives the
+      quadrature — required for a `NodeField`, ignored for an `ElementField`.
+    
+    # Returns
+    
+    The integral, a `float`.
+    
+    # Raises
+    
+    - `TypeError` if `field` is a `NodeField` without `fespace`, or neither a
+      `NodeField` nor an `ElementField`.
+    - `RuntimeError` if a `NodeField` does not define `component` at every node
+      of `fespace`, or if no zone of an `ElementField` carries it.
+    
+    # Notes
+    
+    The cells are summed in parallel: the last bit of the result may change with
+    the number of threads.
     """
 
 def integrate_behavior(model: Model, deformation: ElementField, materials: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> ElementField:
@@ -5962,11 +6049,24 @@ def select(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: ty
 
 def set_positions(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
     r"""
-    Set node coordinates from `field` (absolute): for every node, the
-    active-set coordinate on axis `a` becomes `field.value(node,
-    components[a])`. `components` lists one component name per spatial axis,
-    in axis order; `None` → `["X", "Y", "Z"][:dim]`. Mutates the field's
-    `Coords` in place.
+    Set the coordinates of the nodes of `field` to its values, in absolute.
+    
+    For every node of the field, the coordinate on axis `a` of the active
+    configuration becomes the value of `components[a]`. The `Coords` of the
+    field is changed in place.
+    
+    # Parameters
+    
+    - `field`: the positions, at the nodes; every node must carry every
+      component.
+    - `components`: one component name per spatial axis, in axis order; `None`
+      → `["X", "Y", "Z"][:dim]`, the components of
+      `pyrucast.node_field.positions`.
+    
+    # Raises
+    
+    `RuntimeError` if a node of `field` lacks one of `components`, or if
+    `components` does not hold one name per axis.
     """
 
 def shell(fespace: FiniteElementSpace, formulation: builtins.str) -> Model:
@@ -6368,24 +6468,30 @@ def timoshenko(fespace: FiniteElementSpace) -> Model:
 
 def to_arrays(groups: dict, *, node_fields: typing.Sequence[NodeField] = [], element_fields: typing.Sequence[ElementField] = [], gauss: builtins.bool = False, order: builtins.str = 'pyrucast', first_tag: builtins.int = 1) -> dict:
     r"""
-    Lay meshes and fields out as **flat arrays** — the one exit every exchange
-    format goes through (`pyrucast.export.to_gmsh`,
-    `pyrucast.export.to_medcoupling`, the VTK writer), and the mirror of
-    `pyrucast.mesh.from_arrays`: what it returns has the shape that function
-    reads back.
+    Lay meshes and fields out as flat arrays, the shape `mesh.from_arrays` reads.
     
-    - `groups` — `dict` from group name to `Mesh`, all on one `Coords`;
-    - `node_fields` — `NodeField`s: one row per exported node, `0` where a
-      field defines nothing;
-    - `element_fields` — `ElementField`s, on the cells their zones cover:
-      the Gauss **mean** per cell, or with `gauss=True` the raw values per
-      point along with each type's rule;
-    - `order` — node numbering inside a cell: `"pyrucast"` (= VTK), `"gmsh"`,
-      `"med"`;
-    - `first_tag` — first node and cell tag (gmsh counts from 1, medcoupling
-      from 0).
+    It is the one exit every exchange format goes through
+    (`pyrucast.export.to_gmsh`, `pyrucast.export.to_medcoupling`, the VTK
+    writer), and the mirror of `pyrucast.mesh.from_arrays`. The nodes are
+    numbered in the order they first appear; a cell present in several groups
+    is written once.
     
-    Returns a `dict`:
+    # Parameters
+    
+    - `groups`: a `dict` from group name to `Mesh`, all on one `Coords`.
+    - `node_fields`: `NodeField`s, one row per exported node, `0` where a field
+      defines nothing.
+    - `element_fields`: `ElementField`s, on the cells their zones cover.
+    - `gauss`: `False` gives the Gauss **mean** per cell; `True` the raw values
+      per Gauss point, along with each type's rule.
+    - `order`: the node numbering inside a cell: `"pyrucast"` (the same as
+      VTK), `"gmsh"` or `"med"`.
+    - `first_tag`: the first node and cell tag (gmsh counts from 1,
+      medcoupling from 0).
+    
+    # Returns
+    
+    A `dict`:
     
     - `"node_tags"`, `"node_coords"` (`dim` per node), `"dim"`;
     - `"blocks"` — `(element_type, node_tags, cell_tags, groups)` per block of
@@ -6398,6 +6504,12 @@ def to_arrays(groups: dict, *, node_fields: typing.Sequence[NodeField] = [], ele
     
     Every array is an `Array`: read-only, and read **without a copy** by
     `numpy.asarray` or `memoryview`.
+    
+    # Raises
+    
+    - `TypeError` if a value of `groups` is not a `Mesh`.
+    - `ValueError` if `order` is unknown.
+    - `RuntimeError` if the groups do not all lie on one `Coords`.
     """
 
 def to_poi1(mesh: Mesh) -> Mesh:
@@ -6560,27 +6672,66 @@ def von_mises(model: Model, stress: ElementField, coefficients: typing.Sequence[
 
 def xtx(x: typing.Any, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:
     r"""
-    Squared Euclidean norm `xᵀx = Σ v²` of a field — the sum of squares over
-    every value of the field, a node that several zones carry counted once.
-    Accepts a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
+    Squared Euclidean norm `xᵀx = Σ v²` of a field.
     
-    With `components` given, the sum is restricted to those components only
-    (the rest ignored); by default every component is taken.
+    The sum of the squares of every value of the field; a node that several
+    zones carry counts once. Restricted to some components, it measures the
+    norm of a residual on a subset of the degrees of freedom.
+    
+    # Parameters
+    
+    - `x`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
+    - `components`: the components to sum, the others ignored; `None` takes
+      every component. A component absent from a zone is ignored there.
+    
+    # Returns
+    
+    The squared norm, a `float`.
+    
+    # Raises
+    
+    - `TypeError` if `x` is none of the four field types.
+    - `RuntimeError` if no zone of `x` carries any of `components`.
+    
+    # Notes
+    
+    The sum is gathered in parallel: the last bit of the result may change with
+    the number of threads.
     """
 
 def xty(x: typing.Any, y: typing.Any) -> builtins.float:
     r"""
-    Global scalar product `∑ xᵢ · yᵢ` of two **whole** fields.
+    Global scalar product `Σ xᵢ·yᵢ` of two whole fields, a single number.
     
-    `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
-    `ElementField` / `SubElementField`). The sum runs over the supports both
-    carry and, on each, over the components both carry (aligned by name), a
-    node that several zones carry counted once; a support or a component on one
-    side only has no counterpart and adds nothing. Two sub-fields must sit on
-    the same support. Returns a single float — the field inner product used for
-    energies (`F·u`), residual norms, etc.
+    The inner product of fields used for energies (`F·u`) and residual norms.
+    The sum runs over the supports both fields carry and, on each, over the
+    components both carry, aligned by name (their order may differ); a node
+    that several zones carry counts once. A support or a component on one side
+    only has no counterpart and adds nothing.
     
-    For the **node-by-node** scalar product (a field, one value per node),
-    see `pyrucast.field.psca`.
+    # Parameters
+    
+    - `x`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
+    - `y`: a field of the same type as `x`; two sub-fields must sit on the same
+      support.
+    
+    # Returns
+    
+    The scalar product, a `float`.
+    
+    # Raises
+    
+    - `TypeError` if `y` is not of the type of `x`, or `x` none of the four.
+    - `RuntimeError` if two sub-fields sit on different supports.
+    
+    # Notes
+    
+    The sum is gathered in parallel: the last bit of the result may change with
+    the number of threads.
+    
+    # See also
+    
+    `pyrucast.field.psca`, the scalar product node by node: a field, one value
+    per node.
     """
 
