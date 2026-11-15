@@ -82,6 +82,22 @@ falls back as a singular base does today. With `"lagrange"` the base keeps the
 equality multipliers, a saddle-point: the LU stays. To measure on a release
 build before deciding.
 
+## Cholesky accepts a singular matrix without a word
+
+`solve(k, f, method="cholesky")` on a singular stiffness (boundary conditions
+forgotten) returns a field without raising, where the default LU raises
+"matrix is singular". Observed by running on 2026-11-15; the values returned
+were not examined. The docstring of `solver.solve` (`src/py/ops/solver.rs`)
+promises the error only for a matrix that is not positive definite, so it
+does not lie, but the user who asks for Cholesky loses the check LU gives.
+
+- Probable cause, not verified: a singular, positive semi-definite matrix
+  meets a pivot that rounding leaves slightly positive instead of zero, and
+  faer's `Llt` (`src/ops/solver/lu.rs`) only refuses a pivot `≤ 0`.
+- Lead: first look at how the LU detects the singular case, then check the
+  pivots of `L` against a threshold relative to the largest, and raise the
+  same "singular" error. Then write it in `# Raises` and add a test.
+
 ## `NodeField::with` and `with_components_per_submesh`
 
 Rust `NodeField::with(mesh, components_per_submesh)`
