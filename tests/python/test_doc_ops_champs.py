@@ -140,7 +140,7 @@ temperature = _champ_nodal(
 )
 signal = _champ_nodal(mesh, n, ["s"], [[-1.0], [2.0], [-3.0], [4.0], [-5.0], [6.0]])
 # ANCHOR: maths
-# Atténuation exponentielle d'un champ de température.
+# Exponential attenuation of a temperature field.
 attenue = pyrucast.field.exp(temperature * -0.1)
 
 # Magnitude of a field (combined with scalar field arithmetic).
@@ -169,10 +169,10 @@ assert energie == 6 * (1.0 * 0.5 + 2.0 * 0.5)
 
 _, mesh, _, n = _plaque()
 vitesse = _champ_nodal(mesh, n, ["v_x", "v_y"], [[3.0, 4.0]] * 6)
-# ANCHOR: psca
+# ANCHOR: field-psca
 # Squared norm of a vector field, node by node.
 norme2 = pyrucast.field.psca(vitesse, vitesse)  # one-component field, "psca"
-# ANCHOR_END: psca
+# ANCHOR_END: field-psca
 assert norme2[0][n[0], "psca"] == 25.0
 
 # ── integral ───────────────────────────────────────────────

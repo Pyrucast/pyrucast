@@ -740,47 +740,223 @@ class ElementField:
         """
     def abs(self) -> ElementField:
         r"""
-        Element-wise absolute value of a field.
+        Absolute value of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sqrt(self) -> ElementField:
         r"""
-        Element-wise square root of a field (`nan` for negatives).
+        Square root of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. A negative value gives `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def exp(self) -> ElementField:
         r"""
-        Element-wise exponential `eˣ` of a field.
+        Exponential `eˣ` of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def log(self) -> ElementField:
         r"""
-        Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
+        Natural logarithm of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. Zero gives `-inf`, a negative value `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def log10(self) -> ElementField:
         r"""
-        Element-wise base-10 logarithm of a field.
+        Base-10 logarithm of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. Zero gives `-inf`, a negative value `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def cos(self) -> ElementField:
         r"""
-        Element-wise cosine of a field (radians).
+        Cosine of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sin(self) -> ElementField:
         r"""
-        Element-wise sine of a field (radians).
+        Sine of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def tan(self) -> ElementField:
         r"""
-        Element-wise tangent of a field (radians).
+        Tangent of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sinh(self) -> ElementField:
         r"""
-        Element-wise hyperbolic sine of a field.
+        Hyperbolic sine of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def cosh(self) -> ElementField:
         r"""
-        Element-wise hyperbolic cosine of a field.
+        Hyperbolic cosine of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def tanh(self) -> ElementField:
         r"""
-        Element-wise hyperbolic tangent of a field.
+        Hyperbolic tangent of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
         r"""
@@ -3016,47 +3192,223 @@ class NodeField:
         """
     def abs(self) -> NodeField:
         r"""
-        Element-wise absolute value of a field.
+        Absolute value of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sqrt(self) -> NodeField:
         r"""
-        Element-wise square root of a field (`nan` for negatives).
+        Square root of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. A negative value gives `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def exp(self) -> NodeField:
         r"""
-        Element-wise exponential `eˣ` of a field.
+        Exponential `eˣ` of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def log(self) -> NodeField:
         r"""
-        Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
+        Natural logarithm of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. Zero gives `-inf`, a negative value `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def log10(self) -> NodeField:
         r"""
-        Element-wise base-10 logarithm of a field.
+        Base-10 logarithm of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. Zero gives `-inf`, a negative value `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def cos(self) -> NodeField:
         r"""
-        Element-wise cosine of a field (radians).
+        Cosine of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sin(self) -> NodeField:
         r"""
-        Element-wise sine of a field (radians).
+        Sine of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def tan(self) -> NodeField:
         r"""
-        Element-wise tangent of a field (radians).
+        Tangent of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sinh(self) -> NodeField:
         r"""
-        Element-wise hyperbolic sine of a field.
+        Hyperbolic sine of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def cosh(self) -> NodeField:
         r"""
-        Element-wise hyperbolic cosine of a field.
+        Hyperbolic cosine of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def tanh(self) -> NodeField:
         r"""
-        Element-wise hyperbolic tangent of a field.
+        Hyperbolic tangent of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
         r"""
@@ -3437,47 +3789,223 @@ class SubElementField:
         """
     def abs(self) -> SubElementField:
         r"""
-        Element-wise absolute value of a field.
+        Absolute value of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sqrt(self) -> SubElementField:
         r"""
-        Element-wise square root of a field (`nan` for negatives).
+        Square root of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. A negative value gives `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def exp(self) -> SubElementField:
         r"""
-        Element-wise exponential `eˣ` of a field.
+        Exponential `eˣ` of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def log(self) -> SubElementField:
         r"""
-        Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
+        Natural logarithm of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. Zero gives `-inf`, a negative value `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def log10(self) -> SubElementField:
         r"""
-        Element-wise base-10 logarithm of a field.
+        Base-10 logarithm of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. Zero gives `-inf`, a negative value `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def cos(self) -> SubElementField:
         r"""
-        Element-wise cosine of a field (radians).
+        Cosine of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sin(self) -> SubElementField:
         r"""
-        Element-wise sine of a field (radians).
+        Sine of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def tan(self) -> SubElementField:
         r"""
-        Element-wise tangent of a field (radians).
+        Tangent of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sinh(self) -> SubElementField:
         r"""
-        Element-wise hyperbolic sine of a field.
+        Hyperbolic sine of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def cosh(self) -> SubElementField:
         r"""
-        Element-wise hyperbolic cosine of a field.
+        Hyperbolic cosine of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def tanh(self) -> SubElementField:
         r"""
-        Element-wise hyperbolic tangent of a field.
+        Hyperbolic tangent of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
         r"""
@@ -4298,47 +4826,223 @@ class SubNodeField:
         """
     def abs(self) -> SubNodeField:
         r"""
-        Element-wise absolute value of a field.
+        Absolute value of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sqrt(self) -> SubNodeField:
         r"""
-        Element-wise square root of a field (`nan` for negatives).
+        Square root of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. A negative value gives `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def exp(self) -> SubNodeField:
         r"""
-        Element-wise exponential `eˣ` of a field.
+        Exponential `eˣ` of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def log(self) -> SubNodeField:
         r"""
-        Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
+        Natural logarithm of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. Zero gives `-inf`, a negative value `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def log10(self) -> SubNodeField:
         r"""
-        Element-wise base-10 logarithm of a field.
+        Base-10 logarithm of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded. Zero gives `-inf`, a negative value `nan`.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def cos(self) -> SubNodeField:
         r"""
-        Element-wise cosine of a field (radians).
+        Cosine of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sin(self) -> SubNodeField:
         r"""
-        Element-wise sine of a field (radians).
+        Sine of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def tan(self) -> SubNodeField:
         r"""
-        Element-wise tangent of a field (radians).
+        Tangent of `field`, value by value, in radians.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def sinh(self) -> SubNodeField:
         r"""
-        Element-wise hyperbolic sine of a field.
+        Hyperbolic sine of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def cosh(self) -> SubNodeField:
         r"""
-        Element-wise hyperbolic cosine of a field.
+        Hyperbolic cosine of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def tanh(self) -> SubNodeField:
         r"""
-        Element-wise hyperbolic tangent of a field.
+        Hyperbolic tangent of `field`, value by value.
+        
+        Every value of every component is mapped by the function, as numpy does: the
+        result is not guarded.
+        
+        # Parameters
+        
+        - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+          `SubElementField`.
+        
+        # Returns
+        
+        A new field of the type of `field`, with the same structure.
+        
+        # Raises
+        
+        `TypeError` if `field` is none of the four field types.
         """
     def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
         r"""
@@ -4381,7 +5085,23 @@ class SubNodeField:
 
 def abs(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise absolute value of a field.
+    Absolute value of `field`, value by value.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def along(field: NodeField, line: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Evolution:
@@ -4715,12 +5435,44 @@ def copy(mesh: Mesh, new_nodes: builtins.bool = True) -> Mesh:
 
 def cos(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise cosine of a field (radians).
+    Cosine of `field`, value by value, in radians.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def cosh(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise hyperbolic cosine of a field.
+    Hyperbolic cosine of `field`, value by value.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def creep_blackburn(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
@@ -5046,7 +5798,23 @@ def embedded(immersed: Mesh, host: Mesh, target: Model, variables: typing.Sequen
 
 def exp(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise exponential `eˣ` of a field.
+    Exponential `eˣ` of `field`, value by value.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def export_vtk(mesh: Mesh, path: builtins.str, field: typing.Optional[typing.Any] = None, binary: builtins.bool = False) -> None:
@@ -5520,12 +6288,44 @@ def load(path: builtins.str) -> dict:
 
 def log(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
+    Natural logarithm of `field`, value by value.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded. Zero gives `-inf`, a negative value `nan`.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def log10(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise base-10 logarithm of a field.
+    Base-10 logarithm of `field`, value by value.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded. Zero gives `-inf`, a negative value `nan`.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def lump(matrix: Matrix) -> Matrix:
@@ -6070,17 +6870,35 @@ def project_on_sphere(mesh: Mesh, center: typing.Sequence[builtins.float], radiu
 
 def psca(x: typing.Any, y: typing.Any) -> typing.Any:
     r"""
-    Node-by-node (or point-by-point) scalar product of two fields. Returns a
-    **new field** of the same flavour as the inputs, carrying a single `"psca"`
-    component whose value at each node/point is `∑_c xᵣ,c·yᵣ,c` (reduction over
-    components only, the support is kept).
+    Scalar product of two fields node by node, `pᵢ = Σ_c xᵢ,c·yᵢ,c`.
     
-    `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
-    `ElementField` / `SubElementField`), sit on the same support/decomposition,
-    and carry the same components (aligned by name).
+    The reduction runs over the components alone: the support is kept, one
+    value per node, or per Gauss point for a field at the Gauss points. The
+    components are aligned by name (their order may differ) and only those both
+    fields carry count; a support only one field carries has no counterpart and
+    gives no zone. Each value is written once, so the result does not depend on
+    the number of threads.
     
-    For the **global** scalar product (a single float over the whole field),
-    see `pyrucast.measure.xty`.
+    # Parameters
+    
+    - `x`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
+    - `y`: a field of the same type as `x`; two sub-fields must sit on the same
+      support.
+    
+    # Returns
+    
+    A new field of the type of `x`, one zone per support both fields carry,
+    with a single component `"psca"`.
+    
+    # Raises
+    
+    - `TypeError` if `y` is not of the type of `x`, or `x` none of the four.
+    - `RuntimeError` if two sub-fields sit on different supports.
+    
+    # See also
+    
+    `pyrucast.measure.xty`, the global scalar product: a single number over
+    the whole field.
     """
 
 def radiation(fespace: FiniteElementSpace, target: Model) -> Model:
@@ -6380,12 +7198,44 @@ def shell_deformation(field: NodeField, fespace: FiniteElementSpace, formulation
 
 def sin(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise sine of a field (radians).
+    Sine of `field`, value by value, in radians.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def sinh(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise hyperbolic sine of a field.
+    Hyperbolic sine of `field`, value by value.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def skin(mesh: Mesh, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
@@ -6496,7 +7346,23 @@ def spill_stats() -> dict:
 
 def sqrt(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise square root of a field (`nan` for negatives).
+    Square root of `field`, value by value.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded. A negative value gives `nan`.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def stiffness(model: Model, materials: ElementField) -> Matrix:
@@ -6648,7 +7514,23 @@ def symmetry_point(mesh: Mesh, center: typing.Sequence[builtins.float]) -> Mesh:
 
 def tan(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise tangent of a field (radians).
+    Tangent of `field`, value by value, in radians.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def tangent(model: Model, materials: ElementField, deformation: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> Matrix:
@@ -6692,7 +7574,23 @@ def tangent(model: Model, materials: ElementField, deformation: ElementField, pr
 
 def tanh(field: typing.Any) -> typing.Any:
     r"""
-    Element-wise hyperbolic tangent of a field.
+    Hyperbolic tangent of `field`, value by value.
+    
+    Every value of every component is mapped by the function, as numpy does: the
+    result is not guarded.
+    
+    # Parameters
+    
+    - `field`: a `NodeField`, `SubNodeField`, `ElementField` or
+      `SubElementField`.
+    
+    # Returns
+    
+    A new field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    `TypeError` if `field` is none of the four field types.
     """
 
 def thermal_strain(temperature: ElementField, materials: ElementField, fespace: FiniteElementSpace, t_ref: builtins.float, measure: builtins.str = 'linear') -> ElementField:

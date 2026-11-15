@@ -612,25 +612,12 @@ problème thermique.
 
 ## Maths élément par élément
 
-Onze fonctions appliquent une fonction scalaire à **chaque valeur** d'un champ
-et renvoient un **nouveau** champ du même type (style numpy). Elles acceptent
-indifféremment les quatre saveurs de champ — `NodeField`, `SubNodeField`,
-`ElementField`, `SubElementField` — et dispatchent par type.
-
-| Python | Effet |
-|---|---|
-| `abs(field)` | valeur absolue |
-| `sqrt(field)` | racine carrée (`nan` pour les négatifs) |
-| `exp(field)` | exponentielle `eˣ` |
-| `log(field)` | logarithme népérien (`-inf`/`nan` pour ≤ 0) |
-| `log10(field)` | logarithme base 10 |
-| `cos(field)` / `sin(field)` / `tan(field)` | trigonométrie (radians) |
-| `sinh(field)` / `cosh(field)` / `tanh(field)` | trigonométrie hyperbolique |
-
-Les résultats sont **non bornés**, comme en numpy : aucune protection sur le
-domaine (`log` de ≤ 0 donne `-inf`/`nan`, `sqrt` d'un négatif donne `nan`). Ces
-fonctions se combinent à l'arithmétique scalaire des champs (`f + s`, `f * s`,
-cf. [Champ](../field.md)) pour bâtir des expressions par composante.
+Onze fonctions de [`pyrucast.field`](../reference/field.md) (`abs`, `sqrt`,
+`exp`, `log`, `log10`, `cos`, `sin`, `tan`, `sinh`, `cosh`, `tanh`) appliquent
+une fonction scalaire à **chaque valeur** d'un champ et renvoient un **nouveau**
+champ du même type, comme numpy, sans protection sur le domaine. Elles se
+combinent à l'arithmétique scalaire des champs (`f + s`, `f * s`, cf.
+[Champ](../field.md)) pour bâtir des expressions par composante.
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_champs.py:maths}}
@@ -683,13 +670,9 @@ Produit scalaire **nœud par nœud** (ou point par point) — réduction sur les
 p_i = \sum_c x_{i,c}\\, y_{i,c}.
 \\]
 
-Le résultat est un nouveau champ de la même saveur que les entrées, portant une
-seule composante `"psca"` : la valeur du produit scalaire à chaque nœud. Chaque
-sortie est écrite une fois (par nœud) ⇒ indépendant du nombre de threads.
-
-```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:psca}}
-```
+Le résultat porte une seule composante `"psca"` (voir
+[`field.psca`](../reference/field.md#field-psca)). Chaque sortie est écrite une
+fois (par nœud) ⇒ indépendant du nombre de threads.
 
 ### `integral(field, component, fespace=None)` → `float`
 
