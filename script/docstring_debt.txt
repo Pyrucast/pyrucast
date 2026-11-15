@@ -1,23 +1,6 @@
 # Public functions whose docstring does not follow the writing rule.
 # Ratchet ledger: it can only SHRINK.
 # Regenerate: python script/doc_lint.py --ratchet-docstrings
-element_field.beam_deformation
-element_field.cell_integral
-element_field.consolidate
-element_field.elastic_strain
-element_field.elastic_stress
-element_field.initial_state
-element_field.interp_to_gauss
-element_field.mask
-element_field.material_field
-element_field.material_field_per_sub_model
-element_field.rotate_frame
-element_field.shell_deformation
-element_field.strain
-element_field.stress_measure
-element_field.sub_material_field
-element_field.thermal_strain
-element_field.von_mises
 load
 mesh.arc
 mesh.barycenter

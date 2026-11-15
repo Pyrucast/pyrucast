@@ -39,7 +39,7 @@ actif le temps d'un calcul par `in_config` : voir
 | [`node_field.restrict_like(field, target)`](../reference/node_field.md#node_field-restrict_like) | relit `field` sur le support **et** les composantes de `target`, pour le combiner directement avec lui. |
 | [`node_field.merge(a, b)`](../reference/node_field.md#node_field-merge) | union de deux `NodeField`, consolidée — c'est le nom de `a \| b`. |
 | [`node_field.consolidate(field)`](../reference/node_field.md#node_field-consolidate) | fusionne les zones de **même support** en vérifiant la cohérence des valeurs partagées. |
-| `element_field.consolidate(field)` | fusionne les zones d'une même `FiniteElementSpace` (union des composantes) — le pendant de `|`, qui les laisse côte à côte. |
+| [`element_field.consolidate(field)`](../reference/element_field.md#element_field-consolidate) | fusionne les zones d'une même `FiniteElementSpace` (union des composantes) — le pendant de `|`, qui les laisse côte à côte. |
 
 La consolidation d'un `NodeField` est exactement la **finalisation** de l'union
 `|` : après déduplication par handle, les zones définies sur le même `SubMesh`
@@ -152,7 +152,7 @@ Gauss.
 
 | Python | Effet |
 |---|---|
-| [`node_field.mask(field, …)`](../reference/node_field.md#node_field-mask), `element_field.mask(field, …)` | champ `0/1` de même structure que l'entrée. |
+| [`node_field.mask(field, …)`](../reference/node_field.md#node_field-mask), [`element_field.mask(field, …)`](../reference/element_field.md#element_field-mask) | champ `0/1` de même structure que l'entrée. |
 
 - **Pas de ET entre composantes** (contrairement à `select`) : chaque valeur est
   testée pour elle-même.
@@ -242,6 +242,8 @@ pendant nodal de `element_pointwise`.
 
 ### `interp_to_gauss(field, fespace)` → `ElementField`
 
+{{#pyalgo element_field.interp_to_gauss}}
+
 Interpole un champ **nodal** vers les points de Gauss (valeurs, pas dérivées) :
 
 \\[
@@ -255,6 +257,8 @@ température nodale aux points de Gauss avant `thermal_strain`.
 
 ### `gradient(field, fespace)` → `ElementField`
 
+{{#pyalgo element_field.gradient}}
+
 Gradient d'un champ nodal aux points de Gauss, cellule par cellule :
 
 \\[
@@ -264,6 +268,8 @@ Gradient d'un champ nodal aux points de Gauss, cellule par cellule :
 Une composante de sortie `<comp>_<axe>` par couple (composante d'entrée, axe).
 
 ### `deformation(u, fespace, measure="linear")` → `ElementField`
+
+{{#pyalgo element_field.deformation}}
 
 Déformation d'un champ de déplacement aux points de Gauss, dans la **mesure**
 choisie. `u` doit porter exactement `space_dim` composantes (déplacement selon
@@ -309,10 +315,12 @@ vérifie à chaque itéré en grands déplacements. Aucune autre mesure ne le vo
 Green–Lagrange et Hencky se calculent sans broncher sur une maille retournée.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:mesures}}
+{{#include ../../../tests/python/test_doc_ops_champs.py:element_field-deformation}}
 ```
 
 ### `thermal_strain(temperature, materials, fespace, t_ref, measure="linear")` → `ElementField`
+
+{{#pyalgo element_field.thermal_strain}}
 
 Déformation thermique de libre dilatation (Cast3M `EPTH`), pour la
 thermomécanique **non couplée** :
@@ -339,6 +347,8 @@ exactement, `½((1 + αΔT)² − 1)` en Green–Lagrange (`E_*`), `ln(1 + αΔT
 Hencky (`H_*`) — cf. [Grandes transformations](../mecanique/grandes-transformations.md).
 
 ### `elastic_stress(model, strain, materials)` / `elastic_strain(model, stress, materials)` → `ElementField`
+
+{{#pyalgo element_field.elastic_stress element_field.elastic_strain}}
 
 L'**opérateur élastique** d'un modèle aux points de Gauss, dans les deux sens
 (Cast3M `ELAS`) :
@@ -373,10 +383,12 @@ les deux sens ne font pas la même opération, et l'état que rend
 `integrate_behavior` porte **à la fois** des `sigma_*` et des `eps_*`.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:elastique}}
+{{#include ../../../tests/python/test_doc_ops_champs.py:element_field-elastic_stress}}
 ```
 
 ### `von_mises(model, stress, coefficients=[0.5, 0.5, 0.5, 1.5, 1.5, 1.5])` → `ElementField`
+
+{{#pyalgo element_field.von_mises}}
 
 La **contrainte équivalente** aux points de Gauss : von Mises par défaut, la
 forme anisotrope de Hill avec ses six coefficients `[F, G, H, L, M, N]` :
@@ -401,18 +413,16 @@ dit lesquelles lire, car elles dépendent de la cinématique :
 | `axisymmetric` | `sigma_xx`, `sigma_yy`, `sigma_zz` (orthoradiale), `sigma_xy` | `yz`, `xz` |
 
 Le résultat a une zone par sous-modèle continu, sur ses points de Gauss, et une
-seule composante, `von_mises`. Une erreur nomme ce qui manque : des
-coefficients qui laisseraient la forme devenir négative (chacun de `L`, `M`,
-`N`, `F + G`, `G + H`, `H + F` et `FG + GH + HF` doit être `≥ 0`), ou une
-contrainte sans `sigma_zz` en déformations planes — les lois plastiques le
-portent, une contrainte élastique non. Elle n'existe pas en méthode : elle ne
+seule composante, `von_mises`. Elle n'existe pas en méthode : elle ne
 s'applique qu'à un champ de contraintes.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:von_mises}}
+{{#include ../../../tests/python/test_doc_ops_champs.py:element_field-von_mises}}
 ```
 
 ### `stress_measure(stress, gradient, target)` → `ElementField`
+
+{{#pyalgo element_field.stress_measure}}
 
 Une contrainte convertie, point par point, d'une mesure à l'autre, avec le
 gradient de la transformation `F` (`deformation(u, fespace, "gradient")`) :
@@ -430,6 +440,8 @@ Formules et exemples :
 [Grandes transformations](../mecanique/grandes-transformations.md).
 
 ### `rotate_frame(field, gradient)` → `ElementField`
+
+{{#pyalgo element_field.rotate_frame}}
 
 Un champ de matériau dont les axes (`V1X, V1Y` en 2D, `V1X…V2Z` en 3D) tournent
 avec la pièce, point par point, de la rotation `R` de la décomposition polaire
@@ -461,7 +473,7 @@ ses noms : voir [`node_field.divergence`](../reference/node_field.md#node_field-
 
 ### `cell_integral(field, target)` → `ElementField` et `sum_to_nodes(field)` → `NodeField`
 
-{{#pyalgo node_field.sum_to_nodes}}
+{{#pyalgo element_field.cell_integral node_field.sum_to_nodes}}
 
 Deux briques par maille (Cast3M `INTG 'ELEM'` et `CHAN 'CHPO' 'SOMM'`) :
 
@@ -485,6 +497,8 @@ par `(Σ_e |Ω_e|)^{-1/2}`).
 ```
 
 ### `beam_deformation(field, fespace, material)` → `ElementField`
+
+{{#pyalgo element_field.beam_deformation}}
 
 Déformations **généralisées** d'une poutre — [Bernoulli](../mecanique/bernoulli.md)
 comme [Timoshenko](../mecanique/timoshenko.md) — à partir d'un champ de
@@ -512,6 +526,8 @@ qu'on ait à lui dire laquelle. Le résultat se donne au
 
 ### `shell_deformation(field, fespace, formulation)` → `ElementField`
 
+{{#pyalgo element_field.shell_deformation}}
+
 Déformations généralisées d'une [coque](../mecanique/coques.md), depuis les six
 DDL `u_x…u_z, r_x…r_z`. `formulation` vaut `"thick"` ou
 `"kirchhoff"` : les lignes de membrane, de vrillage et de cisaillement sont
@@ -533,6 +549,8 @@ bloquer, lue de l'autre côté. L'échantillonner ailleurs rapporterait une
 déformation que l'élément ne porte pas.
 
 ## Le `B` du modèle : `strain(model, solution, materials)` → `ElementField`
+
+{{#pyalgo element_field.strain}}
 
 Les producteurs ci-dessus connaissent un espace EF, pas une loi. `strain` est
 leur pendant au niveau du **modèle** : il demande à chaque loi quel producteur
@@ -607,7 +625,7 @@ gradient thermique en est un abus assumé, comme les `internal_forces` d'un
 problème thermique.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:strain_modele}}
+{{#include ../../../tests/python/test_doc_ops_champs.py:element_field-strain}}
 ```
 
 ## Maths élément par élément

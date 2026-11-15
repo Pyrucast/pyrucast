@@ -7,6 +7,8 @@ le `BSIG` de cast3m (`∫ Bᵀ σ`).
 
 ## `initial_state(model, materials)` → `ElementField`
 
+{{#pyalgo element_field.initial_state}}
+
 L'**état de repos** du modèle : ce que porte chaque loi avant que rien ne se
 soit passé. C'est l'état de A du premier pas, à donner comme `prev` à
 `integrate_behavior` et à [`matrix.tangent`](../reference/matrix.md#matrix-tangent).
@@ -22,6 +24,8 @@ contrainte, qui n'ont pas de loi, sont ignorés. La méthode
 `modele.initial_state(materiaux)` fait de même.
 
 ## `integrate_behavior(model, deformation, materials, prev, dt=None)` → `ElementField`
+
+{{#pyalgo element_field.integrate_behavior}}
 
 Là où [`stiffness`](../reference/matrix.md#matrix-stiffness) produit la **linéarisation** du modèle (une
 matrice), `integrate_behavior` produit la **réponse ponctuelle exacte** comme
@@ -89,13 +93,13 @@ tout l'intérêt d'intégrer le comportement exactement.
 ### Boucle multi-pas (fil d'état)
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_physiques.py:pas_a_pas}}
+{{#include ../../../tests/python/test_doc_ops_physiques.py:element_field-integrate_behavior}}
 ```
 
 ## Exemple : efforts de section d'une poutre
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_physiques.py:beam_deformation}}
+{{#include ../../../tests/python/test_doc_ops_physiques.py:element_field-beam_deformation}}
 ```
 
 ## Exemple : résultantes d'une coque
@@ -104,7 +108,7 @@ Le même montage, avec la formulation en argument : ce sont ses lignes de
 flexion qui distinguent `thick` de `kirchhoff`.
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_physiques.py:shell_deformation}}
+{{#include ../../../tests/python/test_doc_ops_physiques.py:element_field-shell_deformation}}
 ```
 
 Les pages [Barre](../mecanique/truss.md), [Élasticité](../mecanique/elasticite.md)

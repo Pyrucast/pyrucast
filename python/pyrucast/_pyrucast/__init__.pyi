@@ -703,24 +703,50 @@ class ElementField:
         """
     def consolidate(self) -> ElementField:
         r"""
-        Fuse the zones of an element `field` sharing the same `FiniteElementSpace`
-        support into a single zone carrying the union of their components.
+        Fuse the zones of `field` that lie on the same FE subspace into one.
         
-        The counterpart of `|`, which leaves component-disjoint zones side by side:
-        this is how per-physics material zones built on one shared fespace become a
-        single material field readable by every physics. Components carried by two
-        zones must agree value by value, else it errors. `field` itself is left
-        untouched.
+        The counterpart of `|`, which leaves zones with distinct components side by
+        side and refuses two zones carrying the same component on one subspace. This
+        is how material zones built physics by physics on one shared FE space (`k`
+        for heat, `E`, `nu`, `alpha` for mechanics) become a single material field
+        that every physics reads.
+        
+        # Parameters
+        
+        - `field`: the field to consolidate.
+        
+        # Returns
+        
+        A new `ElementField`, one zone per FE subspace carrying the union of the
+        components; `field` itself is left untouched.
+        
+        # Raises
+        
+        `RuntimeError` if two zones on one subspace carry the same component.
         """
     def cell_integral(self, target: FiniteElementSpace) -> ElementField:
         r"""
-        Integral of every component of `field` over **each cell**, with the field's
-        own quadrature: `Σ_g f(g)·|J|·w_g`, the `2πr` included on a body of
-        revolution. The result lives on `target`, a space of the same mesh with
-        **one point per cell** — `FiniteElementSpace(mesh, quadrature="REDUCED")`, a
-        single point at each centroid. Integrating `1` gives every cell's measure.
-        Raises when `target` has several points per cell or does not cover the
-        field's mesh.
+        Integrate every component of `field` over each cell.
+        
+        `v_e = Σ_g f(g)·|J|·w_g`, with the field's own quadrature, the `2πr`
+        included on a body of revolution. Integrating `1` gives the measure of every
+        cell; `pyrucast.node_field.sum_to_nodes` then gathers it at the nodes.
+        
+        # Parameters
+        
+        - `field`: the field to integrate, at the Gauss points.
+        - `target`: a space of the same mesh with **one point per cell** —
+          `FiniteElementSpace(mesh, quadrature="REDUCED")`, a single point at each
+          centroid.
+        
+        # Returns
+        
+        An `ElementField` on `target`, with the components of `field`.
+        
+        # Raises
+        
+        `RuntimeError` if `target` has several points per cell or does not cover the
+        mesh of `field`.
         """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> ElementField:
         r"""
@@ -2545,83 +2571,189 @@ class Model:
     def __len__(self) -> builtins.int: ...
     def elastic_stress(self, strain: ElementField, materials: ElementField) -> ElementField:
         r"""
-        Elastic stress `σ = D:ε` of a strain field at the Gauss points of every
-        continuum sub-model of `model`.
+        Elastic stress `σ = D:ε` of `strain`, for each continuum sub-model of `model`.
         
-        `D` is the operator each law predicts with: the Hooke matrix of an
-        elasticity, in its symmetry; the isotropic `D` behind a plasticity's elastic
-        predictor; the **undamaged** `D` a damage law degrades. `strain` is in
-        tensor convention, the layout of `deformation` and `thermal_strain`;
-        `materials` needs only each law's elastic constants (`E`, `nu` when
-        isotropic). One zone per continuum sub-model, its components the stresses
-        the law writes; a sub-model with no elastic operator (conduction, bar, beam,
-        constraint) contributes none.
+        `D` is the operator each law predicts with, not the response of the law
+        itself: the Hooke matrix of an elasticity, in its symmetry; the isotropic `D`
+        behind a plasticity's elastic predictor; the **undamaged** `D` a damage law
+        degrades. It turns an imposed strain increment (thermal, given) into the
+        stress it would cause if nothing yielded.
+        
+        # Parameters
+        
+        - `model`: the sub-models whose elastic operator to apply.
+        - `strain`: the strain at the Gauss points, in tensor convention — the layout
+          of `pyrucast.element_field.deformation` and
+          `pyrucast.element_field.thermal_strain`.
+        - `materials`: the material field; only each law's elastic constants are read
+          (`E`, `nu` when isotropic).
+        
+        # Returns
+        
+        An `ElementField` with one zone per continuum sub-model, its components the
+        stresses the law writes. A sub-model with no elastic operator (conduction,
+        bar, beam, constraint) contributes none.
+        
+        # Raises
+        
+        `RuntimeError` if `materials` lacks an elastic constant of a law.
         """
     def elastic_strain(self, stress: ElementField, materials: ElementField) -> ElementField:
         r"""
-        Elastic strain `ε = D⁻¹:σ` of a stress field at the Gauss points of every
-        continuum sub-model of `model` — the inverse of `elastic_stress`.
+        Elastic strain `ε = D⁻¹:σ` of `stress`, for each continuum sub-model of `model`.
         
-        `stress` carries the stresses each law writes (`sigma_xx`, …; the state
-        returned by `integrate_behavior` will do); `materials` the elastic
-        constants. The result is in tensor convention, the layout of `deformation`,
-        so it subtracts from a strain component for component; in plane stress the
-        out-of-plane `eps_zz` is not written. Raises when `D` is singular at a point
-        (a zero modulus).
+        The inverse of `pyrucast.element_field.elastic_stress`: it brings a stress
+        back to the elastic strain that carries it, for instance under other moduli
+        when the material varies with the temperature.
+        
+        # Parameters
+        
+        - `model`: the sub-models whose elastic operator to invert.
+        - `stress`: the stresses each law writes (`sigma_xx`, …); the state returned
+          by `pyrucast.element_field.integrate_behavior` will do.
+        - `materials`: the material field; only each law's elastic constants are read.
+        
+        # Returns
+        
+        An `ElementField` in tensor convention, the layout of
+        `pyrucast.element_field.deformation`, so it subtracts from a strain component
+        for component. In plane stress the out-of-plane `eps_zz` is not written.
+        
+        # Raises
+        
+        `RuntimeError` if `D` is singular at a point (a zero modulus), or if
+        `materials` lacks an elastic constant of a law.
         """
     def strain(self, solution: NodeField, materials: ElementField) -> ElementField:
         r"""
-        The input of every law of `model`, produced from the nodal `solution` — the
-        model's `B`, of which `internal_forces` is the transpose.
+        The input of every law of `model`, computed from the nodal `solution`.
         
-        One zone per sub-model with a law, on its behaviour space, carrying what
-        that law reads: the small-strain tensor `eps_*` of a continuum or a bar, the
-        gradient `grad_T_*` of conduction, `T` itself for radiation, the section
-        strains of a beam, the generalized strains of a shell. Each law reads its
-        own unknowns of `solution` by name, so one solution — displacement,
-        temperature, multipliers — serves the whole model; sub-models without a law
-        produce nothing. `materials` is read by the beams alone (their `Φ`). The
-        result feeds `integrate_behavior` as is.
+        The model's `B`, of which `pyrucast.node_field.internal_forces` is the
+        transpose. Each law declares which producer feeds it, applied to its own
+        unknowns on its own space:
+        
+        | sub-model | producer | zone returned |
+        |---|---|---|
+        | elasticity, plasticity, damage, bar | `deformation` | `eps_*`, or the measure of the law (`E_*`, `H_*`) |
+        | conduction, Fick | `gradient` | `grad_T_*`, `grad_c_<species>_*` |
+        | radiation | `interp_to_gauss` | `T` at the points |
+        | Bernoulli and Timoshenko beams | `beam_deformation` | `eps`, `kappa*`, `gamma*`, `torsion` |
+        | shell | `shell_deformation` | `eps_*`, `kappa_*`, `drill`, `gamma_*` |
+        
+        # Parameters
+        
+        - `model`: the laws whose input to compute.
+        - `solution`: the current solution. Each law reads its own unknowns by name,
+          so one solution — displacement, temperature, multipliers — serves the whole
+          model; an unknown it lacks reads zero.
+        - `materials`: the material field, read by the beams alone (their
+          `Φ = 12EI/(G·A_s·L²)`).
+        
+        # Returns
+        
+        An `ElementField` with one zone per sub-model carrying a law, on its behaviour
+        space; sub-models without a law (constraints, loads, exchanges) produce
+        nothing. It feeds `pyrucast.element_field.integrate_behavior` as it is.
         """
     def material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
         r"""
-        Build a material `ElementField` applying the same uniform
-        `(component, value)` pairs to every material-hungry sub-model of
-        `model`. Sub-models that need no material (Dirichlet, …) are skipped.
+        Build a uniform material field for every sub-model of `model` that needs one.
+        
+        The same pairs are applied to every sub-model that consumes material; the
+        others (constraints) are skipped. The field is then given as it is to
+        `pyrucast.matrix.stiffness` and `pyrucast.element_field.integrate_behavior`,
+        which pick for each sub-model the zone on its FE subspace. Once built, it is
+        an ordinary `ElementField`, which can vary in space or be scaled.
+        
+        # Parameters
+        
+        - `model`: the sub-models whose material to build.
+        - `components_and_values`: the `(component, value)` pairs, one uniform value
+          per component, for instance `[("E", 210e9), ("nu", 0.3)]`.
+        
+        # Returns
+        
+        An `ElementField` with one zone per sub-model that consumes material.
+        
+        # Raises
+        
+        `RuntimeError` if a component a physics requires is missing.
         """
     def material_field_per_sub_model(self, components_and_values_per_sub_model: typing.Sequence[typing.Sequence[tuple[builtins.str, builtins.float]]]) -> ElementField:
         r"""
-        Build a material `ElementField` where each sub-model gets its own
-        `(component, value)` list. The outer list length must equal
-        `model.len()`. An empty inner list **skips** the matching
-        sub-model (typical for Dirichlet).
+        Build a material field with its own uniform values for each sub-model.
+        
+        Different materials zone by zone: the n-th list of pairs goes to the n-th
+        sub-model of `model`.
+        
+        # Parameters
+        
+        - `model`: the sub-models whose material to build.
+        - `components_and_values_per_sub_model`: one list of `(component, value)`
+          pairs per sub-model of `model`, in order; an empty list skips that
+          sub-model (a constraint).
+        
+        # Returns
+        
+        An `ElementField` with one zone per non-empty list.
+        
+        # Raises
+        
+        `RuntimeError` if the number of lists is not the number of sub-models, or if
+        a component a physics requires is missing.
         """
     def integrate_behavior(self, deformation: ElementField, materials: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> ElementField:
         r"""
-        Integrate the constitutive law of `model`, stepping A → B.
+        Integrate the constitutive laws of `model` over a step from A to B.
         
-        `deformation` is the **end-of-step** behaviour input ε(B) (from
-        `gradient(field, fespace)` or `deformation(u, fespace)`); `prev` is the
-        **state at A** — the converged output of the previous step (stress,
-        internal variables and start-of-step strain), or
-        `element_field.initial_state(model, materials)` on the first step;
-        `materials` supplies the per-zone material data; `dt` is the time increment
-        (`None` if the law is rate-independent). Returns the material-state field at
-        B (dual flux/stress + updated internal variables) of every behaviour-bearing
-        sub-model — feed it back as `prev` at the next step.
+        Each law takes the converged state at the start of the step, A, and the
+        strain at its end, B, and returns the state at B, point by point. For a
+        linear law the result is consistent with the assembled stiffness
+        (`∫ Bᵀ·flux = K·u`); a non-linear law gives its exact response. Constraint
+        sub-models, which have no law, are skipped; the zones of `deformation`,
+        `materials` and `prev` are paired by FE subspace.
         
-        For a linear law the result is consistent with the assembled stiffness
-        (`∫ Bᵀ·flux = K·u`); a non-linear law is the exact response.
+        # Parameters
+        
+        - `model`: the laws to integrate.
+        - `deformation`: the input of the laws at the end of the step, `ε(B)` —
+          from `pyrucast.element_field.strain`, or a producer such as
+          `pyrucast.element_field.deformation` or `pyrucast.element_field.gradient`.
+        - `materials`: the material field, zone by zone.
+        - `prev`: the state at A, the output of the previous step (stress, internal
+          variables, strain at A); on a first step,
+          `pyrucast.element_field.initial_state(model, materials)`.
+        - `dt`: the time increment; `None` when no law depends on the rate.
+        
+        # Returns
+        
+        The material state at B of every sub-model carrying a law: the dual flux or
+        stress and the updated internal variables — to give back as `prev` at the
+        next step.
+        
+        # Raises
+        
+        `RuntimeError` if a rate-dependent law (creep, viscoplasticity) gets no `dt`.
         """
     def initial_state(self, materials: ElementField) -> ElementField:
         r"""
-        The **rest state** of `model` — the `prev` of a first step, for
-        `integrate_behavior` and `matrix.tangent`.
+        The rest state of `model`, the `prev` of a first step.
         
-        One zone per sub-model carrying a law, with the components that law
-        writes. Nearly every law rests at zero; a law whose internal variable starts
-        from a material constant seeds it from `materials` (Gurson's porosity from
-        `f_0`). Constraint sub-models, which have no law, are skipped.
+        What each law carries before anything happened, to give as `prev` to
+        `pyrucast.element_field.integrate_behavior` and `pyrucast.matrix.tangent`.
+        Nearly every law rests at zero; a law whose internal variable starts from a
+        material constant seeds it from `materials` (Gurson's porosity from `f_0`).
+        
+        # Parameters
+        
+        - `model`: the laws whose rest state to build.
+        - `materials`: the material field, read by the laws that seed a variable.
+        
+        # Returns
+        
+        An `ElementField` with one zone per sub-model carrying a law, on its
+        behaviour subspace, with every component that law writes. Constraint
+        sub-models, which have no law, are skipped.
         """
     def stiffness_matrix(self, materials: ElementField) -> Matrix:
         r"""
@@ -3146,18 +3278,41 @@ class NodeField:
         """
     def gradient(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
-        Gradient `∇f` of a node `field` at the Gauss points of `fespace`.
+        Gradient `∇f` of a field at the nodes, at the Gauss points of `fespace`.
         
-        Geometric and physics-agnostic: each component of `field` is
-        differentiated w.r.t. every spatial axis, giving an `ElementField` with
-        one component `grad_<name>_<axis>` per (input component, axis) pair
-        (`grad_T_x`, …). Feed the result to `integrate_behavior`.
+        `∇f = Σ_i f_i ∇N_i`, evaluated at each Gauss point, cell by cell. The
+        operator is geometric and knows no physics; its result feeds
+        `pyrucast.element_field.integrate_behavior` (heat conduction reads
+        `grad_T_*`). A node the field does not define reads zero.
+        
+        # Parameters
+        
+        - `field`: the field to differentiate, at the nodes.
+        - `fespace`: the FE space whose cells and Gauss points to use.
+        
+        # Returns
+        
+        An `ElementField` on `fespace`, with one component `grad_<name>_<axis>` per
+        pair of input component and spatial axis (`grad_T_x`, `grad_T_y`, …).
         """
     def interp_to_gauss(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
-        Interpolate a nodal `field` to the Gauss points of `fespace` (`f(ξ_g) = Σ_i
-        f_i N_i(ξ_g)`), turning a per-node `NodeField` into a per-element
-        `ElementField` with the same component names.
+        Interpolate a field at the nodes to the Gauss points of `fespace`.
+        
+        `f(ξ_g) = Σ_i f_i N_i(ξ_g)`: values, not derivatives — typically to carry a
+        nodal temperature to the Gauss points before
+        `pyrucast.element_field.thermal_strain`. A node the field does not define
+        reads zero.
+        
+        # Parameters
+        
+        - `field`: the field to interpolate, at the nodes.
+        - `fespace`: the FE space whose cells and Gauss points to use.
+        
+        # Returns
+        
+        An `ElementField` on `fespace` with the components of `field`, one value per
+        cell and Gauss point.
         """
     def along(self, line: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Evolution:
         r"""
@@ -4587,12 +4742,25 @@ class SubModel:
         """
     def material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> SubElementField:
         r"""
-        Build the material `SubElementField` of one sub-model.
+        Build a uniform material field for one sub-model.
         
-        `sub_material_field(sub_model, [("k", 1.0), ...])` — fresh
-        SubElementField on the sub-model's FE subspace, pre-filled with the
-        given uniform value per declared component. Errors for physics that
-        need no material (e.g. Dirichlet).
+        A fresh zone on the FE subspace of the sub-model, filled with the given
+        values.
+        
+        # Parameters
+        
+        - `sub_model`: the sub-model whose material to build.
+        - `components_and_values`: the `(component, value)` pairs, one uniform value
+          per component, for instance `[("E", 210e9), ("nu", 0.3)]`.
+        
+        # Returns
+        
+        A `SubElementField` on the FE subspace of `sub_model`.
+        
+        # Raises
+        
+        `RuntimeError` if a component the physics requires is missing, or for a
+        physics that needs no material (a constraint).
         """
 
 @typing.final
@@ -5159,27 +5327,40 @@ def barycenter(mesh: Mesh) -> Mesh:
 
 def beam_deformation(field: NodeField, fespace: FiniteElementSpace, material: ElementField) -> ElementField:
     r"""
-    Generalised **section strains** of a beam at the Gauss points, in whichever
-    configuration the mesh puts it — the geometric producer of the behaviour
-    input for `timoshenko` and `bernoulli`.
+    Generalized section strains of a beam at the Gauss points of `fespace`.
     
-    | `Coords` | DOFs read | components produced |
+    The product `B·u` with the element's own `B`, for Bernoulli and Timoshenko
+    beams alike. The configuration is read on the dimension of the `Coords`:
+    
+    | `Coords` | unknowns read | components produced |
     |---|---|---|
     | 1-D | `w, theta` | `kappa, gamma` |
     | 2-D | `u_x, u_y, r_z` | `eps, kappa, gamma` |
     | 3-D | six | `eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z` |
     
-    For an oriented element it builds the local axes, rotates the nodal triples
-    into them, then evaluates the strains from the local DOFs.
+    For an oriented element, the local axes are built and the nodal triples
+    turned into them before the strains are evaluated. The strains are evaluated
+    at each Gauss point: the curvature varies along an unloaded span (`M' = V`),
+    the shear stays constant. Fed to `pyrucast.element_field.integrate_behavior`,
+    they give the section forces (`N = E·A·eps`, `M = E·I·kappa`,
+    `V = G·A_s·gamma`).
     
-    The **material** is required, and that is the honest signature: the
-    element's interpolation depends on `Φ = 12EI/(G·A_s·L²)`, so its curvature
-    distribution cannot be recovered without knowing the shear stiffness. An
-    operator that took no material could only ever report a mean.
+    # Parameters
     
-    Feed the result to `integrate_behavior` to obtain the section forces
-    (`N = E·A·eps`, `M = E·I·kappa`, `V = G·A_s·gamma`). The moment then varies
-    along the element, as `M' = V` requires, while the shear stays constant.
+    - `field`: the displacements and rotations, at the nodes.
+    - `fespace`: the FE space of the beam, on SEG2 cells.
+    - `material`: the material field. It is required: the element's
+      interpolation depends on `Φ = 12EI/(G·A_s·L²)`. A material without shear
+      constants — a Bernoulli beam's — means `Φ = 0`, so one operator serves both
+      theories.
+    
+    # Returns
+    
+    An `ElementField` on `fespace` with the components of the table.
+    
+    # Raises
+    
+    `RuntimeError` if the cells of `fespace` are not SEG2.
     """
 
 def bernoulli(fespace: FiniteElementSpace) -> Model:
@@ -5256,13 +5437,27 @@ def boundary_transfer(fespace: FiniteElementSpace, target: Model, variables: typ
 
 def cell_integral(field: ElementField, target: FiniteElementSpace) -> ElementField:
     r"""
-    Integral of every component of `field` over **each cell**, with the field's
-    own quadrature: `Σ_g f(g)·|J|·w_g`, the `2πr` included on a body of
-    revolution. The result lives on `target`, a space of the same mesh with
-    **one point per cell** — `FiniteElementSpace(mesh, quadrature="REDUCED")`, a
-    single point at each centroid. Integrating `1` gives every cell's measure.
-    Raises when `target` has several points per cell or does not cover the
-    field's mesh.
+    Integrate every component of `field` over each cell.
+    
+    `v_e = Σ_g f(g)·|J|·w_g`, with the field's own quadrature, the `2πr`
+    included on a body of revolution. Integrating `1` gives the measure of every
+    cell; `pyrucast.node_field.sum_to_nodes` then gathers it at the nodes.
+    
+    # Parameters
+    
+    - `field`: the field to integrate, at the Gauss points.
+    - `target`: a space of the same mesh with **one point per cell** —
+      `FiniteElementSpace(mesh, quadrature="REDUCED")`, a single point at each
+      centroid.
+    
+    # Returns
+    
+    An `ElementField` on `target`, with the components of `field`.
+    
+    # Raises
+    
+    `RuntimeError` if `target` has several points per cell or does not cover the
+    mesh of `field`.
     """
 
 def chain(mesh: Mesh) -> Mesh:
@@ -5340,14 +5535,26 @@ def cleanup(mesh: Mesh) -> Mesh:
 
 def consolidate_element(field: ElementField) -> ElementField:
     r"""
-    Fuse the zones of an element `field` sharing the same `FiniteElementSpace`
-    support into a single zone carrying the union of their components.
+    Fuse the zones of `field` that lie on the same FE subspace into one.
     
-    The counterpart of `|`, which leaves component-disjoint zones side by side:
-    this is how per-physics material zones built on one shared fespace become a
-    single material field readable by every physics. Components carried by two
-    zones must agree value by value, else it errors. `field` itself is left
-    untouched.
+    The counterpart of `|`, which leaves zones with distinct components side by
+    side and refuses two zones carrying the same component on one subspace. This
+    is how material zones built physics by physics on one shared FE space (`k`
+    for heat, `E`, `nu`, `alpha` for mechanics) become a single material field
+    that every physics reads.
+    
+    # Parameters
+    
+    - `field`: the field to consolidate.
+    
+    # Returns
+    
+    A new `ElementField`, one zone per FE subspace carrying the union of the
+    components; `field` itself is left untouched.
+    
+    # Raises
+    
+    `RuntimeError` if two zones on one subspace carry the same component.
     """
 
 def consolidate_mesh(mesh: Mesh) -> Mesh:
@@ -5560,14 +5767,12 @@ def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str
     r"""
     Deformation of a displacement field `u` at the Gauss points of `fespace`.
     
-    `u` must carry exactly `space_dim` components, taken in order as the
-    displacement along x, y, z. `measure` chooses the deformation, with
-    `H = ∇u` and `F = I + H`:
+    With `H = ∇u` and `F = I + H`, the measure is one of:
     
     | measure | formula | components |
     |---|---|---|
     | `"linear"` (default) | `ε = ½(H + Hᵀ)` | `eps_xx`, `eps_xy`, … (tensor convention) |
-    | `"gradient"` (`"F"`) | `F = I + H` | every `F_ij`, row-major |
+    | `"gradient"` (`"F"`) | `F = I + H` | every `F_ij`, row by row |
     | `"green_lagrange"` | `E = ½(FᵀF − I)` | `E_xx`, `E_xy`, … |
     | `"right_cauchy_green"` (`"C"`) | `C = FᵀF` | `C_xx`, … |
     | `"left_cauchy_green"` (`"b"`) | `b = FFᵀ` | `b_xx`, … |
@@ -5575,8 +5780,36 @@ def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str
     | `"euler_almansi"` (`"almansi"`) | `e = ½(I − b⁻¹)` | `e_xx`, … |
     | `"jacobian"` (`"J"`) | `J = det F` | `J` alone |
     
-    On an axisymmetric space, the hoop entry `<prefix>_zz` is appended
-    (`H_θθ = u_r / r`).
+    A symmetric measure gives one component `<prefix>_<ai><aj>` per independent
+    entry `i ≤ j`; the gradient `F`, not symmetric, gives them all. The linear
+    measure is in tensor convention, `eps_xy = ½(∂u_x/∂y + ∂u_y/∂x)`, not the
+    engineering shear `γ`. In 2-D the out-of-plane direction is not deformed and
+    its entries are not produced.
+    
+    # Parameters
+    
+    - `u`: the displacement, at the nodes; exactly one component per spatial
+      axis, taken in order as the displacement along x, y, z.
+    - `fespace`: the FE space whose cells and Gauss points to use.
+    - `measure`: the measure to compute, a name or its alias from the table.
+    
+    # Returns
+    
+    An `ElementField` on `fespace` with the components of the measure. On an
+    axisymmetric space, the hoop entry `<prefix>_zz`, built on `H_θθ = u_r / r`,
+    is appended.
+    
+    # Raises
+    
+    - `RuntimeError` if `u` does not carry one component per spatial axis.
+    - `ValueError` for an unknown `measure`.
+    
+    # Notes
+    
+    Nothing is checked at the Gauss point: a degenerate transformation
+    (`det F = 0`) gives non-finite values for Hencky and Almansi. Only
+    `"jacobian"` sees an inverted cell, where `J ≤ 0` at one of its points:
+    `C = FᵀF` stays positive definite when `F` changes sign.
     """
 
 def dirichlet(imposed_mesh: Mesh, target: Model, variable: builtins.str, sense: builtins.str = '=') -> Model:
@@ -5707,30 +5940,59 @@ def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str, strain
 
 def elastic_strain(model: Model, stress: ElementField, materials: ElementField) -> ElementField:
     r"""
-    Elastic strain `ε = D⁻¹:σ` of a stress field at the Gauss points of every
-    continuum sub-model of `model` — the inverse of `elastic_stress`.
+    Elastic strain `ε = D⁻¹:σ` of `stress`, for each continuum sub-model of `model`.
     
-    `stress` carries the stresses each law writes (`sigma_xx`, …; the state
-    returned by `integrate_behavior` will do); `materials` the elastic
-    constants. The result is in tensor convention, the layout of `deformation`,
-    so it subtracts from a strain component for component; in plane stress the
-    out-of-plane `eps_zz` is not written. Raises when `D` is singular at a point
-    (a zero modulus).
+    The inverse of `pyrucast.element_field.elastic_stress`: it brings a stress
+    back to the elastic strain that carries it, for instance under other moduli
+    when the material varies with the temperature.
+    
+    # Parameters
+    
+    - `model`: the sub-models whose elastic operator to invert.
+    - `stress`: the stresses each law writes (`sigma_xx`, …); the state returned
+      by `pyrucast.element_field.integrate_behavior` will do.
+    - `materials`: the material field; only each law's elastic constants are read.
+    
+    # Returns
+    
+    An `ElementField` in tensor convention, the layout of
+    `pyrucast.element_field.deformation`, so it subtracts from a strain component
+    for component. In plane stress the out-of-plane `eps_zz` is not written.
+    
+    # Raises
+    
+    `RuntimeError` if `D` is singular at a point (a zero modulus), or if
+    `materials` lacks an elastic constant of a law.
     """
 
 def elastic_stress(model: Model, strain: ElementField, materials: ElementField) -> ElementField:
     r"""
-    Elastic stress `σ = D:ε` of a strain field at the Gauss points of every
-    continuum sub-model of `model`.
+    Elastic stress `σ = D:ε` of `strain`, for each continuum sub-model of `model`.
     
-    `D` is the operator each law predicts with: the Hooke matrix of an
-    elasticity, in its symmetry; the isotropic `D` behind a plasticity's elastic
-    predictor; the **undamaged** `D` a damage law degrades. `strain` is in
-    tensor convention, the layout of `deformation` and `thermal_strain`;
-    `materials` needs only each law's elastic constants (`E`, `nu` when
-    isotropic). One zone per continuum sub-model, its components the stresses
-    the law writes; a sub-model with no elastic operator (conduction, bar, beam,
-    constraint) contributes none.
+    `D` is the operator each law predicts with, not the response of the law
+    itself: the Hooke matrix of an elasticity, in its symmetry; the isotropic `D`
+    behind a plasticity's elastic predictor; the **undamaged** `D` a damage law
+    degrades. It turns an imposed strain increment (thermal, given) into the
+    stress it would cause if nothing yielded.
+    
+    # Parameters
+    
+    - `model`: the sub-models whose elastic operator to apply.
+    - `strain`: the strain at the Gauss points, in tensor convention — the layout
+      of `pyrucast.element_field.deformation` and
+      `pyrucast.element_field.thermal_strain`.
+    - `materials`: the material field; only each law's elastic constants are read
+      (`E`, `nu` when isotropic).
+    
+    # Returns
+    
+    An `ElementField` with one zone per continuum sub-model, its components the
+    stresses the law writes. A sub-model with no elastic operator (conduction,
+    bar, beam, constraint) contributes none.
+    
+    # Raises
+    
+    `RuntimeError` if `materials` lacks an elastic constant of a law.
     """
 
 def elasticity(fespace: FiniteElementSpace, kinematics: builtins.str, symmetry: builtins.str = 'isotropic', strain_measure: builtins.str = 'linear') -> Model:
@@ -6007,12 +6269,22 @@ def geometric(model: Model, materials: ElementField, stress: ElementField) -> Ma
 
 def gradient(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
     r"""
-    Gradient `∇f` of a node `field` at the Gauss points of `fespace`.
+    Gradient `∇f` of a field at the nodes, at the Gauss points of `fespace`.
     
-    Geometric and physics-agnostic: each component of `field` is
-    differentiated w.r.t. every spatial axis, giving an `ElementField` with
-    one component `grad_<name>_<axis>` per (input component, axis) pair
-    (`grad_T_x`, …). Feed the result to `integrate_behavior`.
+    `∇f = Σ_i f_i ∇N_i`, evaluated at each Gauss point, cell by cell. The
+    operator is geometric and knows no physics; its result feeds
+    `pyrucast.element_field.integrate_behavior` (heat conduction reads
+    `grad_T_*`). A node the field does not define reads zero.
+    
+    # Parameters
+    
+    - `field`: the field to differentiate, at the nodes.
+    - `fespace`: the FE space whose cells and Gauss points to use.
+    
+    # Returns
+    
+    An `ElementField` on `fespace`, with one component `grad_<name>_<axis>` per
+    pair of input component and spatial axis (`grad_T_x`, `grad_T_y`, …).
     """
 
 def grid_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, prefer_quads: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
@@ -6124,13 +6396,23 @@ def heat_conduction(fespace: FiniteElementSpace, symmetry: builtins.str = 'isotr
 
 def initial_state(model: Model, materials: ElementField) -> ElementField:
     r"""
-    The **rest state** of `model` — the `prev` of a first step, for
-    `integrate_behavior` and `matrix.tangent`.
+    The rest state of `model`, the `prev` of a first step.
     
-    One zone per sub-model carrying a law, with the components that law
-    writes. Nearly every law rests at zero; a law whose internal variable starts
-    from a material constant seeds it from `materials` (Gurson's porosity from
-    `f_0`). Constraint sub-models, which have no law, are skipped.
+    What each law carries before anything happened, to give as `prev` to
+    `pyrucast.element_field.integrate_behavior` and `pyrucast.matrix.tangent`.
+    Nearly every law rests at zero; a law whose internal variable starts from a
+    material constant seeds it from `materials` (Gurson's porosity from `f_0`).
+    
+    # Parameters
+    
+    - `model`: the laws whose rest state to build.
+    - `materials`: the material field, read by the laws that seed a variable.
+    
+    # Returns
+    
+    An `ElementField` with one zone per sub-model carrying a law, on its
+    behaviour subspace, with every component that law writes. Constraint
+    sub-models, which have no law, are skipped.
     """
 
 def integral(field: typing.Any, component: builtins.str, fespace: typing.Optional[FiniteElementSpace] = None) -> builtins.float:
@@ -6170,20 +6452,36 @@ def integral(field: typing.Any, component: builtins.str, fespace: typing.Optiona
 
 def integrate_behavior(model: Model, deformation: ElementField, materials: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> ElementField:
     r"""
-    Integrate the constitutive law of `model`, stepping A → B.
+    Integrate the constitutive laws of `model` over a step from A to B.
     
-    `deformation` is the **end-of-step** behaviour input ε(B) (from
-    `gradient(field, fespace)` or `deformation(u, fespace)`); `prev` is the
-    **state at A** — the converged output of the previous step (stress,
-    internal variables and start-of-step strain), or
-    `element_field.initial_state(model, materials)` on the first step;
-    `materials` supplies the per-zone material data; `dt` is the time increment
-    (`None` if the law is rate-independent). Returns the material-state field at
-    B (dual flux/stress + updated internal variables) of every behaviour-bearing
-    sub-model — feed it back as `prev` at the next step.
+    Each law takes the converged state at the start of the step, A, and the
+    strain at its end, B, and returns the state at B, point by point. For a
+    linear law the result is consistent with the assembled stiffness
+    (`∫ Bᵀ·flux = K·u`); a non-linear law gives its exact response. Constraint
+    sub-models, which have no law, are skipped; the zones of `deformation`,
+    `materials` and `prev` are paired by FE subspace.
     
-    For a linear law the result is consistent with the assembled stiffness
-    (`∫ Bᵀ·flux = K·u`); a non-linear law is the exact response.
+    # Parameters
+    
+    - `model`: the laws to integrate.
+    - `deformation`: the input of the laws at the end of the step, `ε(B)` —
+      from `pyrucast.element_field.strain`, or a producer such as
+      `pyrucast.element_field.deformation` or `pyrucast.element_field.gradient`.
+    - `materials`: the material field, zone by zone.
+    - `prev`: the state at A, the output of the previous step (stress, internal
+      variables, strain at A); on a first step,
+      `pyrucast.element_field.initial_state(model, materials)`.
+    - `dt`: the time increment; `None` when no law depends on the rate.
+    
+    # Returns
+    
+    The material state at B of every sub-model carrying a law: the dual flux or
+    stress and the updated internal variables — to give back as `prev` at the
+    next step.
+    
+    # Raises
+    
+    `RuntimeError` if a rate-dependent law (creep, viscoplasticity) gets no `dt`.
     """
 
 def interface_transfer(side_a: FiniteElementSpace, side_b: FiniteElementSpace, target: Model, variables: typing.Sequence[builtins.str], tol: builtins.float = 1e-09) -> Model:
@@ -6256,9 +6554,22 @@ def internal_forces(model: Model, state: ElementField, solution: NodeField, mate
 
 def interp_to_gauss(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
     r"""
-    Interpolate a nodal `field` to the Gauss points of `fespace` (`f(ξ_g) = Σ_i
-    f_i N_i(ξ_g)`), turning a per-node `NodeField` into a per-element
-    `ElementField` with the same component names.
+    Interpolate a field at the nodes to the Gauss points of `fespace`.
+    
+    `f(ξ_g) = Σ_i f_i N_i(ξ_g)`: values, not derivatives — typically to carry a
+    nodal temperature to the Gauss points before
+    `pyrucast.element_field.thermal_strain`. A node the field does not define
+    reads zero.
+    
+    # Parameters
+    
+    - `field`: the field to interpolate, at the nodes.
+    - `fespace`: the FE space whose cells and Gauss points to use.
+    
+    # Returns
+    
+    An `ElementField` on `fespace` with the components of `field`, one value per
+    cell and Gauss point.
     """
 
 def invert(mesh: Mesh) -> Mesh:
@@ -6356,20 +6667,35 @@ def lump(matrix: Matrix) -> Matrix:
 
 def mask_element(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
     r"""
-    Per-component 0/1 **mask** of a field against a value band — same structure
-    as the input: same zones, same support, same components, only the values are
-    rewritten (`1.0` inside the band, `0.0` outside). The result is therefore
-    multipliable term by term with the input.
+    A 0/1 mask of `field` against a band of values, component by component.
     
-    `field` is an `ElementField` or a `SubElementField`, and the result is of
-    the same kind. Its sibling `pyrucast.mesh.select` extracts the passing
-    *support* instead, and produces a `Mesh`.
+    The result has the structure of the input — same zones, same support, same
+    components, same Gauss points —, only the values are rewritten: `1.0` inside
+    the band, `0.0` outside. It therefore multiplies term by term with the input.
+    There is **no** AND across components: each value stands on its own. The
+    comparisons `>=`, `>`, `<=`, `<` of a field against a number build the same
+    mask. Its sibling `pyrucast.mesh.select` extracts the passing cells instead,
+    as a `Mesh`.
     
-    The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
-    `le` (`≤`), `lt` (`<`). There is **no** AND across components: each value
-    stands on its own. `components=None` tests every component; a `components`
-    list tests only those, leaving the others at `1.0` (identity for the
-    product), and a zone missing a listed component is left all-`1.0`.
+    # Parameters
+    
+    - `field`: an `ElementField` or a `SubElementField`.
+    - `ge`, `gt`: the lower bound, `v ≥ ge` or `v > gt` — at most one of the two.
+    - `le`, `lt`: the upper bound, `v ≤ le` or `v < lt` — at most one of the two.
+      A bound left out leaves that side open; at least one bound is given.
+    - `components`: the components to test, the others left at `1.0` (neutral
+      for the product); a zone missing a listed component is left all `1.0`.
+      `None` tests every component.
+    
+    # Returns
+    
+    A field of the type of `field`, with the same structure.
+    
+    # Raises
+    
+    - `TypeError` if `field` is neither an `ElementField` nor a `SubElementField`.
+    - `RuntimeError` if no bound is given, if both bounds of one side are, or if
+      the lower bound exceeds the upper one.
     """
 
 def mask_node(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
@@ -6440,17 +6766,51 @@ def match_gauss(element_type: builtins.str, ref_nodes: typing.Sequence[builtins.
 
 def material_field(model: Model, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
     r"""
-    Build a material `ElementField` applying the same uniform
-    `(component, value)` pairs to every material-hungry sub-model of
-    `model`. Sub-models that need no material (Dirichlet, …) are skipped.
+    Build a uniform material field for every sub-model of `model` that needs one.
+    
+    The same pairs are applied to every sub-model that consumes material; the
+    others (constraints) are skipped. The field is then given as it is to
+    `pyrucast.matrix.stiffness` and `pyrucast.element_field.integrate_behavior`,
+    which pick for each sub-model the zone on its FE subspace. Once built, it is
+    an ordinary `ElementField`, which can vary in space or be scaled.
+    
+    # Parameters
+    
+    - `model`: the sub-models whose material to build.
+    - `components_and_values`: the `(component, value)` pairs, one uniform value
+      per component, for instance `[("E", 210e9), ("nu", 0.3)]`.
+    
+    # Returns
+    
+    An `ElementField` with one zone per sub-model that consumes material.
+    
+    # Raises
+    
+    `RuntimeError` if a component a physics requires is missing.
     """
 
 def material_field_per_sub_model(model: Model, components_and_values_per_sub_model: typing.Sequence[typing.Sequence[tuple[builtins.str, builtins.float]]]) -> ElementField:
     r"""
-    Build a material `ElementField` where each sub-model gets its own
-    `(component, value)` list. The outer list length must equal
-    `model.len()`. An empty inner list **skips** the matching
-    sub-model (typical for Dirichlet).
+    Build a material field with its own uniform values for each sub-model.
+    
+    Different materials zone by zone: the n-th list of pairs goes to the n-th
+    sub-model of `model`.
+    
+    # Parameters
+    
+    - `model`: the sub-models whose material to build.
+    - `components_and_values_per_sub_model`: one list of `(component, value)`
+      pairs per sub-model of `model`, in order; an empty list skips that
+      sub-model (a constraint).
+    
+    # Returns
+    
+    An `ElementField` with one zone per non-empty list.
+    
+    # Raises
+    
+    `RuntimeError` if the number of lists is not the number of sub-models, or if
+    a component a physics requires is missing.
     """
 
 def mazars(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
@@ -7068,17 +7428,30 @@ def rotate(mesh: Mesh, angle: builtins.float, center: typing.Sequence[builtins.f
 
 def rotate_frame(field: ElementField, gradient: ElementField) -> ElementField:
     r"""
-    `field` with its material axes turned with the part: `V1*` (and `V2*` in
-    3-D) turned by the rotation `R` of the polar decomposition `F = R U` at each
-    point, `F` read from `gradient` — the field `deformation(u, fespace,
-    "gradient")` produces, computed on the **reference** configuration. Every
-    other component is copied as it is: the material is the same, only its axes
-    follow the rotation, `k = R k₀ Rᵀ`. This is what a conduction or a diffusion
-    computed on the deformed part reads.
+    Turn the material axes of `field` with the part, by the rotation of `F`.
     
-    A zone without axes (an isotropic material) comes back as it is, shared. A
-    zone carrying part of the axes only, or a gradient missing on a zone's FE
-    space, is an error.
+    The axes `V1*` (and `V2*` in 3-D) are turned by the rotation `R` of the
+    polar decomposition `F = R U` at each point, `v = R v₀`, hence `k = R k₀ Rᵀ`.
+    Every other component is copied as it is: the material is the same, only its
+    axes follow the rotation. This is what a conduction or a diffusion computed on
+    the deformed part reads.
+    
+    # Parameters
+    
+    - `field`: the material field at the Gauss points.
+    - `gradient`: the deformation gradient `F_*`, as
+      `pyrucast.element_field.deformation(u, fespace, "gradient")` produces it on
+      the **reference** configuration.
+    
+    # Returns
+    
+    A new `ElementField`. A zone without axes (an isotropic material) comes back
+    as it is, shared.
+    
+    # Raises
+    
+    `RuntimeError` if a zone carries part of the axes only, or if `gradient` has
+    no zone on the FE space of a zone of `field`.
     """
 
 def save(path: builtins.str, objects: dict) -> None:
@@ -7176,24 +7549,35 @@ def shell(fespace: FiniteElementSpace, formulation: builtins.str) -> Model:
 
 def shell_deformation(field: NodeField, fespace: FiniteElementSpace, formulation: builtins.str) -> ElementField:
     r"""
-    Generalised **strains of a shell** at the Gauss points — the geometric
-    producer of the behaviour input for `shell`.
+    Generalized strains of a shell at the Gauss points of `fespace`.
     
-    `shell_deformation(field, fespace, formulation)` with `formulation`
-    (`"thick"` or `"kirchhoff"`), which decides the bending rows and whether a
-    transverse shear is reported at all:
+    Read from the six unknowns `u_x…u_z, r_x…r_z`, all in the **local** frame of
+    the facet. `drill` is the drilling residual `θ_z − ω_z`. The transverse shear
+    is constant per element, sampled at the reduced point where the stiffness
+    integrates it: anywhere else would report a strain the element does not
+    carry. Fed to `pyrucast.element_field.integrate_behavior`, they give the
+    generalized forces (`N = D_m·eps`, `M = D_b·kappa`, `Q = D_s·gamma`, and the
+    drilling moment).
     
-    | formulation | components produced |
-    |---|---|
-    | `thick` | `eps_xx…eps_xy`, `kappa_xx…kappa_xy`, `drill`, `gamma_xz, gamma_yz` |
-    | `kirchhoff` | the same, without the two shear strains |
+    # Parameters
     
-    All in the element's **local** frame. The transverse shear is
-    element-constant, sampled at the reduced point the stiffness integrates it
-    at — anywhere else would report a strain the element does not carry.
+    - `field`: the displacements and rotations, at the nodes.
+    - `fespace`: the FE space of the shell.
+    - `formulation`: `"thick"` or `"kirchhoff"`, which decides the bending rows
+      and whether a transverse shear is reported:
     
-    Feed the result to `integrate_behavior` to obtain the generalised forces
-    (`N = D_m·eps`, `M = D_b·kappa`, `Q = D_s·gamma`, and the drilling moment).
+      | formulation | components produced |
+      |---|---|
+      | `"thick"` | `eps_xx…eps_xy`, `kappa_xx…kappa_xy`, `drill`, `gamma_xz, gamma_yz` |
+      | `"kirchhoff"` | the same, without the two shear strains |
+    
+    # Returns
+    
+    An `ElementField` on `fespace` with the components of the table.
+    
+    # Raises
+    
+    `RuntimeError` for an unknown `formulation`.
     """
 
 def sin(field: typing.Any) -> typing.Any:
@@ -7393,42 +7777,91 @@ def stiffness(model: Model, materials: ElementField) -> Matrix:
 
 def strain(model: Model, solution: NodeField, materials: ElementField) -> ElementField:
     r"""
-    The input of every law of `model`, produced from the nodal `solution` — the
-    model's `B`, of which `internal_forces` is the transpose.
+    The input of every law of `model`, computed from the nodal `solution`.
     
-    One zone per sub-model with a law, on its behaviour space, carrying what
-    that law reads: the small-strain tensor `eps_*` of a continuum or a bar, the
-    gradient `grad_T_*` of conduction, `T` itself for radiation, the section
-    strains of a beam, the generalized strains of a shell. Each law reads its
-    own unknowns of `solution` by name, so one solution — displacement,
-    temperature, multipliers — serves the whole model; sub-models without a law
-    produce nothing. `materials` is read by the beams alone (their `Φ`). The
-    result feeds `integrate_behavior` as is.
+    The model's `B`, of which `pyrucast.node_field.internal_forces` is the
+    transpose. Each law declares which producer feeds it, applied to its own
+    unknowns on its own space:
+    
+    | sub-model | producer | zone returned |
+    |---|---|---|
+    | elasticity, plasticity, damage, bar | `deformation` | `eps_*`, or the measure of the law (`E_*`, `H_*`) |
+    | conduction, Fick | `gradient` | `grad_T_*`, `grad_c_<species>_*` |
+    | radiation | `interp_to_gauss` | `T` at the points |
+    | Bernoulli and Timoshenko beams | `beam_deformation` | `eps`, `kappa*`, `gamma*`, `torsion` |
+    | shell | `shell_deformation` | `eps_*`, `kappa_*`, `drill`, `gamma_*` |
+    
+    # Parameters
+    
+    - `model`: the laws whose input to compute.
+    - `solution`: the current solution. Each law reads its own unknowns by name,
+      so one solution — displacement, temperature, multipliers — serves the whole
+      model; an unknown it lacks reads zero.
+    - `materials`: the material field, read by the beams alone (their
+      `Φ = 12EI/(G·A_s·L²)`).
+    
+    # Returns
+    
+    An `ElementField` with one zone per sub-model carrying a law, on its behaviour
+    space; sub-models without a law (constraints, loads, exchanges) produce
+    nothing. It feeds `pyrucast.element_field.integrate_behavior` as it is.
     """
 
 def stress_measure(stress: ElementField, gradient: ElementField, target: builtins.str) -> ElementField:
     r"""
-    `stress` converted to the measure `target`, point by point, with the
-    deformation gradient `gradient` — the field `deformation(u, fespace,
-    "gradient")` produces (`F_xx, F_xy, …`).
+    Convert `stress` to the measure `target`, point by point.
     
-    `target` is `"cauchy"` (`sigma_*`, the true stress), `"kirchhoff"` (`tau_* =
-    J sigma_*`), `"pk1"` (`P_*`, the nominal stress `F S`, not symmetric),
-    `"pk2"` (`S_*`, dual of Green–Lagrange) or `"hencky"` (`T_*`, dual of the
-    Hencky strain, what a law reading Hencky writes). The measure of `stress` is
-    recognised by its names, one per zone. This is how the Lagrangian stress a
-    law writes in large transformations becomes the first Piola–Kirchhoff
-    `internal_forces` reads, or the Cauchy stress of the results.
+    This is how the Lagrangian stress a law writes in large strains becomes the
+    first Piola–Kirchhoff stress `pyrucast.node_field.internal_forces` reads, or
+    the Cauchy stress of the results. A bar is recognised by its axial second
+    Piola–Kirchhoff force `S_n`: `"pk1"` turns it into the nominal force vector
+    `P_x, P_y(, P_z) = S_n F t₀`, `"cauchy"` into the true force `n = λ S_n`.
+    
+    # Parameters
+    
+    - `stress`: the stress to convert. Its measure is recognised by its names,
+      one per zone: `sigma_*`, `tau_*`, `P_*`, `S_*` or `T_*`.
+    - `gradient`: the deformation gradient `F_xx, F_xy, …` at the same points, as
+      `pyrucast.element_field.deformation(u, fespace, "gradient")` produces it.
+    - `target`: the measure wanted:
+      - `"cauchy"`: `sigma_*`, the true stress;
+      - `"kirchhoff"`: `tau_* = J sigma_*`;
+      - `"pk1"`: `P_*`, the nominal stress `F S`, not symmetric;
+      - `"pk2"`: `S_*`, dual of Green–Lagrange;
+      - `"hencky"`: `T_*`, dual of the Hencky strain, what a law reading Hencky
+        writes.
+    
+    # Returns
+    
+    An `ElementField` with the components of `target`.
+    
+    # Raises
+    
+    - `RuntimeError` if `gradient` lacks a component `F_*`.
+    - `ValueError` for an unknown `target`.
     """
 
 def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> SubElementField:
     r"""
-    Build the material `SubElementField` of one sub-model.
+    Build a uniform material field for one sub-model.
     
-    `sub_material_field(sub_model, [("k", 1.0), ...])` — fresh
-    SubElementField on the sub-model's FE subspace, pre-filled with the
-    given uniform value per declared component. Errors for physics that
-    need no material (e.g. Dirichlet).
+    A fresh zone on the FE subspace of the sub-model, filled with the given
+    values.
+    
+    # Parameters
+    
+    - `sub_model`: the sub-model whose material to build.
+    - `components_and_values`: the `(component, value)` pairs, one uniform value
+      per component, for instance `[("E", 210e9), ("nu", 0.3)]`.
+    
+    # Returns
+    
+    A `SubElementField` on the FE subspace of `sub_model`.
+    
+    # Raises
+    
+    `RuntimeError` if a component the physics requires is missing, or for a
+    physics that needs no material (a constraint).
     """
 
 def sum_to_nodes(field: ElementField) -> NodeField:
@@ -7595,20 +8028,39 @@ def tanh(field: typing.Any) -> typing.Any:
 
 def thermal_strain(temperature: ElementField, materials: ElementField, fespace: FiniteElementSpace, t_ref: builtins.float, measure: builtins.str = 'linear') -> ElementField:
     r"""
-    Thermal (free-dilation) strain `ε_th = α·(T − t_ref)` at the Gauss points of
-    `fespace`. `temperature` is a per-element field carrying `"T"` (e.g. from
-    `interp_to_gauss`); `materials` carries `"alpha"` (supplied via
-    `material_field`). Returns the strain tensor in the same layout as
-    `deformation`, so `deformation(u, fespace) - thermal_strain(...)` is the
-    mechanical strain. Backbone of uncoupled thermomechanics: the thermal load
-    is `divergence(integrate_behavior(model, ε_th, materials), "sigma")`,
-    renamed into the dual rows, and the stress is recovered as `σ = D:(ε −
-    ε_th)`.
+    Thermal strain `ε_th = α·(T − t_ref)` at the Gauss points of `fespace`.
     
-    `measure` is the strain the law reads (`"linear"`, `"green_lagrange"`,
-    `"hencky"`): the dilation of stretch `1 + α·ΔT` is given exactly in it —
-    `α·ΔT`, `½((1 + α·ΔT)² − 1)`, `ln(1 + α·ΔT)` — under its names (`eps_*`,
-    `E_*`, `H_*`).
+    The strain of free dilation, for uncoupled thermomechanics. Its layout is the
+    one of `pyrucast.element_field.deformation` — normal components `α·ΔT`, zero
+    shears, the hoop `eps_zz` included on a body of revolution —, so
+    `deformation(u, fespace) - thermal_strain(...)` is the mechanical strain
+    `ε(u) − ε_th`. No coupling is done here: the thermal load and the stress
+    `σ = D:(ε − ε_th)` are built from the other operators.
+    
+    # Parameters
+    
+    - `temperature`: a field at the Gauss points carrying `"T"`, for instance
+      from `pyrucast.element_field.interp_to_gauss`.
+    - `materials`: the material field; `alpha` is read on `fespace`, an optional
+      component of the elasticity next to `E` and `nu`.
+    - `fespace`: the FE space whose Gauss points to use.
+    - `t_ref`: the reference temperature, where the strain is zero.
+    - `measure`: the strain the law reads, `"linear"`, `"green_lagrange"` or
+      `"hencky"`. The dilation of stretch `1 + α·ΔT` is given exactly in it —
+      `α·ΔT`, `½((1 + α·ΔT)² − 1)`, `ln(1 + α·ΔT)` — under its names (`eps_*`,
+      `E_*`, `H_*`).
+    
+    # Returns
+    
+    An `ElementField` on `fespace`, the strain tensor under the names of
+    `measure`.
+    
+    # Raises
+    
+    - `RuntimeError` if `materials` has no zone on `fespace` carrying `alpha`, if
+      `temperature` lacks `"T"`, or for a `measure` that is not a strain a law
+      reads (`"gradient"`, `"jacobian"`, …).
+    - `ValueError` for an unknown `measure`.
     """
 
 def timoshenko(fespace: FiniteElementSpace) -> Model:
@@ -7818,24 +8270,40 @@ def viscoplasticity_lemaitre_chaboche(fespace: FiniteElementSpace, kinematics: b
 
 def von_mises(model: Model, stress: ElementField, coefficients: typing.Sequence[builtins.float] = [0.5, 0.5, 0.5, 1.5, 1.5, 1.5]) -> ElementField:
     r"""
-    Equivalent stress of `stress` at the Gauss points of every continuum
-    sub-model of `model`: von Mises by default, Hill's anisotropic form with
-    `coefficients = [F, G, H, L, M, N]`:
+    Equivalent stress of `stress`: von Mises, or Hill's form with `coefficients`.
     
     `σ_eq² = F(σyy − σzz)² + G(σzz − σxx)² + H(σxx − σyy)² + 2Lσyz² + 2Mσxz² + 2Nσxy²`
     
-    The default `[0.5, 0.5, 0.5, 1.5, 1.5, 1.5]` is von Mises, `√(3 J₂)`.
-    `stress` carries the stresses the laws write (`sigma_xx`, …; the state of
-    `integrate_behavior` or the output of `elastic_stress` will do). The model
-    says which components to read: the six in 3-D; `sigma_xx`, `sigma_yy`,
-    `sigma_xy` in plane stress (`zz` is zero there); plus `sigma_zz` in plane
-    strain and on a body of revolution. Returns one zone per continuum
-    sub-model, with the single component `"von_mises"`.
+    The model says which components to read, as they depend on the kinematics:
     
-    Raises for coefficients that let the form go negative (each of `L`, `M`,
-    `N`, `F + G`, `G + H`, `H + F`, `FG + GH + HF` must be `≥ 0`), and for a
-    stress missing a component its kinematics reads — in plane strain, a
-    stress without `sigma_zz`.
+    | kinematics | components read | taken as zero |
+    |---|---|---|
+    | `full_3d` | the six `sigma_*` | — |
+    | `plane_stress` | `sigma_xx`, `sigma_yy`, `sigma_xy` | `zz`, `yz`, `xz` |
+    | `plane_strain` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `yz`, `xz` |
+    | `axisymmetric` | `sigma_xx`, `sigma_yy`, `sigma_zz` (hoop), `sigma_xy` | `yz`, `xz` |
+    
+    # Parameters
+    
+    - `model`: the continuum sub-models whose kinematics say what to read.
+    - `stress`: the stresses the laws write (`sigma_xx`, …); the output of
+      `pyrucast.element_field.elastic_stress` or the state of
+      `pyrucast.element_field.integrate_behavior` will do, whatever else they
+      carry.
+    - `coefficients`: `[F, G, H, L, M, N]`; the default
+      `[0.5, 0.5, 0.5, 1.5, 1.5, 1.5]` is von Mises, `√(3 J₂)`.
+    
+    # Returns
+    
+    An `ElementField` with one zone per continuum sub-model, on its Gauss points,
+    and the single component `"von_mises"`.
+    
+    # Raises
+    
+    `RuntimeError` for coefficients that let the form go negative (each of `L`,
+    `M`, `N`, `F + G`, `G + H`, `H + F`, `FG + GH + HF` must be `≥ 0`), and for a
+    stress missing a component its kinematics reads — in plane strain, a stress
+    without `sigma_zz`, which plastic laws carry and an elastic stress does not.
     """
 
 def xtx(x: typing.Any, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:

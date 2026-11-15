@@ -220,14 +220,14 @@ assert partout == 1.0
 _, mesh, fes, n = _plaque()
 # Uniform stretch λ = 1.1 along x: u_x = 0.1·x.
 u = _champ_nodal(mesh, n, ["u_x", "u_y"], [[0.1 * p.position()[0], 0.0] for p in n])
-# ANCHOR: mesures
+# ANCHOR: element_field-deformation
 # Linearized strain, the default: eps_xx, eps_xy, eps_yy.
 eps = pyrucast.element_field.deformation(u, fes)
 # Finite measures share the call; each has its own prefix.
 E = pyrucast.element_field.deformation(u, fes, "green_lagrange")  # E_xx…
 F = pyrucast.element_field.deformation(u, fes, "F")  # F_xx, F_xy, F_yx, F_yy
 H = pyrucast.element_field.deformation(u, fes, "hencky")  # H_xx…
-# ANCHOR_END: mesures
+# ANCHOR_END: element_field-deformation
 assert abs(eps[0].value(0, 0, "eps_xx") - 0.1) < 1e-12
 assert abs(E[0].value(0, 0, "E_xx") - 0.105) < 1e-12
 assert F[0].components() == ["F_xx", "F_xy", "F_yx", "F_yy"]
@@ -243,12 +243,12 @@ materiaux = pyrucast.element_field.material_field(
 )
 dilatation = pyrucast.ElementField(fes, ["eps_xx", "eps_xy", "eps_yy"])
 dilatation[0].set_uniform("eps_xx", 1e-3)
-# ANCHOR: elastique
+# ANCHOR: element_field-elastic_stress
 # The stress an imposed strain would cause if nothing yielded: D:ε.
 sigma = pyrucast.element_field.elastic_stress(plasticite, dilatation, materiaux)
 # And back: the elastic strain carrying a stress, D⁻¹:σ.
 retour = pyrucast.element_field.elastic_strain(plasticite, sigma, materiaux)
-# ANCHOR_END: elastique
+# ANCHOR_END: element_field-elastic_stress
 assert abs(sigma[0].value(0, 0, "sigma_xx") - 2e8) < 1e-3  # far beyond sigma_y
 assert abs(retour[0].value(0, 0, "eps_xx") - 1e-3) < 1e-15
 
@@ -257,7 +257,7 @@ assert abs(retour[0].value(0, 0, "eps_xx") - 1e-3) < 1e-15
 contraintes = pyrucast.ElementField(fes, ["sigma_xx", "sigma_yy", "sigma_xy"])
 contraintes[0].set_uniform("sigma_xx", 120e6)
 contraintes[0].set_uniform("sigma_xy", 40e6)
-# ANCHOR: von_mises
+# ANCHOR: element_field-von_mises
 # von Mises at each Gauss point, from the stresses the law writes; the model
 # says which ones to read (here a plane stress: σzz = 0).
 vm = pyrucast.element_field.von_mises(plasticite, contraintes)
@@ -265,7 +265,7 @@ vm = pyrucast.element_field.von_mises(plasticite, contraintes)
 hill = pyrucast.element_field.von_mises(
     plasticite, contraintes, [0.6, 0.4, 0.5, 1.5, 1.5, 2.0]
 )
-# ANCHOR_END: von_mises
+# ANCHOR_END: element_field-von_mises
 # √(σxx² + 3 σxy²) in plane stress.
 assert abs(vm[0].value(0, 0, "von_mises") - math.sqrt(120e6**2 + 3 * 40e6**2)) < 1e-3
 # G σxx² + H σxx² + 2 N σxy² with σyy = σzz = 0.
@@ -307,14 +307,14 @@ solution = _champ_nodal(
         for x in (0.0, 1.0, 2.0)
     ],
 )
-# ANCHOR: strain_modele
+# ANCHOR: element_field-strain
 # B: each law gets its own input from one solution — a strain for the solid,
 # a temperature gradient for conduction.
 eps = couple.strain(solution, materiaux)
-repos = couple.initial_state(materiaux)  # l'état de départ des deux lois
+repos = couple.initial_state(materiaux)  # the starting state of both laws
 etat = couple.integrate_behavior(eps, materiaux, repos)  # the laws
 f_int = couple.internal_forces(etat, solution, materiaux)  # Bᵀ: back to the nodes
-# ANCHOR_END: strain_modele
+# ANCHOR_END: element_field-strain
 assert [z.components() for z in eps] == [
     ["eps_xx", "eps_xy", "eps_yy"],
     ["grad_T_x", "grad_T_y"],

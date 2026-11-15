@@ -139,17 +139,17 @@ materials = pyrucast.element_field.material_field(
 )
 u = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(n), ["u_x", "u_y"])
 nsteps = 2
-# ANCHOR: pas_a_pas
+# ANCHOR: element_field-integrate_behavior
 state = pyrucast.element_field.initial_state(
     model, materials
-)  # VAR0 = prev : l'état de repos au premier pas
+)  # prev: the rest state on the first step
 for step in range(1, nsteps + 1):
     # the step's load → Newton loop on u
     eps = pyrucast.element_field.deformation(u, fes)  # ε(B)
     out = pyrucast.element_field.integrate_behavior(model, eps, materials, prev=state)
-    # F_int (BSIG), résidu, correction de u
+    # internal forces, residual, correction of u
     state = out  # commit: prev ← VAR1 for the next step
-# ANCHOR_END: pas_a_pas
+# ANCHOR_END: element_field-integrate_behavior
 assert len(state) == 1
 
 # ── beam deformation ───────────────────────────────────────
@@ -164,15 +164,15 @@ materials = pyrucast.element_field.material_field(
 solution = pyrucast.NodeField(
     pyrucast.mesh.poi1_from_nodes(noeuds), ["u_x", "u_y", "r_z"]
 )
-# ANCHOR: beam_deformation
+# ANCHOR: element_field-beam_deformation
 # Solution (w, theta) already obtained from the solver.
 eps = pyrucast.element_field.beam_deformation(solution, fes, materials)  # (κ, γ)
 repos = pyrucast.element_field.initial_state(
     model, materials
-)  # l'état de départ de la loi
+)  # the starting state of the law
 forces = pyrucast.element_field.integrate_behavior(model, eps, materials, repos)
-# forces porte le moment M = E·I·κ et l'effort tranchant V = G·A_s·γ.
-# ANCHOR_END: beam_deformation
+# forces carries the moment M = E·I·κ and the shear force V = G·A_s·γ.
+# ANCHOR_END: element_field-beam_deformation
 assert len(forces) == 1
 
 # ── shell deformation ──────────────────────────────────────
@@ -190,16 +190,16 @@ solution = pyrucast.NodeField(
     pyrucast.mesh.poi1_from_nodes(_c),
     ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"],
 )
-# ANCHOR: shell_deformation
+# ANCHOR: element_field-shell_deformation
 # Solution (six DOFs per node) already obtained from the solver.
 eps = pyrucast.element_field.shell_deformation(solution, fes, "thick")
 repos = pyrucast.element_field.initial_state(
     model, materials
-)  # l'état de départ de la loi
+)  # the starting state of the law
 forces = pyrucast.element_field.integrate_behavior(model, eps, materials, repos)
 # forces carries the membrane resultants N, the bending ones M, the
-# vrillage M_drill, et — en `thick` — l'effort tranchant Q.
-# ANCHOR_END: shell_deformation
+# drilling moment M_drill, and — in `thick` — the shear force Q.
+# ANCHOR_END: element_field-shell_deformation
 assert len(forces) == 1
 
 # ── forces internes ────────────────────────────────────────
@@ -241,10 +241,10 @@ def _deux_modeles():
 # ── material field ─────────────────────────────────────────
 
 thermique, elastique = _deux_modeles()
-# ANCHOR: material_field
+# ANCHOR: element_field-material_field
 import pyrucast
 
-# Thermique : conductivité uniforme.
+# Heat: a uniform conductivity.
 materials = pyrucast.element_field.material_field(thermique, [("k", 1.0)])
 
 # Elasticity: two properties. Every physics declares the components it
@@ -252,7 +252,7 @@ materials = pyrucast.element_field.material_field(thermique, [("k", 1.0)])
 materials = pyrucast.element_field.material_field(
     elastique, [("E", 210e9), ("nu", 0.3)]
 )
-# ANCHOR_END: material_field
+# ANCHOR_END: element_field-material_field
 assert len(materials) == 1
 
 # ── Thermique ───────────────────────────────────────────────────────────────
