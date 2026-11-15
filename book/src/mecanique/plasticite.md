@@ -80,6 +80,8 @@ donne à Newton sa convergence quadratique.
 opérateur constant, celui d'un Newton modifié. La tangente
 \\(\int B^{\mathsf T} D_\text{alg} B\\) est celle d'un Newton complet.
 
+{{#pyalgo matrix.tangent}}
+
 ## Variables
 
 Selon la cinématique :

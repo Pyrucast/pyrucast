@@ -9,7 +9,7 @@ le `BSIG` de cast3m (`∫ Bᵀ σ`).
 
 L'**état de repos** du modèle : ce que porte chaque loi avant que rien ne se
 soit passé. C'est l'état de A du premier pas, à donner comme `prev` à
-`integrate_behavior` et à [`matrix.tangent`](assemblage.md).
+`integrate_behavior` et à [`matrix.tangent`](../reference/matrix.md#matrix-tangent).
 
 Il a une zone par sous-modèle portant une loi, sur son sous-espace de
 comportement, avec toutes les composantes que la loi écrit, si bien que la
@@ -23,7 +23,7 @@ contrainte, qui n'ont pas de loi, sont ignorés. La méthode
 
 ## `integrate_behavior(model, deformation, materials, prev, dt=None)` → `ElementField`
 
-Là où [`stiffness`](assemblage.md) produit la **linéarisation** du modèle (une
+Là où [`stiffness`](../reference/matrix.md#matrix-stiffness) produit la **linéarisation** du modèle (une
 matrice), `integrate_behavior` produit la **réponse ponctuelle exacte** comme
 [champ aux points de Gauss](../element-field.md).
 
@@ -142,7 +142,7 @@ configuration de référence par la contrainte **nominale** `P = F S`, lue enti�
 [Grandes transformations](../mecanique/grandes-transformations.md).
 
 C'est le côté **intérieur** du bilan `Σ f_int = Σ f_ext`, dont l'écart est le
-résidu d'équilibre. Le miroir nodal de [`stiffness`](assemblage.md) : là où
+résidu d'équilibre. Le miroir nodal de [`stiffness`](../reference/matrix.md#matrix-stiffness) : là où
 l'assemblage demande à chaque sous-modèle ses blocs de `∂r/∂u`, celui-ci lui
 demande son terme de `r`. Un sous-modèle qui n'a pas de terme de ce côté n'en
 déclare aucun et n'apparaît pas dans le résultat.

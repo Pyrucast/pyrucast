@@ -3,7 +3,7 @@
 Une matrice est ce que rend un assemblage : `pyrucast.matrix.stiffness(modele,
 materiaux)` rend **une seule** matrice pour tout le [modèle](model.md),
 physiques et contraintes comprises, et `mass`, `geometric` et `tangent` font de
-même (voir [Assemblage](operateurs/assemblage.md)). Elle est **creuse** : seuls
+même (voir [`pyrucast.matrix`](reference/matrix.md)). Elle est **creuse** : seuls
 ses termes non nuls sont gardés. C'est un [agrégat](aggregate.md) :
 
 - un **bloc** (`SubMatrix`) est la part d'un sous-modèle : la conduction d'une
@@ -105,6 +105,13 @@ Une matrice est assemblée **une fois** : ses valeurs ne bougent plus, et un
 second `assemble()` ne fait rien. Les valeurs d'une autre configuration
 s'obtiennent en refaisant la matrice.
 
+Ajouter un bloc à une matrice assemblée efface ses valeurs ; `assemble()` les
+recalcule, bloc ajouté compris :
+
+```python
+{{#include ../../tests/python/test_doc_ops_assemblage.py:assemble}}
+```
+
 ## Calculer avec des matrices
 
 - `2.0 * K`, `K * 2.0`, `K / dt` et `-K` rendent une matrice neuve, assemblée
@@ -137,6 +144,15 @@ Deux matrices ne se multiplient pas entre elles.
 
 ```python
 {{#include ../../tests/python/test_doc_matrice.py:calculer}}
+```
+
+Additionner deux matrices assemblées sur deux configurations, c'est ce que
+fait le pas à pas en grands déplacements : la capacité sur la référence, la
+conduction et les échanges sur la pièce déformée (voir
+[Grandes transformations](mecanique/grandes-transformations.md)).
+
+```python
+{{#include ../../tests/python/test_doc_ops_assemblage.py:somme_configurations}}
 ```
 
 ## Natures physiques
@@ -306,7 +322,13 @@ valeurs en parallèle par coloriage des mailles (voir
 `set_assembled`. `Matrix::assemble` est défini dans `ops::matrix` et non avec
 la matrice : calculer un bloc calculé demande le calcul élémentaire, qui vit
 dans `models`, dont `containers` ne dépend pas. Il construit le motif depuis
-les blocs à chaque appel.
+les blocs à chaque appel, sans lire celui que le modèle garde : il convient à
+une composition ponctuelle, et l'assemblage répété d'un même modèle passe par
+`stiffness`.
+
+```rust,ignore
+{{#include ../../tests/doc_conteneurs.rs:reassembler}}
+```
 
 **Facteur.** Il s'applique partout où une valeur du bloc est lue ou émise
 (`get`, `iter_entries`, les conversions, l'assemblage), sauf dans

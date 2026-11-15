@@ -177,7 +177,7 @@ zone, puisqu'un sous-espace porte chaque composante dans une seule zone ; avec
 
 Ces champs sont ensuite **consommés** par l'assemblage (`stiffness`, `mass`,
 `tangent`, `internal_forces`, `external_forces`, cf.
-[Assemblage](operateurs/assemblage.md)), ramenés aux nœuds (`divergence`,
+[`pyrucast.matrix`](reference/matrix.md)), ramenés aux nœuds (`divergence`,
 `sum_to_nodes`), tracés (`plot`) ou exportés (`pyrucast.export.to_arrays(…,
 element_fields=[…])`).
 

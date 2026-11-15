@@ -15,8 +15,10 @@ The directives:
 - `{{#pysummary matrix.stiffness matrix.mass}}` — a table, one row per name:
   short prototype linked to the entry, first line of the docstring;
 - `{{#pyalgo mesh.regularize mesh.cleanup}}` — at the top of an algorithm
-  page: declares the functions the page explains. The page gets links to
-  their entries, and each entry gets a link back to the page.
+  page, or of the section of a page that tells the algorithm: declares the
+  functions it explains. The place gets links to their entries, and each
+  entry gets a link back that lands on the directive, labelled by the page
+  and the section it stands in.
 
 A directive preceded by a backslash is left alone (and loses the backslash),
 as mdBook does for `\\{{#include}}`.
@@ -65,6 +67,8 @@ DIRECTIVE = re.compile(r"(\\)?\{\{#(pymodule|pysummary|pyalgo)\b([^}]*)\}\}")
 ANCHOR = re.compile(r"ANCHOR:\s*([\w-]+)\s*$", re.MULTILINE)
 INLINE_CODE = re.compile(r"(?<![\[`])`([^`\n]+)`(?!`)")
 INTRA_LINK = re.compile(r"\[`([^`\n]+)`\](?![(\[])")
+HEADING = re.compile(r"(#{1,6})\s+(.+?)\s*$")
+HEADING_ID = re.compile(r"\s*\{#[\w-]+\}$")
 SYMBOL = re.compile(r"(pyrucast\.)?(?:(\w+)\.)?(\w+)(\(.*\))?")
 
 
@@ -308,26 +312,61 @@ class Layout:
 
     homes: dict[str, list[str]] = field(default_factory=dict)  # module → pages
     listed: dict[str, list[str]] = field(default_factory=dict)  # key → pages
-    algorithms: dict[str, list[Page]] = field(default_factory=dict)  # key → pages
+    algorithms: dict[str, list[Algorithm]] = field(default_factory=dict)  # key → …
+
+
+@dataclass(frozen=True)
+class Algorithm:
+    """One `{{#pyalgo}}`: the place an entry of the reference links to."""
+
+    page: Page
+    fragment: str  # id laid where the directive stands: "pyalgo-2"
+    section: str  # heading the directive stands under, "" under the page title
+
+    @property
+    def label(self) -> str:
+        return (
+            f"{self.page.title} — {self.section}" if self.section else self.page.title
+        )
 
 
 def _directives(text: str):
     for m in DIRECTIVE.finditer(text):
         if not m.group(1):
-            yield m.group(2), m.group(3).split()
+            yield m.group(2), m.group(3).split(), m.start()
+
+
+def _section(text: str, position: int) -> str:
+    """Heading of the section `position` falls in — none under the page title."""
+    section, fenced = "", False
+    for line in text[:position].split("\n"):
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        elif not fenced:
+            heading = HEADING.match(line)
+            if heading:
+                level, title = heading.groups()
+                section = "" if level == "#" else HEADING_ID.sub("", title)
+    return section
 
 
 def read_layout(pages: list[Page]) -> Layout:
     layout = Layout()
     for page in pages:
-        for kind, names in _directives(page.content):
+        rank = 0
+        for kind, names, position in _directives(page.content):
+            if kind == "pyalgo":
+                rank += 1
+                place = Algorithm(
+                    page, f"pyalgo-{rank}", _section(page.content, position)
+                )
             for name in names:
                 if kind == "pymodule":
                     layout.homes.setdefault(name, []).append(page.path)
                 elif kind == "pysummary":
                     layout.listed.setdefault(name, []).append(page.path)
                 else:
-                    layout.algorithms.setdefault(name, []).append(page)
+                    layout.algorithms.setdefault(name, []).append(place)
     return layout
 
 
@@ -427,7 +466,8 @@ class Renderer:
         algorithms = self.layout.algorithms.get(e.key, [])
         if algorithms:
             links = ", ".join(
-                f"[{p.title}]({_relative(p.path, page)})" for p in algorithms
+                f"[{a.label}]({_relative(a.page.path, page)}#{a.fragment})"
+                for a in algorithms
             )
             parts.append(f"**Algorithm:** {links}.")
         if e.example:
@@ -449,20 +489,28 @@ class Renderer:
         parts += [self.entry(e, page) for e in entries]
         return "\n\n".join(parts)
 
-    def algorithm(self, entries: list[Entry], page: Page) -> str:
+    def algorithm(self, entries: list[Entry], page: Page, rank: int) -> str:
+        """The line a `{{#pyalgo}}` becomes. It carries the id the entries of
+        the reference link to: they land on the section, not on the page."""
         links = []
         for e in entries:
             url = self.link(e, page)
             links.append(f"[`{e.key}`]({url})" if url else f"`{e.key}`")
-        return "Fonctions décrites : " + ", ".join(links) + "."
+        return (
+            f'<a id="pyalgo-{rank}"></a>Fonctions décrites : ' + ", ".join(links) + "."
+        )
 
     # ── a page ──
 
     def expand(self, page: Page) -> str:
+        rank = 0  # of the `pyalgo` at hand in the page, as `read_layout` counts
+
         def replace(m: re.Match) -> str:
+            nonlocal rank
             if m.group(1):  # escaped: shown as written
                 return m.group(0)[1:]
             kind, names = m.group(2), m.group(3).split()
+            rank += kind == "pyalgo"
             if not names:
                 self.errors.append(f"{page.path}: {{{{#{kind}}}}} names nothing")
                 return ""
@@ -480,7 +528,7 @@ class Renderer:
             entries = [self.api.entries[n] for n in names]
             if kind == "pysummary":
                 return self.table(entries, page)
-            return self.algorithm(entries, page)
+            return self.algorithm(entries, page, rank)
 
         return DIRECTIVE.sub(replace, page.content)
 

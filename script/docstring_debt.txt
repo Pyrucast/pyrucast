@@ -39,10 +39,6 @@ field.sqrt
 field.tan
 field.tanh
 load
-matrix.geometric
-matrix.lump
-matrix.mass
-matrix.tangent
 measure.integral
 measure.xtx
 mesh.arc

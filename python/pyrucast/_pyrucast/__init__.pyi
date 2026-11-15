@@ -1305,9 +1305,28 @@ class Matrix:
     def __len__(self) -> builtins.int: ...
     def lump(self) -> Matrix:
         r"""
-        Lump an assembled matrix into a diagonal one by row-sum concentration.
-        Applied to a consistent mass / capacity matrix it yields the diagonal
-        (lumped) mass, conserving the total mass.
+        Lump an assembled matrix into a diagonal one, each term the sum of its row.
+        
+        Applied to a consistent mass or capacity matrix, it yields the lumped
+        (diagonal) mass, which conserves the total mass:
+        `Σ_i M_lump[i,i] = Σ_ij M[i,j]`. It is the cheap, uncoupled form explicit
+        time schemes use.
+        
+        # Parameters
+        
+        - `matrix`: an assembled, square matrix whose row `i` and column `i` carry
+          the same node.
+        
+        # Returns
+        
+        A new matrix with the rows and the columns of `matrix`, in the same order,
+        and one diagonal block per row support: it is solved, multiplied by a field
+        and saved like `matrix`, which is left untouched.
+        
+        # Raises
+        
+        `RuntimeError` if `matrix` has no assembled values (an output of `|` or
+        `filter`, before `assemble()`).
         """
     def solve(self, rhs: NodeField, method: builtins.str = 'lu', relations: builtins.str = 'lagrange', active_set: builtins.str = 'schur', cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10, verbosity: builtins.str = 'silent') -> NodeField:
         r"""
@@ -2371,31 +2390,113 @@ class Model:
         r"""
         Assemble the stiffness matrix `K` of `model`.
         
-        `materials` carries the per-zone material data: every sub-model that
-        needs it picks the `SubElementField` whose FE subspace matches its own.
+        One matrix covers every unknown of the model, multipliers included: a physics
+        contributes its block, a constraint the two halves `C` and `Cᵀ` of its
+        relations. Boundary conditions have no special status — they are sub-models
+        like the others.
+        
+        # Parameters
+        
+        - `model`: the physics and the constraints to assemble.
+        - `materials`: the material data, zone by zone. Every sub-model that needs
+          some picks the zone whose FE subspace is its own; a sub-model without
+          material (a constraint) ignores it.
+        
+        # Returns
+        
+        The matrix, assembled on the configuration active at the call.
+        
+        # Raises
+        
+        `RuntimeError` if no zone of `materials` lies on the FE subspace of a
+        sub-model with the components its physics requires.
         """
     def mass_matrix(self, materials: ElementField) -> Matrix:
         r"""
-        Assemble the consistent mass matrix `M` of `model`, or the heat-capacity
-        matrix `C` for a thermal model.
+        Assemble the mass matrix `M` of `model`, or its heat-capacity matrix `C`.
         
-        Mechanics assembles `M = ∫ ρ Nᵀ N` (material `rho`); heat conduction
-        assembles `C = ∫ ρ cp Nᵀ N` (material `rho`, `cp`). `materials` carries the
-        per-zone coefficients, exactly like [`stiffness`].
+        Mechanics assembles the consistent mass `M = ∫ ρ N_i N_j`, heat conduction the
+        capacity `C = ∫ ρ c_p N_i N_j`. A physics without a mass term (a boundary
+        exchange, a constraint) contributes nothing.
+        
+        # Parameters
+        
+        - `model`: the physics to assemble.
+        - `materials`: the material data, zone by zone, as for [`stiffness`]. It must
+          carry `rho` on a mechanical zone, `rho` and `cp` on a thermal one: the
+          stiffness does not read them, so the material field holds them only if
+          given.
+        
+        # Returns
+        
+        The matrix, assembled on the configuration active at the call.
+        
+        # Raises
+        
+        `RuntimeError` if `rho` or `cp` is missing on a zone that needs it.
         """
     def geometric_matrix(self, materials: ElementField, stress: ElementField) -> Matrix:
         r"""
-        Assemble the geometric (initial-stress) stiffness `K_g` of `model`, from the
-        current stress field `stress` (Voigt-named `sigma_*`). `materials` resolves
-        each mechanical zone, exactly like [`stiffness`].
+        Assemble the geometric (initial-stress) stiffness `K_g` of `model`.
+        
+        `K_g[(i,a),(j,b)] = δ_ab ∫ ∇N_i · σ · ∇N_j` is the stiffening a stress in
+        place brings: the term of buckling and of prestressed analyses. It does not
+        depend on the constitutive law. A physics without geometric stiffness (heat
+        conduction, a constraint) contributes nothing.
+        
+        # Parameters
+        
+        - `model`: the physics to assemble.
+        - `materials`: the material data, zone by zone, as for [`stiffness`].
+        - `stress`: the current Cauchy stress at the Gauss points, components
+          `sigma_*` — typically what `element_field.integrate_behavior` returns. Each
+          zone is picked by its FE subspace, like `materials`.
+        
+        # Returns
+        
+        The matrix, assembled on the configuration active at the call.
+        
+        # Raises
+        
+        `RuntimeError` if `stress` lacks a `sigma_*` component on a mechanical zone.
         """
     def tangent_matrix(self, materials: ElementField, deformation: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> Matrix:
         r"""
-        Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of
-        `model`. `D_alg` is evaluated **at the Gauss point**, from the same inputs
-        `integrate_behavior` takes — no field of moduli is materialised, since this
-        assembler would be its only reader. `prev` is the state at A:
-        `element_field.initial_state(model, materials)` on a first step.
+        Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`.
+        
+        `D_alg` is the derivative of the step `ε(B) ↦ σ(B)`, the state at A held
+        fixed: both ends of the step are in its definition, hence the same inputs as
+        `element_field.integrate_behavior`. This is the matrix that gives a Newton
+        iteration its quadratic convergence.
+        
+        A linear physics (conduction, diffusion, exchanges, trusses, beams, shells)
+        and the constraints have no law to differentiate: their tangent is their
+        stiffness, assembled without reading `deformation`.
+        
+        # Parameters
+        
+        - `model`: the physics and the constraints to assemble.
+        - `materials`: the material data, zone by zone, as for [`stiffness`].
+        - `deformation`: the input of the laws at the end of the step, `ε(B)` — from
+          `element_field.deformation`.
+        - `prev`: the state at A, the converged output of the previous step; on a
+          first step, `element_field.initial_state(model, materials)`.
+        - `dt`: the time increment; `None` when no law depends on the rate.
+        
+        # Returns
+        
+        The matrix, assembled on the configuration active at the call.
+        
+        # Raises
+        
+        `RuntimeError` if a non-linear law of `model` has no tangent of its own
+        (`model.mazars`, `model.damage_tc`, `model.damage_sic_sic`): the call fails
+        rather than return an empty block.
+        
+        # Notes
+        
+        `D_alg` is evaluated at each Gauss point during the assembly: no field of
+        moduli is stored between the law and this function.
         """
     def update_contact(self, displacement: NodeField) -> Model:
         r"""
@@ -4876,9 +4977,28 @@ def gauss_to_external(element_type: builtins.str, ref_nodes: typing.Sequence[bui
 
 def geometric(model: Model, materials: ElementField, stress: ElementField) -> Matrix:
     r"""
-    Assemble the geometric (initial-stress) stiffness `K_g` of `model`, from the
-    current stress field `stress` (Voigt-named `sigma_*`). `materials` resolves
-    each mechanical zone, exactly like [`stiffness`].
+    Assemble the geometric (initial-stress) stiffness `K_g` of `model`.
+    
+    `K_g[(i,a),(j,b)] = δ_ab ∫ ∇N_i · σ · ∇N_j` is the stiffening a stress in
+    place brings: the term of buckling and of prestressed analyses. It does not
+    depend on the constitutive law. A physics without geometric stiffness (heat
+    conduction, a constraint) contributes nothing.
+    
+    # Parameters
+    
+    - `model`: the physics to assemble.
+    - `materials`: the material data, zone by zone, as for [`stiffness`].
+    - `stress`: the current Cauchy stress at the Gauss points, components
+      `sigma_*` — typically what `element_field.integrate_behavior` returns. Each
+      zone is picked by its FE subspace, like `materials`.
+    
+    # Returns
+    
+    The matrix, assembled on the configuration active at the call.
+    
+    # Raises
+    
+    `RuntimeError` if `stress` lacks a `sigma_*` component on a mechanical zone.
     """
 
 def gradient(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
@@ -5136,9 +5256,28 @@ def log10(field: typing.Any) -> typing.Any:
 
 def lump(matrix: Matrix) -> Matrix:
     r"""
-    Lump an assembled matrix into a diagonal one by row-sum concentration.
-    Applied to a consistent mass / capacity matrix it yields the diagonal
-    (lumped) mass, conserving the total mass.
+    Lump an assembled matrix into a diagonal one, each term the sum of its row.
+    
+    Applied to a consistent mass or capacity matrix, it yields the lumped
+    (diagonal) mass, which conserves the total mass:
+    `Σ_i M_lump[i,i] = Σ_ij M[i,j]`. It is the cheap, uncoupled form explicit
+    time schemes use.
+    
+    # Parameters
+    
+    - `matrix`: an assembled, square matrix whose row `i` and column `i` carry
+      the same node.
+    
+    # Returns
+    
+    A new matrix with the rows and the columns of `matrix`, in the same order,
+    and one diagonal block per row support: it is solved, multiplied by a field
+    and saved like `matrix`, which is left untouched.
+    
+    # Raises
+    
+    `RuntimeError` if `matrix` has no assembled values (an output of `|` or
+    `filter`, before `assemble()`).
     """
 
 def mask_element(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
@@ -5179,12 +5318,27 @@ def mask_node(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt:
 
 def mass(model: Model, materials: ElementField) -> Matrix:
     r"""
-    Assemble the consistent mass matrix `M` of `model`, or the heat-capacity
-    matrix `C` for a thermal model.
+    Assemble the mass matrix `M` of `model`, or its heat-capacity matrix `C`.
     
-    Mechanics assembles `M = ∫ ρ Nᵀ N` (material `rho`); heat conduction
-    assembles `C = ∫ ρ cp Nᵀ N` (material `rho`, `cp`). `materials` carries the
-    per-zone coefficients, exactly like [`stiffness`].
+    Mechanics assembles the consistent mass `M = ∫ ρ N_i N_j`, heat conduction the
+    capacity `C = ∫ ρ c_p N_i N_j`. A physics without a mass term (a boundary
+    exchange, a constraint) contributes nothing.
+    
+    # Parameters
+    
+    - `model`: the physics to assemble.
+    - `materials`: the material data, zone by zone, as for [`stiffness`]. It must
+      carry `rho` on a mechanical zone, `rho` and `cp` on a thermal one: the
+      stiffness does not read them, so the material field holds them only if
+      given.
+    
+    # Returns
+    
+    The matrix, assembled on the configuration active at the call.
+    
+    # Raises
+    
+    `RuntimeError` if `rho` or `cp` is missing on a zone that needs it.
     """
 
 def match_gauss(element_type: builtins.str, ref_nodes: typing.Sequence[builtins.float], xi: typing.Sequence[builtins.float], weights: typing.Sequence[builtins.float], order: builtins.str) -> builtins.list[builtins.int]:
@@ -5960,8 +6114,26 @@ def stiffness(model: Model, materials: ElementField) -> Matrix:
     r"""
     Assemble the stiffness matrix `K` of `model`.
     
-    `materials` carries the per-zone material data: every sub-model that
-    needs it picks the `SubElementField` whose FE subspace matches its own.
+    One matrix covers every unknown of the model, multipliers included: a physics
+    contributes its block, a constraint the two halves `C` and `Cᵀ` of its
+    relations. Boundary conditions have no special status — they are sub-models
+    like the others.
+    
+    # Parameters
+    
+    - `model`: the physics and the constraints to assemble.
+    - `materials`: the material data, zone by zone. Every sub-model that needs
+      some picks the zone whose FE subspace is its own; a sub-model without
+      material (a constraint) ignores it.
+    
+    # Returns
+    
+    The matrix, assembled on the configuration active at the call.
+    
+    # Raises
+    
+    `RuntimeError` if no zone of `materials` lies on the FE subspace of a
+    sub-model with the components its physics requires.
     """
 
 def strain(model: Model, solution: NodeField, materials: ElementField) -> ElementField:
@@ -6079,11 +6251,41 @@ def tan(field: typing.Any) -> typing.Any:
 
 def tangent(model: Model, materials: ElementField, deformation: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> Matrix:
     r"""
-    Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of
-    `model`. `D_alg` is evaluated **at the Gauss point**, from the same inputs
-    `integrate_behavior` takes — no field of moduli is materialised, since this
-    assembler would be its only reader. `prev` is the state at A:
-    `element_field.initial_state(model, materials)` on a first step.
+    Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`.
+    
+    `D_alg` is the derivative of the step `ε(B) ↦ σ(B)`, the state at A held
+    fixed: both ends of the step are in its definition, hence the same inputs as
+    `element_field.integrate_behavior`. This is the matrix that gives a Newton
+    iteration its quadratic convergence.
+    
+    A linear physics (conduction, diffusion, exchanges, trusses, beams, shells)
+    and the constraints have no law to differentiate: their tangent is their
+    stiffness, assembled without reading `deformation`.
+    
+    # Parameters
+    
+    - `model`: the physics and the constraints to assemble.
+    - `materials`: the material data, zone by zone, as for [`stiffness`].
+    - `deformation`: the input of the laws at the end of the step, `ε(B)` — from
+      `element_field.deformation`.
+    - `prev`: the state at A, the converged output of the previous step; on a
+      first step, `element_field.initial_state(model, materials)`.
+    - `dt`: the time increment; `None` when no law depends on the rate.
+    
+    # Returns
+    
+    The matrix, assembled on the configuration active at the call.
+    
+    # Raises
+    
+    `RuntimeError` if a non-linear law of `model` has no tangent of its own
+    (`model.mazars`, `model.damage_tc`, `model.damage_sic_sic`): the call fails
+    rather than return an empty block.
+    
+    # Notes
+    
+    `D_alg` is evaluated at each Gauss point during the assembly: no field of
+    moduli is stored between the law and this function.
     """
 
 def tanh(field: typing.Any) -> typing.Any:

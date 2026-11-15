@@ -26,7 +26,7 @@ comme Dirichlet).
 ```
 
 Le champ produit est ensuite passé tel quel à
-[`stiffness(model, materials)`](assemblage.md) et à
+[`stiffness(model, materials)`](../reference/matrix.md#matrix-stiffness) et à
 [`integrate_behavior`](comportement.md). Comme l'assembleur sélectionne, pour
 chaque sous-modèle, la zone dont le `SubFiniteElementSpace` correspond au sien,
 un champ couvrant seulement certains sous-espaces reste valide tant que chaque

@@ -221,7 +221,16 @@ f_{i,a} = \int \varphi\\,n_a\\,N_i\\,d\Gamma \\;\text{pour une pression.}
 | comportement | aucun |
 
 La densité est une composante du champ matériau : uniforme, ou variable d'un
-point de Gauss à l'autre.
+point de Gauss à l'autre. Une densité absente du matériau est refusée à
+l'assemblage, par son nom.
+
+La cible est le modèle que la charge alimente. Le nom d'une ligne duale est
+libre et ne dit pas à quelle physique elle appartient ; la cible, si : on y
+cherche le sous-modèle qui déclare cette ligne. Un nom mal tapé est refusé à
+la construction du modèle.
+
+Un bord s'intègre directement : une arête `SEG2` d'un maillage 2D est mesurée
+comme une ligne, une face comme une aire.
 
 ### Ce qu'il produit
 
@@ -235,6 +244,18 @@ point de Gauss à l'autre.
 
 La source de l'[échange de bord](#exemple) ci-dessus est un flux imposé :
 `model.flux(gauche, conduction, "q")` et la composante `phi_q` du matériau.
+
+Une charge n'a pas à rejoindre le modèle qu'elle alimente : comme elle n'entre
+dans aucune matrice, elle peut rester un modèle à elle seule, avec son propre
+matériau. C'est utile quand deux charges écrivent dans la même ligne duale avec
+des densités différentes.
+
+```python
+{{#include ../../tests/python/test_doc_ops_assemblage.py:model-flux}}
+```
+
+L'orientation de la normale d'une pression et son signe sont décrits dans
+[Grandes transformations](mecanique/grandes-transformations.md).
 
 ## Côté Rust
 

@@ -81,7 +81,6 @@
   - [Construction](operateurs/construction.md)
   - [Géométrie](operateurs/geometrie.md)
   - [Champs](operateurs/champs.md)
-  - [Assemblage](operateurs/assemblage.md)
   - [Comportement](operateurs/comportement.md)
   - [Solveur](operateurs/solveur.md)
   - [Sauvegarde et relecture](sauvegarde.md)

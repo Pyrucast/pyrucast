@@ -72,7 +72,7 @@ P = F\\,S .
 qui fait de `internal_forces` l'adjoint de `strain` au point `u`. Avec `F = I`,
 on retrouve le `B` habituel. En pratique, la loi rend `S`, on la convertit
 en `P` (la contrainte nominale, **non symétrique**), et
-[`internal_forces`](../operateurs/assemblage.md) applique son `Bᵀ` sur la
+[`internal_forces`](../reference/node_field.md#node_field-internal_forces) applique son `Bᵀ` sur la
 configuration de référence : c'est la même boucle qu'en petites déformations,
 qui lit simplement un tenseur plein (`P_xx, P_xy, P_yx, P_yy`).
 
@@ -167,6 +167,8 @@ n'entre que dans le résidu, recalculée à chaque itéré.
 
 ## La rigidité géométrique
 
+{{#pyalgo matrix.geometric}}
+
 L'opérateur de Newton se construit sur la configuration courante avec les
 fonctions existantes : la rigidité élastique `stiffness`, et la rigidité
 géométrique `geometric` avec la contrainte de Cauchy, `K_e + K_σ`. Deux
@@ -251,7 +253,7 @@ La **capacité** seule reste sur la référence : la masse se conserve,
 L'opérateur réunit la conduction et les échanges, assemblés sur la
 configuration courante, et la capacité, assemblée sur la référence : une
 matrice garde les valeurs de la configuration où elle a été assemblée, et
-[la somme](../operateurs/assemblage.md#la-somme) les additionne telles quelles.
+[la somme](../matrix.md#calculer-avec-des-matrices) les additionne telles quelles.
 
 ## Dans le pas à pas
 

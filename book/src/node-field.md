@@ -154,7 +154,7 @@ vérification.
 
 Les opérateurs qui **produisent** un champ aux nœuds sont rangés dans
 `pyrucast.node_field` (détail dans [Opérateurs sur les
-champs](operateurs/champs.md) et [Assemblage](operateurs/assemblage.md)) :
+champs](operateurs/champs.md) et [`pyrucast.node_field`](reference/node_field.md)) :
 
 | Famille | Opérateurs |
 |---|---|

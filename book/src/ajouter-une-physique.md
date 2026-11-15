@@ -357,6 +357,8 @@ matchent par **appartenance**. Un `HeatConduction` rend
 
 ### Un genre de matrice = un layout + un noyau
 
+{{#pyalgo matrix.stiffness matrix.mass matrix.geometric matrix.tangent}}
+
 L'assemblage est **agnostique au genre de matrice**. L'énum `MatrixKind`
 (`Stiffness`, `Mass`, `Geometric`, `Tangent`) est le discriminant qui fait
 tourner **la même machinerie** — recette, scatter colorié, cache de motif creux

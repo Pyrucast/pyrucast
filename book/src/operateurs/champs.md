@@ -10,8 +10,9 @@ de Gauss. Ces opérateurs croisent des conteneurs (maillage + champ, espace EF
 par composante, elle, reste **sur les types de champ** (cf. [Champ](../field.md)).
 
 Les autres thèmes d'opérateurs ont leur propre page : construction du matériau
-([Construction](construction.md)), [Assemblage](assemblage.md) (dont le
-chargement réparti `flux`), [Comportement](comportement.md), [Solveur](solveur.md).
+([Construction](construction.md)), l'assemblage
+([`pyrucast.matrix`](../reference/matrix.md)), le chargement réparti
+([Flux imposé](../echanges.md#flux-imposé)), [Comportement](comportement.md), [Solveur](solveur.md).
 
 ## Coordonnées et déplacement
 

@@ -166,7 +166,7 @@ imposées, portées par les nœuds-multiplicateurs.
 {{#include ../../tests/python/test_doc_conteneurs.py:model_chargement}}
 ```
 
-Les opérateurs sont détaillés dans [Assemblage](operateurs/assemblage.md) et
+Les opérateurs sont détaillés dans [`pyrucast.matrix`](reference/matrix.md) et
 [Solveur](operateurs/solveur.md). Des exemples complets à solution analytique
 sont déroulés dans [Dirichlet](contraintes/dirichlet.md) (Poisson 1-D),
 [Conduction thermique](thermique.md) et [Mécanique](mecanique.md).
