@@ -240,12 +240,15 @@ Deux points utiles :
 | tout item public a un exemple | `doc_lint.py doctests` | `check_doc` |
 | toute entrée Python est citée par un exemple | `doc_lint.py api-python` | `check_doc` |
 | chaque équation arrive intacte à MathJax | `doc_lint.py equations` | `check_doc` |
+| toute fonction publique est dans la référence et dans le sommaire, une fois | `doc_lint.py reference` | `check_doc` |
+| le stub commité dit ce que dit le module installé | `doc_lint.py stub` | `check_doc` |
+| une docstring suit la règle d'écriture | `doc_lint.py docstrings` | `check_doc` |
 
 Le détail de ce que chaque script lance — commande par commande, avec les
 fichiers concernés et les durées mesurées — est dans
 [Compilation et tests](../compilation.md#scriptcheck_sh--vérifications-en-bloc-ou-à-la-carte).
 
-Les six derniers vivent dans `script/doc_lint.py` et se lancent aussi un par
+Les neuf derniers vivent dans `script/doc_lint.py` et se lancent aussi un par
 un : `python script/doc_lint.py includes`. Chacun porte son registre de
 dérogations — nom → raison — et son test d'hygiène, qui échoue sur une entrée
 périmée.

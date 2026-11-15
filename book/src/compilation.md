@@ -238,7 +238,7 @@ la recompilation.
 | `script/run_examples.sh` | des chaînes de calcul **de bout en bout** | 30 `examples/*.py`, 3 `examples/*.rs`, 6 `tutoriel/*.py` | 80 s | | | | | ✓ | | ✓ | ✓ |
 | `cargo doc --no-deps --lib` (`-D warnings`) | la rustdoc n'a aucun lien cassé | — | 1 s | | | | | | ✓ | ✓ | ✓ |
 | `mdbook build book` | le book se rend | `book/src/**` | 1 s | | | | | | ✓ | ✓ | ✓ |
-| `python script/doc_lint.py` | les **six garde-fous** du book et des exemples | `book/src/**.md`, le book construit, la rustdoc, le module Python installé | 28 s | | | | | | ✓ | ✓ | ✓ |
+| `python script/doc_lint.py` | les **neuf garde-fous** du book et des exemples | `book/src/**.md`, le book construit, la rustdoc, le module Python installé | 28 s | | | | | | ✓ | ✓ | ✓ |
 | `cargo clippy` × 4 jeux de features | aucun avertissement, `-D warnings` | — | 105 s | | | | | | | | ✓ |
 
 Et les totaux, dans le même régime :
@@ -328,7 +328,7 @@ est donc exécuté par `check_rust`, `check_python` ou `check_examples`, et il n
 peut plus diverger de l'API.
 
 `check_doc` ne compile donc rien lui-même. Il construit la rustdoc et le book,
-puis lance `script/doc_lint.py`, six vérifications de texte :
+puis lance `script/doc_lint.py`, neuf vérifications de texte :
 
 | garde-fou | ce qu'il tient |
 |---|---|
@@ -338,6 +338,9 @@ puis lance `script/doc_lint.py`, six vérifications de texte :
 | `doctests` | cliquet : la couverture des doctests ne peut que monter |
 | `api-python` | cliquet : toute entrée Python est citée par un exemple exécuté |
 | `equations` | chaque équation arrive intacte à MathJax |
+| `reference` | toute fonction publique est rendue une fois dans la référence et listée une fois dans le sommaire |
+| `stub` | le stub commité dit ce que dit le module installé : noms, arguments, docstrings |
+| `docstrings` | cliquet : une docstring suit la règle d'écriture |
 
 Le premier est le plus important, parce que le mécanisme porteur n'est gardé par
 rien d'autre : une ancre inexistante rend un bloc **vide**, avec un code de

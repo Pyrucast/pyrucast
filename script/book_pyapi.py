@@ -195,9 +195,15 @@ def _method_twins(stub: Path) -> dict[str, list[str]]:
 
 
 def _example_anchors(root: Path, errors: list[str]) -> dict[str, Path]:
+    """The example anchors of the `<module>-<function>` form, and their file.
+
+    An anchor without its end, or with nothing in between, is an error here:
+    mdBook would render it as an empty block without a word."""
     anchors: dict[str, Path] = {}
     for path in sorted((root / "tests" / "python").glob("test_doc_*.py")):
-        for name in ANCHOR.findall(path.read_text(encoding="utf-8")):
+        source = path.read_text(encoding="utf-8")
+        for start in ANCHOR.finditer(source):
+            name = start.group(1)
             if "-" not in name:
                 continue
             if name in anchors:
@@ -206,6 +212,15 @@ def _example_anchors(root: Path, errors: list[str]) -> dict[str, Path]:
                     f"{anchors[name].name} and {path.name}"
                 )
             anchors[name] = path
+            end = re.search(
+                rf"ANCHOR_END:\s*{re.escape(name)}\s*$",
+                source[start.end() :],
+                re.MULTILINE,
+            )
+            if not end:
+                errors.append(f'{path.name}: ANCHOR_END "{name}" missing')
+            elif not source[start.end() : start.end() + end.start()].strip("# \n"):
+                errors.append(f'{path.name}: example anchor "{name}" is empty')
     return anchors
 
 

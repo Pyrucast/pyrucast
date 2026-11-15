@@ -13,6 +13,11 @@ on:
     paths:
       - 'book/**'
       - 'src/**'
+      # La référence des opérateurs est fabriquée au build à partir de ces
+      # fichiers : le stub et les modules Python, les exemples, le générateur.
+      - 'python/**'
+      - 'tests/python/**'
+      - 'script/book_pyapi.py'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/pages.yml'
@@ -53,6 +58,12 @@ jobs:
 
       - name: Installer Rust
         uses: dtolnay/rust-toolchain@stable
+
+      # Le préprocesseur `pyapi` de book.toml lance `python` : bibliothèque
+      # standard seule, mais la commande doit exister sous ce nom.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
 
       - name: Builder le book
         run: mdbook build book
