@@ -1,0 +1,3 @@
+# pyrucast.coords
+
+{{#pymodule coords}}
