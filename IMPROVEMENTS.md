@@ -98,6 +98,24 @@ does not lie, but the user who asks for Cholesky loses the check LU gives.
   pivots of `L` against a threshold relative to the largest, and raise the
   same "singular" error. Then write it in `# Raises` and add a test.
 
+## `to_medcoupling` copies every array it hands to medcoupling
+
+`to_medcoupling` (`python/pyrucast/_med.py`) gets its arrays from `to_arrays`
+without a copy, then copies them once more with `np.array(...)` before
+building the medcoupling objects: the node coordinates, the connectivity of
+each block (`setNodalConnectivity`) and the values of each field (`_values`).
+The comment in place gives the reason: medcoupling takes over the memory of
+the numpy arrays it is given, so they must own it, and a view on a pyrucast
+`Array` would dangle once that array is freed. On a large mesh the export
+holds every array twice for a moment.
+
+- Lead: let `to_arrays` (or a variant for this adapter) hand over arrays that
+  numpy owns outright, built in Rust and given away rather than lent, so
+  medcoupling can take them as they are. First check, in the medcoupling
+  source, under what condition it takes over a buffer and how it frees it
+  (allocator compatibility).
+- Measure the peak memory and the time on a large mesh before and after.
+
 ## `NodeField::with` and `with_components_per_submesh`
 
 Rust `NodeField::with(mesh, components_per_submesh)`
