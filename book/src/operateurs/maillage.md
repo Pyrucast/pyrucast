@@ -92,6 +92,8 @@ quadratique prend de lui-même l'interpolation `LAGRANGE2` (cf.
 
 ## `sweep` : une surface entre deux lignes
 
+{{#pyalgo mesh.sweep}}
+
 `sweep(mesh_a, mesh_b, n_layers, element_type=None)` tisse `n_layers` couches
 entre deux lignes de même degré et de même nombre d'éléments : le nœud `j` de
 la première est relié au nœud `j` de la seconde, et les couches
@@ -133,6 +135,8 @@ ouverte est une erreur.
 
 ## Surface entre 4 côtés : `transfinite`
 
+{{#pyalgo mesh.transfinite}}
+
 `transfinite(side1, side2, side3, side4, element_type="QUA4")` maille une
 surface **structurée** délimitée par quatre lignes `SEG2` — l'équivalent
 Cast3M de l'opérateur `DALL(er)`, généralisant `sweep` (2 lignes) à 4 lignes.
@@ -169,6 +173,8 @@ sur le bord, quelle que soit leur forme (pas seulement des droites). Comme
 
 ## Copie sur place : `copy`
 
+{{#pyalgo mesh.copy}}
+
 `copy(mesh, new_nodes=True)` rend une copie du maillage **sans le déplacer** :
 mêmes sous-maillages dans le même ordre, mêmes types, mêmes couleurs, même
 connectivité. Ce que l'argument tranche, c'est si les deux maillages se tiennent
@@ -193,6 +199,8 @@ méthode `duplicate()`, qui est le cas `new_nodes=False`.
 ```
 
 ## Copies rigides : `translate`, `rotate` et les symétries
+
+{{#pyalgo mesh.translate mesh.rotate mesh.symmetry_point mesh.symmetry_line mesh.symmetry_plane}}
 
 `translate(mesh, vector)`, `rotate(mesh, angle, center, axis=None)` et les trois
 symétries renvoient une **copie neuve** du maillage — mêmes sous-maillages,
@@ -246,6 +254,8 @@ Appliquer `invert` au résultat redonne la connectivité miroir brute.
 
 ### Projection sur une sphère : `project_on_sphere`
 
+{{#pyalgo mesh.project_on_sphere}}
+
 `project_on_sphere(mesh, center, radius)` renvoie, elle aussi, une **copie
 neuve** : chaque nœud — sommets et nœuds milieux — est poussé le long du
 rayon issu de `center`, jusqu'à la distance `radius`. La copie garde les zones,
@@ -269,6 +279,8 @@ radius)`.
 
 ## Tissage d'un solide entre deux surfaces : `sweep_solid`
 
+{{#pyalgo mesh.sweep_solid}}
+
 `sweep_solid(mesh_a, mesh_b, n_layers)` est le **compagnon 3D** de `sweep` :
 là où ce dernier relie deux lignes `SEG2` par une bande de `QUA4`, `sweep_solid`
 relie deux **surfaces** par un solide. Les faces `TRI3` deviennent des prismes
@@ -289,6 +301,8 @@ surface et sa copie déplacée :
 ```
 
 ## Révolution : `revolve`
+
+{{#pyalgo mesh.revolve}}
 
 `revolve(mesh, angle, n_layers, center, axis=None)` est le **compagnon
 rotatif** d'`extrude` : là où `extrude` translate le maillage source couche
@@ -346,6 +360,8 @@ les deux faces ne se déduisent pas l'une de l'autre par une rotation.
 
 ## Passage à l'ordre quadratique : `to_quadratic`
 
+{{#pyalgo mesh.to_quadratic}}
+
 `to_quadratic(mesh)` construit la **copie quadratique** (Lagrange-2) d'un
 maillage **linéaire** : chaque type d'élément est promu vers son homologue
 quadratique — `SEG2→SEG3`, `TRI3→TRI6`, `QUA4→QUA8`, `TET4→TET10`,
@@ -372,6 +388,8 @@ l'espace éléments finis prend de lui-même (cf.
 
 ## Changement de type d'élément : `convert`
 
+{{#pyalgo mesh.convert}}
+
 `convert(mesh, element_type)` **change le type d'élément** de chaque
 sous-maillage vers `element_type`, en découpant chaque cellule en cellules du
 type cible — **sans jamais déplacer ni ajouter de nœud** sur les sommets
@@ -397,6 +415,8 @@ relève de [`to_quadratic`](#passage-à-lordre-quadratique--to_quadratic).
 ```
 
 ## Maillage d'un contour fermé : `triangulate_surface`
+
+{{#pyalgo mesh.triangulate_surface}}
 
 `triangulate_surface(contour, element_type, size=None)` remplit l'intérieur
 d'un contour par **triangulation de Delaunay contrainte (CDT)** puis
@@ -522,6 +542,8 @@ géométriques réutilisables indépendamment du système `Mesh`
 (voir [Triangulation](../triangulation.md)).
 
 ## Pavage frontal d'un contour fermé : `pave_surface`
+
+{{#pyalgo mesh.pave_surface}}
 
 `pave_surface(contour, element_type, size=None, prefer_quads=False, relax="free")`
 remplit le même contour que `triangulate_surface`, mais en **posant directement
@@ -869,6 +891,8 @@ géométrie, mais laisse une part notable de triangles en `QUA4`.
 
 ## Cœur en grille, bande frontale : `grid_surface`
 
+{{#pyalgo mesh.grid_surface}}
+
 `grid_surface(contour, element_type, size=None, band=0, prefer_quads=False,
 relax="free")` prend la même entrée que `pave_surface`, rend la même chose, et
 tient la même promesse — **le contour est intouchable**. Seul l'intérieur est
@@ -1091,6 +1115,8 @@ manquée se paie en mailles de raccord.
 
 ## Lignes par nœud, rangées pliées : `grid_surface2`
 
+{{#pyalgo mesh.grid_surface2}}
+
 `grid_surface2(contour, element_type, size=None, band=0, prefer_quads=False,
 relax="free")` prend les mêmes contours, rend le même maillage, respecte le
 même contour intouchable que `grid_surface`. **Il ne le remplace pas** : la façon de poser la grille
@@ -1156,6 +1182,8 @@ le hasard de l'endroit où ses sommets sont tombés.
 ```
 
 ## Améliorer un maillage existant : `regularize`, `cleanup`, `merge_triangles`
+
+{{#pyalgo mesh.regularize mesh.cleanup mesh.merge_triangles}}
 
 Les trois opérateurs font sur n'importe quel maillage ce que les paveurs font
 déjà à leur propre ouvrage en fin de course. Ils sont **séparés et
@@ -1420,6 +1448,8 @@ aucun à l'arrivée.
 
 ## Couche limite hexaédrique : `pave_volume`
 
+{{#pyalgo mesh.pave_volume}}
+
 `pave_volume(envelope, layers=1, thickness=None, size=None)` remplit la même
 enveloppe fermée que `triangulate_volume`, mais met des **hexaèdres là où ils
 comptent** — dans la couche contre le bord, où les gradients de contrainte et
@@ -1620,6 +1650,8 @@ et la principale source d'échec.
   tétraédrique n'est donc pas un raccourci mais l'état de l'art.
 
 ## Mailleur volumique : `triangulate_volume`
+
+{{#pyalgo mesh.triangulate_volume}}
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-triangulate_volume}}
@@ -1943,6 +1975,8 @@ et `triangulate_volume_cancellable(…, cancel)` pour la forme interruptible.
 
 ## Bord d'une surface : `border`
 
+{{#pyalgo mesh.border}}
+
 `border(mesh, angle_deg=None)` est l'**inverse** de `triangulate_surface` : il
 prend un maillage de surface (cellules `TRI3` / `QUA4`) et renvoie son **bord**
 sous forme de boucles `SEG2` fermées. Une surface quadratique (`TRI6`,
@@ -1993,6 +2027,8 @@ Côté Rust, `ops::mesh::border(&mesh, angle_deg)`.
 
 ## Peau d'un volume : `skin`
 
+{{#pyalgo mesh.skin}}
+
 `skin(mesh, angle_deg=None)` est le pendant **3D** de `border` : il prend un
 maillage volumique et renvoie sa **peau** — la surface extérieure — découpée en
 **faces planes**, un sous-maillage par face.
@@ -2037,6 +2073,8 @@ inférieure (surface, ligne), ou si l'espace n'est pas 3D.
 Côté Rust, `ops::mesh::skin(&mesh, angle_deg)`.
 
 ## Orientation des cellules : `orient` et `invert`
+
+{{#pyalgo mesh.orient mesh.invert}}
 
 `orient(mesh)` (Cast3M `ORIE`) **harmonise** l'orientation des cellules d'un
 maillage, et `invert(mesh)` (Cast3M `INVE`) l'**inverse**. Les deux travaillent
@@ -2091,6 +2129,8 @@ Côté Rust, `ops::mesh::orient(&mesh)` et `ops::mesh::invert(&mesh)`.
 
 ## Mise en chaîne d'une ligne : `chain`
 
+{{#pyalgo mesh.chain}}
+
 `orient` fait *pointer* les segments d'une courbe dans le même sens, mais les
 laisse là où ils sont dans la connectivité. `chain(mesh)` est le complément :
 il les met dans l'**ordre du parcours**, de sorte que lire les mailles l'une
@@ -2135,6 +2175,8 @@ Côté Rust, `ops::mesh::chain(&mesh)` — ou la méthode `mesh.chain()`.
 
 ## Éléments s'appuyant sur des nœuds : `elements_on`
 
+{{#pyalgo mesh.elements_on}}
+
 `elements_on(mesh, points, strict=True)` renvoie le **sous-ensemble** des
 éléments de `mesh` qui **s'appuient** sur les nœuds de `points` — l'opérateur
 historique `ELEM … APPUYE`. Seul l'**ensemble des nœuds référencés** par
@@ -2167,6 +2209,8 @@ nœud n'a de sens qu'au sein d'une `Coords`), sinon une erreur est levée. Un
 Côté Rust, `ops::mesh::elements_on(&mesh, &points, strict)`.
 
 ## Sélection de nœuds par région géométrique : la famille `points_*`
+
+{{#pyalgo mesh.points_in_sphere mesh.points_on_sphere mesh.points_on_plane mesh.points_below_plane mesh.points_on_line mesh.points_in_cylinder mesh.points_on_cylinder mesh.points_in_cone mesh.points_on_cone mesh.points_in_torus mesh.points_on_torus}}
 
 Pour poser une condition aux limites il faut d'abord **désigner des nœuds**.
 La famille `points_*` répond à cette question par une **région géométrique** —
@@ -2251,6 +2295,8 @@ Côté Rust, `ops::mesh::points_on_plane(&mesh, &origin, &normal, tol)` et
 consorts, avec `tol: Option<f64>`.
 
 ## Soudure des nœuds proches : `merge_nodes`
+
+{{#pyalgo mesh.merge_nodes}}
 
 `merge_nodes(mesh, tol)` **soude** entre eux les nœuds distants de moins de
 `tol` (distance euclidienne). C'est l'opération de « recollage » classique :
@@ -2364,6 +2410,8 @@ structure constante.
 
 ## Lecture d'un maillage gmsh : `read_gmsh`
 
+{{#pyalgo mesh.read_gmsh mesh.read_gmsh_str}}
+
 `read_gmsh` importe un maillage produit par **gmsh** (fichier `.msh`,
 versions **MSH 2.2** et **MSH 4.1**, en **ASCII comme en binaire** —
 l'endianness est lue dans le fichier). L'appelant fournit la `Coords` dans
@@ -2449,6 +2497,8 @@ le réseau). Côté Rust, `ops::mesh::read_gmsh(coords, path)` et
 
 ## Déléguer le maillage à gmsh : `from_gmsh`
 
+{{#pyalgo mesh.from_gmsh}}
+
 Les mailleurs de pyrucast couvrent le cas courant ; les géométries difficiles,
 elles, se **délèguent**. On définit la géométrie et on maille dans gmsh — c'est
 son métier —, puis on appelle `from_gmsh` pour récupérer le résultat, **sans
@@ -2517,6 +2567,8 @@ sur ses courbes de bord — et seuls les nœuds **référencés** sont matérial
 
 ## Lire un fichier MED : `from_medcoupling`
 
+{{#pyalgo mesh.from_medcoupling}}
+
 Le format **MED** est celui de Salome et de code_aster. pyrucast le lit et
 l'écrit au travers de **medcoupling**, la bibliothèque MED de Salome
 (`pip install medcoupling`). Elle n'est **pas** une dépendance de pyrucast :
@@ -2563,6 +2615,8 @@ ses nœuds milieux au milieu des arêtes que medcoupling en déduit.
 > dépendance facultative importée à l'exécution.
 
 ## L'opérateur en dessous : `from_arrays`
+
+{{#pyalgo mesh.from_arrays}}
 
 `from_gmsh` et `from_medcoupling` sont les seules fonctions de `pyrucast.mesh`
 écrites en Python : elles ont besoin d'un interpréteur portant le module
