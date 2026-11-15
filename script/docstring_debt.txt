@@ -55,7 +55,6 @@ mesh.consolidate
 mesh.convert
 mesh.copy
 mesh.element_type_from_gmsh
-mesh.elements_on
 mesh.extrude
 mesh.from_arrays
 mesh.from_gmsh
@@ -130,7 +129,6 @@ model.viscoplasticity_chaboche
 model.viscoplasticity_lemaitre_chaboche
 node_field.consolidate
 node_field.divergence
-node_field.internal_forces
 node_field.mask
 node_field.merge
 node_field.positions

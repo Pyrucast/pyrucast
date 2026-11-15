@@ -42,10 +42,9 @@ pub fn integral(
     ))
 }
 
-/// Squared Euclidean norm `xᵀx = Σ v²` of a field (Cast3M `XTX`) — the sum of
-/// squares over every value of the field, a node that several zones carry
-/// counted once. Accepts a `NodeField`, `SubNodeField`, `ElementField` or
-/// `SubElementField`.
+/// Squared Euclidean norm `xᵀx = Σ v²` of a field — the sum of squares over
+/// every value of the field, a node that several zones carry counted once.
+/// Accepts a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
 ///
 /// With `components` given, the sum is restricted to those components only
 /// (the rest ignored); by default every component is taken.
@@ -90,7 +89,7 @@ pub fn xtx(x: &Bound<'_, PyAny>, components: Option<Vec<String>>) -> PyResult<f6
     ))
 }
 
-/// Global scalar product `∑ xᵢ · yᵢ` of two **whole** fields — Cast3M's `XTY`.
+/// Global scalar product `∑ xᵢ · yᵢ` of two **whole** fields.
 ///
 /// `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
 /// `ElementField` / `SubElementField`). The sum runs over the supports both

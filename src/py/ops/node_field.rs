@@ -54,9 +54,8 @@ pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNo
     })
 }
 
-/// `field` read at the nodes of `target`, through the cells of `mesh` — Cast3M
-/// `PROI` onto a geometry. `field` is a nodal field or a field at the Gauss
-/// points:
+/// `field` read at the nodes of `target`, through the cells of `mesh`. `field`
+/// is a nodal field or a field at the Gauss points:
 ///
 /// - **nodal** (`NodeField`, `SubNodeField`): a node of `target` inside a cell
 ///   of `mesh` takes `Σ Nᵢ(ξ) f(nodeᵢ)`, the shape functions of that cell at
@@ -259,10 +258,9 @@ pub fn consolidate(field: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
 /// is a vector and yields a single `div_A` component; `A_xx, A_xy, A_yy` is a
 /// symmetric tensor and yields one component per axis, `div_A_x, div_A_y`. The
 /// tensor case is the internal forces of a continuum when the quantity is a
-/// Cauchy stress — `divergence(stress, "sigma")` is Cast3m `BSIG` — but the
-/// operator knows nothing of mechanics: it needs only the geometry and the
-/// names. A node shared by several subspaces receives the sum of their
-/// contributions.
+/// Cauchy stress, but the operator knows nothing of mechanics: it needs only
+/// the geometry and the names. A node shared by several subspaces receives the
+/// sum of their contributions.
 #[py_op(method_on = PyElementField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -272,11 +270,11 @@ pub fn divergence(field: PyRef<PyElementField>, prefix: &str) -> PyResult<PyNode
 }
 
 /// A field carrying **one point per cell** gathered at the nodes by
-/// **summation** (Cast3M `CHAN 'CHPO' 'SOMM'`): each node receives, per
-/// component, the sum of the values of the cells it belongs to — across zones
-/// too. Not a smoothing: no average, no weight. Applied to the cell measures of
-/// `cell_integral`, it gives the volume each node stands for. Raises on a zone
-/// with more than one point per cell (build it on a `REDUCED` space).
+/// **summation**: each node receives, per component, the sum of the values of
+/// the cells it belongs to — across zones too. Not a smoothing: no average, no
+/// weight. Applied to the cell measures of `cell_integral`, it gives the volume
+/// each node stands for. Raises on a zone with more than one point per cell
+/// (build it on a `REDUCED` space).
 #[py_op(method_on = PyElementField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -285,8 +283,7 @@ pub fn sum_to_nodes(field: PyRef<PyElementField>) -> PyResult<PyNodeField> {
     Ok(PyNodeField { inner: nf })
 }
 
-/// Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`
-/// (Cast3m `BSIG` for a continuum).
+/// Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`.
 ///
 /// The nodal mirror of `matrix.stiffness(model, materials)`: every sub-model is
 /// asked for its term of the residual on the internal side. `state` is the
@@ -350,9 +347,9 @@ pub fn external_forces(
 }
 
 /// Per-component 0/1 **mask** of a field against a value band — same structure
-/// as the input (Cast3M `MASQUE`): same zones, same support, same components,
-/// only the values are rewritten (`1.0` inside the band, `0.0` outside). The
-/// result is therefore multipliable term by term with the input.
+/// as the input: same zones, same support, same components, only the values are
+/// rewritten (`1.0` inside the band, `0.0` outside). The result is therefore
+/// multipliable term by term with the input.
 ///
 /// `field` is a `NodeField` or a `SubNodeField`, and the result is of the same
 /// kind. Its sibling `pyrucast.mesh.select` extracts the passing *support*
@@ -396,9 +393,9 @@ pub fn mask(
 // `#[py_op]` copies onto the method.
 
 /// Per-component 0/1 **mask** of this field against a value band — same
-/// structure as the field (Cast3M `MASQUE`): same zones, same support, same
-/// components, only the values are rewritten (`1.0` inside the band, `0.0`
-/// outside). The result is therefore multipliable term by term with the field.
+/// structure as the field: same zones, same support, same components, only the
+/// values are rewritten (`1.0` inside the band, `0.0` outside). The result is
+/// therefore multipliable term by term with the field.
 ///
 /// Its sibling `select` extracts the passing *nodes* instead, and produces a
 /// `Mesh`.
@@ -426,10 +423,9 @@ pub fn mask_node_field(
 }
 
 /// Per-component 0/1 **mask** of this sub-field against a value band — same
-/// structure as the sub-field (Cast3M `MASQUE`): same support, same
-/// components, only the values are rewritten (`1.0` inside the band, `0.0`
-/// outside). The result is therefore multipliable term by term with the
-/// sub-field.
+/// structure as the sub-field: same support, same components, only the values
+/// are rewritten (`1.0` inside the band, `0.0` outside). The result is
+/// therefore multipliable term by term with the sub-field.
 ///
 /// Its sibling `select` extracts the passing *nodes* instead, and produces a
 /// `Mesh`.

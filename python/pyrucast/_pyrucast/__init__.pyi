@@ -714,21 +714,20 @@ class ElementField:
         """
     def cell_integral(self, target: FiniteElementSpace) -> ElementField:
         r"""
-        Integral of every component of `field` over **each cell** (Cast3M
-        `INTG 'ELEM'`), with the field's own quadrature: `Σ_g f(g)·|J|·w_g`, the
-        `2πr` included on a body of revolution. The result lives on `target`, a
-        space of the same mesh with **one point per cell** —
-        `FiniteElementSpace(mesh, quadrature="REDUCED")`, a single point at each
-        centroid. Integrating `1` gives every cell's measure. Raises when `target`
-        has several points per cell or does not cover the field's mesh.
+        Integral of every component of `field` over **each cell**, with the field's
+        own quadrature: `Σ_g f(g)·|J|·w_g`, the `2πr` included on a body of
+        revolution. The result lives on `target`, a space of the same mesh with
+        **one point per cell** — `FiniteElementSpace(mesh, quadrature="REDUCED")`, a
+        single point at each centroid. Integrating `1` gives every cell's measure.
+        Raises when `target` has several points per cell or does not cover the
+        field's mesh.
         """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> ElementField:
         r"""
         Per-component 0/1 **mask** of this field against a value band — same
-        structure as the field (Cast3M `MASQUE`): same zones, same support, same
-        components, same Gauss points, only the values are rewritten (`1.0` inside
-        the band, `0.0` outside). The result is therefore multipliable term by term
-        with the field.
+        structure as the field: same zones, same support, same components, same
+        Gauss points, only the values are rewritten (`1.0` inside the band, `0.0`
+        outside). The result is therefore multipliable term by term with the field.
         
         Its sibling `select` extracts the passing *cells* instead, and produces a
         `Mesh`.
@@ -823,19 +822,18 @@ class ElementField:
         is a vector and yields a single `div_A` component; `A_xx, A_xy, A_yy` is a
         symmetric tensor and yields one component per axis, `div_A_x, div_A_y`. The
         tensor case is the internal forces of a continuum when the quantity is a
-        Cauchy stress — `divergence(stress, "sigma")` is Cast3m `BSIG` — but the
-        operator knows nothing of mechanics: it needs only the geometry and the
-        names. A node shared by several subspaces receives the sum of their
-        contributions.
+        Cauchy stress, but the operator knows nothing of mechanics: it needs only
+        the geometry and the names. A node shared by several subspaces receives the
+        sum of their contributions.
         """
     def sum_to_nodes(self) -> NodeField:
         r"""
         A field carrying **one point per cell** gathered at the nodes by
-        **summation** (Cast3M `CHAN 'CHPO' 'SOMM'`): each node receives, per
-        component, the sum of the values of the cells it belongs to — across zones
-        too. Not a smoothing: no average, no weight. Applied to the cell measures of
-        `cell_integral`, it gives the volume each node stands for. Raises on a zone
-        with more than one point per cell (build it on a `REDUCED` space).
+        **summation**: each node receives, per component, the sum of the values of
+        the cells it belongs to — across zones too. Not a smoothing: no average, no
+        weight. Applied to the cell measures of `cell_integral`, it gives the volume
+        each node stands for. Raises on a zone with more than one point per cell
+        (build it on a `REDUCED` space).
         """
 
 @typing.final
@@ -1307,9 +1305,9 @@ class Matrix:
     def __len__(self) -> builtins.int: ...
     def lump(self) -> Matrix:
         r"""
-        Lump an assembled matrix into a diagonal one by row-sum concentration
-        (Cast3M `LUMP`). Applied to a consistent mass / capacity matrix it yields the
-        diagonal (lumped) mass, conserving the total mass.
+        Lump an assembled matrix into a diagonal one by row-sum concentration.
+        Applied to a consistent mass / capacity matrix it yields the diagonal
+        (lumped) mass, conserving the total mass.
         """
     def solve(self, rhs: NodeField, method: builtins.str = 'lu', relations: builtins.str = 'lagrange', active_set: builtins.str = 'schur', cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10, verbosity: builtins.str = 'silent') -> NodeField:
         r"""
@@ -1519,8 +1517,7 @@ class Mesh:
         """
     def elements_on(self, points: Mesh, strict: builtins.bool = True) -> Mesh:
         r"""
-        Keep the elements of `mesh` resting on the nodes of `points`
-        (Cast3m `ELEM … APPUYE`).
+        Keep the elements of `mesh` resting on the nodes of `points`.
         
         Only the node set referenced by `points` matters (typically a POI1
         points mesh). With `strict=True` a cell is kept when **all** its nodes
@@ -1538,16 +1535,14 @@ class Mesh:
         """
     def points_on_sphere(self, center: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Nodes **on** the sphere of centre `center` and radius `radius`
-        (Cast3m `POIN … SPHE`).
+        Nodes **on** the sphere of centre `center` and radius `radius`.
         
         Keeps the nodes whose distance to `center` is within `tol` of `radius`, on
         either side. In 2-D this selects a circle.
         """
     def points_on_plane(self, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Nodes **on** the plane through `origin` with normal `normal`
-        (Cast3m `POIN … PLAN`).
+        Nodes **on** the plane through `origin` with normal `normal`.
         
         Keeps the nodes within `tol` of the plane — the usual way to grab a
         boundary face of a box mesh. `normal` need not be normalized; in 2-D the
@@ -1563,8 +1558,7 @@ class Mesh:
         """
     def points_on_line(self, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Nodes **on** the infinite line through `a` and `b`
-        (Cast3m `POIN … DROIT`).
+        Nodes **on** the infinite line through `a` and `b`.
         
         Keeps the nodes at a distance `≤ tol` from the line, with no bound along
         it — use `points_in_cylinder` with a small radius for a selection clipped
@@ -1580,8 +1574,8 @@ class Mesh:
         """
     def points_on_cylinder(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
-        Nodes **on** the lateral surface of the finite cylinder of axis
-        `base → top` and radius `radius` (Cast3m `POIN … CYLI`).
+        Nodes **on** the lateral surface of the finite cylinder of axis `base → top`
+        and radius `radius`.
         
         The end discs are **not** part of the selection — they are flat faces, and
         `points_on_plane` cuts those. This is how you grab the bore of a tube.
@@ -1598,7 +1592,7 @@ class Mesh:
     def points_on_cone(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], base_radius: builtins.float, top_radius: builtins.float = 0.0, tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
         Nodes **on** the lateral surface of the cone of axis `base → top`, radius
-        `base_radius` at `base` and `top_radius` at `top` (Cast3m `POIN … CONE`).
+        `base_radius` at `base` and `top_radius` at `top`.
         
         The distance to the slanted surface is the perpendicular one, so the band
         stays `tol` wide however steep the cone is. As for `points_on_cylinder`,
@@ -1642,9 +1636,9 @@ class Mesh:
         pieces. Loops keep the CCW boundary orientation (outer loop CCW, holes
         CW), so the result can feed straight back into `triangulate_surface`.
         
-        With `angle_deg` given, each loop is further split into open **arêtes** at
+        With `angle_deg` given, each loop is further split into open **sides** at
         its corner nodes — where the boundary turns by more than `angle_deg`
-        degrees — one SEG2 submesh per arête (as `skin` splits a volume's skin into
+        degrees — one SEG2 submesh per side (as `skin` splits a volume's skin into
         flat faces). A loop with no such corner stays a single closed loop.
         `angle_deg=None` (the default) keeps every boundary as one closed loop.
         """
@@ -1672,7 +1666,7 @@ class Mesh:
         """
     def orient(self) -> Mesh:
         r"""
-        Harmonise the orientation of a mesh's cells (cast3m `ORIE`).
+        Harmonise the orientation of a mesh's cells.
         
         Cells sharing a facet are made consistently oriented — all normals of a
         surface point the same way, all segments of a curve run head-to-tail, all
@@ -1696,7 +1690,7 @@ class Mesh:
         """
     def invert(self) -> Mesh:
         r"""
-        Reverse the orientation of every cell of a mesh (cast3m `INVE`).
+        Reverse the orientation of every cell of a mesh.
         
         Flips each cell's winding/traversal/handedness (POI1 cells are unchanged),
         in any dimension. Combined with `orient`, this selects the inside/outside
@@ -1825,9 +1819,9 @@ class Mesh:
         """
     def symmetry_point(self, center: typing.Sequence[builtins.float]) -> Mesh:
         r"""
-        Mirror `mesh` through the point `center` (Cast3m `SYME … POINT`),
-        returning a fresh copy with its own nodes (the original is left
-        untouched). Every node goes to `2·center − x`.
+        Mirror `mesh` through the point `center`, returning a fresh copy with its
+        own nodes (the original is left untouched). Every node goes to `2·center −
+        x`.
         
         In 3-D the map reverses orientation, so the cells are re-ordered (as
         `invert` does) to keep the copy's Jacobians positive; in 2-D it is a plain
@@ -1835,9 +1829,8 @@ class Mesh:
         """
     def symmetry_line(self, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float]) -> Mesh:
         r"""
-        Mirror `mesh` through the infinite line running through `a` and `b`
-        (Cast3m `SYME … DROIT`), returning a fresh copy with its own nodes (the
-        original is left untouched).
+        Mirror `mesh` through the infinite line running through `a` and `b`,
+        returning a fresh copy with its own nodes (the original is left untouched).
         
         In 2-D this is the mirror image about the line; in 3-D it is the half-turn
         about it (for the mirror image through a plane, use `symmetry_plane`).
@@ -1847,9 +1840,9 @@ class Mesh:
     def symmetry_plane(self, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float], c: typing.Sequence[builtins.float]) -> Mesh:
         r"""
         Mirror `mesh` through the plane running through the three points `a`, `b`
-        and `c` (Cast3m `SYME … PLAN`), returning a fresh copy with its own nodes
-        (the original is left untouched). Only the plane the three points span
-        matters, not their order; they must not be aligned.
+        and `c`, returning a fresh copy with its own nodes (the original is left
+        untouched). Only the plane the three points span matters, not their order;
+        they must not be aligned.
         
         3-D only — in 2-D the mirror about a line is `symmetry_line`. Always
         orientation-reversing, so the cells are re-ordered (as `invert` does) to
@@ -2065,8 +2058,7 @@ class Mesh:
         arbitrary dimensions 0.437 / 0.979, crenellated profile with its base in one
         run 0.323 / 0.651, house with a pitched roof 0.420 / 0.548. On a **circle**
         the order reverses hard — 0.288 against 0.005 — and `grid_surface2` should
-        not be used: nothing dictates a grid line over most of a curve. The book's
-        *Mailler une géométrie* page puts all four surface meshers side by side.
+        not be used: nothing dictates a grid line over most of a curve.
         
         `size`, `band` and `relax` mean what they mean for `grid_surface`.
         """
@@ -2298,7 +2290,7 @@ class Model:
     def elastic_stress(self, strain: ElementField, materials: ElementField) -> ElementField:
         r"""
         Elastic stress `σ = D:ε` of a strain field at the Gauss points of every
-        continuum sub-model of `model` — Cast3M `ELAS` applied to a strain.
+        continuum sub-model of `model`.
         
         `D` is the operator each law predicts with: the Hooke matrix of an
         elasticity, in its symmetry; the isotropic `D` behind a plasticity's elastic
@@ -2312,8 +2304,7 @@ class Model:
     def elastic_strain(self, stress: ElementField, materials: ElementField) -> ElementField:
         r"""
         Elastic strain `ε = D⁻¹:σ` of a stress field at the Gauss points of every
-        continuum sub-model of `model` — the inverse of `elastic_stress` (Cast3M
-        `ELAS` applied to a stress).
+        continuum sub-model of `model` — the inverse of `elastic_stress`.
         
         `stress` carries the stresses each law writes (`sigma_xx`, …; the state
         returned by `integrate_behavior` will do); `materials` the elastic
@@ -2325,8 +2316,7 @@ class Model:
     def strain(self, solution: NodeField, materials: ElementField) -> ElementField:
         r"""
         The input of every law of `model`, produced from the nodal `solution` — the
-        model's `B`, of which `internal_forces` is the transpose (Cast3M `EPSI`,
-        extended to every physics).
+        model's `B`, of which `internal_forces` is the transpose.
         
         One zone per sub-model with a law, on its behaviour space, carrying what
         that law reads: the small-strain tensor `eps_*` of a continuum or a bar, the
@@ -2352,7 +2342,7 @@ class Model:
         """
     def integrate_behavior(self, deformation: ElementField, materials: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> ElementField:
         r"""
-        Integrate the constitutive law of `model` (Cast3m `COMP`), stepping A → B.
+        Integrate the constitutive law of `model`, stepping A → B.
         
         `deformation` is the **end-of-step** behaviour input ε(B) (from
         `gradient(field, fespace)` or `deformation(u, fespace)`); `prev` is the
@@ -2386,8 +2376,8 @@ class Model:
         """
     def mass_matrix(self, materials: ElementField) -> Matrix:
         r"""
-        Assemble the consistent mass matrix `M` of `model` (Cast3M `MASS`), or the
-        heat-capacity matrix `C` for a thermal model (Cast3M `CAPA`).
+        Assemble the consistent mass matrix `M` of `model`, or the heat-capacity
+        matrix `C` for a thermal model.
         
         Mechanics assembles `M = ∫ ρ Nᵀ N` (material `rho`); heat conduction
         assembles `C = ∫ ρ cp Nᵀ N` (material `rho`, `cp`). `materials` carries the
@@ -2395,16 +2385,16 @@ class Model:
         """
     def geometric_matrix(self, materials: ElementField, stress: ElementField) -> Matrix:
         r"""
-        Assemble the geometric (initial-stress) stiffness `K_g` of `model` (Cast3M
-        `KSIG`), from the current stress field `stress` (Voigt-named `sigma_*`).
-        `materials` resolves each mechanical zone, exactly like [`stiffness`].
+        Assemble the geometric (initial-stress) stiffness `K_g` of `model`, from the
+        current stress field `stress` (Voigt-named `sigma_*`). `materials` resolves
+        each mechanical zone, exactly like [`stiffness`].
         """
     def tangent_matrix(self, materials: ElementField, deformation: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> Matrix:
         r"""
-        Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`
-        (Cast3M `KTAN`). `D_alg` is evaluated **at the Gauss point**, from the same
-        inputs `integrate_behavior` takes — no field of moduli is materialised, since
-        this assembler would be its only reader. `prev` is the state at A:
+        Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of
+        `model`. `D_alg` is evaluated **at the Gauss point**, from the same inputs
+        `integrate_behavior` takes — no field of moduli is materialised, since this
+        assembler would be its only reader. `prev` is the state at A:
         `element_field.initial_state(model, materials)` on a first step.
         """
     def update_contact(self, displacement: NodeField) -> Model:
@@ -2429,8 +2419,7 @@ class Model:
         """
     def internal_forces(self, state: ElementField, solution: NodeField, materials: ElementField) -> NodeField:
         r"""
-        Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`
-        (Cast3m `BSIG` for a continuum).
+        Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`.
         
         The nodal mirror of `matrix.stiffness(model, materials)`: every sub-model is
         asked for its term of the residual on the internal side. `state` is the
@@ -2797,10 +2786,9 @@ class NodeField:
         """
     def interp_to_gauss(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
-        Interpolate a nodal `field` to the Gauss points of `fespace`
-        (`f(ξ_g) = Σ_i f_i N_i(ξ_g)`), turning a per-node `NodeField` into a
-        per-element `ElementField` with the same component names. Cast3M `CHAN`
-        (nodes → Gauss).
+        Interpolate a nodal `field` to the Gauss points of `fespace` (`f(ξ_g) = Σ_i
+        f_i N_i(ξ_g)`), turning a per-node `NodeField` into a per-element
+        `ElementField` with the same component names.
         """
     def along(self, line: Mesh, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Evolution:
         r"""
@@ -2941,9 +2929,9 @@ class NodeField:
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
         r"""
         Per-component 0/1 **mask** of this field against a value band — same
-        structure as the field (Cast3M `MASQUE`): same zones, same support, same
-        components, only the values are rewritten (`1.0` inside the band, `0.0`
-        outside). The result is therefore multipliable term by term with the field.
+        structure as the field: same zones, same support, same components, only the
+        values are rewritten (`1.0` inside the band, `0.0` outside). The result is
+        therefore multipliable term by term with the field.
         
         Its sibling `select` extracts the passing *nodes* instead, and produces a
         `Mesh`.
@@ -3192,10 +3180,10 @@ class SubElementField:
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubElementField:
         r"""
         Per-component 0/1 **mask** of this sub-field against a value band — same
-        structure as the sub-field (Cast3M `MASQUE`): same support, same
-        components, same Gauss points, only the values are rewritten (`1.0` inside
-        the band, `0.0` outside). The result is therefore multipliable term by term
-        with the sub-field.
+        structure as the sub-field: same support, same components, same Gauss
+        points, only the values are rewritten (`1.0` inside the band, `0.0`
+        outside). The result is therefore multipliable term by term with the
+        sub-field.
         
         Its sibling `select` extracts the passing *cells* instead, and produces a
         `Mesh`.
@@ -4136,10 +4124,9 @@ class SubNodeField:
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubNodeField:
         r"""
         Per-component 0/1 **mask** of this sub-field against a value band — same
-        structure as the sub-field (Cast3M `MASQUE`): same support, same
-        components, only the values are rewritten (`1.0` inside the band, `0.0`
-        outside). The result is therefore multipliable term by term with the
-        sub-field.
+        structure as the sub-field: same support, same components, only the values
+        are rewritten (`1.0` inside the band, `0.0` outside). The result is
+        therefore multipliable term by term with the sub-field.
         
         Its sibling `select` extracts the passing *nodes* instead, and produces a
         `Mesh`.
@@ -4260,9 +4247,9 @@ def border(mesh: Mesh, angle_deg: typing.Optional[builtins.float] = None) -> Mes
     pieces. Loops keep the CCW boundary orientation (outer loop CCW, holes
     CW), so the result can feed straight back into `triangulate_surface`.
     
-    With `angle_deg` given, each loop is further split into open **arêtes** at
+    With `angle_deg` given, each loop is further split into open **sides** at
     its corner nodes — where the boundary turns by more than `angle_deg`
-    degrees — one SEG2 submesh per arête (as `skin` splits a volume's skin into
+    degrees — one SEG2 submesh per side (as `skin` splits a volume's skin into
     flat faces). A loop with no such corner stays a single closed loop.
     `angle_deg=None` (the default) keeps every boundary as one closed loop.
     """
@@ -4298,13 +4285,13 @@ def boundary_transfer(fespace: FiniteElementSpace, target: Model, variables: typ
 
 def cell_integral(field: ElementField, target: FiniteElementSpace) -> ElementField:
     r"""
-    Integral of every component of `field` over **each cell** (Cast3M
-    `INTG 'ELEM'`), with the field's own quadrature: `Σ_g f(g)·|J|·w_g`, the
-    `2πr` included on a body of revolution. The result lives on `target`, a
-    space of the same mesh with **one point per cell** —
-    `FiniteElementSpace(mesh, quadrature="REDUCED")`, a single point at each
-    centroid. Integrating `1` gives every cell's measure. Raises when `target`
-    has several points per cell or does not cover the field's mesh.
+    Integral of every component of `field` over **each cell**, with the field's
+    own quadrature: `Σ_g f(g)·|J|·w_g`, the `2πr` included on a body of
+    revolution. The result lives on `target`, a space of the same mesh with
+    **one point per cell** — `FiniteElementSpace(mesh, quadrature="REDUCED")`, a
+    single point at each centroid. Integrating `1` gives every cell's measure.
+    Raises when `target` has several points per cell or does not cover the
+    field's mesh.
     """
 
 def chain(mesh: Mesh) -> Mesh:
@@ -4620,10 +4607,9 @@ def displace_from(field: NodeField, reference: builtins.int, target: builtins.in
     it lands at `X + u` again, nothing accumulates. What the field carries is
     applied, and nothing else: a node it does not define, or that carries none
     of the components (a multiplier node of a solution), stays at its reference
-    position, and a component a node lacks counts as 0. The active
-    configuration is left as it is. `components` names one displacement component per axis; `None` →
-    `["u_x", "u_y", "u_z"][:dim]`. Cast3M `FORM` with a displacement, without
-    changing the active configuration.
+    position, and a component a node lacks counts as 0. The active configuration
+    is left as it is. `components` names one displacement component per axis;
+    `None` → `["u_x", "u_y", "u_z"][:dim]`.
     """
 
 def divergence(field: ElementField, prefix: builtins.str) -> NodeField:
@@ -4635,10 +4621,9 @@ def divergence(field: ElementField, prefix: builtins.str) -> NodeField:
     is a vector and yields a single `div_A` component; `A_xx, A_xy, A_yy` is a
     symmetric tensor and yields one component per axis, `div_A_x, div_A_y`. The
     tensor case is the internal forces of a continuum when the quantity is a
-    Cauchy stress — `divergence(stress, "sigma")` is Cast3m `BSIG` — but the
-    operator knows nothing of mechanics: it needs only the geometry and the
-    names. A node shared by several subspaces receives the sum of their
-    contributions.
+    Cauchy stress, but the operator knows nothing of mechanics: it needs only
+    the geometry and the names. A node shared by several subspaces receives the
+    sum of their contributions.
     """
 
 def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
@@ -4660,8 +4645,7 @@ def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str, strain
 def elastic_strain(model: Model, stress: ElementField, materials: ElementField) -> ElementField:
     r"""
     Elastic strain `ε = D⁻¹:σ` of a stress field at the Gauss points of every
-    continuum sub-model of `model` — the inverse of `elastic_stress` (Cast3M
-    `ELAS` applied to a stress).
+    continuum sub-model of `model` — the inverse of `elastic_stress`.
     
     `stress` carries the stresses each law writes (`sigma_xx`, …; the state
     returned by `integrate_behavior` will do); `materials` the elastic
@@ -4674,7 +4658,7 @@ def elastic_strain(model: Model, stress: ElementField, materials: ElementField) 
 def elastic_stress(model: Model, strain: ElementField, materials: ElementField) -> ElementField:
     r"""
     Elastic stress `σ = D:ε` of a strain field at the Gauss points of every
-    continuum sub-model of `model` — Cast3M `ELAS` applied to a strain.
+    continuum sub-model of `model`.
     
     `D` is the operator each law predicts with: the Hooke matrix of an
     elasticity, in its symmetry; the isotropic `D` behind a plasticity's elastic
@@ -4721,8 +4705,7 @@ def element_type_from_gmsh(code: builtins.int) -> builtins.str:
 
 def elements_on(mesh: Mesh, points: Mesh, strict: builtins.bool = True) -> Mesh:
     r"""
-    Keep the elements of `mesh` resting on the nodes of `points`
-    (Cast3m `ELEM … APPUYE`).
+    Keep the elements of `mesh` resting on the nodes of `points`.
     
     Only the node set referenced by `points` matters (typically a POI1
     points mesh). With `strict=True` a cell is kept when **all** its nodes
@@ -4893,9 +4876,9 @@ def gauss_to_external(element_type: builtins.str, ref_nodes: typing.Sequence[bui
 
 def geometric(model: Model, materials: ElementField, stress: ElementField) -> Matrix:
     r"""
-    Assemble the geometric (initial-stress) stiffness `K_g` of `model` (Cast3M
-    `KSIG`), from the current stress field `stress` (Voigt-named `sigma_*`).
-    `materials` resolves each mechanical zone, exactly like [`stiffness`].
+    Assemble the geometric (initial-stress) stiffness `K_g` of `model`, from the
+    current stress field `stress` (Voigt-named `sigma_*`). `materials` resolves
+    each mechanical zone, exactly like [`stiffness`].
     """
 
 def gradient(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
@@ -4976,8 +4959,7 @@ def grid_surface2(contour: Mesh, element_type: builtins.str, size: typing.Option
     arbitrary dimensions 0.437 / 0.979, crenellated profile with its base in one
     run 0.323 / 0.651, house with a pitched roof 0.420 / 0.548. On a **circle**
     the order reverses hard — 0.288 against 0.005 — and `grid_surface2` should
-    not be used: nothing dictates a grid line over most of a curve. The book's
-    *Mailler une géométrie* page puts all four surface meshers side by side.
+    not be used: nothing dictates a grid line over most of a curve.
     
     `size`, `band` and `relax` mean what they mean for `grid_surface`.
     """
@@ -5044,7 +5026,7 @@ def integral(field: typing.Any, component: builtins.str, fespace: typing.Optiona
 
 def integrate_behavior(model: Model, deformation: ElementField, materials: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> ElementField:
     r"""
-    Integrate the constitutive law of `model` (Cast3m `COMP`), stepping A → B.
+    Integrate the constitutive law of `model`, stepping A → B.
     
     `deformation` is the **end-of-step** behaviour input ε(B) (from
     `gradient(field, fespace)` or `deformation(u, fespace)`); `prev` is the
@@ -5086,8 +5068,7 @@ def interface_transfer(side_a: FiniteElementSpace, side_b: FiniteElementSpace, t
 
 def internal_forces(model: Model, state: ElementField, solution: NodeField, materials: ElementField) -> NodeField:
     r"""
-    Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`
-    (Cast3m `BSIG` for a continuum).
+    Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`.
     
     The nodal mirror of `matrix.stiffness(model, materials)`: every sub-model is
     asked for its term of the residual on the internal side. `state` is the
@@ -5113,15 +5094,14 @@ def internal_forces(model: Model, state: ElementField, solution: NodeField, mate
 
 def interp_to_gauss(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
     r"""
-    Interpolate a nodal `field` to the Gauss points of `fespace`
-    (`f(ξ_g) = Σ_i f_i N_i(ξ_g)`), turning a per-node `NodeField` into a
-    per-element `ElementField` with the same component names. Cast3M `CHAN`
-    (nodes → Gauss).
+    Interpolate a nodal `field` to the Gauss points of `fespace` (`f(ξ_g) = Σ_i
+    f_i N_i(ξ_g)`), turning a per-node `NodeField` into a per-element
+    `ElementField` with the same component names.
     """
 
 def invert(mesh: Mesh) -> Mesh:
     r"""
-    Reverse the orientation of every cell of a mesh (cast3m `INVE`).
+    Reverse the orientation of every cell of a mesh.
     
     Flips each cell's winding/traversal/handedness (POI1 cells are unchanged),
     in any dimension. Combined with `orient`, this selects the inside/outside
@@ -5156,17 +5136,17 @@ def log10(field: typing.Any) -> typing.Any:
 
 def lump(matrix: Matrix) -> Matrix:
     r"""
-    Lump an assembled matrix into a diagonal one by row-sum concentration
-    (Cast3M `LUMP`). Applied to a consistent mass / capacity matrix it yields the
-    diagonal (lumped) mass, conserving the total mass.
+    Lump an assembled matrix into a diagonal one by row-sum concentration.
+    Applied to a consistent mass / capacity matrix it yields the diagonal
+    (lumped) mass, conserving the total mass.
     """
 
 def mask_element(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
     r"""
     Per-component 0/1 **mask** of a field against a value band — same structure
-    as the input (Cast3M `MASQUE`): same zones, same support, same components,
-    only the values are rewritten (`1.0` inside the band, `0.0` outside). The
-    result is therefore multipliable term by term with the input.
+    as the input: same zones, same support, same components, only the values are
+    rewritten (`1.0` inside the band, `0.0` outside). The result is therefore
+    multipliable term by term with the input.
     
     `field` is an `ElementField` or a `SubElementField`, and the result is of
     the same kind. Its sibling `pyrucast.mesh.select` extracts the passing
@@ -5182,9 +5162,9 @@ def mask_element(field: typing.Any, ge: typing.Optional[builtins.float] = None, 
 def mask_node(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
     r"""
     Per-component 0/1 **mask** of a field against a value band — same structure
-    as the input (Cast3M `MASQUE`): same zones, same support, same components,
-    only the values are rewritten (`1.0` inside the band, `0.0` outside). The
-    result is therefore multipliable term by term with the input.
+    as the input: same zones, same support, same components, only the values are
+    rewritten (`1.0` inside the band, `0.0` outside). The result is therefore
+    multipliable term by term with the input.
     
     `field` is a `NodeField` or a `SubNodeField`, and the result is of the same
     kind. Its sibling `pyrucast.mesh.select` extracts the passing *support*
@@ -5199,8 +5179,8 @@ def mask_node(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt:
 
 def mass(model: Model, materials: ElementField) -> Matrix:
     r"""
-    Assemble the consistent mass matrix `M` of `model` (Cast3M `MASS`), or the
-    heat-capacity matrix `C` for a thermal model (Cast3M `CAPA`).
+    Assemble the consistent mass matrix `M` of `model`, or the heat-capacity
+    matrix `C` for a thermal model.
     
     Mechanics assembles `M = ∫ ρ Nᵀ N` (material `rho`); heat conduction
     assembles `C = ∫ ρ cp Nᵀ N` (material `rho`, `cp`). `materials` carries the
@@ -5310,7 +5290,7 @@ def mpc(terms: typing.Sequence[tuple[Mesh, builtins.str, builtins.float]], targe
 
 def orient(mesh: Mesh) -> Mesh:
     r"""
-    Harmonise the orientation of a mesh's cells (cast3m `ORIE`).
+    Harmonise the orientation of a mesh's cells.
     
     Cells sharing a facet are made consistently oriented — all normals of a
     surface point the same way, all segments of a curve run head-to-tail, all
@@ -5493,7 +5473,7 @@ def points_in_torus(mesh: Mesh, center: typing.Sequence[builtins.float], axis: t
 def points_on_cone(mesh: Mesh, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], base_radius: builtins.float, top_radius: builtins.float = 0.0, tol: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
     Nodes **on** the lateral surface of the cone of axis `base → top`, radius
-    `base_radius` at `base` and `top_radius` at `top` (Cast3m `POIN … CONE`).
+    `base_radius` at `base` and `top_radius` at `top`.
     
     The distance to the slanted surface is the perpendicular one, so the band
     stays `tol` wide however steep the cone is. As for `points_on_cylinder`,
@@ -5502,8 +5482,8 @@ def points_on_cone(mesh: Mesh, base: typing.Sequence[builtins.float], top: typin
 
 def points_on_cylinder(mesh: Mesh, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Nodes **on** the lateral surface of the finite cylinder of axis
-    `base → top` and radius `radius` (Cast3m `POIN … CYLI`).
+    Nodes **on** the lateral surface of the finite cylinder of axis `base → top`
+    and radius `radius`.
     
     The end discs are **not** part of the selection — they are flat faces, and
     `points_on_plane` cuts those. This is how you grab the bore of a tube.
@@ -5511,8 +5491,7 @@ def points_on_cylinder(mesh: Mesh, base: typing.Sequence[builtins.float], top: t
 
 def points_on_line(mesh: Mesh, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Nodes **on** the infinite line through `a` and `b`
-    (Cast3m `POIN … DROIT`).
+    Nodes **on** the infinite line through `a` and `b`.
     
     Keeps the nodes at a distance `≤ tol` from the line, with no bound along
     it — use `points_in_cylinder` with a small radius for a selection clipped
@@ -5521,8 +5500,7 @@ def points_on_line(mesh: Mesh, a: typing.Sequence[builtins.float], b: typing.Seq
 
 def points_on_plane(mesh: Mesh, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Nodes **on** the plane through `origin` with normal `normal`
-    (Cast3m `POIN … PLAN`).
+    Nodes **on** the plane through `origin` with normal `normal`.
     
     Keeps the nodes within `tol` of the plane — the usual way to grab a
     boundary face of a box mesh. `normal` need not be normalized; in 2-D the
@@ -5531,8 +5509,7 @@ def points_on_plane(mesh: Mesh, origin: typing.Sequence[builtins.float], normal:
 
 def points_on_sphere(mesh: Mesh, center: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
     r"""
-    Nodes **on** the sphere of centre `center` and radius `radius`
-    (Cast3m `POIN … SPHE`).
+    Nodes **on** the sphere of centre `center` and radius `radius`.
     
     Keeps the nodes whose distance to `center` is within `tol` of `radius`, on
     either side. In 2-D this selects a circle.
@@ -5559,9 +5536,8 @@ def positions(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins.s
 
 def project(field: typing.Any, mesh: Mesh, target: Mesh, tol: builtins.float = 1e-06) -> NodeField:
     r"""
-    `field` read at the nodes of `target`, through the cells of `mesh` — Cast3M
-    `PROI` onto a geometry. `field` is a nodal field or a field at the Gauss
-    points:
+    `field` read at the nodes of `target`, through the cells of `mesh`. `field`
+    is a nodal field or a field at the Gauss points:
     
     - **nodal** (`NodeField`, `SubNodeField`): a node of `target` inside a cell
       of `mesh` takes `Σ Nᵢ(ξ) f(nodeᵢ)`, the shape functions of that cell at
@@ -5604,10 +5580,10 @@ def project_on_sphere(mesh: Mesh, center: typing.Sequence[builtins.float], radiu
 
 def psca(x: typing.Any, y: typing.Any) -> typing.Any:
     r"""
-    Node-by-node (or point-by-point) scalar product of two fields — Cast3M's
-    `PSCA`. Returns a **new field** of the same flavour as the inputs, carrying
-    a single `"psca"` component whose value at each node/point is `∑_c xᵣ,c·yᵣ,c`
-    (reduction over components only, the support is kept).
+    Node-by-node (or point-by-point) scalar product of two fields. Returns a
+    **new field** of the same flavour as the inputs, carrying a single `"psca"`
+    component whose value at each node/point is `∑_c xᵣ,c·yᵣ,c` (reduction over
+    components only, the support is kept).
     
     `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
     `ElementField` / `SubElementField`), sit on the same support/decomposition,
@@ -5991,8 +5967,7 @@ def stiffness(model: Model, materials: ElementField) -> Matrix:
 def strain(model: Model, solution: NodeField, materials: ElementField) -> ElementField:
     r"""
     The input of every law of `model`, produced from the nodal `solution` — the
-    model's `B`, of which `internal_forces` is the transpose (Cast3M `EPSI`,
-    extended to every physics).
+    model's `B`, of which `internal_forces` is the transpose.
     
     One zone per sub-model with a law, on its behaviour space, carrying what
     that law reads: the small-strain tensor `eps_*` of a continuum or a bar, the
@@ -6010,14 +5985,13 @@ def stress_measure(stress: ElementField, gradient: ElementField, target: builtin
     deformation gradient `gradient` — the field `deformation(u, fespace,
     "gradient")` produces (`F_xx, F_xy, …`).
     
-    `target` is `"cauchy"` (`sigma_*`, the true stress), `"kirchhoff"`
-    (`tau_* = J sigma_*`), `"pk1"` (`P_*`, the nominal stress `F S`, not
-    symmetric), `"pk2"` (`S_*`, dual of Green–Lagrange) or `"hencky"` (`T_*`,
-    dual of the Hencky strain, what a law reading Hencky writes). The measure of
-    `stress` is recognised by its names, one per zone. This is how the
-    Lagrangian stress a law writes in large transformations becomes the first
-    Piola–Kirchhoff `internal_forces` reads, or the Cauchy stress of the
-    results — the stress half of Cast3M `CONF`.
+    `target` is `"cauchy"` (`sigma_*`, the true stress), `"kirchhoff"` (`tau_* =
+    J sigma_*`), `"pk1"` (`P_*`, the nominal stress `F S`, not symmetric),
+    `"pk2"` (`S_*`, dual of Green–Lagrange) or `"hencky"` (`T_*`, dual of the
+    Hencky strain, what a law reading Hencky writes). The measure of `stress` is
+    recognised by its names, one per zone. This is how the Lagrangian stress a
+    law writes in large transformations becomes the first Piola–Kirchhoff
+    `internal_forces` reads, or the Cauchy stress of the results.
     """
 
 def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> SubElementField:
@@ -6033,11 +6007,11 @@ def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequen
 def sum_to_nodes(field: ElementField) -> NodeField:
     r"""
     A field carrying **one point per cell** gathered at the nodes by
-    **summation** (Cast3M `CHAN 'CHPO' 'SOMM'`): each node receives, per
-    component, the sum of the values of the cells it belongs to — across zones
-    too. Not a smoothing: no average, no weight. Applied to the cell measures of
-    `cell_integral`, it gives the volume each node stands for. Raises on a zone
-    with more than one point per cell (build it on a `REDUCED` space).
+    **summation**: each node receives, per component, the sum of the values of
+    the cells it belongs to — across zones too. Not a smoothing: no average, no
+    weight. Applied to the cell measures of `cell_integral`, it gives the volume
+    each node stands for. Raises on a zone with more than one point per cell
+    (build it on a `REDUCED` space).
     """
 
 def sweep(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
@@ -6066,9 +6040,8 @@ def sweep_solid(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
 
 def symmetry_line(mesh: Mesh, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float]) -> Mesh:
     r"""
-    Mirror `mesh` through the infinite line running through `a` and `b`
-    (Cast3m `SYME … DROIT`), returning a fresh copy with its own nodes (the
-    original is left untouched).
+    Mirror `mesh` through the infinite line running through `a` and `b`,
+    returning a fresh copy with its own nodes (the original is left untouched).
     
     In 2-D this is the mirror image about the line; in 3-D it is the half-turn
     about it (for the mirror image through a plane, use `symmetry_plane`).
@@ -6079,9 +6052,9 @@ def symmetry_line(mesh: Mesh, a: typing.Sequence[builtins.float], b: typing.Sequ
 def symmetry_plane(mesh: Mesh, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float], c: typing.Sequence[builtins.float]) -> Mesh:
     r"""
     Mirror `mesh` through the plane running through the three points `a`, `b`
-    and `c` (Cast3m `SYME … PLAN`), returning a fresh copy with its own nodes
-    (the original is left untouched). Only the plane the three points span
-    matters, not their order; they must not be aligned.
+    and `c`, returning a fresh copy with its own nodes (the original is left
+    untouched). Only the plane the three points span matters, not their order;
+    they must not be aligned.
     
     3-D only — in 2-D the mirror about a line is `symmetry_line`. Always
     orientation-reversing, so the cells are re-ordered (as `invert` does) to
@@ -6090,9 +6063,9 @@ def symmetry_plane(mesh: Mesh, a: typing.Sequence[builtins.float], b: typing.Seq
 
 def symmetry_point(mesh: Mesh, center: typing.Sequence[builtins.float]) -> Mesh:
     r"""
-    Mirror `mesh` through the point `center` (Cast3m `SYME … POINT`),
-    returning a fresh copy with its own nodes (the original is left
-    untouched). Every node goes to `2·center − x`.
+    Mirror `mesh` through the point `center`, returning a fresh copy with its
+    own nodes (the original is left untouched). Every node goes to `2·center −
+    x`.
     
     In 3-D the map reverses orientation, so the cells are re-ordered (as
     `invert` does) to keep the copy's Jacobians positive; in 2-D it is a plain
@@ -6106,10 +6079,10 @@ def tan(field: typing.Any) -> typing.Any:
 
 def tangent(model: Model, materials: ElementField, deformation: ElementField, prev: ElementField, dt: typing.Optional[builtins.float] = None) -> Matrix:
     r"""
-    Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`
-    (Cast3M `KTAN`). `D_alg` is evaluated **at the Gauss point**, from the same
-    inputs `integrate_behavior` takes — no field of moduli is materialised, since
-    this assembler would be its only reader. `prev` is the state at A:
+    Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of
+    `model`. `D_alg` is evaluated **at the Gauss point**, from the same inputs
+    `integrate_behavior` takes — no field of moduli is materialised, since this
+    assembler would be its only reader. `prev` is the state at A:
     `element_field.initial_state(model, materials)` on a first step.
     """
 
@@ -6121,14 +6094,14 @@ def tanh(field: typing.Any) -> typing.Any:
 def thermal_strain(temperature: ElementField, materials: ElementField, fespace: FiniteElementSpace, t_ref: builtins.float, measure: builtins.str = 'linear') -> ElementField:
     r"""
     Thermal (free-dilation) strain `ε_th = α·(T − t_ref)` at the Gauss points of
-    `fespace` — Cast3M `EPTH`. `temperature` is a per-element field carrying
-    `"T"` (e.g. from `interp_to_gauss`); `materials` carries `"alpha"` (supplied
-    via `material_field`). Returns the strain tensor in the same layout as
+    `fespace`. `temperature` is a per-element field carrying `"T"` (e.g. from
+    `interp_to_gauss`); `materials` carries `"alpha"` (supplied via
+    `material_field`). Returns the strain tensor in the same layout as
     `deformation`, so `deformation(u, fespace) - thermal_strain(...)` is the
     mechanical strain. Backbone of uncoupled thermomechanics: the thermal load
     is `divergence(integrate_behavior(model, ε_th, materials), "sigma")`,
-    renamed into the dual rows, and the stress is recovered as
-    `σ = D:(ε − ε_th)`.
+    renamed into the dual rows, and the stress is recovered as `σ = D:(ε −
+    ε_th)`.
     
     `measure` is the strain the law reads (`"linear"`, `"green_lagrange"`,
     `"hencky"`): the dilation of stretch `1 + α·ΔT` is given exactly in it —
@@ -6353,10 +6326,9 @@ def von_mises(model: Model, stress: ElementField, coefficients: typing.Sequence[
 
 def xtx(x: typing.Any, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:
     r"""
-    Squared Euclidean norm `xᵀx = Σ v²` of a field (Cast3M `XTX`) — the sum of
-    squares over every value of the field, a node that several zones carry
-    counted once. Accepts a `NodeField`, `SubNodeField`, `ElementField` or
-    `SubElementField`.
+    Squared Euclidean norm `xᵀx = Σ v²` of a field — the sum of squares over
+    every value of the field, a node that several zones carry counted once.
+    Accepts a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
     
     With `components` given, the sum is restricted to those components only
     (the rest ignored); by default every component is taken.
@@ -6364,7 +6336,7 @@ def xtx(x: typing.Any, components: typing.Optional[typing.Sequence[builtins.str]
 
 def xty(x: typing.Any, y: typing.Any) -> builtins.float:
     r"""
-    Global scalar product `∑ xᵢ · yᵢ` of two **whole** fields — Cast3M's `XTY`.
+    Global scalar product `∑ xᵢ · yᵢ` of two **whole** fields.
     
     `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
     `ElementField` / `SubElementField`). The sum runs over the supports both

@@ -19,8 +19,8 @@ pub fn stiffness(model: PyRef<PyModel>, materials: PyRef<PyElementField>) -> PyR
     Ok(PyMatrix { inner: k })
 }
 
-/// Assemble the consistent mass matrix `M` of `model` (Cast3M `MASS`), or the
-/// heat-capacity matrix `C` for a thermal model (Cast3M `CAPA`).
+/// Assemble the consistent mass matrix `M` of `model`, or the heat-capacity
+/// matrix `C` for a thermal model.
 ///
 /// Mechanics assembles `M = ∫ ρ Nᵀ N` (material `rho`); heat conduction
 /// assembles `C = ∫ ρ cp Nᵀ N` (material `rho`, `cp`). `materials` carries the
@@ -33,9 +33,9 @@ pub fn mass(model: PyRef<PyModel>, materials: PyRef<PyElementField>) -> PyResult
     Ok(PyMatrix { inner: m })
 }
 
-/// Lump an assembled matrix into a diagonal one by row-sum concentration
-/// (Cast3M `LUMP`). Applied to a consistent mass / capacity matrix it yields the
-/// diagonal (lumped) mass, conserving the total mass.
+/// Lump an assembled matrix into a diagonal one by row-sum concentration.
+/// Applied to a consistent mass / capacity matrix it yields the diagonal
+/// (lumped) mass, conserving the total mass.
 #[py_op(method_on = PyMatrix)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -44,9 +44,9 @@ pub fn lump(matrix: PyRef<PyMatrix>) -> PyResult<PyMatrix> {
     Ok(PyMatrix { inner: m })
 }
 
-/// Assemble the geometric (initial-stress) stiffness `K_g` of `model` (Cast3M
-/// `KSIG`), from the current stress field `stress` (Voigt-named `sigma_*`).
-/// `materials` resolves each mechanical zone, exactly like [`stiffness`].
+/// Assemble the geometric (initial-stress) stiffness `K_g` of `model`, from the
+/// current stress field `stress` (Voigt-named `sigma_*`). `materials` resolves
+/// each mechanical zone, exactly like [`stiffness`].
 #[py_op(method_on = PyModel, name = "geometric_matrix")]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -59,10 +59,10 @@ pub fn geometric(
     Ok(PyMatrix { inner: m })
 }
 
-/// Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`
-/// (Cast3M `KTAN`). `D_alg` is evaluated **at the Gauss point**, from the same
-/// inputs `integrate_behavior` takes — no field of moduli is materialised, since
-/// this assembler would be its only reader. `prev` is the state at A:
+/// Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of
+/// `model`. `D_alg` is evaluated **at the Gauss point**, from the same inputs
+/// `integrate_behavior` takes — no field of moduli is materialised, since this
+/// assembler would be its only reader. `prev` is the state at A:
 /// `element_field.initial_state(model, materials)` on a first step.
 #[py_op(method_on = PyModel, name = "tangent_matrix")]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]

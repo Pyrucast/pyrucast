@@ -39,10 +39,9 @@ pub fn displace(field: PyRef<PyNodeField>, components: Option<Vec<String>>) -> P
 /// it lands at `X + u` again, nothing accumulates. What the field carries is
 /// applied, and nothing else: a node it does not define, or that carries none
 /// of the components (a multiplier node of a solution), stays at its reference
-/// position, and a component a node lacks counts as 0. The active
-/// configuration is left as it is. `components` names one displacement component per axis; `None` →
-/// `["u_x", "u_y", "u_z"][:dim]`. Cast3M `FORM` with a displacement, without
-/// changing the active configuration.
+/// position, and a component a node lacks counts as 0. The active configuration
+/// is left as it is. `components` names one displacement component per axis;
+/// `None` → `["u_x", "u_y", "u_z"][:dim]`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (field, reference, target, components=None))]

@@ -70,8 +70,7 @@ pub fn barycenter(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Keep the elements of `mesh` resting on the nodes of `points`
-/// (Cast3m `ELEM … APPUYE`).
+/// Keep the elements of `mesh` resting on the nodes of `points`.
 ///
 /// Only the node set referenced by `points` matters (typically a POI1
 /// points mesh). With `strict=True` a cell is kept when **all** its nodes
@@ -115,8 +114,7 @@ pub fn points_in_sphere(
     Ok(PyMesh { inner: result })
 }
 
-/// Nodes **on** the sphere of centre `center` and radius `radius`
-/// (Cast3m `POIN … SPHE`).
+/// Nodes **on** the sphere of centre `center` and radius `radius`.
 ///
 /// Keeps the nodes whose distance to `center` is within `tol` of `radius`, on
 /// either side. In 2-D this selects a circle.
@@ -134,8 +132,7 @@ pub fn points_on_sphere(
     Ok(PyMesh { inner: result })
 }
 
-/// Nodes **on** the plane through `origin` with normal `normal`
-/// (Cast3m `POIN … PLAN`).
+/// Nodes **on** the plane through `origin` with normal `normal`.
 ///
 /// Keeps the nodes within `tol` of the plane — the usual way to grab a
 /// boundary face of a box mesh. `normal` need not be normalized; in 2-D the
@@ -173,8 +170,7 @@ pub fn points_below_plane(
     Ok(PyMesh { inner: result })
 }
 
-/// Nodes **on** the infinite line through `a` and `b`
-/// (Cast3m `POIN … DROIT`).
+/// Nodes **on** the infinite line through `a` and `b`.
 ///
 /// Keeps the nodes at a distance `≤ tol` from the line, with no bound along
 /// it — use `points_in_cylinder` with a small radius for a selection clipped
@@ -213,8 +209,8 @@ pub fn points_in_cylinder(
     Ok(PyMesh { inner: result })
 }
 
-/// Nodes **on** the lateral surface of the finite cylinder of axis
-/// `base → top` and radius `radius` (Cast3m `POIN … CYLI`).
+/// Nodes **on** the lateral surface of the finite cylinder of axis `base → top`
+/// and radius `radius`.
 ///
 /// The end discs are **not** part of the selection — they are flat faces, and
 /// `points_on_plane` cuts those. This is how you grab the bore of a tube.
@@ -257,7 +253,7 @@ pub fn points_in_cone(
 }
 
 /// Nodes **on** the lateral surface of the cone of axis `base → top`, radius
-/// `base_radius` at `base` and `top_radius` at `top` (Cast3m `POIN … CONE`).
+/// `base_radius` at `base` and `top_radius` at `top`.
 ///
 /// The distance to the slanted surface is the perpendicular one, so the band
 /// stays `tol` wide however steep the cone is. As for `points_on_cylinder`,
@@ -408,9 +404,9 @@ pub fn merge_nodes(
 /// pieces. Loops keep the CCW boundary orientation (outer loop CCW, holes
 /// CW), so the result can feed straight back into `triangulate_surface`.
 ///
-/// With `angle_deg` given, each loop is further split into open **arêtes** at
+/// With `angle_deg` given, each loop is further split into open **sides** at
 /// its corner nodes — where the boundary turns by more than `angle_deg`
-/// degrees — one SEG2 submesh per arête (as `skin` splits a volume's skin into
+/// degrees — one SEG2 submesh per side (as `skin` splits a volume's skin into
 /// flat faces). A loop with no such corner stays a single closed loop.
 /// `angle_deg=None` (the default) keeps every boundary as one closed loop.
 #[py_op(method_on = PyMesh)]
@@ -453,7 +449,7 @@ pub fn skin(mesh: PyRef<PyMesh>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Harmonise the orientation of a mesh's cells (cast3m `ORIE`).
+/// Harmonise the orientation of a mesh's cells.
 ///
 /// Cells sharing a facet are made consistently oriented — all normals of a
 /// surface point the same way, all segments of a curve run head-to-tail, all
@@ -487,7 +483,7 @@ pub fn chain(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Reverse the orientation of every cell of a mesh (cast3m `INVE`).
+/// Reverse the orientation of every cell of a mesh.
 ///
 /// Flips each cell's winding/traversal/handedness (POI1 cells are unchanged),
 /// in any dimension. Combined with `orient`, this selects the inside/outside
@@ -783,9 +779,9 @@ pub fn rotate(
     Ok(PyMesh { inner: result })
 }
 
-/// Mirror `mesh` through the point `center` (Cast3m `SYME … POINT`),
-/// returning a fresh copy with its own nodes (the original is left
-/// untouched). Every node goes to `2·center − x`.
+/// Mirror `mesh` through the point `center`, returning a fresh copy with its
+/// own nodes (the original is left untouched). Every node goes to `2·center −
+/// x`.
 ///
 /// In 3-D the map reverses orientation, so the cells are re-ordered (as
 /// `invert` does) to keep the copy's Jacobians positive; in 2-D it is a plain
@@ -798,9 +794,8 @@ pub fn symmetry_point(mesh: PyRef<PyMesh>, center: Vec<f64>) -> PyResult<PyMesh>
     Ok(PyMesh { inner: result })
 }
 
-/// Mirror `mesh` through the infinite line running through `a` and `b`
-/// (Cast3m `SYME … DROIT`), returning a fresh copy with its own nodes (the
-/// original is left untouched).
+/// Mirror `mesh` through the infinite line running through `a` and `b`,
+/// returning a fresh copy with its own nodes (the original is left untouched).
 ///
 /// In 2-D this is the mirror image about the line; in 3-D it is the half-turn
 /// about it (for the mirror image through a plane, use `symmetry_plane`).
@@ -815,9 +810,9 @@ pub fn symmetry_line(mesh: PyRef<PyMesh>, a: Vec<f64>, b: Vec<f64>) -> PyResult<
 }
 
 /// Mirror `mesh` through the plane running through the three points `a`, `b`
-/// and `c` (Cast3m `SYME … PLAN`), returning a fresh copy with its own nodes
-/// (the original is left untouched). Only the plane the three points span
-/// matters, not their order; they must not be aligned.
+/// and `c`, returning a fresh copy with its own nodes (the original is left
+/// untouched). Only the plane the three points span matters, not their order;
+/// they must not be aligned.
 ///
 /// 3-D only — in 2-D the mirror about a line is `symmetry_line`. Always
 /// orientation-reversing, so the cells are re-ordered (as `invert` does) to
@@ -1124,8 +1119,7 @@ pub fn grid_surface(
 /// arbitrary dimensions 0.437 / 0.979, crenellated profile with its base in one
 /// run 0.323 / 0.651, house with a pitched roof 0.420 / 0.548. On a **circle**
 /// the order reverses hard — 0.288 against 0.005 — and `grid_surface2` should
-/// not be used: nothing dictates a grid line over most of a curve. The book's
-/// *Mailler une géométrie* page puts all four surface meshers side by side.
+/// not be used: nothing dictates a grid line over most of a curve.
 ///
 /// `size`, `band` and `relax` mean what they mean for `grid_surface`.
 #[py_op(method_on = PyMesh)]

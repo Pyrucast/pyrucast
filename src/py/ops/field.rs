@@ -21,10 +21,10 @@ pub(crate) fn extract_names(arg: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     ))
 }
 
-/// Node-by-node (or point-by-point) scalar product of two fields — Cast3M's
-/// `PSCA`. Returns a **new field** of the same flavour as the inputs, carrying
-/// a single `"psca"` component whose value at each node/point is `∑_c xᵣ,c·yᵣ,c`
-/// (reduction over components only, the support is kept).
+/// Node-by-node (or point-by-point) scalar product of two fields. Returns a
+/// **new field** of the same flavour as the inputs, carrying a single `"psca"`
+/// component whose value at each node/point is `∑_c xᵣ,c·yᵣ,c` (reduction over
+/// components only, the support is kept).
 ///
 /// `x` and `y` must be the same flavour (`NodeField` / `SubNodeField` /
 /// `ElementField` / `SubElementField`), sit on the same support/decomposition,

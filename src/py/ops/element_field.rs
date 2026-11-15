@@ -77,10 +77,9 @@ pub fn deformation(
     Ok(PyElementField { inner: ef })
 }
 
-/// Interpolate a nodal `field` to the Gauss points of `fespace`
-/// (`f(ξ_g) = Σ_i f_i N_i(ξ_g)`), turning a per-node `NodeField` into a
-/// per-element `ElementField` with the same component names. Cast3M `CHAN`
-/// (nodes → Gauss).
+/// Interpolate a nodal `field` to the Gauss points of `fespace` (`f(ξ_g) = Σ_i
+/// f_i N_i(ξ_g)`), turning a per-node `NodeField` into a per-element
+/// `ElementField` with the same component names.
 #[py_op(method_on = PyNodeField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -93,14 +92,14 @@ pub fn interp_to_gauss(
 }
 
 /// Thermal (free-dilation) strain `ε_th = α·(T − t_ref)` at the Gauss points of
-/// `fespace` — Cast3M `EPTH`. `temperature` is a per-element field carrying
-/// `"T"` (e.g. from `interp_to_gauss`); `materials` carries `"alpha"` (supplied
-/// via `material_field`). Returns the strain tensor in the same layout as
+/// `fespace`. `temperature` is a per-element field carrying `"T"` (e.g. from
+/// `interp_to_gauss`); `materials` carries `"alpha"` (supplied via
+/// `material_field`). Returns the strain tensor in the same layout as
 /// `deformation`, so `deformation(u, fespace) - thermal_strain(...)` is the
 /// mechanical strain. Backbone of uncoupled thermomechanics: the thermal load
 /// is `divergence(integrate_behavior(model, ε_th, materials), "sigma")`,
-/// renamed into the dual rows, and the stress is recovered as
-/// `σ = D:(ε − ε_th)`.
+/// renamed into the dual rows, and the stress is recovered as `σ = D:(ε −
+/// ε_th)`.
 ///
 /// `measure` is the strain the law reads (`"linear"`, `"green_lagrange"`,
 /// `"hencky"`): the dilation of stretch `1 + α·ΔT` is given exactly in it —
@@ -130,14 +129,13 @@ pub fn thermal_strain(
 /// deformation gradient `gradient` — the field `deformation(u, fespace,
 /// "gradient")` produces (`F_xx, F_xy, …`).
 ///
-/// `target` is `"cauchy"` (`sigma_*`, the true stress), `"kirchhoff"`
-/// (`tau_* = J sigma_*`), `"pk1"` (`P_*`, the nominal stress `F S`, not
-/// symmetric), `"pk2"` (`S_*`, dual of Green–Lagrange) or `"hencky"` (`T_*`,
-/// dual of the Hencky strain, what a law reading Hencky writes). The measure of
-/// `stress` is recognised by its names, one per zone. This is how the
-/// Lagrangian stress a law writes in large transformations becomes the first
-/// Piola–Kirchhoff `internal_forces` reads, or the Cauchy stress of the
-/// results — the stress half of Cast3M `CONF`.
+/// `target` is `"cauchy"` (`sigma_*`, the true stress), `"kirchhoff"` (`tau_* =
+/// J sigma_*`), `"pk1"` (`P_*`, the nominal stress `F S`, not symmetric),
+/// `"pk2"` (`S_*`, dual of Green–Lagrange) or `"hencky"` (`T_*`, dual of the
+/// Hencky strain, what a law reading Hencky writes). The measure of `stress` is
+/// recognised by its names, one per zone. This is how the Lagrangian stress a
+/// law writes in large transformations becomes the first Piola–Kirchhoff
+/// `internal_forces` reads, or the Cauchy stress of the results.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn stress_measure(
@@ -171,7 +169,7 @@ pub fn rotate_frame(
 }
 
 /// Elastic stress `σ = D:ε` of a strain field at the Gauss points of every
-/// continuum sub-model of `model` — Cast3M `ELAS` applied to a strain.
+/// continuum sub-model of `model`.
 ///
 /// `D` is the operator each law predicts with: the Hooke matrix of an
 /// elasticity, in its symmetry; the isotropic `D` behind a plasticity's elastic
@@ -195,8 +193,7 @@ pub fn elastic_stress(
 }
 
 /// Elastic strain `ε = D⁻¹:σ` of a stress field at the Gauss points of every
-/// continuum sub-model of `model` — the inverse of `elastic_stress` (Cast3M
-/// `ELAS` applied to a stress).
+/// continuum sub-model of `model` — the inverse of `elastic_stress`.
 ///
 /// `stress` carries the stresses each law writes (`sigma_xx`, …; the state
 /// returned by `integrate_behavior` will do); `materials` the elastic
@@ -248,8 +245,7 @@ pub fn von_mises(
 }
 
 /// The input of every law of `model`, produced from the nodal `solution` — the
-/// model's `B`, of which `internal_forces` is the transpose (Cast3M `EPSI`,
-/// extended to every physics).
+/// model's `B`, of which `internal_forces` is the transpose.
 ///
 /// One zone per sub-model with a law, on its behaviour space, carrying what
 /// that law reads: the small-strain tensor `eps_*` of a continuum or a bar, the
@@ -271,13 +267,13 @@ pub fn strain(
     Ok(PyElementField { inner: ef })
 }
 
-/// Integral of every component of `field` over **each cell** (Cast3M
-/// `INTG 'ELEM'`), with the field's own quadrature: `Σ_g f(g)·|J|·w_g`, the
-/// `2πr` included on a body of revolution. The result lives on `target`, a
-/// space of the same mesh with **one point per cell** —
-/// `FiniteElementSpace(mesh, quadrature="REDUCED")`, a single point at each
-/// centroid. Integrating `1` gives every cell's measure. Raises when `target`
-/// has several points per cell or does not cover the field's mesh.
+/// Integral of every component of `field` over **each cell**, with the field's
+/// own quadrature: `Σ_g f(g)·|J|·w_g`, the `2πr` included on a body of
+/// revolution. The result lives on `target`, a space of the same mesh with
+/// **one point per cell** — `FiniteElementSpace(mesh, quadrature="REDUCED")`, a
+/// single point at each centroid. Integrating `1` gives every cell's measure.
+/// Raises when `target` has several points per cell or does not cover the
+/// field's mesh.
 #[py_op(method_on = PyElementField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -417,7 +413,7 @@ pub fn material_field_per_sub_model(
     Ok(PyElementField { inner: ef })
 }
 
-/// Integrate the constitutive law of `model` (Cast3m `COMP`), stepping A → B.
+/// Integrate the constitutive law of `model`, stepping A → B.
 ///
 /// `deformation` is the **end-of-step** behaviour input ε(B) (from
 /// `gradient(field, fespace)` or `deformation(u, fespace)`); `prev` is the
@@ -471,9 +467,9 @@ pub fn initial_state(
 }
 
 /// Per-component 0/1 **mask** of a field against a value band — same structure
-/// as the input (Cast3M `MASQUE`): same zones, same support, same components,
-/// only the values are rewritten (`1.0` inside the band, `0.0` outside). The
-/// result is therefore multipliable term by term with the input.
+/// as the input: same zones, same support, same components, only the values are
+/// rewritten (`1.0` inside the band, `0.0` outside). The result is therefore
+/// multipliable term by term with the input.
 ///
 /// `field` is an `ElementField` or a `SubElementField`, and the result is of
 /// the same kind. Its sibling `pyrucast.mesh.select` extracts the passing
@@ -514,10 +510,9 @@ pub fn mask(
 // documentation.
 
 /// Per-component 0/1 **mask** of this field against a value band — same
-/// structure as the field (Cast3M `MASQUE`): same zones, same support, same
-/// components, same Gauss points, only the values are rewritten (`1.0` inside
-/// the band, `0.0` outside). The result is therefore multipliable term by term
-/// with the field.
+/// structure as the field: same zones, same support, same components, same
+/// Gauss points, only the values are rewritten (`1.0` inside the band, `0.0`
+/// outside). The result is therefore multipliable term by term with the field.
 ///
 /// Its sibling `select` extracts the passing *cells* instead, and produces a
 /// `Mesh`.
@@ -545,10 +540,10 @@ pub fn mask_element_field(
 }
 
 /// Per-component 0/1 **mask** of this sub-field against a value band — same
-/// structure as the sub-field (Cast3M `MASQUE`): same support, same
-/// components, same Gauss points, only the values are rewritten (`1.0` inside
-/// the band, `0.0` outside). The result is therefore multipliable term by term
-/// with the sub-field.
+/// structure as the sub-field: same support, same components, same Gauss
+/// points, only the values are rewritten (`1.0` inside the band, `0.0`
+/// outside). The result is therefore multipliable term by term with the
+/// sub-field.
 ///
 /// Its sibling `select` extracts the passing *cells* instead, and produces a
 /// `Mesh`.
