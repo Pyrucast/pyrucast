@@ -145,8 +145,9 @@ impl PySubElementField {
     ///
     /// `components` is a single name or a list of names (e.g. the result of
     /// `model.primal_vars()`). Returns a **new** field of the caller's own kind,
-    /// sharing its support; the original is untouched. Errors if a requested name
-    /// is absent — filtering never invents a component.
+    /// sharing its support; the original is untouched. A name the zone does not
+    /// carry is ignored; errors if it carries none of them — a zone keeps at
+    /// least one component, and filtering never invents one.
     fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<Self> {
         let wanted = crate::py::ops::field::extract_names(components)?;
         let out = self.handle.read().select_components(wanted.as_slice())?;
@@ -328,13 +329,15 @@ impl PyElementField {
     ///
     /// `components` is a single name or a list of names (e.g. the result of
     /// `model.primal_vars()`). Returns a **new** field of the caller's own kind,
-    /// sharing its support; the original is untouched. Errors if a requested name
-    /// is absent — filtering never invents a component.
+    /// sharing its support; the original is untouched. A name the field does not
+    /// carry is ignored: a zone carrying none of the names is dropped, and a field
+    /// carrying none of them gives an empty field — filtering never invents a
+    /// component.
     fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<Self> {
         use crate::containers::field::Field;
         let wanted = crate::py::ops::field::extract_names(components)?;
         Ok(Self {
-            inner: self.inner.filter_components(wanted.as_slice())?,
+            inner: self.inner.filter_components(wanted.as_slice()),
         })
     }
 

@@ -537,8 +537,10 @@ class ElementField:
         
         `components` is a single name or a list of names (e.g. the result of
         `model.primal_vars()`). Returns a **new** field of the caller's own kind,
-        sharing its support; the original is untouched. Errors if a requested name
-        is absent — filtering never invents a component.
+        sharing its support; the original is untouched. A name the field does not
+        carry is ignored: a zone carrying none of the names is dropped, and a field
+        carrying none of them gives an empty field — filtering never invents a
+        component.
         """
     def rename_component(self, old: builtins.str, new: builtins.str) -> ElementField:
         r"""
@@ -3663,8 +3665,10 @@ class NodeField:
         
         `components` is a single name or a list of names (e.g. the result of
         `model.primal_vars()`). Returns a **new** field of the caller's own kind,
-        sharing its support; the original is untouched. Errors if a requested name
-        is absent — filtering never invents a component.
+        sharing its support; the original is untouched. A name the field does not
+        carry is ignored: a zone carrying none of the names is dropped, and a field
+        carrying none of them gives an empty field — filtering never invents a
+        component.
         """
     def rename_component(self, old: builtins.str, new: builtins.str) -> NodeField:
         r"""
@@ -4322,8 +4326,9 @@ class SubElementField:
         
         `components` is a single name or a list of names (e.g. the result of
         `model.primal_vars()`). Returns a **new** field of the caller's own kind,
-        sharing its support; the original is untouched. Errors if a requested name
-        is absent — filtering never invents a component.
+        sharing its support; the original is untouched. A name the zone does not
+        carry is ignored; errors if it carries none of them — a zone keeps at
+        least one component, and filtering never invents one.
         """
     def rename_component(self, old: builtins.str, new: builtins.str) -> SubElementField:
         r"""
@@ -5407,8 +5412,9 @@ class SubNodeField:
         
         `components` is a single name or a list of names (e.g. the result of
         `model.primal_vars()`). Returns a **new** field of the caller's own kind,
-        sharing its support; the original is untouched. Errors if a requested name
-        is absent — filtering never invents a component.
+        sharing its support; the original is untouched. A name the zone does not
+        carry is ignored; errors if it carries none of them — a zone keeps at
+        least one component, and filtering never invents one.
         """
     def rename_component(self, old: builtins.str, new: builtins.str) -> SubNodeField:
         r"""

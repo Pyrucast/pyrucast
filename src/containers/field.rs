@@ -96,9 +96,9 @@ pub(crate) fn check_components(kind: &str, components: &[String]) -> Result<()> 
 /// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
 /// // The Rust twin of the Python argument `str | list[str]`: the component
 /// // operators read the same way on both sides.
-/// assert_eq!(temp.filter_components("T")?.components(), vec!["T".to_string()]);
-/// assert_eq!(temp.filter_components(["T"])?.components(), vec!["T".to_string()]);
-/// assert_eq!(temp.filter_components(vec!["T".to_string()])?.components(),
+/// assert_eq!(temp.filter_components("T").components(), vec!["T".to_string()]);
+/// assert_eq!(temp.filter_components(["T"]).components(), vec!["T".to_string()]);
+/// assert_eq!(temp.filter_components(vec!["T".to_string()]).components(),
 ///            vec!["T".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -1543,14 +1543,17 @@ where
     /// `wanted` is a single name or a list ([`IntoComponentNames`]) and accepts
     /// a superset of the field's components (extras are ignored), so passing
     /// `model.primal_vars()` to strip a solver result of its dual (Lagrange)
-    /// unknowns is the intended use. Errors if **no** zone carries any of
-    /// `wanted`.
-    fn filter_components(&self, wanted: impl IntoComponentNames) -> Result<Self>
+    /// unknowns is the intended use. A field carrying none of `wanted` gives an
+    /// **empty** field: what it carries of them is nothing.
+    fn filter_components(&self, wanted: impl IntoComponentNames) -> Self
     where
         Self: Sized,
     {
         let wanted = wanted.into_names();
         let mut out = Self::default();
+        // Every zone comes from a valid field, which carries no component twice
+        // on one support: neither a zone nor its selection can be refused, and a
+        // selection of components the zone carries builds on its own support.
         for h in self.iter() {
             let s = h.read();
             let n_present = s
@@ -1563,18 +1566,17 @@ where
             }
             if n_present == s.component_count() {
                 // Filter is a no-op on this zone: share the handle untouched.
-                out.add_sub(h.clone())?;
+                out.add_sub(h.clone())
+                    .expect("a zone of a valid field joins a field of its zones");
             } else {
-                out.add_sub(Handle::new(s.select_components(wanted.as_slice())?))?;
+                let kept = s
+                    .select_components(wanted.as_slice())
+                    .expect("the zone carries at least one of the names");
+                out.add_sub(Handle::new(kept))
+                    .expect("a selection of a valid zone joins a field of its zones");
             }
         }
-        if out.is_empty() {
-            return Err(PyrucastError::Message(format!(
-                "filter_components: no zone carries any of {:?}",
-                wanted
-            )));
-        }
-        Ok(out)
+        out
     }
 
     /// A new field with component `from` renamed to `to` in every zone carrying
@@ -2790,7 +2792,7 @@ mod tests {
         let ef = make_two_zone_element_field();
         // Keep only "k": zone0 is a no-op (shares its handle), zone1 is rebuilt.
         // Single-name ergonomic input.
-        let out = ef.filter_components("k").unwrap();
+        let out = ef.filter_components("k");
         assert_eq!(out.len(), 2);
         assert_eq!(Field::components(&out), vec!["k"]);
         // zone0 handle shared untouched; zone1 rebuilt (a new zone).
@@ -2798,12 +2800,12 @@ mod tests {
         assert!(!out.get(1).unwrap().same_object(&ef.get(1).unwrap()));
 
         // Keep only "E": zone0 (no E) is dropped, zone1 kept.
-        let only_e = ef.filter_components("E").unwrap();
+        let only_e = ef.filter_components("E");
         assert_eq!(only_e.len(), 1);
         assert_eq!(Field::components(&only_e), vec!["E"]);
 
-        // No zone carries any requested component ⇒ error.
-        assert!(ef.filter_components("missing").is_err());
+        // No zone carries any requested component ⇒ an empty field.
+        assert!(ef.filter_components("missing").is_empty());
     }
 
     #[test]
@@ -2817,9 +2819,8 @@ mod tests {
         let f = NodeField::from_sub(s);
         // primal_vars() may name components the field lacks — extras are ignored.
         // A Vec<String> (as primal_vars() returns) flows in directly.
-        let primal = f
-            .filter_components(vec!["u_x".to_string(), "u_y".to_string(), "T".to_string()])
-            .unwrap();
+        let primal =
+            f.filter_components(vec!["u_x".to_string(), "u_y".to_string(), "T".to_string()]);
         assert_eq!(Field::components(&primal), vec!["u_x", "u_y"]);
         assert_eq!(primal.value(nodes[0].id(), "u_x").unwrap(), 1.0);
         assert!(primal.value_opt(nodes[0].id(), "lambda").is_none());

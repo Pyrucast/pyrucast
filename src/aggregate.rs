@@ -617,12 +617,12 @@ macro_rules! impl_aggregate_pymethods {
                         let _ = stringify!($components);
                         if let Ok(name) = key.extract::<String>() {
                             let inner =
-                                $crate::containers::field::Field::filter_components(&self.inner, name)?;
+                                $crate::containers::field::Field::filter_components(&self.inner, name);
                             return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
                         }
                         if let Ok(names) = key.extract::<Vec<String>>() {
                             let inner =
-                                $crate::containers::field::Field::filter_components(&self.inner, names)?;
+                                $crate::containers::field::Field::filter_components(&self.inner, names);
                             return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
                         }
                     )?

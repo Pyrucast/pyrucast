@@ -195,7 +195,10 @@ acceptent les quatre saveurs (`NodeField`, `SubNodeField`, `ElementField`,
 `components` peut être un **sur-ensemble** des composantes du champ (les noms
 absents sont ignorés) : passer `model.primal_vars()` à un résultat de `solve`
 pour en retirer les inconnues duales (multiplicateurs de Lagrange) est l'usage
-visé. Erreur si aucune zone ne porte l'une des composantes demandées.
+visé. Un champ qui ne porte aucune des composantes demandées donne un champ
+**vide** : ce qu'il en porte, c'est rien. Sur un sous-champ, en revanche,
+`filter_components` lève une erreur si aucune n'y est : une zone garde au moins
+une composante.
 
 `rename_component` laisse **inchangée** (handle partagé) toute zone ne portant
 pas `old`. Erreur si aucune zone ne porte `old`, ou si une zone concernée a déjà

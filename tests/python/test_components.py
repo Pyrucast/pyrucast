@@ -60,10 +60,9 @@ def test_filter_no_op_returns_equivalent_field():
     assert g[0].get(0, 1) == 2.0
 
 
-def test_filter_none_present_errors():
+def test_filter_none_present_gives_an_empty_field():
     f, _ = _poi1_field([[1.0]], components=("T",))
-    with pytest.raises(RuntimeError):
-        f.filter_components(["nope"])
+    assert len(f.filter_components(["nope"])) == 0
 
 
 # ─── rename_component() ──────────────────────────────────────────────────────
@@ -116,10 +115,12 @@ def test_getitem_int_and_slice_unchanged():
     assert len(f[0:1]) == 1
 
 
-def test_getitem_unknown_component_raises():
+def test_getitem_unknown_component_gives_an_empty_field():
     f, _ = _poi1_field([[1.0]], components=("T",))
+    assert len(f["nope"]) == 0
+    # A zone keeps at least one component: on a zone, it is an error.
     with pytest.raises(RuntimeError):
-        _ = f["nope"]
+        _ = f[0]["nope"]
 
 
 # ─── sub-field flavour ───────────────────────────────────────────────────────
