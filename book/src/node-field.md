@@ -53,6 +53,7 @@ composante.
 | `value(nœud, "c")`, `values(nœuds, "c")` | une valeur, ou une liste dans l'ordre des nœuds |
 | `node_count` | le nombre de nœuds distincts, toutes zones confondues |
 | `min(c)`, `max(c)`, `sum(c)` | sur toutes les zones qui portent `c` ; `sum` compte une fois un nœud partagé |
+| `norm(p)` | la norme de toutes les valeurs, `p = 2` par défaut, `p = 0` pour la plus grande valeur absolue ; un nœud partagé compté une fois |
 | `champ["c"]`, `filter_components([…])`, `rename_component(a, b)` | un champ réduit à ces composantes, ou une composante renommée |
 | `add_to_component(c, s)`, `mul_to_component(c, s)`… | une opération sur une composante, en place |
 | `check()` | vérifie que les zones s'accordent sur les nœuds qu'elles partagent |
@@ -114,7 +115,7 @@ valeur dans toutes les zones qui le portent, pour chaque composante qu'elles
 ont en commun. Le champ s'appuie sur elle :
 
 - `value` et `values` lisent la première zone qui porte le nœud ;
-- `sum`, `node_count`, `pyrucast.measure.xtx` et `xty` comptent un nœud
+- `sum`, `norm`, `node_count`, `pyrucast.measure.xtx` et `xty` comptent un nœud
   partagé une fois ;
 - `add_to_component` et les autres opérations par composante modifient toutes
   les zones à la fois, et gardent donc la règle.

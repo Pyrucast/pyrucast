@@ -709,7 +709,7 @@ forme ; un `ElementField` y est déjà. Comme `xty`, la somme flottante dépend 
 nombre de threads jusqu'au dernier ULP. En interne, la réduction parallèle sur
 les cellules passe par le driver `kernel::reduce_cells`.
 
-### Somme et `xtx`
+### Somme, `xtx` et norme
 
 Pour une **résultante de forces déjà nodales** (sortie de `internal_forces`,
 réactions…), la résultante est une simple **somme par nœud** — exposée comme
@@ -722,11 +722,14 @@ méthode, à côté de `min` / `max` :
 | `field.sum(comp)` | une composante (`Σ` nœuds/points) | un `float` |
 | `xtx(field)` | toutes les valeurs au carré (`Σ v²`, `XTX`) | un `float` |
 | `xtx(field, components=[…])` | seules ces composantes au carré | un `float` |
+| `field.norm(p)` | toutes les valeurs : `(Σ \|v\|ᵖ)^(1/p)`, `p = 2` par défaut, `p = 0` pour le plus grand `\|v\|` | un `float` |
 
-Sur un champ aux nœuds, `sum` et `xtx` comptent une fois un nœud que plusieurs
+Sur un champ aux nœuds, `sum`, `xtx` et `norm` comptent une fois un nœud que plusieurs
 zones portent : il n'y a qu'une valeur (voir [Champ](../field.md#les-règles-de-cohérence)).
 Elles regroupent la somme en parallèle : dépendantes du nombre de threads au
 dernier ULP (contrairement à `min` / `max`, exactes quel que soit l'ordre).
+`norm()` vaut `√xtx(field)` ; un champ sans valeur, par exemple un
+`filter_components` qui ne garde rien, a une norme nulle.
 
 Appelées **sans argument**, `min` et `max` lisent le champ comme la liste plate
 de ses valeurs — toutes composantes confondues, et, au niveau agrégat, toutes

@@ -1035,3 +1035,22 @@ def test_a_field_is_not_built_on_a_poi1_zone_listing_a_node_twice():
     assert not points[0].is_sealed
     distinct = pyrucast.mesh.to_poi1(points)
     assert pyrucast.node_field.positions(distinct).value(b, "X") == 1.0
+
+
+def test_norm_counts_a_node_two_zones_share_once():
+    """Two zones sharing nodes n1 and n2, holding the same value in both:
+    every order counts each node once, and the default is the Euclidean norm."""
+    _, (n0, n1, n2, n3), mesh = _two_zone_mesh()
+    f = pyrucast.NodeField(mesh, ["T"])
+    f[0][n0, "T"], f[0][n1, "T"], f[0][n2, "T"] = 3.0, -4.0, 12.0
+    f[1][n1, "T"], f[1][n3, "T"], f[1][n2, "T"] = -4.0, 0.0, 12.0
+    assert f.norm(1) == 19.0  # 3 + 4 + 12 + 0
+    assert f.norm() == 13.0  # √(9 + 16 + 144)
+    assert f.norm() == math.sqrt(pyrucast.measure.xtx(f))
+    assert f.norm(0) == 12.0
+    assert f.norm(3) == pytest.approx((27 + 64 + 1728) ** (1 / 3))
+    # A zone alone: n0, n1, n2.
+    assert f[0].norm(1) == 19.0
+    assert f[1].norm(1) == 16.0
+    # Nothing carried, nothing measured.
+    assert f.filter_components("nope").norm() == 0.0

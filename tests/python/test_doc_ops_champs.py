@@ -202,6 +202,9 @@ ry = forces.sum("f_y")
 fy_max = forces.max("f_y")
 # …or, without an argument, of the whole field, components pooled.
 partout = forces.min()
+# Norm of the residual, every value: Euclidean by default, the largest |v| with 0.
+r = residu.norm()
+r_max = residu.norm(0)
 # ANCHOR_END: sommes
 # ANCHOR: measure-xtx
 # Squared norm of the residual, for a convergence test.
@@ -214,6 +217,7 @@ assert r2 == 6 * 25.0
 assert r2_uy == 6 * 16.0
 assert fy_max == 2.0
 assert partout == 1.0
+assert r == math.sqrt(r2) and r_max == 4.0
 
 # ── mesures de déformation ─────────────────────────────────
 

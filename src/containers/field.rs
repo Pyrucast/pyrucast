@@ -772,6 +772,61 @@ pub trait SubField {
             .sum()
     }
 
+    /// The `order`-norm of the field's values, every component pooled: `0`
+    /// gives the largest `|v|` (the infinity norm), `p ≥ 1` gives
+    /// `(Σ |v|ᵖ)^(1/p)`, `2` the Euclidean norm `√(xᵀx)`. A field without
+    /// values has norm `0`. Like [`SubField::xtx`], a sum is thread-count
+    /// dependent to the last ULP.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::mesh::SubMesh;
+    /// # use pyrucast::containers::node_field::SubNodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let n: Vec<Node> = (0..2)
+    /// #     .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
+    /// #     .collect();
+    /// # let support = Handle::new(SubMesh::poi1_from_nodes(&n)?);
+    /// let mut u = SubNodeField::from_poi1(&support, vec!["u_x".into()])?;
+    /// u.set_value(n[0].id(), "u_x", 3.0)?;
+    /// u.set_value(n[1].id(), "u_x", -4.0)?;
+    /// assert_eq!(u.norm(2), 5.0);
+    /// assert_eq!(u.norm(1), 7.0);
+    /// assert_eq!(u.norm(0), 4.0);
+    /// assert!((u.norm(3) - 91f64.powf(1.0 / 3.0)).abs() < 1e-12);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    fn norm(&self, order: u32) -> f64 {
+        // The order is resolved here, once: each loop below carries no branch.
+        match order {
+            0 => self
+                .values()
+                .par_iter()
+                .with_min_len(MIN_PARALLEL_LEN)
+                .map(|v| v.abs())
+                .reduce(|| 0.0, f64::max),
+            1 => self
+                .values()
+                .par_iter()
+                .with_min_len(MIN_PARALLEL_LEN)
+                .map(|v| v.abs())
+                .sum(),
+            2 => self.xtx().sqrt(),
+            p => {
+                let p = f64::from(p);
+                self.values()
+                    .par_iter()
+                    .with_min_len(MIN_PARALLEL_LEN)
+                    .map(|v| v.abs().powf(p))
+                    .sum::<f64>()
+                    .powf(1.0 / p)
+            }
+        }
+    }
+
     /// Squared Euclidean norm restricted to the named `components` — `Σ v²`
     /// over the selected components only, the rest ignored. Components this
     /// sub-field does not carry are silently skipped (an aggregate may spread
@@ -1244,6 +1299,64 @@ where
             |z, c| components.contains(&zones[z].components()[c].as_str()),
             |z, cols| row_squares(zones[z], cols),
         ))
+    }
+
+    /// The `order`-norm of the field's values, every component pooled — the
+    /// aggregate twin of [`SubField::norm`]: `0` gives the largest `|v|`,
+    /// `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`, `2` the Euclidean norm `√(xᵀx)`. A
+    /// point several zones carry counts **once**, as in [`Field::sum`]; an
+    /// empty field has norm `0`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::field::Field;
+    /// # use pyrucast::containers::mesh::SubMesh;
+    /// # use pyrucast::containers::node_field::{NodeField, SubNodeField};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let n: Vec<Node> = (0..3)
+    /// #     .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
+    /// #     .collect();
+    /// // Two zones sharing the middle node, which holds -4 in both.
+    /// let mut u = NodeField::empty();
+    /// for (nodes, values) in [(&n[0..2], [3.0, -4.0]), (&n[1..3], [-4.0, 12.0])] {
+    ///     let support = Handle::new(SubMesh::poi1_from_nodes(nodes)?);
+    ///     let mut zone = SubNodeField::from_poi1(&support, vec!["u_x".into()])?;
+    ///     for (node, value) in nodes.iter().zip(values) {
+    ///         zone.set_value(node.id(), "u_x", value)?;
+    ///     }
+    ///     u.add_sub(Handle::new(zone))?;
+    /// }
+    /// // The shared node counts once: 3 + 4 + 12, and √(9 + 16 + 144).
+    /// assert_eq!(u.norm(1), 19.0);
+    /// assert_eq!(u.norm(2), 13.0);
+    /// assert_eq!(u.norm(0), 12.0);
+    /// assert_eq!(NodeField::empty().norm(2), 0.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    fn norm(&self, order: u32) -> f64 {
+        // Before any guard is taken here: `xtx` takes its own.
+        if order == 2 {
+            return self.xtx().sqrt();
+        }
+        let guards: Vec<ReadGuard<Self::Sub>> = self.iter().map(|h| h.read()).collect();
+        let zones: Vec<&Self::Sub> = guards.iter().map(|g| &**g).collect();
+        match (order, &zones[..]) {
+            (_, []) => 0.0,
+            (_, [zone]) => SubField::norm(*zone, order),
+            // A shared point holds one value: met twice, it changes no maximum.
+            (0, _) => zones
+                .iter()
+                .map(|z| SubField::norm(*z, 0))
+                .fold(0.0, f64::max),
+            (1, _) => sum_once(&zones, |_, _| true, |z, cols| row_abs(zones[z], cols)),
+            (p, _) => {
+                let p = f64::from(p);
+                sum_once(&zones, |_, _| true, |z, cols| row_powers(zones[z], cols, p)).powf(1.0 / p)
+            }
+        }
     }
 
     /// Zero-copy view of the zones, for operators doing many reads
@@ -1905,6 +2018,33 @@ fn row_squares<'a, S: SubField>(
     move |row| {
         let r = &values[row * width..(row + 1) * width];
         cols.iter().map(|&c| r[c] * r[c]).sum()
+    }
+}
+
+/// `Σ |v|` over the columns `cols` of a row of `zone`.
+fn row_abs<'a, S: SubField>(
+    zone: &'a S,
+    cols: &[usize],
+) -> impl Fn(usize) -> f64 + Sync + use<'a, S> {
+    let (values, width) = (zone.values(), zone.component_count());
+    let cols = cols.to_vec();
+    move |row| {
+        let r = &values[row * width..(row + 1) * width];
+        cols.iter().map(|&c| r[c].abs()).sum()
+    }
+}
+
+/// `Σ |v|ᵖ` over the columns `cols` of a row of `zone`.
+fn row_powers<'a, S: SubField>(
+    zone: &'a S,
+    cols: &[usize],
+    p: f64,
+) -> impl Fn(usize) -> f64 + Sync + use<'a, S> {
+    let (values, width) = (zone.values(), zone.component_count());
+    let cols = cols.to_vec();
+    move |row| {
+        let r = &values[row * width..(row + 1) * width];
+        cols.iter().map(|&c| r[c].abs().powf(p)).sum()
     }
 }
 
@@ -3475,6 +3615,46 @@ mod tests {
         // Four distinct nodes carry T = 1, three carry P = 2.
         assert_eq!(Field::xtx(&u), 4.0 * 1.0 + 3.0 * 4.0);
         assert_eq!(Field::xtx_components(&u, &["T"]).unwrap(), 4.0);
+    }
+
+    /// Large enough for the parallel chunks: three zones of a line, overlapping,
+    /// node `i` holding `(i mod 7) − 3` in each zone carrying it. Every order
+    /// is checked against the same norm computed here over the distinct nodes.
+    #[test]
+    fn the_norm_counts_each_node_once_on_a_large_field() {
+        let count = 4 * CHUNK_ROWS + 123;
+        let n = nodes_on_a_line(count);
+        let value = |i: usize| (i % 7) as f64 - 3.0;
+        let third = count / 3;
+        let mut u = NodeField::empty();
+        for range in [0..2 * third, third..count, 0..10] {
+            let nodes = &n[range.clone()];
+            let support = Handle::new(SubMesh::poi1_from_nodes(nodes).unwrap());
+            let mut zone = SubNodeField::from_poi1(&support, vec!["T".into()]).unwrap();
+            for (k, node) in nodes.iter().enumerate() {
+                zone.set_value(node.id(), "T", value(range.start + k))
+                    .unwrap();
+            }
+            u.add_sub(Handle::new(zone)).unwrap();
+        }
+        let distinct: Vec<f64> = (0..count).map(value).collect();
+        let lp = |p: f64| {
+            distinct
+                .iter()
+                .map(|v| v.abs().powf(p))
+                .sum::<f64>()
+                .powf(1.0 / p)
+        };
+        let close = |a: f64, b: f64| (a - b).abs() <= 1e-10 * b;
+        assert_eq!(Field::norm(&u, 0), 3.0);
+        assert!(close(Field::norm(&u, 1), lp(1.0)));
+        assert!(close(Field::norm(&u, 2), lp(2.0)));
+        assert!(close(Field::norm(&u, 3), lp(3.0)));
+        // One zone alone goes through the zone's own kernels.
+        let first = NodeField::from_sub(u.get(0).unwrap().read().clone());
+        let in_first: Vec<f64> = (0..2 * third).map(value).collect();
+        let l3: f64 = in_first.iter().map(|v| v.abs().powi(3)).sum::<f64>().cbrt();
+        assert!(close(Field::norm(&first, 3), l3));
     }
 
     #[test]

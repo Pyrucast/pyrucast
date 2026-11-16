@@ -123,6 +123,22 @@ impl PySubElementField {
         Ok(SubField::sum(&*self.handle.read(), component)?)
     }
 
+    /// The `order`-norm of the field's values, every component pooled.
+    ///
+    /// # Parameters
+    ///
+    /// - `order`: `2`, the default, gives the Euclidean norm `√(Σ v²)`; any
+    ///   `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`; `0` gives the largest `|v|`, the
+    ///   infinity norm.
+    ///
+    /// # Returns
+    ///
+    /// The norm, a `float`; `0.0` for a field without values.
+    #[pyo3(signature = (order = 2))]
+    fn norm(&self, order: u32) -> f64 {
+        SubField::norm(&*self.handle.read(), order)
+    }
+
     /// Component names, in order.
     fn components(&self) -> Vec<String> {
         self.handle.read().components().to_vec()
@@ -317,6 +333,22 @@ impl PyElementField {
     fn sum(&self, component: &str) -> PyResult<f64> {
         use crate::containers::field::Field;
         Ok(Field::sum(&self.inner, component)?)
+    }
+
+    /// The `order`-norm of the field's values, every component pooled.
+    ///
+    /// # Parameters
+    ///
+    /// - `order`: `2`, the default, gives the Euclidean norm `√(Σ v²)`; any
+    ///   `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`; `0` gives the largest `|v|`, the
+    ///   infinity norm.
+    ///
+    /// # Returns
+    ///
+    /// The norm, a `float`; `0.0` for a field without values.
+    #[pyo3(signature = (order = 2))]
+    fn norm(&self, order: u32) -> f64 {
+        crate::containers::field::Field::norm(&self.inner, order)
     }
 
     /// Union of the zones' component names, first-seen order.

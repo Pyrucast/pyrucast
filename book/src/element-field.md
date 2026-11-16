@@ -52,6 +52,7 @@ bornes ou une composante inconnue lèvent une erreur.
 | `support()` | le sous-espace de chaque zone, dans l'ordre, partagé |
 | `components()` | l'union des composantes des zones |
 | `min(c)`, `max(c)`, `sum(c)` | sur toutes les zones qui portent `c` |
+| `norm(p)` | la norme de toutes les valeurs aux points de Gauss, sans poids, `p = 2` par défaut, `p = 0` pour la plus grande valeur absolue |
 | `champ["c"]`, `filter_components([…])`, `rename_component(a, b)` | un champ réduit à ces composantes, ou une composante renommée |
 | `add_to_component(c, s)`, `mul_to_component(c, s)`… | une opération sur une composante, en place |
 | `consolidate()` | fond les zones posées sur un même sous-espace (voir [Combiner](#combiner-des-champs)) |

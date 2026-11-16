@@ -527,6 +527,20 @@ class ElementField:
         field), across the zones defining it. Errors if no zone defines the
         component.
         """
+    def norm(self, order: builtins.int = 2) -> builtins.float:
+        r"""
+        The `order`-norm of the field's values, every component pooled.
+        
+        # Parameters
+        
+        - `order`: `2`, the default, gives the Euclidean norm `√(Σ v²)`; any
+          `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`; `0` gives the largest `|v|`, the
+          infinity norm.
+        
+        # Returns
+        
+        The norm, a `float`; `0.0` for a field without values.
+        """
     def components(self) -> builtins.list[builtins.str]:
         r"""
         Union of the zones' component names, first-seen order.
@@ -3655,6 +3669,21 @@ class NodeField:
         that several zones carry counts once. Errors if no zone defines the
         component.
         """
+    def norm(self, order: builtins.int = 2) -> builtins.float:
+        r"""
+        The `order`-norm of the field's values, every component pooled.
+        
+        # Parameters
+        
+        - `order`: `2`, the default, gives the Euclidean norm `√(Σ v²)`; any
+          `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`; `0` gives the largest `|v|`, the
+          infinity norm.
+        
+        # Returns
+        
+        The norm, a `float`; `0.0` for a field without values. A node that
+        several zones carry counts once.
+        """
     def components(self) -> builtins.list[builtins.str]:
         r"""
         Union of the zones' component names, first-seen order.
@@ -4310,6 +4339,20 @@ class SubElementField:
         Sum of the named `component` over the support — Σ over the nodes, or over
         the Gauss points for a field by elements. The resultant of a nodal force
         field, one component at a time. An empty support sums to `0.0`.
+        """
+    def norm(self, order: builtins.int = 2) -> builtins.float:
+        r"""
+        The `order`-norm of the field's values, every component pooled.
+        
+        # Parameters
+        
+        - `order`: `2`, the default, gives the Euclidean norm `√(Σ v²)`; any
+          `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`; `0` gives the largest `|v|`, the
+          infinity norm.
+        
+        # Returns
+        
+        The norm, a `float`; `0.0` for a field without values.
         """
     def components(self) -> builtins.list[builtins.str]:
         r"""
@@ -5396,6 +5439,20 @@ class SubNodeField:
         Sum of the named `component` over the support — Σ over the nodes, or over
         the Gauss points for a field by elements. The resultant of a nodal force
         field, one component at a time. An empty support sums to `0.0`.
+        """
+    def norm(self, order: builtins.int = 2) -> builtins.float:
+        r"""
+        The `order`-norm of the field's values, every component pooled.
+        
+        # Parameters
+        
+        - `order`: `2`, the default, gives the Euclidean norm `√(Σ v²)`; any
+          `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`; `0` gives the largest `|v|`, the
+          infinity norm.
+        
+        # Returns
+        
+        The norm, a `float`; `0.0` for a field without values.
         """
     def components(self) -> builtins.list[builtins.str]:
         r"""
