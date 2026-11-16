@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from .. import element_field, node_field
 from .._pyrucast import ElementField, Evolution, FiniteElementSpace
 from .configuration import configurations
-from .fields import carried, domain_mesh, uniform
+from .fields import domain_mesh, uniform
 
 __all__ = ["Problem", "describe_problem"]
 
@@ -64,7 +64,7 @@ def _strain_measure(domain, fespace, displacement_names, materials):
     large transformations with anything else: beams and shells have no
     large-transformation formulation yet, and a bar reads Green–Lagrange."""
     rest = uniform(domain_mesh(fespace), displacement_names, 0.0)
-    names = carried(element_field.strain(domain, rest, materials))
+    names = element_field.strain(domain, rest, materials).components()
     prefixes = {name.split("_")[0] for name in names}
     finite = prefixes & set(_MEASURES)
     if not finite:
@@ -295,7 +295,7 @@ def describe_problem(data, options):
         prescribed_temperature_at=_of_time(data.get("temperature")),
         laws=laws,
         law_outputs=law_outputs,
-        transient_heat=heat is not None and "cp" in carried(first_materials),
+        transient_heat=heat is not None and "cp" in first_materials.components(),
         radiating=heat is not None and len(model.filter("radiation")) > 0,
         weights=weights,
         indirect_domain=(

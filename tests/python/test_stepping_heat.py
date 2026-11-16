@@ -186,50 +186,32 @@ def _uniform(mesh, value):
     return field
 
 
-def test_a_chained_relation_hands_the_solve_over_to_the_lu_with_multipliers():
-    """``stepping.fields.solve`` tries what it is given and, refused, takes the
-    LU with multipliers and says so. A rod clamped at ``T(0) = 0`` and bound by
-    ``T(2) − T(0) = 1``: that relation's master is the clamp's slave, a chain
-    the elimination does not express, while the multipliers solve it."""
-    from pyrucast.stepping.fields import solve
-
+def test_a_chained_relation_is_solved_by_the_lu_with_multipliers():
+    """A rod held at ``T(0) = 0`` and bound by ``T(L) − T(0) = 1``: that
+    relation's master is the clamp's slave, a chain the elimination does not
+    express. The first solve falls back on the LU with multipliers, and the
+    steady profile is the linear one, ``T = x / L``."""
     _, fes, nodes = _rod()
     conduction = pc.model.heat_conduction(fes)
     clamp = pc.model.dirichlet(pc.mesh.poi1_from_nodes([nodes[0]]), conduction, "T")
     first, last = (pc.mesh.poi1_from_nodes([n]) for n in (nodes[0], nodes[-1]))
     link = pc.model.mpc([(last, "T", 1.0), (first, "T", -1.0)], conduction)
     model = conduction | clamp | link
-    k = pc.matrix.stiffness(model, pc.element_field.material_field(model, [("k", 1.0)]))
     rhs = clamp.constraint_rhs([(nodes[0], 0.0)]) | link.constraint_rhs(
         [(nodes[-1], 1.0)]
     )
-
+    k = pc.matrix.stiffness(model, pc.element_field.material_field(model, [("k", 1.0)]))
+    # The fixture is what it claims: out of the elimination's scope.
     with pytest.raises(RuntimeError, match="chaining"):
         pc.solver.solve(k, rhs, relations="eliminate", cache=False)
-    solved, method, relations = solve(k, rhs, "cholesky", "eliminate")
-    assert (method, relations) == ("lu", "lagrange")
-    by_default = pc.solver.solve(k, rhs, cache=False)
-    for node in nodes:
-        assert solved.value(node, "T") == pytest.approx(by_default.value(node, "T"))
-    assert solved.value(nodes[-1], "T") == pytest.approx(1.0)
 
-
-def test_a_clamped_rod_is_solved_by_elimination_and_cholesky():
-    """Within the elimination's scope, ``stepping.fields.solve`` keeps what it
-    was given, and the solution is the multipliers' one."""
-    from pyrucast.stepping.fields import solve
-
-    _, fes, nodes = _rod()
-    conduction = pc.model.heat_conduction(fes)
-    clamp = pc.model.dirichlet(pc.mesh.poi1_from_nodes([nodes[0]]), conduction, "T")
-    model = conduction | clamp
-    k = pc.matrix.stiffness(model, pc.element_field.material_field(model, [("k", 1.0)]))
-    flux = pc.NodeField(pc.mesh.poi1_from_nodes([nodes[-1]]), ["q"])
-    flux[0].set_value(nodes[-1], "q", 1.0)
-    rhs = clamp.constraint_rhs([(nodes[0], 2.0)]) + flux
-
-    solved, method, relations = solve(k, rhs, "cholesky", "eliminate")
-    assert (method, relations) == ("cholesky", "eliminate")
-    by_default = pc.solver.solve(k, rhs, cache=False)
-    for node in nodes:
-        assert solved.value(node, "T") == pytest.approx(by_default.value(node, "T"))
+    data = {
+        "model": model,
+        "times": [0.0, 1.0],
+        "materials": pc.element_field.material_field(model, [("k", 1.0)]),
+        "loads": rhs,
+    }
+    pc.stepping.step_by_step(data)
+    temperature = data["results"][-1]["temperature"]
+    for i, node in enumerate(nodes):
+        assert temperature.value(node, "T") == pytest.approx(i / (len(nodes) - 1))

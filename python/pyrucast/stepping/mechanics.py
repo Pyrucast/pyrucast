@@ -26,10 +26,10 @@ substeps of forced convergence when an iteration stalls.
 
 from dataclasses import dataclass, field
 
-from .. import element_field, matrix, measure, node_field
+from .. import element_field, matrix, measure, node_field, solver
 from .anderson import Accelerator
 from .control import AutomaticControl, IndirectControl
-from .fields import STRAIN_PREFIXES, carried, infinity_norm, part, shifted, solve
+from .fields import STRAIN_PREFIXES, infinity_norm, part
 from .materials import materials_at
 from .problem import contacts
 
@@ -81,7 +81,7 @@ class StepData:
 def _thermal_strain(problem, materials, temperature, options):
     """``α (T − T_ref)`` at the Gauss points, or ``None`` without a
     temperature or without ``alpha`` in the materials."""
-    if temperature is None or "alpha" not in carried(materials):
+    if temperature is None or "alpha" not in materials.components():
         return None
     at_points = element_field.interp_to_gauss(
         temperature.filter_components(["T"]), problem.fespace
@@ -231,9 +231,10 @@ def _turned_inside_out(problem, solution):
 def _advanced(problem, solution, increment):
     """The solution after a solve: displacement ``+ δu``, multipliers as
     returned (they are totals)."""
-    displacement = shifted(
-        part(solution, problem.displacement_names),
-        part(increment, problem.displacement_names),
+    moved = part(increment, problem.displacement_names)
+    displacement = (
+        node_field.restrict_like(part(solution, problem.displacement_names), moved)
+        + moved
     )
     multipliers = part(increment, problem.multiplier_names)
     return displacement if multipliers is None else displacement | multipliers
@@ -242,13 +243,15 @@ def _advanced(problem, solution, increment):
 def _work(problem, primal, dual):
     """``Σ primal·dual`` over the model's (unknown, dual) pairs — ``δu·f`` and
     ``λ·g`` — the scalar product of an increment with a force."""
-    names = [p for p in carried(primal) if p in problem.duality]
+    names = [p for p in primal.components() if p in problem.duality]
     if not names:
         return 0.0
     renamed = primal.filter_components(names)
     for name in names:
         renamed = renamed.rename_component(name, problem.duality[name])
-    duals = [problem.duality[n] for n in names if problem.duality[n] in carried(dual)]
+    duals = [
+        problem.duality[n] for n in names if problem.duality[n] in dual.components()
+    ]
     if not duals:
         return 0.0
     against = dual.filter_components(duals)
@@ -364,7 +367,9 @@ def reference_forces(
     for load in step.loads:
         aligned = node_field.restrict_like(load, balance_start.system)
         applied = aligned if applied is None else applied + aligned
-    rows = [n for n in carried(balance_start.system) if n not in problem.force_names]
+    rows = [
+        n for n in balance_start.system.components() if n not in problem.force_names
+    ]
     rows = [n for n in rows if n not in problem.moment_names]
     work = 0.0
     if applied is not None:
@@ -420,9 +425,12 @@ def nonlinear_predictor(
         or infinity_norm(previous, problem.force_names) <= options.precision * reference
     ):
         return None
-    both = shifted(
-        part(state.first_correction, problem.displacement_names),
-        part(first_correction, problem.displacement_names),
+    now_moved = part(first_correction, problem.displacement_names)
+    both = (
+        node_field.restrict_like(
+            part(state.first_correction, problem.displacement_names), now_moved
+        )
+        + now_moved
     )
     on_previous = _work(problem, both, previous)
     now = _work(problem, both, increment)
@@ -680,9 +688,16 @@ def equilibrium_iterations(
                 pause = 2
                 accelerations += 1
                 rhs = rhs - node_field.restrict_like(correction, rhs)
-        increment, state.mechanics_method, state.mechanics_relations = solve(
-            operator, rhs, state.mechanics_method, state.mechanics_relations
-        )
+        try:
+            increment = solver.solve(
+                operator,
+                rhs,
+                method=state.mechanics_method,
+                relations=state.mechanics_relations,
+            )
+        except RuntimeError:
+            state.mechanics_method, state.mechanics_relations = "lu", "lagrange"
+            increment = solver.solve(operator, rhs)
         previous_increment = part(increment, problem.displacement_names)
         reached = solution
         solution = _advanced(problem, solution, increment)
@@ -745,7 +760,7 @@ def equilibrium_iterations(
                 previous.constraint_forces, change
             )
         reaction_change = infinity_norm(change, problem.force_names)
-        names = [n for n in carried(strain) if n.startswith(STRAIN_PREFIXES)]
+        names = [n for n in strain.components() if n.startswith(STRAIN_PREFIXES)]
         measures = {
             "force": max(
                 infinity_norm(current.out_of_balance, problem.force_names),
@@ -949,9 +964,16 @@ def mechanical_step(data, problem, state, t_end, temperature, options):
             step,
             inertia(start.solution) if inertia else None,
         )
-        first_correction, state.mechanics_method, state.mechanics_relations = solve(
-            operator, first.system, state.mechanics_method, state.mechanics_relations
-        )
+        try:
+            first_correction = solver.solve(
+                operator,
+                first.system,
+                method=state.mechanics_method,
+                relations=state.mechanics_relations,
+            )
+        except RuntimeError:
+            state.mechanics_method, state.mechanics_relations = "lu", "lagrange"
+            first_correction = solver.solve(operator, first.system)
         # This step's load increment: the first residual, less what the
         # previous step left unbalanced.
         increment = part(first.out_of_balance, forces)
@@ -1136,12 +1158,18 @@ def _controller(
     if options.indirect_control is not None:
         settings = options.indirect_control
         pilot = settings["load"]
-        response, state.mechanics_method, state.mechanics_relations = solve(
-            operator,
-            node_field.restrict_like(pilot, first.system),
-            state.mechanics_method,
-            state.mechanics_relations,
-        )
+        try:
+            response = solver.solve(
+                operator,
+                node_field.restrict_like(pilot, first.system),
+                method=state.mechanics_method,
+                relations=state.mechanics_relations,
+            )
+        except RuntimeError:
+            state.mechanics_method, state.mechanics_relations = "lu", "lagrange"
+            response = solver.solve(
+                operator, node_field.restrict_like(pilot, first.system)
+            )
 
         def control_step(level):
             loads = step.loads + (pilot * level,)

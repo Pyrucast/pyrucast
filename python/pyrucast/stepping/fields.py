@@ -4,17 +4,13 @@ Each is two or three library calls under a name that says what the solver
 means by it — no value is ever read or written one node at a time.
 """
 
-from .. import node_field, solver
 from .._pyrucast import NodeField
 
 __all__ = [
     "STRAIN_PREFIXES",
-    "carried",
     "domain_mesh",
     "infinity_norm",
     "part",
-    "shifted",
-    "solve",
     "uniform",
 ]
 
@@ -23,47 +19,11 @@ __all__ = [
 STRAIN_PREFIXES = ("eps", "E_", "H_")
 
 
-def carried(field):
-    """Every component ``field`` carries, in first-seen order."""
-    seen = []
-    for zone in field:
-        for name in zone.components():
-            if name not in seen:
-                seen.append(name)
-    return seen
-
-
 def part(field, names):
     """The components ``names`` of ``field`` — ``None`` when it carries none."""
-    if field is None or not any(n in carried(field) for n in names):
+    if field is None or not any(n in field.components() for n in names):
         return None
     return field.filter_components(list(names))
-
-
-def shifted(base, increment):
-    """``base + increment`` on the supports of ``increment``: ``base`` is
-    reprojected there first, so the two always add zone by zone (absent from
-    ``base`` reads as zero)."""
-    if base is None:
-        return increment
-    if increment is None:
-        return base
-    return node_field.restrict_like(base, increment) + increment
-
-
-def solve(operator, rhs, method, relations):
-    """``operator⁻¹ rhs`` by ``method`` and ``relations``, and the two that
-    solved it: refused — a relation the elimination cannot express, a matrix
-    the Cholesky finds not positive definite — they give way to the LU with
-    multipliers, which then stays."""
-    try:
-        return (
-            solver.solve(operator, rhs, method=method, relations=relations),
-            method,
-            relations,
-        )
-    except RuntimeError:
-        return solver.solve(operator, rhs), "lu", "lagrange"
 
 
 def infinity_norm(field, names):
@@ -71,7 +31,7 @@ def infinity_norm(field, names):
     carries none of them)."""
     if field is None:
         return 0.0
-    present = [n for n in names if n in carried(field)]
+    present = [n for n in names if n in field.components()]
     if not present:
         return 0.0
     magnitude = field.abs()

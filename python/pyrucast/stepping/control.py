@@ -45,16 +45,12 @@ def automatic_control(problem, increment, elastic, fraction, materials):
     return max(total, _largest_strain(problem, departure, materials))
 
 
-def _components(field):
-    return [n for zone in field for n in zone.components()]
-
-
 def _spread(scalar, like):
     """The one-component ``scalar`` field copied into every component of
     ``like`` — what a division component by component needs."""
-    (name,) = set(_components(scalar))
+    (name,) = scalar.components()
     copies = None
-    for component in dict.fromkeys(_components(like)):
+    for component in like.components():
         copy = scalar.rename_component(name, component)
         copies = copy if copies is None else copies | copy
     return element_field.consolidate(copies)
