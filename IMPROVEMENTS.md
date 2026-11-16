@@ -82,21 +82,85 @@ falls back as a singular base does today. With `"lagrange"` the base keeps the
 equality multipliers, a saddle-point: the LU stays. To measure on a release
 build before deciding.
 
-## Cholesky accepts a singular matrix without a word
+## A singular matrix passes the solve unnoticed
 
-`solve(k, f, method="cholesky")` on a singular stiffness (boundary conditions
-forgotten) returns a field without raising, where the default LU raises
-"matrix is singular". Observed by running on 2026-11-15; the values returned
-were not examined. The docstring of `solver.solve` (`src/py/ops/solver.rs`)
-promises the error only for a matrix that is not positive definite, so it
-does not lie, but the user who asks for Cholesky loses the check LU gives.
+A structure left free to move as a rigid body — boundary conditions forgotten
+— assembles a singular stiffness, and `solve` does not always say so.
+Measured on 2026-11-16 on the tutorial's lug (HEX20):
 
-- Probable cause, not verified: a singular, positive semi-definite matrix
-  meets a pivot that rounding leaves slightly positive instead of zero, and
-  faer's `Llt` (`src/ops/solver/lu.rs`) only refuses a pivot `≤ 0`.
-- Lead: first look at how the LU detects the singular case, then check the
-  pivots of `L` against a threshold relative to the largest, and raise the
-  same "singular" error. Then write it in `# Raises` and add a test.
+- The LU, the default, returns without an error with no clamp (`u` up to
+  2·10⁶ m) and on the conduction with no imposed temperature (`T` up to
+  1.3·10¹⁶). It raises only on an exactly zero pivot, whose solution is not
+  finite (`src/ops/solver/lu.rs`, step 3 of `solve`).
+- The Cholesky refused both, but only because rounding left a pivot negative.
+  A pivot that rounding leaves slightly positive goes through: observed on
+  2026-11-15, values not examined.
+
+The docstring of `solver.solve` says so since then (`# Notes`). Leads:
+
+- Cholesky: a relative test per pivot, `L_kk² ≤ τ·A_kk`. An exact singularity
+  cancels a pivot down to rounding, while a regular matrix keeps
+  `L_kk² / A_kk ≥ 1/κ` (κ its condition number): τ is to be fixed by measuring
+  that ratio on singular and on regular cases. The high-level `Llt` keeps its
+  values private; faer's intermediate API gives them
+  (`factorize_symbolic_cholesky`, `SymbolicCholesky::factorize_numeric_llt`,
+  the diagonal of `L` through `raw()` and `perm()`).
+- LU: faer exposes none of its pivots, at any level. A condition estimate
+  from the factorization — a few solves, as LAPACK's `gecon` does — would
+  serve every method alike.
+- Then raise one "singular" error, write it in `# Raises`, and test both
+  measured cases.
+
+## A plain solve factorizes a symmetric matrix by LU
+
+`solve` keeps `method="lu"`, `relations="lagrange"` by default, and faer's LU
+ignores symmetry. On the lug's elastic stiffness with its clamp (12 255 DOF,
+measured on 2026-11-16): LU 0.61 s, elimination then Cholesky 0.165 s
+(0.245 s with the elimination), against 0.21 s for the symmetric
+factorization of another code on the same matrix — the same solution. A
+caller of `solve` who does not ask for `relations="eliminate"`,
+`method="cholesky"` pays three times the factorization. `stepping.step_by_step`
+asks for them, and falls back on the LU with multipliers when a solve refuses
+them (`stepping.fields.solve`).
+
+- To decide whether `solve` should try them by itself. A solver option doing
+  so (`"auto"`, 2026-11-16) was reverted the same day: about 120 lines of code
+  and 270 of tests to rebuild, from the matrix cache, what the caller already
+  knows (which physics, whether there is contact).
+- Keep the symbolic analysis (ordering, elimination tree, supernodes) from one
+  matrix to the next of the same pattern, which the model already keeps per
+  matrix kind. faer's high level allows it: `SymbolicLu::try_new` then
+  `Lu::try_new_with_symbolic` (`SymbolicLlt` / `Llt` alike), where
+  `sp_lu()` / `sp_cholesky()` redo both at each call. Measure its share of the
+  0.61 s first.
+- LDLᵀ or LBLᵀ (Bunch-Kaufman) on the saddle-point would factorize the
+  multipliers' system without eliminating it, and a stiffness past its
+  buckling load, for about half an LU. Only faer's intermediate API has them:
+  `factorize_numeric_ldlt` (with a regularization given the expected sign of
+  each pivot) and `factorize_numeric_intranode_lblt` (its pivots are searched
+  inside a supernode only).
+
+## With contact, eliminating the relations slows the solve down
+
+On `tutoriel/contact.py` (measured on 2026-11-16, same 40 iterations, results
+equal to rounding), solving with `relations="eliminate"` takes 13.1 s against
+11.5 s by multipliers, though both factorize by LU (the active-set loop does,
+whatever is asked):
+
+- a solve that reuses everything is faster eliminated: 14.9 ms against
+  28.1 ms (three series of 100 solves each);
+- but the first solve takes 3.7 s against 2.9 s, and each refactorization at
+  a status change about 540 ms against 430 ms — on a smaller system. Cause not
+  found; the inequality rows of the reduced system are not scaled
+  (`lambda_scale: 1.0` in `src/ops/solver/eliminate.rs`), which the
+  multipliers path does — a lead, not verified.
+- On that tutorial `active_set="schur"` refactorizes at every status change,
+  in both paths: the same series of times with `"refactorize"` asked
+  explicitly. The base (every contact released) is presumably singular, the
+  support then being held by nothing: to check, since the Schur strategy
+  never applies there.
+
+`stepping.step_by_step` keeps the multipliers when the model has contact.
 
 ## `to_medcoupling` copies every array it hands to medcoupling
 
