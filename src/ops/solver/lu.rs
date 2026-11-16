@@ -163,14 +163,10 @@ impl Factored {
 
     /// Whether this is the factorization `method` asks for: a cached one is
     /// reused only then, so asking for a Cholesky after an LU attempts it.
-    /// [`SolveMethod::Auto`] asks for no factorization in particular, so it
-    /// takes whichever is there: what `auto` chose the first time is kept.
     pub(crate) fn answers(&self, method: SolveMethod) -> bool {
         matches!(
             (self, method),
-            (Factored::Lu(_), SolveMethod::Lu)
-                | (Factored::Cholesky(_), SolveMethod::Cholesky)
-                | (_, SolveMethod::Auto)
+            (Factored::Lu(_), SolveMethod::Lu) | (Factored::Cholesky(_), SolveMethod::Cholesky)
         )
     }
 }
@@ -269,23 +265,6 @@ pub(crate) fn factorize_csr(
     };
     let out = match options.method {
         SolveMethod::Lu => Factored::Lu(lu_of(n, col_ptr, row_idx, values)?),
-        // Positive-definiteness depends on the values, so it is learnt by
-        // trying: a refused pivot sends the same arrays to the LU. Anything
-        // else faer reports is a real failure and is not hidden behind an LU.
-        SolveMethod::Auto if symmetric => match cholesky_of(n, col_ptr, row_idx, values) {
-            Ok(llt) => Factored::Cholesky(llt),
-            Err(LltError::Numeric(
-                faer::linalg::cholesky::llt::factor::LltError::NonPositivePivot { .. },
-            )) => Factored::Lu(lu_of(n, col_ptr, row_idx, values)?),
-            Err(other) => {
-                return Err(PyrucastError::Message(format!(
-                    "solve: Cholesky could not be set up: {other:?}"
-                )))
-            }
-        },
-        // A Cholesky reads one triangle: on a matrix that does not declare
-        // itself symmetric it would quietly use the wrong half.
-        SolveMethod::Auto => Factored::Lu(lu_of(n, col_ptr, row_idx, values)?),
         SolveMethod::Cholesky => {
             // faer cannot catch this one: a Cholesky reads a single triangle, so
             // on a non-symmetric matrix it does not fail — it quietly uses the
@@ -397,12 +376,11 @@ pub(crate) fn lu_solve_vec(lu: &SparseLu, b: &[f64]) -> Vec<f64> {
     x
 }
 
-/// Which factorization a solve should run. With [`Lu`](Self::Lu) or
-/// [`Cholesky`](Self::Cholesky) the caller chooses, and nothing is attempted
-/// and retried behind their back. [`Auto`](Self::Auto) lets the solve choose,
-/// at the cost of an attempt that may fail — paid once per matrix, never on a
-/// saddle-point. The enum leaves room for an iterative back-end without
-/// changing the `solve` call sites.
+/// Which factorization a solve should run. The caller chooses; nothing is
+/// attempted and retried behind their back, because the case that fails is the
+/// common one — every multiplier boundary condition assembles a saddle-point —
+/// and the failed attempt would be paid on each factorization. The enum leaves
+/// room for an iterative back-end without changing the `solve` call sites.
 ///
 /// ```
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -447,15 +425,6 @@ pub(crate) fn lu_solve_vec(lu: &SparseLu, b: &[f64]) -> Vec<f64> {
 /// let c = SolveOptions { method: SolveMethod::Cholesky, cache: false, ..Default::default() };
 /// let err = solver::solve_with_options(&k, &charge, &c).unwrap_err().to_string();
 /// assert!(err.contains("positive definite"), "{err}");
-///
-/// // `auto` takes it all the same — by LU, the saddle-point never being
-/// // positive definite — and gives the LU's answer.
-/// # use pyrucast::named::Named;
-/// assert_eq!(SolveMethod::parse("auto")?, SolveMethod::Auto);
-/// let a = SolveOptions { method: SolveMethod::Auto, cache: false, ..Default::default() };
-/// let by_lu = solver::solve_with_options(&k, &charge, &o)?;
-/// let by_auto = solver::solve_with_options(&k, &charge, &a)?;
-/// assert!((by_auto.value(n[2].id(), "T")? - by_lu.value(n[2].id(), "T")?).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -473,16 +442,6 @@ pub enum SolveMethod {
     /// whereas the system an [elimination](crate::ops::solver::RelationMethod::Eliminate)
     /// reduces it to carries no multiplier DOF and usually accepts.
     Cholesky,
-    /// Cholesky when the system to factorize declares itself symmetric, holds
-    /// no multiplier, and turns out positive definite; the LU otherwise.
-    ///
-    /// Positive-definiteness depends on the values — a structure past its
-    /// buckling load loses it — so it is learnt by attempting the Cholesky: a
-    /// refused pivot hands the same matrix to the LU. A saddle-point is never
-    /// attempted, its zero block forbidding it whatever the values. What was
-    /// chosen is kept with the factorization on the matrix, so a matrix solved
-    /// again is not attempted again.
-    Auto,
 }
 
 /// How much a solve says about what it did.
@@ -530,13 +489,12 @@ impl crate::named::Named for Verbosity {
 
 impl crate::named::Named for SolveMethod {
     const LABEL: &'static str = "solver method";
-    const VALUES: &'static [Self] = &[SolveMethod::Lu, SolveMethod::Cholesky, SolveMethod::Auto];
+    const VALUES: &'static [Self] = &[SolveMethod::Lu, SolveMethod::Cholesky];
 
     fn name(self) -> &'static str {
         match self {
             SolveMethod::Lu => "lu",
             SolveMethod::Cholesky => "cholesky",
-            SolveMethod::Auto => "auto",
         }
     }
 }
@@ -582,22 +540,13 @@ impl Factorization {
         // scale (see `scaling`): the values are then copied once, scaled.
         let scaling = RelationScaling::of(&vars, &row_keys, &col_keys, offsets, cols, vals);
         let factored = match &scaling {
-            // Its zero block forbids positive-definiteness whatever the values,
-            // so `auto` goes straight to the LU: a Cholesky would be attempted
-            // only to be refused.
             Some(scale) => factorize_csr(
                 row_keys.len(),
                 offsets,
                 cols,
                 &scale.scale_csr(offsets, cols, vals),
                 matrix.symmetric() && scale.is_symmetric(),
-                &SolveOptions {
-                    method: match options.method {
-                        SolveMethod::Auto => SolveMethod::Lu,
-                        explicit => explicit,
-                    },
-                    ..*options
-                },
+                options,
             )?,
             None => factorize_csr(
                 row_keys.len(),
@@ -1228,128 +1177,6 @@ mod tests {
         };
         let err = crate::ops::solver::solve_with_options(&m, &rhs, &cholesky).unwrap_err();
         assert!(err.to_string().contains("symmetric"), "{err}");
-    }
-
-    fn auto() -> SolveOptions {
-        SolveOptions {
-            method: SolveMethod::Auto,
-            ..Default::default()
-        }
-    }
-
-    /// `[[1, 2], [2, 1]]` with no relation, declared symmetric: indefinite
-    /// (eigenvalues 3 and −1), so a Cholesky refuses its second pivot, and
-    /// nonsingular, so the LU solves it. With `b = (3, 3)`, `x = (1, 1)`.
-    fn symmetric_indefinite() -> (
-        crate::containers::matrix::Matrix,
-        NodeField,
-        [crate::atoms::NodeId; 2],
-    ) {
-        use crate::containers::matrix::{DofOrdering, SubMatrix};
-        let coords = Handle::new(Coords::new(1).unwrap());
-        let a = Node::create_in(coords.clone(), &[0.0]).unwrap().id();
-        let b = Node::create_in(coords.clone(), &[1.0]).unwrap().id();
-        let sm = {
-            let mut sm = SubMesh::new(coords, ElementType::POI1);
-            sm.add_cell(&[a]).unwrap();
-            sm.add_cell(&[b]).unwrap();
-            Handle::new(sm)
-        };
-        let mut block = SubMatrix::new(
-            sm.clone(),
-            sm.clone(),
-            vec!["q".into()],
-            vec!["T".into()],
-            DofOrdering::NodesThenVars,
-            Symmetry::Full,
-        )
-        .unwrap();
-        for (r, c, v) in [(a, a, 1.0), (a, b, 2.0), (b, a, 2.0), (b, b, 1.0)] {
-            block.add_entry(r, "q", c, "T", v).unwrap();
-        }
-        let mut m = crate::containers::matrix::Matrix::empty();
-        m.add_sub(Handle::new(block)).unwrap();
-        m.assemble().unwrap();
-        let mut rhs = SubNodeField::from_poi1(&sm, vec!["q".into()]).unwrap();
-        rhs.set_value(a, "q", 3.0).unwrap();
-        rhs.set_value(b, "q", 3.0).unwrap();
-        (m, NodeField::from_sub(rhs), [a, b])
-    }
-
-    /// On a symmetric positive definite matrix, `auto` takes the Cholesky — and
-    /// the answer is the LU's.
-    #[test]
-    fn auto_takes_the_cholesky_of_a_positive_definite_matrix() {
-        let (m, rhs) = spd_grid(4);
-        assert_eq!(
-            Factorization::new(&m, &auto()).unwrap().method(),
-            "cholesky"
-        );
-        let node = m.row_mesh().unwrap().node(0, 0, 0).unwrap().id();
-        let by_auto = crate::ops::solver::solve_with_options(&m, &rhs, &auto()).unwrap();
-        let by_lu =
-            crate::ops::solver::solve_with_options(&m, &rhs, &SolveOptions::default()).unwrap();
-        let (a, b) = (
-            by_auto.value(node, "T").unwrap(),
-            by_lu.value(node, "T").unwrap(),
-        );
-        assert!((a - b).abs() <= 1e-10 * (1.0 + a.abs()), "{a} vs {b}");
-    }
-
-    /// A symmetric matrix that is not positive definite: the Cholesky refuses
-    /// it, and `auto` hands the same matrix to the LU, which solves it.
-    #[test]
-    fn auto_hands_an_indefinite_matrix_to_the_lu() {
-        let (m, rhs, [a, b]) = symmetric_indefinite();
-        assert!(m.symmetric());
-        // The fixture is what it claims: an explicit Cholesky refuses it.
-        assert!(Factorization::new(&m, &cholesky()).is_err());
-        assert_eq!(Factorization::new(&m, &auto()).unwrap().method(), "lu");
-        let x = crate::ops::solver::solve_with_options(&m, &rhs, &auto()).unwrap();
-        assert!((x.value(a, "T").unwrap() - 1.0).abs() < 1e-12);
-        assert!((x.value(b, "T").unwrap() - 1.0).abs() < 1e-12);
-    }
-
-    /// A saddle-point is symmetric but never positive definite: `auto` takes
-    /// the LU on it.
-    #[test]
-    fn auto_takes_the_lu_of_a_saddle_point() {
-        let m = clamped_bar();
-        assert!(m.symmetric());
-        assert_eq!(Factorization::new(&m, &auto()).unwrap().method(), "lu");
-    }
-
-    /// A Cholesky would read one triangle of a matrix that declares no
-    /// symmetry: `auto` does not attempt it.
-    #[test]
-    fn auto_takes_the_lu_of_a_matrix_declaring_no_symmetry() {
-        let (m, _, _) = tiny_system();
-        assert!(!m.symmetric());
-        assert_eq!(Factorization::new(&m, &auto()).unwrap().method(), "lu");
-    }
-
-    /// What `auto` chose is kept: a second `auto` solve of the same matrix
-    /// reuses the very factorization of the first — a Cholesky, or the LU a
-    /// refused Cholesky led to — rather than attempting again.
-    #[test]
-    fn auto_keeps_the_factorization_it_chose() {
-        for (m, rhs, chosen) in [
-            {
-                let (m, rhs) = spd_grid(3);
-                (m, rhs, "cholesky")
-            },
-            {
-                let (m, rhs, _) = symmetric_indefinite();
-                (m, rhs, "lu")
-            },
-        ] {
-            crate::ops::solver::solve_with_options(&m, &rhs, &auto()).unwrap();
-            let first = m.cached_factorization::<Factorization>().unwrap();
-            assert_eq!(first.method(), chosen);
-            crate::ops::solver::solve_with_options(&m, &rhs, &auto()).unwrap();
-            let second = m.cached_factorization::<Factorization>().unwrap();
-            assert!(Arc::ptr_eq(&first, &second), "{chosen}: factorized again");
-        }
     }
 
     #[test]

@@ -17,14 +17,11 @@
 //! - [`RelationMethod::Eliminate`] — every equality relation eliminates one
 //!   unknown (master/slave condensation), and the smaller system left carries
 //!   no multiplier but those of the inequalities, which the same active-set
-//!   loop resolves on it;
-//! - [`RelationMethod::Auto`] — the elimination when every relation is within
-//!   its scope, the multipliers otherwise.
+//!   loop resolves on it.
 //!
 //! Whatever is costly — the factorization, the condensation, the active-set
 //! state — is cached on the matrix ([`SolveOptions::cache`]) and cleared when
-//! the matrix changes. What is cached also records the path that made it:
-//! under `auto`, a matrix solved again goes down that path again.
+//! the matrix changes.
 //!
 //! ```
 //! # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -118,13 +115,6 @@ pub use unilateral::ActiveSetMethod;
 ///     relations: RelationMethod::Eliminate, ..Default::default() })?;
 /// let m = modele.multiplier_mesh()?.get(0)?.read().connectivity()[0];
 /// assert!((elimine.value(m, "lambda")? - lagrange.value(m, "lambda")?).abs() < 1e-9);
-///
-/// // `auto` eliminates this one — a single relation, an unknown of its own —
-/// // and gives the same solution again.
-/// assert_eq!(RelationMethod::parse("auto")?, RelationMethod::Auto);
-/// let auto = solver::solve_with_options(&k, &charge, &SolveOptions {
-///     relations: RelationMethod::Auto, ..Default::default() })?;
-/// assert!((auto.value(m, "lambda")? - lagrange.value(m, "lambda")?).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -142,30 +132,16 @@ pub enum RelationMethod {
     /// reduced system with its multiplier, for the active-set loop. Scope:
     /// non-chained, disjoint slaves.
     Eliminate,
-    /// The elimination when every equality relation is within its scope — an
-    /// unknown of its own, appearing in no other equality relation — and the
-    /// multipliers otherwise: a relation chained to another is left to them
-    /// instead of being refused. Either way, the same solution.
-    ///
-    /// Decided when the matrix is first solved: what that solve caches — a
-    /// condensation, or a factorization of the saddle-point — records the
-    /// path, and the next solve of the same matrix takes it again.
-    Auto,
 }
 
 impl crate::named::Named for RelationMethod {
     const LABEL: &'static str = "relation method";
-    const VALUES: &'static [Self] = &[
-        RelationMethod::Lagrange,
-        RelationMethod::Eliminate,
-        RelationMethod::Auto,
-    ];
+    const VALUES: &'static [Self] = &[RelationMethod::Lagrange, RelationMethod::Eliminate];
 
     fn name(self) -> &'static str {
         match self {
             RelationMethod::Lagrange => "lagrange",
             RelationMethod::Eliminate => "eliminate",
-            RelationMethod::Auto => "auto",
         }
     }
 }
@@ -186,8 +162,7 @@ impl crate::named::Named for RelationMethod {
 pub struct SolveOptions {
     /// Direct factorization: LU, or Cholesky for a symmetric positive definite
     /// system (a saddle-point never is; a system reduced by elimination
-    /// usually is), or `Auto` to let the solve find out. The active-set loop
-    /// factorizes by LU whatever is asked.
+    /// usually is). The active-set loop factorizes by LU whatever is asked.
     pub method: SolveMethod,
     /// How the constraint relations are enforced.
     pub relations: RelationMethod,
@@ -197,9 +172,8 @@ pub struct SolveOptions {
     /// Reuse / populate what is cached on the matrix: the factorization, the
     /// condensation or the active-set state (with its last converged status as
     /// a warm start). A factorization, alone or inside a condensation, is
-    /// reused for the `method` it was made with only — or for `Auto`, which
-    /// takes whichever is there. When `false`, everything is computed afresh
-    /// and the cache is not touched.
+    /// reused for the `method` it was made with only. When `false`,
+    /// everything is computed afresh and the cache is not touched.
     pub cache: bool,
     /// Maximum number of status iterations of the active-set loop.
     pub max_iter: usize,
@@ -418,40 +392,13 @@ pub fn solve_cancellable_with_options(
 ) -> Result<NodeField> {
     cancel.check()?;
     match options.relations {
-        // An explicit `relations` decides the path, with the blocks, before any
+        // The path is decided by `relations` and by the blocks, before any
         // cache is looked at. Each path keeps its own artefact in the matrix's
         // single cache slot: another path on the same matrix replaces it.
-        RelationMethod::Lagrange => by_multipliers(matrix, rhs, options, cancel),
-        RelationMethod::Eliminate => eliminate::solve(matrix, rhs, options, cancel),
-        // `auto` reads the path off what the slot holds: a factorization or an
-        // active-set state was made by multipliers, a condensation by
-        // eliminating — `eliminate::solve` takes that one up itself. On an
-        // empty slot the elimination is tried, and hands over to the
-        // multipliers when a relation is out of its scope.
-        RelationMethod::Auto
-            if options.cache
-                && (matrix.cached_factorization::<lu::Factorization>().is_some()
-                    || matrix
-                        .cached_factorization::<unilateral::ActiveSetState>()
-                        .is_some()) =>
-        {
-            by_multipliers(matrix, rhs, options, cancel)
+        RelationMethod::Lagrange if matrix.has_inequality() => {
+            unilateral::solve(matrix, rhs, options, cancel)
         }
-        RelationMethod::Auto => eliminate::solve(matrix, rhs, options, cancel),
-    }
-}
-
-/// The multipliers path: the saddle-point as assembled, through the active-set
-/// loop as soon as the matrix carries an inequality.
-fn by_multipliers(
-    matrix: &Matrix,
-    rhs: &NodeField,
-    options: &SolveOptions,
-    cancel: &dyn Cancel,
-) -> Result<NodeField> {
-    if matrix.has_inequality() {
-        unilateral::solve(matrix, rhs, options, cancel)
-    } else {
-        lu::solve(matrix, rhs, options, cancel)
+        RelationMethod::Lagrange => lu::solve(matrix, rhs, options, cancel),
+        RelationMethod::Eliminate => eliminate::solve(matrix, rhs, options, cancel),
     }
 }

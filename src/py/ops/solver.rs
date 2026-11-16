@@ -28,10 +28,7 @@ use pyrucast_macros::py_op;
 ///   lives at its multiplier node, component `imposed`.
 /// - `method`: the factorization. `"lu"` works on any square matrix;
 ///   `"cholesky"` asks that the system be symmetric **and** positive definite —
-///   never a system with multipliers, usually one reduced by elimination.
-///   `"auto"` attempts the Cholesky when the system to factorize declares itself
-///   symmetric and holds no multiplier, and takes the LU when it does not or
-///   when the Cholesky refuses it (a structure past its buckling load). The
+///   never a system with multipliers, usually one reduced by elimination. The
 ///   active-set loop factorizes by LU whatever is asked.
 /// - `relations`: how the constraint relations are enforced. `"lagrange"`: by
 ///   their multipliers, the system solved as assembled. `"eliminate"`: each
@@ -39,9 +36,7 @@ use pyrucast_macros::py_op;
 ///   without multipliers, is solved; an inequality is not eliminated, it stays
 ///   on the reduced system and is resolved by the same active-set loop. Scope of
 ///   `"eliminate"`: each relation eliminates an unknown of its own, which
-///   appears in no other equality relation. `"auto"`: `"eliminate"` when every
-///   equality relation is within that scope, `"lagrange"` otherwise. Every
-///   choice gives the same solution.
+///   appears in no other equality relation.
 /// - `active_set`: how each status of the active-set loop is factorized, read
 ///   only when `matrix` carries an inequality. `"schur"` factorizes the
 ///   inequality-free base once and updates it per status, falling back on
@@ -52,9 +47,7 @@ use pyrucast_macros::py_op;
 ///   and store what this one computes. The store is cleared when the matrix
 ///   changes. A matrix keeps one of them at a time, and a factorization serves
 ///   the `method` it was made with only: another `relations` or `method`
-///   computes afresh and replaces it. `"auto"` takes whatever is stored, so
-///   what it chose on the first solve of a matrix is kept for the next ones.
-///   `False` neither reads nor fills it.
+///   computes afresh and replaces it. `False` neither reads nor fills it.
 /// - `max_iter`: the bound of the active-set loop, in status changes.
 /// - `tol`: the sign tolerance of the active-set loop, on the multiplier and on
 ///   the gap.
@@ -71,8 +64,8 @@ use pyrucast_macros::py_op;
 ///
 /// # Raises
 ///
-/// `RuntimeError` if `matrix` has no assembled values, if the LU meets an
-/// exactly zero pivot (an unknown nothing holds at all), if `"cholesky"` meets a
+/// `RuntimeError` if `matrix` has no assembled values, if the LU meets a singular
+/// matrix (boundary conditions forgotten, typically), if `"cholesky"` meets a
 /// matrix that is not positive definite, if a relation is out of the scope of
 /// `"eliminate"`, or if the active-set loop has not converged after `max_iter`
 /// status changes. `ValueError` for an unknown `method`, `relations`,
@@ -83,11 +76,6 @@ use pyrucast_macros::py_op;
 /// `Ctrl+C` is honoured between the phases of the solve and at each status
 /// change; a factorization is a single library call and is not interrupted
 /// mid-way.
-///
-/// A matrix that is singular only up to rounding is not always reported: a
-/// structure left free to move as a rigid body, its boundary conditions
-/// forgotten, can come back as a finite but absurdly large solution. Check the
-/// boundary conditions when the magnitudes are implausible.
 #[py_op(method_on = PyMatrix)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]

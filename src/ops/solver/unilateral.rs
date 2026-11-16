@@ -254,7 +254,7 @@ impl ActiveSet {
 /// The active-set state of the Lagrange path, cached transparently on the
 /// [`Matrix`] (cleared on any matrix mutation): the row layout the right-hand
 /// side is gathered on, and the loop.
-pub(super) struct ActiveSetState {
+struct ActiveSetState {
     /// The matrix row layout (gathers the rhs; the solution is wrapped by
     /// [`Matrix::field_from_col_values`], which reads the column layout from
     /// the assembled matrix itself).

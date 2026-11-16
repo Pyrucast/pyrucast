@@ -60,11 +60,6 @@
 //! periodicity and is validated with a clear error. Chained relations (a master
 //! that is itself a slave elsewhere) are out of scope for v1. An inequality
 //! may reach a slave: it goes through `T` like any other row.
-//!
-//! Under [`RelationMethod::Auto`](super::RelationMethod::Auto), a matrix out of
-//! that scope is not an error: it is solved by the multipliers instead. The
-//! scope is checked before the physics stiffness is copied out, so the
-//! hand-over costs no more than reading the relations.
 
 use crate::atoms::NodeId;
 use crate::containers::matrix::{dof_node, dof_var, DofKey, Matrix};
@@ -80,7 +75,7 @@ use std::sync::Arc;
 use super::lu::{self, factorize_csr, Factored, SolveMethod};
 use super::relations::{relation_rows, RelationRow};
 use super::unilateral::{release_pivot, ActiveSet, Inequality};
-use super::{RelationMethod, SolveOptions};
+use super::SolveOptions;
 
 /// One eliminated slave DOF and the data needed to build `u₀` and recover its
 /// relation's multiplier. The masters are folded into `T` at build time, so
@@ -120,17 +115,6 @@ pub(super) struct Condensation {
     n_cols: usize,
     /// One entry per eliminated slave.
     slaves: Vec<SlaveInfo>,
-}
-
-/// What an elimination makes of a matrix's relations.
-enum Elimination {
-    /// Every equality relation had an unknown of its own: the condensation.
-    Condensed(Condensation),
-    /// A relation the elimination cannot express — chained to another one, or
-    /// reaching an unknown that is not a physics DOF — and why. The multipliers
-    /// still can: an explicit elimination reports it as an error, `auto` hands
-    /// the matrix over to them.
-    OutOfScope(String),
 }
 
 /// The system an elimination leaves.
@@ -200,25 +184,11 @@ pub(super) fn solve(
             if relations.is_empty() {
                 return lu::solve(matrix, rhs, options, cancel);
             }
-            match build_condensation(matrix, relations, options)? {
-                Elimination::Condensed(c) => {
-                    let c = Arc::new(c);
-                    if options.cache {
-                        matrix.store_factorization(c.clone());
-                    }
-                    c
-                }
-                // What the multipliers cache on the matrix then records the
-                // choice: the next `auto` solve goes to them directly.
-                Elimination::OutOfScope(reason) => {
-                    return match options.relations {
-                        RelationMethod::Auto => super::by_multipliers(matrix, rhs, options, cancel),
-                        RelationMethod::Lagrange | RelationMethod::Eliminate => {
-                            Err(PyrucastError::Message(reason))
-                        }
-                    };
-                }
+            let c = Arc::new(build_condensation(matrix, relations, options)?);
+            if options.cache {
+                matrix.store_factorization(c.clone());
             }
+            c
         }
     };
     cancel.check()?;
@@ -299,15 +269,14 @@ pub(super) fn solve(
     matrix.field_from_col_values(&x)
 }
 
-/// Build the [`Condensation`]: partition physics vs multiplier DOFs, read the
-/// relations, pick slaves, extract the physics stiffness, assemble `T` and
-/// factorize the reduced matrix — or say why the relations are out of the
-/// elimination's scope, before anything costly is built.
+/// Build the [`Condensation`]: partition physics vs multiplier DOFs, extract the
+/// physics stiffness, read the relations, pick slaves, assemble `T` and factorize
+/// the reduced matrix.
 fn build_condensation(
     matrix: &Matrix,
     relations: Vec<RelationRow>,
     options: &SolveOptions,
-) -> Result<Elimination> {
+) -> Result<Condensation> {
     // ── Partition the matrix DOFs: multiplier nodes vs physics ─────────
     let mult_nodes: HashSet<NodeId> = relations.iter().map(|r| r.multiplier).collect();
     // Only the equations are eliminated; an inequality holds as one or not
@@ -364,7 +333,7 @@ fn build_condensation(
         })
     };
     if phys_row_keys.len() != n_phys {
-        return Ok(Elimination::OutOfScope(format!(
+        return Err(PyrucastError::Message(format!(
             "elimination: physics block is not square ({} dual rows vs {} primal cols)",
             phys_row_keys.len(),
             n_phys
@@ -377,108 +346,11 @@ fn build_condensation(
     // this is the one place that would silently solve the wrong system.
     for k in 0..n_phys {
         if dof_node(phys_row_keys[k]) != dof_node(phys_col_keys[k]) {
-            return Ok(Elimination::OutOfScope(
+            return Err(PyrucastError::Message(
                 "elimination: physics row/column DOFs are not conjugate-aligned; \
                  this physics is unsupported by the elimination solver"
                     .into(),
             ));
-        }
-    }
-
-    // ── Pass 1: pick slaves + validate the non-chained/disjoint scope ──
-    // Before `K_phys` is extracted: a matrix out of scope costs no copy of it.
-    struct SlaveRecord {
-        s_idx: usize,
-        a_s: f64,
-        masters: Vec<(usize, f64)>,
-        multiplier_node: NodeId,
-    }
-    // Every term of a relation, as a physics index — or why not: a relation
-    // that reaches a multiplier column is not one an elimination can express.
-    let resolve = |rel: &RelationRow| -> std::result::Result<Vec<(usize, f64)>, String> {
-        rel.terms
-            .iter()
-            .map(|&(col, coefficient)| {
-                let idx = full_col_to_phys[col];
-                if idx == usize::MAX {
-                    let key = full_col[col];
-                    return Err(format!(
-                        "elimination: the relation at multiplier node {:?} reaches \
-                         ({:?}, '{}'), which is not a physics DOF of the matrix",
-                        rel.multiplier,
-                        dof_node(key),
-                        vars[dof_var(key) as usize]
-                    ));
-                }
-                Ok((idx, coefficient))
-            })
-            .collect()
-    };
-    let mut records: Vec<SlaveRecord> = Vec::with_capacity(equalities.len());
-    let mut slave_set: HashSet<usize> = HashSet::new();
-    let mut master_set: HashSet<usize> = HashSet::new();
-    for rel in &equalities {
-        let resolved = match resolve(rel) {
-            Ok(resolved) => resolved,
-            Err(reason) => return Ok(Elimination::OutOfScope(reason)),
-        };
-        // Slave = the **available** term (not already a slave or a master of
-        // another relation) with the largest |coefficient| — the numerically
-        // safest denominator that also keeps shared masters as masters. If no
-        // term is available, every DOF of this relation is already constrained:
-        // that is a chained/over-constrained system, out of v1 scope.
-        let Some((slave_pos, &(s_idx, a_s))) = resolved
-            .iter()
-            .enumerate()
-            .filter(|(_, (idx, _))| !slave_set.contains(idx) && !master_set.contains(idx))
-            .max_by(|a, b| a.1 .1.abs().total_cmp(&b.1 .1.abs()))
-        else {
-            return Ok(Elimination::OutOfScope(format!(
-                "elimination: relation at multiplier node {:?} has no eliminable \
-                 DOF — all its terms are already constrained (chaining is out of \
-                 scope, v1)",
-                rel.multiplier
-            )));
-        };
-        if a_s == 0.0 {
-            return Err(PyrucastError::Message(format!(
-                "elimination: relation at multiplier node {:?} has no term with a \
-                 nonzero coefficient",
-                rel.multiplier
-            )));
-        }
-        let mut masters = Vec::with_capacity(resolved.len() - 1);
-        for (p, &(m_idx, coefficient)) in resolved.iter().enumerate() {
-            if p == slave_pos {
-                continue;
-            }
-            if slave_set.contains(&m_idx) {
-                let key = phys_col_keys[m_idx];
-                return Ok(Elimination::OutOfScope(format!(
-                    "elimination: master DOF ({:?}, '{}') is a slave of another \
-                     relation — chaining is out of scope (v1)",
-                    dof_node(key),
-                    vars[dof_var(key) as usize]
-                )));
-            }
-            masters.push((m_idx, coefficient));
-        }
-        slave_set.insert(s_idx);
-        master_set.extend(masters.iter().map(|(m, _)| *m));
-        records.push(SlaveRecord {
-            s_idx,
-            a_s,
-            masters,
-            multiplier_node: rel.multiplier,
-        });
-    }
-    // The inequalities stay relations of the reduced system, so their terms
-    // too must be physics DOFs.
-    let mut inequality_rows = Vec::with_capacity(inequalities.len());
-    for rel in &inequalities {
-        match resolve(rel) {
-            Ok(resolved) => inequality_rows.push(resolved),
-            Err(reason) => return Ok(Elimination::OutOfScope(reason)),
         }
     }
 
@@ -500,6 +372,90 @@ fn build_condensation(
         }
     }
     let k_phys = CsrMatrix::from(&k_coo);
+
+    // ── Pass 1: pick slaves + validate the non-chained/disjoint scope ──
+    struct SlaveRecord {
+        s_idx: usize,
+        a_s: f64,
+        masters: Vec<(usize, f64)>,
+        multiplier_node: NodeId,
+    }
+    // Every term of a relation, as a physics index: a relation that reaches a
+    // multiplier column is not one an elimination can express.
+    let resolve = |rel: &RelationRow| -> Result<Vec<(usize, f64)>> {
+        rel.terms
+            .iter()
+            .map(|&(col, coefficient)| {
+                let idx = full_col_to_phys[col];
+                if idx == usize::MAX {
+                    let key = full_col[col];
+                    return Err(PyrucastError::Message(format!(
+                        "elimination: the relation at multiplier node {:?} reaches \
+                         ({:?}, '{}'), which is not a physics DOF of the matrix",
+                        rel.multiplier,
+                        dof_node(key),
+                        vars[dof_var(key) as usize]
+                    )));
+                }
+                Ok((idx, coefficient))
+            })
+            .collect()
+    };
+    let mut records: Vec<SlaveRecord> = Vec::with_capacity(equalities.len());
+    let mut slave_set: HashSet<usize> = HashSet::new();
+    let mut master_set: HashSet<usize> = HashSet::new();
+    for rel in &equalities {
+        let resolved = resolve(rel)?;
+        // Slave = the **available** term (not already a slave or a master of
+        // another relation) with the largest |coefficient| — the numerically
+        // safest denominator that also keeps shared masters as masters. If no
+        // term is available, every DOF of this relation is already constrained:
+        // that is a chained/over-constrained system, out of v1 scope.
+        let (slave_pos, &(s_idx, a_s)) = resolved
+            .iter()
+            .enumerate()
+            .filter(|(_, (idx, _))| !slave_set.contains(idx) && !master_set.contains(idx))
+            .max_by(|a, b| a.1 .1.abs().total_cmp(&b.1 .1.abs()))
+            .ok_or_else(|| {
+                PyrucastError::Message(format!(
+                    "elimination: relation at multiplier node {:?} has no eliminable \
+                     DOF — all its terms are already constrained (chaining is out of \
+                     scope, v1)",
+                    rel.multiplier
+                ))
+            })?;
+        if a_s == 0.0 {
+            return Err(PyrucastError::Message(format!(
+                "elimination: relation at multiplier node {:?} has no term with a \
+                 nonzero coefficient",
+                rel.multiplier
+            )));
+        }
+        let mut masters = Vec::with_capacity(resolved.len() - 1);
+        for (p, &(m_idx, coefficient)) in resolved.iter().enumerate() {
+            if p == slave_pos {
+                continue;
+            }
+            if slave_set.contains(&m_idx) {
+                let key = phys_col_keys[m_idx];
+                return Err(PyrucastError::Message(format!(
+                    "elimination: master DOF ({:?}, '{}') is a slave of another \
+                     relation — chaining is out of scope (v1)",
+                    dof_node(key),
+                    vars[dof_var(key) as usize]
+                )));
+            }
+            masters.push((m_idx, coefficient));
+        }
+        slave_set.insert(s_idx);
+        master_set.extend(masters.iter().map(|(m, _)| *m));
+        records.push(SlaveRecord {
+            s_idx,
+            a_s,
+            masters,
+            multiplier_node: rel.multiplier,
+        });
+    }
 
     // ── Free-DOF numbering (physics minus slaves) ──────────────────────
     let mut phys_to_free = vec![None; n_phys];
@@ -556,12 +512,14 @@ fn build_condensation(
         // own, after them — the bordering the Lagrange path assembles.
         let n_kept = inequalities.len();
         let mut c_coo = CooMatrix::<f64>::new(n_kept, n_phys);
-        for (i, resolved) in inequality_rows.iter().enumerate() {
-            for &(p, a) in resolved {
+        let mut rows = Vec::with_capacity(n_kept);
+        for (i, rel) in inequalities.iter().enumerate() {
+            let resolved = resolve(rel)?;
+            for &(p, a) in &resolved {
                 c_coo.push(i, p, a);
             }
+            rows.push(resolved);
         }
-        let rows = inequality_rows;
         let b: CsrMatrix<f64> = &CsrMatrix::from(&c_coo) * &t;
         let n = n_free + n_kept;
         let mut saddle = CooMatrix::<f64>::new(n, n);
@@ -616,7 +574,7 @@ fn build_condensation(
         })
         .collect::<Result<_>>()?;
 
-    Ok(Elimination::Condensed(Condensation {
+    Ok(Condensation {
         t,
         tt,
         k_phys,
@@ -627,7 +585,7 @@ fn build_condensation(
         phys_to_col,
         n_cols: full_col.len(),
         slaves,
-    }))
+    })
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────
@@ -693,160 +651,13 @@ mod tests {
             method: crate::ops::solver::lu::SolveMethod::Cholesky,
             ..Default::default()
         };
-        let cond = condensed(&m, &ask_cholesky);
+        let cond = build_condensation(&m, relation_rows(&m).unwrap(), &ask_cholesky).unwrap();
         assert_eq!(cond.method(), "cholesky");
 
         // And the default takes the LU, on the very same reduced system.
-        let cond = condensed(&m, &SolveOptions::default());
+        let cond =
+            build_condensation(&m, relation_rows(&m).unwrap(), &SolveOptions::default()).unwrap();
         assert_eq!(cond.method(), "lu");
-    }
-
-    /// A conduction bar on nodes `0..=3`, `k = 1`, held at `T(0) = 0`; with
-    /// `chained`, also bound by `T(3) − T(0) = 1`, whose master `T(0)` is the
-    /// Dirichlet's slave — out of the elimination's scope, though the
-    /// multipliers solve it (`T = x / 3`). Returns the matrix, the right-hand
-    /// side and the nodes.
-    fn bar(chained: bool) -> (Matrix, NodeField, Vec<Node>) {
-        use crate::containers::element_field::{ElementField, SubElementField};
-        use crate::containers::field::SubField;
-        use crate::containers::finite_element_space::FiniteElementSpace;
-        use crate::containers::mesh::Mesh;
-        use crate::containers::model::SubModel;
-
-        let coords = Handle::new(Coords::new(1).unwrap());
-        let nodes: Vec<Node> = (0..=3)
-            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
-            .collect();
-        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
-        for i in 0..3 {
-            mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()]).unwrap();
-        }
-        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let sub = fes.get(0).unwrap();
-        let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
-        mat.set_uniform("k", 1.0).unwrap();
-        let mut materials = ElementField::empty();
-        materials.add_sub(Handle::new(mat)).unwrap();
-        let mut model = Model::empty();
-        model
-            .add_sub(Handle::new(
-                SubModel::heat_conduction(sub, MaterialSymmetry::Isotropic).unwrap(),
-            ))
-            .unwrap();
-        let poi1 = |n: &Node| {
-            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(n)).unwrap())
-        };
-        let clamp = SubModel::dirichlet(&poi1(&nodes[0]), &model, "T", Default::default()).unwrap();
-        let mut imposed = vec![(clamp.multiplier_nodes()[0], 0.0)];
-        model.add_sub(Handle::new(clamp)).unwrap();
-        if chained {
-            let (last, first) = (poi1(&nodes[3]), poi1(&nodes[0]));
-            let link = SubModel::mpc(
-                &[(&last, "T", 1.0), (&first, "T", -1.0)],
-                &model,
-                Default::default(),
-            )
-            .unwrap();
-            imposed.push((link.multiplier_nodes()[0], 1.0));
-            model.add_sub(Handle::new(link)).unwrap();
-        }
-        let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
-
-        let sm = {
-            let mut sm = SubMesh::new(coords, ElementType::POI1);
-            for &(m, _) in &imposed {
-                sm.add_cell(&[m]).unwrap();
-            }
-            Handle::new(sm)
-        };
-        let mut rhs = SubNodeField::from_poi1(&sm, vec![IMPOSED.into()]).unwrap();
-        for &(m, g) in &imposed {
-            rhs.set_value(m, IMPOSED, g).unwrap();
-        }
-        (k, NodeField::from_sub(rhs), nodes)
-    }
-
-    fn all_auto() -> SolveOptions {
-        SolveOptions {
-            method: SolveMethod::Auto,
-            relations: RelationMethod::Auto,
-            ..Default::default()
-        }
-    }
-
-    /// Within the elimination's scope, `auto` eliminates — and factorizes the
-    /// reduced system by Cholesky — gives the multipliers' solution, and keeps
-    /// the condensation: a second solve does not build it again.
-    #[test]
-    fn auto_eliminates_within_scope_and_keeps_the_condensation() {
-        let (k, rhs, nodes) = bar(false);
-        let first = crate::ops::solver::solve_with_options(&k, &rhs, &all_auto()).unwrap();
-        let cond = k.cached_factorization::<Condensation>().unwrap();
-        assert_eq!(cond.method(), "cholesky");
-        crate::ops::solver::solve_with_options(&k, &rhs, &all_auto()).unwrap();
-        let again = k.cached_factorization::<Condensation>().unwrap();
-        assert!(Arc::ptr_eq(&cond, &again), "condensed again");
-
-        let lagrange = crate::ops::solver::solve_with_options(
-            &k,
-            &rhs,
-            &SolveOptions {
-                cache: false,
-                ..Default::default()
-            },
-        )
-        .unwrap();
-        for node in &nodes {
-            let (a, b) = (
-                first.value(node.id(), "T").unwrap(),
-                lagrange.value(node.id(), "T").unwrap(),
-            );
-            assert!((a - b).abs() < 1e-12, "{a} vs {b}");
-        }
-    }
-
-    /// A chained relation is out of the elimination's scope: an explicit
-    /// elimination refuses it, `auto` hands it to the multipliers — the same
-    /// solution as asking for them — and what they cache records the choice.
-    #[test]
-    fn auto_hands_a_chained_system_to_the_multipliers_and_keeps_them() {
-        let (k, rhs, nodes) = bar(true);
-        let refused = solve(
-            &k,
-            &rhs,
-            &SolveOptions {
-                relations: RelationMethod::Eliminate,
-                cache: false,
-                ..Default::default()
-            },
-            &crate::interrupt::NoCancel,
-        );
-        let Err(err) = refused else {
-            panic!("the fixture must be out of the elimination's scope");
-        };
-        assert!(err.to_string().contains("chaining"), "{err}");
-
-        let auto = crate::ops::solver::solve_with_options(&k, &rhs, &all_auto()).unwrap();
-        assert!(k.cached_factorization::<Condensation>().is_none());
-        let first = k.cached_factorization::<lu::Factorization>().unwrap();
-        assert_eq!(first.method(), "lu");
-        crate::ops::solver::solve_with_options(&k, &rhs, &all_auto()).unwrap();
-        let again = k.cached_factorization::<lu::Factorization>().unwrap();
-        assert!(Arc::ptr_eq(&first, &again), "factorized again");
-
-        // T = x / 3 on the bar: T(0) = 0 and T(3) − T(0) = 1.
-        for (i, node) in nodes.iter().enumerate() {
-            let t = auto.value(node.id(), "T").unwrap();
-            assert!((t - i as f64 / 3.0).abs() < 1e-12, "T({i}) = {t}");
-        }
-    }
-
-    /// The condensation of `m`'s relations, which the test expects in scope.
-    fn condensed(m: &Matrix, options: &SolveOptions) -> Condensation {
-        match build_condensation(m, relation_rows(m).unwrap(), options).unwrap() {
-            Elimination::Condensed(c) => c,
-            Elimination::OutOfScope(reason) => panic!("expected in scope: {reason}"),
-        }
     }
 
     /// The condensation is cached on the matrix by the first elimination solve,
