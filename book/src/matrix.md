@@ -183,7 +183,8 @@ déclarations.
 
 Le solveur lit la matrice colonne par colonne. Une matrice symétrique s'y prête
 telle quelle, une autre est d'abord recopiée dans ce sens. Seule une matrice
-symétrique accepte `method="cholesky"`. Une déclaration fausse n'est pas
+symétrique accepte `method="cholesky"`, et `method="auto"` ne tente Cholesky
+que sur elle. Une déclaration fausse n'est pas
 détectée : déclarer `"full"` un bloc qui ne l'est pas fait résoudre le système
 de la matrice transposée.
 
@@ -225,6 +226,8 @@ solveur (voir [Résolution](algorithmes/solveur.md#les-voies-de-la-résolution))
 
 Le contenu n'est repris que s'il répond à la demande : la même voie, et, pour
 une factorisation, la même `method`. Sinon il est recalculé et prend la place.
+`"auto"` reprend ce qu'il trouve, quel qu'il soit : ce qu'il a choisi à la
+première résolution d'une matrice vaut pour les suivantes.
 
 Ce qui est gardé est oublié quand la matrice change (`add_sub`, `add_subs`).
 Une matrice neuve part sans : `2.0 * K`, `M / dt + K` ou un nouvel assemblage

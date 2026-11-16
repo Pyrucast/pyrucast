@@ -56,7 +56,8 @@ relations étaient des égalités.
 
 `solve` choisit son calcul, sa **voie**, d'après deux choses : l'option
 `relations`, et la présence d'inégalités dans la matrice (un bloc `C` dont le
-sens est `>=` ou `<=`). Dans la boucle de l'ensemble actif, l'option
+sens est `>=` ou `<=`). Avec `relations="auto"`, la forme des relations et ce
+que la matrice a déjà gardé décident aussi. Dans la boucle de l'ensemble actif, l'option
 `active_set` choisit ensuite comment chaque statut est factorisé. Pour chaque
 voie, le schéma dit ce qui est calculé, et ce que la matrice garde ensuite dans
 sa case de cache (section suivante).
@@ -81,38 +82,53 @@ solve(matrice, second_membre, relations=…, method=…, active_set=…)
 │               calcul : une LU de toute la matrice à chaque statut
 │               case   : l'état de l'ensemble actif : les inégalités, le
 │                        dernier statut convergé et sa LU
-└── relations="eliminate"
-    ├── la matrice ne porte aucune relation
-    │     calcul : factorisation de la matrice, LU ou Cholesky selon method
-    │     case   : la factorisation
-    ├── la matrice ne porte que des égalités
-    │     calcul : élimination des égalités, puis factorisation du système
-    │              réduit K̂ = TᵀKT, LU ou Cholesky selon method
-    │     case   : la condensation : T, Tᵀ, K sans ses contraintes, K̂ factorisé
-    └── la matrice porte des inégalités
-          calcul : élimination des égalités, puis boucle de l'ensemble actif
-                   sur le système réduit [[K̂, Bᵀ], [B, 0]], toujours en LU
-          ├── active_set="schur" (défaut)
-          │     calcul : une LU de la base (le système réduit, toutes les
-          │              inégalités relâchées), faite une fois ; à chaque
-          │              statut, une petite matrice dense, une ligne par
-          │              relation active
-          │     case   : la condensation : T, Tᵀ, K sans ses contraintes, le
-          │              système réduit, et l'état de l'ensemble actif : les
-          │              inégalités, la LU de la base, les colonnes déjà
-          │              calculées, le dernier statut convergé
-          │     base singulière : calcul de active_set="refactorize"
-          └── active_set="refactorize"
-                calcul : une LU de tout le système réduit à chaque statut
-                case   : la condensation : T, Tᵀ, K sans ses contraintes, le
-                         système réduit, et l'état de l'ensemble actif : les
-                         inégalités, le dernier statut convergé et sa LU
+├── relations="eliminate"
+│   ├── la matrice ne porte aucune relation
+│   │     calcul : factorisation de la matrice, LU ou Cholesky selon method
+│   │     case   : la factorisation
+│   ├── la matrice ne porte que des égalités
+│   │     calcul : élimination des égalités, puis factorisation du système
+│   │              réduit K̂ = TᵀKT, LU ou Cholesky selon method
+│   │     case   : la condensation : T, Tᵀ, K sans ses contraintes, K̂ factorisé
+│   └── la matrice porte des inégalités
+│         calcul : élimination des égalités, puis boucle de l'ensemble actif
+│                  sur le système réduit [[K̂, Bᵀ], [B, 0]], toujours en LU
+│         ├── active_set="schur" (défaut)
+│         │     calcul : une LU de la base (le système réduit, toutes les
+│         │              inégalités relâchées), faite une fois ; à chaque
+│         │              statut, une petite matrice dense, une ligne par
+│         │              relation active
+│         │     case   : la condensation : T, Tᵀ, K sans ses contraintes, le
+│         │              système réduit, et l'état de l'ensemble actif : les
+│         │              inégalités, la LU de la base, les colonnes déjà
+│         │              calculées, le dernier statut convergé
+│         │     base singulière : calcul de active_set="refactorize"
+│         └── active_set="refactorize"
+│               calcul : une LU de tout le système réduit à chaque statut
+│               case   : la condensation : T, Tᵀ, K sans ses contraintes, le
+│                        système réduit, et l'état de l'ensemble actif : les
+│                        inégalités, le dernier statut convergé et sa LU
+└── relations="auto"
+    ├── la case contient déjà quelque chose
+    │     calcul : la voie qui l'a rempli, reprise telle quelle
+    ├── chaque relation d'égalité a une inconnue à elle
+    │     calcul : celui de relations="eliminate"
+    └── une relation est enchaînée à une autre
+          calcul : celui de relations="lagrange"
 ```
 
 `method` ne s'applique qu'aux factorisations directes : la boucle de
 l'ensemble actif factorise en LU quoi qu'on demande, parce que le système d'un
 statut n'est jamais symétrique (une relation inactive y devient la ligne
 `λ = 0`, sa colonne restant en place).
+
+`method="auto"` laisse la résolution choisir entre les deux. Elle tente
+Cholesky quand le système à factoriser se déclare symétrique et ne porte aucun
+multiplicateur : le système réduit d'une élimination, ou une matrice sans
+relation. Si Cholesky le refuse, par exemple une raideur qui a cessé d'être
+définie positive au-delà d'un flambement, la même matrice part en LU. Un
+système avec multiplicateurs part directement en LU : il n'est jamais défini
+positif, la tentative échouerait à coup sûr.
 
 **Les relations sont mises à l'échelle de la structure.** Par la voie des
 multiplicateurs, un système `[[K, Cᵀ], [C, 0]]` mêle deux ordres de grandeur :
@@ -160,6 +176,10 @@ en plus du dernier statut convergé.
   une factorisation, seule ou dans une condensation, la même `method`. Sinon il
   est recalculé et remplace l'ancien : alterner deux voies sur une même matrice
   recalcule à chaque changement.
+- `"auto"` reprend ce que contient la case, quel qu'il soit : `relations="auto"`
+  suit la voie qui l'a rempli, `method="auto"` garde la factorisation qui s'y
+  trouve. Ce qu'il a choisi à la première résolution d'une matrice vaut donc
+  pour les suivantes : un Cholesky refusé n'est pas retenté.
 - Il est oublié dès que la matrice change (`add_sub`), et n'est pas
   sauvegardé. `cache=False` ne le lit ni ne le remplit.
 - On ne stocke **jamais l'inverse explicite** (dense, coûteux, instable) —
@@ -327,7 +347,8 @@ imposée :
 
 Premier levier, donc : quand le système éliminé est symétrique défini positif
 (thermique, élasticité), `solve(…, relations="eliminate", method="cholesky")` divise le pic
-par cinq et le temps par huit.
+par cinq et le temps par huit. `solve(…, relations="auto", method="auto")` prend
+cette voie de lui-même quand le modèle s'y prête, et l'autre sinon.
 
 Un cube est le pire cas du remplissage. Une pièce mince ou élancée s'en tient
 bien en dessous, à nombre de DDL égal.

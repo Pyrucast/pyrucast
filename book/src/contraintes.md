@@ -64,7 +64,8 @@ le nœud immergé pour le baignage, le nœud esclave pour le contact).
 ## Imposition par élimination (condensation)
 
 Voie **alternative** aux multiplicateurs, sélectionnée au moment de la résolution
-par [`solve(…, relations="eliminate")`](reference/solver.md#solver-solve). Plutôt que
+par [`solve(…, relations="eliminate")`](reference/solver.md#solver-solve), ou par
+`relations="auto"`, qui la prend quand chaque relation a une inconnue à elle. Plutôt que
 d'agrandir le système, on **élimine** chaque relation : un terme *esclave* `s`
 est exprimé par les *maîtres*,
 

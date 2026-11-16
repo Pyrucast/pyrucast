@@ -351,8 +351,10 @@ le moteur commun des assembleurs, qui n'a pas de binding Python.
 
 La matrice se suffit : ses lignes de relation portent leur sens (`SubMatrix::row_sense`),
 aucun modèle n'est passé à la résolution. L'élimination est une option
-(`relations="eliminate"`), et l'ensemble actif s'enclenche de lui-même sur une
-matrice qui porte des inégalités.
+(`relations="eliminate"`, ou `relations="auto"` qui la prend quand elle
+s'applique), comme Cholesky (`method="cholesky"`, ou `method="auto"`), et
+l'ensemble actif s'enclenche de lui-même sur une matrice qui porte des
+inégalités.
 
 ### `ops::export` — export vers des formats externes
 
