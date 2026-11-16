@@ -26,10 +26,10 @@ substeps of forced convergence when an iteration stalls.
 
 from dataclasses import dataclass, field
 
-from .. import element_field, matrix, measure, node_field, solver
+from .. import element_field, matrix, measure, node_field
 from .anderson import Accelerator
 from .control import AutomaticControl, IndirectControl
-from .fields import STRAIN_PREFIXES, carried, infinity_norm, part, shifted
+from .fields import STRAIN_PREFIXES, carried, infinity_norm, part, shifted, solve
 from .materials import materials_at
 from .problem import contacts
 
@@ -226,12 +226,6 @@ def _turned_inside_out(problem, solution):
         part(solution, problem.displacement_names), problem.fespace, "jacobian"
     )
     return min(jacobian[i].min("J") for i in problem.volume_zones) <= 0.0
-
-
-def _solve(operator, rhs):
-    """``operator⁻¹ rhs`` — the active-set loop when the operator carries an
-    inequality, a plain factorization otherwise; either stays on ``operator``."""
-    return solver.solve(operator, rhs)
 
 
 def _advanced(problem, solution, increment):
@@ -686,7 +680,9 @@ def equilibrium_iterations(
                 pause = 2
                 accelerations += 1
                 rhs = rhs - node_field.restrict_like(correction, rhs)
-        increment = _solve(operator, rhs)
+        increment, state.mechanics_method, state.mechanics_relations = solve(
+            operator, rhs, state.mechanics_method, state.mechanics_relations
+        )
         previous_increment = part(increment, problem.displacement_names)
         reached = solution
         solution = _advanced(problem, solution, increment)
@@ -953,7 +949,9 @@ def mechanical_step(data, problem, state, t_end, temperature, options):
             step,
             inertia(start.solution) if inertia else None,
         )
-        first_correction = _solve(operator, first.system)
+        first_correction, state.mechanics_method, state.mechanics_relations = solve(
+            operator, first.system, state.mechanics_method, state.mechanics_relations
+        )
         # This step's load increment: the first residual, less what the
         # previous step left unbalanced.
         increment = part(first.out_of_balance, forces)
@@ -1138,7 +1136,12 @@ def _controller(
     if options.indirect_control is not None:
         settings = options.indirect_control
         pilot = settings["load"]
-        response = _solve(operator, node_field.restrict_like(pilot, first.system))
+        response, state.mechanics_method, state.mechanics_relations = solve(
+            operator,
+            node_field.restrict_like(pilot, first.system),
+            state.mechanics_method,
+            state.mechanics_relations,
+        )
 
         def control_step(level):
             loads = step.loads + (pilot * level,)

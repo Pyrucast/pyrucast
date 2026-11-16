@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from .. import element_field
 from .fields import domain_mesh, uniform
 from .materials import materials_at
+from .problem import contacts
 
 __all__ = ["State", "initial_state"]
 
@@ -41,6 +42,13 @@ class State:
     # materials it was built from and, in dynamics, the time step.
     operator: object | None = None
     operator_key: tuple = (None, None)
+    # How each physics solves: the relations eliminated and the rest factorized
+    # by Cholesky, until a solve refuses it; the LU with multipliers from then
+    # on (`fields.solve`).
+    mechanics_method: str = "cholesky"
+    mechanics_relations: str = "eliminate"
+    heat_method: str = "cholesky"
+    heat_relations: str = "eliminate"
     mass: object | None = None
     mass_materials: object | None = None
     # What the next step's predictor reads (Cast3M FNONL, INCREMENT, ZDEP1, RESIDU).
@@ -108,4 +116,9 @@ def initial_state(data, problem, options):
         if options.dynamics:
             state.velocity = at_rest("velocity")
             state.acceleration = at_rest("acceleration")
+        # With contact, the active-set loop factorizes by LU whatever is asked:
+        # eliminating the other relations would only cost.
+        if contacts(problem.mechanics) is not None:
+            state.mechanics_method = "lu"
+            state.mechanics_relations = "lagrange"
     return state

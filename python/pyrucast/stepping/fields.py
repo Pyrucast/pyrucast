@@ -4,7 +4,7 @@ Each is two or three library calls under a name that says what the solver
 means by it — no value is ever read or written one node at a time.
 """
 
-from .. import node_field
+from .. import node_field, solver
 from .._pyrucast import NodeField
 
 __all__ = [
@@ -14,6 +14,7 @@ __all__ = [
     "infinity_norm",
     "part",
     "shifted",
+    "solve",
     "uniform",
 ]
 
@@ -48,6 +49,21 @@ def shifted(base, increment):
     if increment is None:
         return base
     return node_field.restrict_like(base, increment) + increment
+
+
+def solve(operator, rhs, method, relations):
+    """``operator⁻¹ rhs`` by ``method`` and ``relations``, and the two that
+    solved it: refused — a relation the elimination cannot express, a matrix
+    the Cholesky finds not positive definite — they give way to the LU with
+    multipliers, which then stays."""
+    try:
+        return (
+            solver.solve(operator, rhs, method=method, relations=relations),
+            method,
+            relations,
+        )
+    except RuntimeError:
+        return solver.solve(operator, rhs), "lu", "lagrange"
 
 
 def infinity_norm(field, names):

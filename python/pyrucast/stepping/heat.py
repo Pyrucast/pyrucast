@@ -21,9 +21,9 @@ the conduction add into one operator as they are.
 from contextlib import nullcontext
 from dataclasses import dataclass
 
-from .. import element_field, matrix, node_field, solver
+from .. import element_field, matrix, node_field
 from .anderson import Accelerator
-from .fields import carried, infinity_norm, part, shifted
+from .fields import carried, infinity_norm, part, shifted, solve
 from .materials import materials_at
 
 __all__ = ["HeatOutcome", "heat_step", "heat_step_dupont", "heat_step_linear"]
@@ -183,12 +183,6 @@ def _capacity(problem, materials, dt):
     return matrix.mass(problem.heat_domain, materials) * (1.0 / dt)
 
 
-def _solve(operator, rhs):
-    """``operator⁻¹ rhs`` — the active-set loop when the operator carries an
-    inequality, a plain factorization otherwise; either stays on ``operator``."""
-    return solver.solve(operator, rhs)
-
-
 def heat_step(data, problem, state, t_end, options):
     """The heat problem from ``state.time`` to ``t_end`` by the θ-scheme,
     iterated (Cast3M ``TRANSNON``).
@@ -249,7 +243,9 @@ def heat_step(data, problem, state, t_end, options):
             if correction is not None:
                 pause = 2
                 rhs = rhs - node_field.restrict_like(correction, rhs)
-        increment = _solve(operator, rhs)
+        increment, state.heat_method, state.heat_relations = solve(
+            operator, rhs, state.heat_method, state.heat_relations
+        )
         temperature = _advanced(problem, temperature, increment)
         change = infinity_norm(increment, ["T"])
         size = 0.5 * (size_start + infinity_norm(temperature, ["T"]))
@@ -300,7 +296,10 @@ def heat_step_linear(data, problem, state, t_end, options):
         problem, _temperatures(problem, start), materials, dt, state.heat_behaviour
     )
     system, _ = _system(problem, loads, start, behaviour, start, materials)
-    temperature = _advanced(problem, start, _solve(operator, system))
+    increment, state.heat_method, state.heat_relations = solve(
+        operator, system, state.heat_method, state.heat_relations
+    )
+    temperature = _advanced(problem, start, increment)
     behaviour = _laws(
         problem,
         _temperatures(problem, temperature),
@@ -374,7 +373,10 @@ def heat_step_dupont(data, problem, state, t_end, options):
         materials,
         tangent * (weighted - extrapolated),
     )
-    temperature = _advanced(problem, state.temperature, _solve(operator, system))
+    increment, state.heat_method, state.heat_relations = solve(
+        operator, system, state.heat_method, state.heat_relations
+    )
+    temperature = _advanced(problem, state.temperature, increment)
     behaviour = _laws(
         problem,
         _temperatures(problem, temperature),
