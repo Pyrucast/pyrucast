@@ -1614,8 +1614,8 @@ class Matrix:
         
         # Raises
         
-        `RuntimeError` if `matrix` has no assembled values, if the LU meets a singular
-        matrix (boundary conditions forgotten, typically), if `"cholesky"` meets a
+        `RuntimeError` if `matrix` has no assembled values, if the LU meets an
+        exactly zero pivot (an unknown nothing holds at all), if `"cholesky"` meets a
         matrix that is not positive definite, if a relation is out of the scope of
         `"eliminate"`, or if the active-set loop has not converged after `max_iter`
         status changes. `ValueError` for an unknown `method`, `relations`,
@@ -1626,6 +1626,11 @@ class Matrix:
         `Ctrl+C` is honoured between the phases of the solve and at each status
         change; a factorization is a single library call and is not interrupted
         mid-way.
+        
+        A matrix that is singular only up to rounding is not always reported: a
+        structure left free to move as a rigid body, its boundary conditions
+        forgotten, can come back as a finite but absurdly large solution. Check the
+        boundary conditions when the magnitudes are implausible.
         """
 
 @typing.final
@@ -9138,8 +9143,8 @@ def solve(matrix: Matrix, rhs: NodeField, method: builtins.str = 'lu', relations
     
     # Raises
     
-    `RuntimeError` if `matrix` has no assembled values, if the LU meets a singular
-    matrix (boundary conditions forgotten, typically), if `"cholesky"` meets a
+    `RuntimeError` if `matrix` has no assembled values, if the LU meets an
+    exactly zero pivot (an unknown nothing holds at all), if `"cholesky"` meets a
     matrix that is not positive definite, if a relation is out of the scope of
     `"eliminate"`, or if the active-set loop has not converged after `max_iter`
     status changes. `ValueError` for an unknown `method`, `relations`,
@@ -9150,6 +9155,11 @@ def solve(matrix: Matrix, rhs: NodeField, method: builtins.str = 'lu', relations
     `Ctrl+C` is honoured between the phases of the solve and at each status
     change; a factorization is a single library call and is not interrupted
     mid-way.
+    
+    A matrix that is singular only up to rounding is not always reported: a
+    structure left free to move as a rigid body, its boundary conditions
+    forgotten, can come back as a finite but absurdly large solution. Check the
+    boundary conditions when the magnitudes are implausible.
     """
 
 def spill_stats() -> dict:
