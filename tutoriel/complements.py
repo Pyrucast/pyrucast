@@ -1,12 +1,10 @@
-"""Tutoriel débutant — 6. Compléments : éléments structuraux + export.
+"""Beginner tutorial — Complements: structural elements and export.
 
-Barre en traction (élément `SEG2`, `model.truss`) — l'équivalent pyrucast
-of Cast3M's `BARR`/`POUT` elements mentioned in the Cast3M training's complements.
-The result is compared with the analytical solution then exported to VTK
-(readable by ParaView), the equivalent of Cast3M's `SORT 'VTK'`.
-Cast3M.
+A bar in tension (`SEG2` element, `model.truss`). The end displacement is
+compared with the analytical solution, then the displacement field is exported
+to VTK (readable by ParaView).
 
-Lancement ::
+Run ::
 
     maturin develop --release
     python tutoriel/complements.py
@@ -50,7 +48,7 @@ def main() -> None:
 
     ux = solution.value(n1, "u_x")
     attendu = F * L / (E * A)
-    print(f"u_x (bout) = {ux:.6e}   (analytique F·L/(E·A) = {attendu:.6e})")
+    print(f"u_x (end) = {ux:.6e}   (analytical F·L/(E·A) = {attendu:.6e})")
     assert abs(ux - attendu) < 1e-10 * attendu
 
     # ANCHOR: export
