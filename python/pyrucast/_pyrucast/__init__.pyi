@@ -640,6 +640,15 @@ class ElementField:
         the functional `|`, which leaves both operands untouched
         and returns a fresh, deduplicated aggregate.
         """
+    def deduplicate(self) -> ElementField:
+        r"""
+        A fresh aggregate holding each zone once, at its first place:
+        a zone listed again — the same object — is dropped. The zones
+        are shared, not copied, and this aggregate is left untouched.
+        A mesh built one zone per subspace (`fespace.mesh()`) lists
+        twice a zone two physics share; deduplicated, a field can be
+        built on it.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -1207,6 +1216,15 @@ class Evolution:
         the functional `|`, which leaves both operands untouched
         and returns a fresh, deduplicated aggregate.
         """
+    def deduplicate(self) -> Evolution:
+        r"""
+        A fresh aggregate holding each zone once, at its first place:
+        a zone listed again — the same object — is dropped. The zones
+        are shared, not copied, and this aggregate is left untouched.
+        A mesh built one zone per subspace (`fespace.mesh()`) lists
+        twice a zone two physics share; deduplicated, a field can be
+        built on it.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -1308,6 +1326,15 @@ class FiniteElementSpace:
         deep-copied). Plain concatenation: no deduplication, unlike
         the functional `|`, which leaves both operands untouched
         and returns a fresh, deduplicated aggregate.
+        """
+    def deduplicate(self) -> FiniteElementSpace:
+        r"""
+        A fresh aggregate holding each zone once, at its first place:
+        a zone listed again — the same object — is dropped. The zones
+        are shared, not copied, and this aggregate is left untouched.
+        A mesh built one zone per subspace (`fespace.mesh()`) lists
+        twice a zone two physics share; deduplicated, a field can be
+        built on it.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -1541,6 +1568,15 @@ class Matrix:
         the functional `|`, which leaves both operands untouched
         and returns a fresh, deduplicated aggregate.
         """
+    def deduplicate(self) -> Matrix:
+        r"""
+        A fresh aggregate holding each zone once, at its first place:
+        a zone listed again — the same object — is dropped. The zones
+        are shared, not copied, and this aggregate is left untouched.
+        A mesh built one zone per subspace (`fespace.mesh()`) lists
+        twice a zone two physics share; deduplicated, a field can be
+        built on it.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -1773,6 +1809,15 @@ class Mesh:
         deep-copied). Plain concatenation: no deduplication, unlike
         the functional `|`, which leaves both operands untouched
         and returns a fresh, deduplicated aggregate.
+        """
+    def deduplicate(self) -> Mesh:
+        r"""
+        A fresh aggregate holding each zone once, at its first place:
+        a zone listed again — the same object — is dropped. The zones
+        are shared, not copied, and this aggregate is left untouched.
+        A mesh built one zone per subspace (`fespace.mesh()`) lists
+        twice a zone two physics share; deduplicated, a field can be
+        built on it.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -3103,6 +3148,15 @@ class Model:
         the functional `|`, which leaves both operands untouched
         and returns a fresh, deduplicated aggregate.
         """
+    def deduplicate(self) -> Model:
+        r"""
+        A fresh aggregate holding each zone once, at its first place:
+        a zone listed again — the same object — is dropped. The zones
+        are shared, not copied, and this aggregate is left untouched.
+        A mesh built one zone per subspace (`fespace.mesh()`) lists
+        twice a zone two physics share; deduplicated, a field can be
+        built on it.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -3782,6 +3836,15 @@ class NodeField:
         deep-copied). Plain concatenation: no deduplication, unlike
         the functional `|`, which leaves both operands untouched
         and returns a fresh, deduplicated aggregate.
+        """
+    def deduplicate(self) -> NodeField:
+        r"""
+        A fresh aggregate holding each zone once, at its first place:
+        a zone listed again — the same object — is dropped. The zones
+        are shared, not copied, and this aggregate is left untouched.
+        A mesh built one zone per subspace (`fespace.mesh()`) lists
+        twice a zone two physics share; deduplicated, a field can be
+        built on it.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...

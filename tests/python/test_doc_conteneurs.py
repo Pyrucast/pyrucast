@@ -258,9 +258,13 @@ print(mesh)  # Mesh: 2 submesh(es) [#…, #…], 2 cell(s) total
 # another aggregate (concatenation, without deduplication).
 tri.add_subs(qua)
 print(len(tri))  # 2 sous-maillages
+# A zone listed twice, kept once, where it came first.
+tri.add_subs(qua)
+print(len(tri), len(tri.deduplicate()))  # 3 2
 # ANCHOR_END: aggregat
 assert len(mesh) == 2
-assert len(tri) == 2
+assert len(tri) == 3
+assert len(tri.deduplicate()) == 2
 
 # ── first steps ────────────────────────────────────────────
 
