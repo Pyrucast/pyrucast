@@ -26,17 +26,6 @@ def _of_time(spec):
     return lambda _t: spec
 
 
-def _nodal_weights(domain, names):
-    """``(Σ cell measures around each node + ε)^-½`` on every component of
-    ``names`` — the weight that puts residuals at comparable scales before
-    they are combined (Cast3M ``ZJAC``)."""
-    fespace = domain.fespace()
-    ones = ElementField(fespace, [(name, 1.0) for name in names])
-    centres = FiniteElementSpace(fespace.mesh().deduplicate(), quadrature="REDUCED")
-    volumes = node_field.sum_to_nodes(element_field.cell_integral(ones, centres))
-    return (volumes + 1e-300) ** -0.5
-
-
 # The strain measure a law reads, from the prefix of what it reads.
 _MEASURES = {"E": "green_lagrange", "H": "hencky"}
 
@@ -70,37 +59,6 @@ def contacts(model):
         if sub.label() == "Contact":
             found.add_sub(sub)
     return found if len(found) > 0 else None
-
-
-def _frame_fespace(model):
-    """The FE space of the laws of ``model`` that read material axes (``V1X``
-    and the others), ``None`` when none does: where the gradient that turns
-    those axes with the part is computed. Every physics counts — a zone the
-    heat and the mechanics share carries the axes of both."""
-    oriented = Model.empty()
-    for sub in model:
-        if "V1X" in (sub.material_components() or []):
-            oriented.add_sub(sub)
-    return oriented.fespace() if len(oriented) > 0 else None
-
-
-def _follower_split(mechanics):
-    """The loads that follow the wall (``flux`` in its normal mode, density
-    ``phi_n``) and the rest of the mechanical model, ``(follower, others)``;
-    ``follower`` is ``None`` when there is none. The contacts stay out of
-    both: their gap follows their pairing, read on the model they are updated
-    in."""
-    follower, others = Model.empty(), Model.empty()
-    for sub in mechanics:
-        if sub.label() == "Contact":
-            continue
-        if (sub.material_components() or []) == ["phi_n"]:
-            follower.add_sub(sub)
-        else:
-            others.add_sub(sub)
-    return (follower if len(follower) > 0 else None), (
-        others if len(others) > 0 else None
-    )
 
 
 @dataclass(frozen=True)
@@ -220,11 +178,19 @@ def describe_problem(data, options):
         translation_names = tuple(
             v for v in displacement_names if v not in rotation_names
         )
-        weights = (
-            _nodal_weights(mechanics_domain, force_names)
-            if options.acceleration
-            else None
-        )
+        weights = None
+        if options.acceleration:
+            # (Σ cell measures around each node + ε)^-½ on every force: the
+            # weight that puts residuals at comparable scales before they are
+            # combined (Cast3M ``ZJAC``).
+            ones = ElementField(fespace, [(name, 1.0) for name in force_names])
+            centres = FiniteElementSpace(
+                fespace.mesh().deduplicate(), quadrature="REDUCED"
+            )
+            volumes = node_field.sum_to_nodes(
+                element_field.cell_integral(ones, centres)
+            )
+            weights = (volumes + 1e-300) ** -0.5
         strain_measure = _strain_measure(
             mechanics_domain, fespace, displacement_names, first_materials
         )
@@ -248,13 +214,35 @@ def describe_problem(data, options):
     updates_contact = False
     volume_zones = ()
     if large:
-        follower_loads, step_loads = _follower_split(mechanics)
+        # The loads that follow the wall (``flux`` in its normal mode, density
+        # ``phi_n``) apart from the rest of the mechanics. The contacts stay out
+        # of both: their gap follows their pairing, read on the model they are
+        # updated in.
+        follower_loads, step_loads = Model.empty(), Model.empty()
+        for sub in mechanics:
+            if sub.label() == "Contact":
+                continue
+            if (sub.material_components() or []) == ["phi_n"]:
+                follower_loads.add_sub(sub)
+            else:
+                step_loads.add_sub(sub)
+        follower_loads = follower_loads if len(follower_loads) > 0 else None
+        step_loads = step_loads if len(step_loads) > 0 else None
         updates_contact = contacts(mechanics) is not None
         volume_zones = tuple(
             i for i in range(len(fespace)) if fespace[i].ref_dim == fespace[i].space_dim
         )
         if heat is not None:
-            frame_fespace = _frame_fespace(model)
+            # The FE space of the laws that read material axes (``V1X`` and the
+            # others), where the gradient turning them with the part is
+            # computed. Every physics counts — a zone the heat and the
+            # mechanics share carries the axes of both.
+            oriented = Model.empty()
+            for sub in model:
+                if "V1X" in (sub.material_components() or []):
+                    oriented.add_sub(sub)
+            if len(oriented) > 0:
+                frame_fespace = oriented.fespace()
 
     laws = data.get("material_laws")
     # One output component per curve, named by its ordinate type.
