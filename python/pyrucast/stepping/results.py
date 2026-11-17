@@ -1,7 +1,5 @@
 """The record of a step (Cast3M ``PAS_RESU``)."""
 
-from .fields import part
-
 __all__ = ["store_step"]
 
 
@@ -27,15 +25,19 @@ def store_step(data, problem, state, options, initial=False):
         not state.converged or not _close(state.time, options.save_times)
     ):
         return
-    reactions = (
-        state.constraint_forces * -1.0 if state.constraint_forces is not None else None
-    )
+    solution, forces = state.solution, state.constraint_forces
     record = {
         "time": state.time,
-        "displacement": part(state.solution, problem.displacement_names),
-        "reactions": part(reactions, problem.force_names + problem.moment_names),
+        "displacement": (
+            None if solution is None else solution[problem.displacement_names]
+        ),
+        "reactions": (
+            None
+            if forces is None
+            else forces[problem.force_names + problem.moment_names] * -1.0
+        ),
         "behaviour": state.behaviour,
-        "temperature": part(state.temperature, ["T"]),
+        "temperature": None if state.temperature is None else state.temperature["T"],
         "velocity": state.velocity,
         "acceleration": state.acceleration,
         "load_multiplier": state.load_multiplier,

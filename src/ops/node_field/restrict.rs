@@ -120,13 +120,16 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
 /// a fresh support, whereas the running field carries only the primal DOFs —
 /// `restrict_like` keeps exactly the latter, on the running field's own support.
 ///
+/// An empty `field` defines nothing: the result is `target`'s zones, every
+/// value zero. An empty `target` gives an empty field.
+///
 /// Errors if `target` is attached to a different `Coords` than `field`.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{Band, ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
-/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::field::{Field, SubField};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::containers::node_field::NodeField;
@@ -158,12 +161,14 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
 /// let cible = NodeField::from_submesh(&bout.get(0)?, vec!["q".into()])?;
 /// let r = node_field::restrict_like(&temp, &cible)?;
 /// assert!(r.get(0)?.read().same_support(&cible.get(0)?.read()));
+/// // A field carrying none of the components gives zeros on the target.
+/// let rien = node_field::restrict_like(&Field::filter_components(&temp, "q"), &cible)?;
+/// assert_eq!(rien.get(0)?.read().get(1, 0)?, 0.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn restrict_like(field: &NodeField, target: &NodeField) -> Result<NodeField> {
-    let target_coords = target.coords()?;
-    let field_coords = field.coords()?;
-    if !target_coords.same_object(&field_coords) {
+    // An empty field has no `Coords` to compare.
+    if !field.is_empty() && !target.is_empty() && !target.coords()?.same_object(&field.coords()?) {
         return Err(PyrucastError::Message(
             "restrict_like: target is not attached to the same Coords".into(),
         ));

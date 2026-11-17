@@ -665,6 +665,18 @@ def test_restrict_like_lands_on_target_support():
     assert s.value(nodes[1], "u_y") == 2.0
 
 
+def test_restrict_like_with_an_empty_field():
+    """An empty field defines nothing: zeros on the target. An empty target
+    gives an empty field."""
+    _c, nodes, sm = _poi1_with(2)
+    target = pyrucast.NodeField(sm, [("u_x", 3.0)])
+    nothing = target["lambda"]
+    zeros = pyrucast.node_field.restrict_like(nothing, target)
+    assert zeros.components() == ["u_x"]
+    assert zeros.values(nodes, "u_x") == [0.0, 0.0]
+    assert len(pyrucast.node_field.restrict_like(target, nothing)) == 0
+
+
 # ─── min / max ───────────────────────────────────────────────────────────────
 
 

@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from .. import element_field, matrix, measure, node_field, solver
 from .anderson import Accelerator
 from .control import AutomaticControl, IndirectControl
-from .fields import STRAIN_PREFIXES, infinity_norm, part
+from .fields import STRAIN_PREFIXES
 from .materials import materials_at
 from .problem import contacts
 
@@ -171,7 +171,7 @@ def balance(problem, mechanics, solution, behaviour, step, inertia=None):
     follow the wall are evaluated on the configuration of this iterate, and
     the contacts' gaps are those of their last update.
     """
-    displacement = part(solution, problem.displacement_names)
+    displacement = solution[problem.displacement_names]
     stress = behaviour
     if problem.configurations is not None:
         gradient = element_field.deformation(displacement, problem.fespace, "gradient")
@@ -193,8 +193,8 @@ def balance(problem, mechanics, solution, behaviour, step, inertia=None):
         system = system + node_field.restrict_like(gaps, internal)
     if inertia is not None:
         system = system - node_field.restrict_like(inertia, internal)
-    multipliers = part(solution, problem.multiplier_names)
-    if multipliers is None:
+    multipliers = solution[problem.multiplier_names]
+    if len(multipliers) == 0:
         return Balance(system, system, None)
     constraint_forces = node_field.restrict_like(
         node_field.internal_forces(
@@ -212,7 +212,7 @@ def mechanics_at(problem, solution):
     itself."""
     if not problem.updates_contact:
         return problem.mechanics
-    return problem.mechanics.update_contact(part(solution, problem.displacement_names))
+    return problem.mechanics.update_contact(solution[problem.displacement_names])
 
 
 def _turned_inside_out(problem, solution):
@@ -223,7 +223,7 @@ def _turned_inside_out(problem, solution):
     if not problem.volume_zones:
         return False
     jacobian = element_field.deformation(
-        part(solution, problem.displacement_names), problem.fespace, "jacobian"
+        solution[problem.displacement_names], problem.fespace, "jacobian"
     )
     return min(jacobian[i].min("J") for i in problem.volume_zones) <= 0.0
 
@@ -231,13 +231,11 @@ def _turned_inside_out(problem, solution):
 def _advanced(problem, solution, increment):
     """The solution after a solve: displacement ``+ δu``, multipliers as
     returned (they are totals)."""
-    moved = part(increment, problem.displacement_names)
+    moved = increment[problem.displacement_names]
     displacement = (
-        node_field.restrict_like(part(solution, problem.displacement_names), moved)
-        + moved
+        node_field.restrict_like(solution[problem.displacement_names], moved) + moved
     )
-    multipliers = part(increment, problem.multiplier_names)
-    return displacement if multipliers is None else displacement | multipliers
+    return displacement | increment[problem.multiplier_names]
 
 
 def _work(problem, primal, dual):
@@ -308,7 +306,7 @@ def _current_operator(problem, state, step, options, mechanics, strain, behaviou
     configuration (Cast3M ``K_e(GEOM2) + K_σ``)."""
     dt = step.t_end - step.t_start
     solution, reached = at
-    displacement = part(solution, problem.displacement_names)
+    displacement = solution[problem.displacement_names]
     sigma = None
     if options.geometric_stiffness is not False and reached is not None:
         # F and σ belong to the reference configuration: evaluated before the
@@ -376,22 +374,20 @@ def reference_forces(
         work = _work(
             problem,
             first_correction,
-            part(applied, problem.force_names + problem.moment_names),
+            applied[problem.force_names + problem.moment_names],
         )
-    constraint_rows = part(balance_start.system, rows) if rows else None
-    if constraint_rows is not None:
-        work -= _work(problem, first_correction, constraint_rows)
-    largest_move = infinity_norm(first_correction, problem.translation_names)
+    work -= _work(problem, first_correction, balance_start.system[rows])
+    largest_move = first_correction.norm(0, problem.translation_names)
     work = abs(work) + internal_scale * largest_move
     force = work / (largest_move + _TINY) + internal_scale
-    force = max(force, infinity_norm(applied, problem.force_names), floor)
+    largest_applied = 0.0 if applied is None else applied.norm(0, problem.force_names)
+    force = max(force, largest_applied, floor)
     if force < _TINY:
         force = 1.0
     moment = 1.0
     if problem.moment_names:
         moment = (
-            work / (infinity_norm(first_correction, problem.rotation_names) + _TINY)
-            + _TINY
+            work / (first_correction.norm(0, problem.rotation_names) + _TINY) + _TINY
         )
     return force, moment
 
@@ -422,13 +418,13 @@ def nonlinear_predictor(
         or previous is None
         or not state.converged
         or state.substeps_before > 0
-        or infinity_norm(previous, problem.force_names) <= options.precision * reference
+        or previous.norm(0, problem.force_names) <= options.precision * reference
     ):
         return None
-    now_moved = part(first_correction, problem.displacement_names)
+    now_moved = first_correction[problem.displacement_names]
     both = (
         node_field.restrict_like(
-            part(state.first_correction, problem.displacement_names), now_moved
+            state.first_correction[problem.displacement_names], now_moved
         )
         + now_moved
     )
@@ -437,10 +433,8 @@ def nonlinear_predictor(
     before = _work(problem, both, state.load_increment)
     ratio = now / (before + _TINY)
     by_time = dt / state.dt_before if state.dt_before > _TINY else 0.0
-    moving = _work(
-        problem, part(first_correction, problem.displacement_names), increment
-    )
-    largest = infinity_norm(first_correction, problem.translation_names)
+    moving = _work(problem, first_correction[problem.displacement_names], increment)
+    largest = first_correction.norm(0, problem.translation_names)
     if abs(moving) < options.precision * reference * largest or abs(
         on_previous
     ) > 200.0 * abs(before):
@@ -457,12 +451,10 @@ def _nonlinear_forces(problem, operator, start, solution, increment, residual):
     """``K Δx − ΔR⁰ + r`` on the force rows: what the operator alone would not
     have predicted. Zero for a linear step."""
     step_increment = solution - node_field.restrict_like(start, solution)
-    predicted = operator * step_increment
-    forces = list(problem.force_names + problem.moment_names)
-    out = part(predicted, forces) - node_field.restrict_like(
-        part(increment, forces), part(predicted, forces)
-    )
-    return out + node_field.restrict_like(part(residual, forces), out)
+    forces = problem.force_names + problem.moment_names
+    predicted = (operator * step_increment)[forces]
+    out = predicted - node_field.restrict_like(increment[forces], predicted)
+    return out + node_field.restrict_like(residual[forces], out)
 
 
 # ─── Algo 6: is it over? ────────────────────────────────────────────────────
@@ -682,7 +674,7 @@ def equilibrium_iterations(
             pause = 4
         rhs = current.system
         if accelerator is not None:
-            forces = part(current.out_of_balance, problem.force_names)
+            forces = current.out_of_balance[problem.force_names]
             correction = accelerator(forces, pause <= 0 and i > 3, previous_increment)
             if correction is not None:
                 pause = 2
@@ -698,7 +690,7 @@ def equilibrium_iterations(
         except RuntimeError:
             state.mechanics_method, state.mechanics_relations = "lu", "lagrange"
             increment = solver.solve(operator, rhs)
-        previous_increment = part(increment, problem.displacement_names)
+        previous_increment = increment[problem.displacement_names]
         reached = solution
         solution = _advanced(problem, solution, increment)
         if controller is not None:
@@ -759,18 +751,17 @@ def equilibrium_iterations(
             change = change - node_field.restrict_like(
                 previous.constraint_forces, change
             )
-        reaction_change = infinity_norm(change, problem.force_names)
+        reaction_change = 0.0 if change is None else change.norm(0, problem.force_names)
         names = [n for n in strain.components() if n.startswith(STRAIN_PREFIXES)]
         measures = {
             "force": max(
-                infinity_norm(current.out_of_balance, problem.force_names),
+                current.out_of_balance.norm(0, problem.force_names),
                 reaction_change,
             )
             / force_ref,
-            "moment": infinity_norm(current.out_of_balance, problem.moment_names)
-            / moment_ref,
-            "strain_change": infinity_norm(strain - previous_strain, names),
-            "strain_increment": infinity_norm(strain - start_strain, names),
+            "moment": current.out_of_balance.norm(0, problem.moment_names) / moment_ref,
+            "strain_change": (strain - previous_strain).norm(0, names),
+            "strain_increment": (strain - start_strain).norm(0, names),
         }
         if options.trace:
             print(
@@ -796,7 +787,7 @@ def equilibrium_iterations(
                 inertia(solution) if inertia else None,
             )
             if (
-                infinity_norm(check.out_of_balance, problem.force_names) / force_ref
+                check.out_of_balance.norm(0, problem.force_names) / force_ref
                 >= options.precision
             ):
                 rebuilds += 1
@@ -885,10 +876,10 @@ def _newmark(problem, state, step, dt):
     """``x ↦ M a(x)`` with ``a = 4/Δt² (u − uₙ) − 4/Δt vₙ − aₙ`` (Newmark,
     γ = ½, β = ¼), and the update of velocity and acceleration."""
     mass = _mass(problem, state, step.materials)
-    u_n = part(state.solution, problem.displacement_names)
+    u_n = state.solution[problem.displacement_names]
 
     def accelerations(solution):
-        u = part(solution, problem.displacement_names)
+        u = solution[problem.displacement_names]
         moved = u - node_field.restrict_like(u_n, u)
         return (
             moved * (4.0 / dt**2)
@@ -900,7 +891,7 @@ def _newmark(problem, state, step, dt):
         return mass * accelerations(solution)
 
     def motion(solution):
-        u = part(solution, problem.displacement_names)
+        u = solution[problem.displacement_names]
         moved = u - node_field.restrict_like(u_n, u)
         velocity = moved * (2.0 / dt) - node_field.restrict_like(state.velocity, u)
         return velocity, accelerations(solution)
@@ -976,20 +967,19 @@ def mechanical_step(data, problem, state, t_end, temperature, options):
             first_correction = solver.solve(operator, first.system)
         # This step's load increment: the first residual, less what the
         # previous step left unbalanced.
-        increment = part(first.out_of_balance, forces)
+        increment = first.out_of_balance[forces]
         if state.final_residual is not None:
             increment = increment - node_field.restrict_like(
-                part(state.final_residual, forces), increment
+                state.final_residual[forces], increment
             )
         if reference is None:
-            internal_scale = infinity_norm(
-                first.system - _applied(step, first.system), problem.force_names
+            internal_scale = (first.system - _applied(step, first.system)).norm(
+                0, problem.force_names
             )
             floor = 0.0
             if problem.configurations is not None:
-                floor = infinity_norm(
-                    operator * part(start.solution, problem.displacement_names),
-                    problem.force_names,
+                floor = (operator * start.solution[problem.displacement_names]).norm(
+                    0, problem.force_names
                 )
             reference = reference_forces(
                 problem, step, first_correction, first, internal_scale, floor
@@ -1148,8 +1138,8 @@ def _controller(
             problem,
             fraction,
             options.automatic_target,
-            part(first_correction, problem.displacement_names),
-            part(first.out_of_balance, problem.force_names),
+            first_correction[problem.displacement_names],
+            first.out_of_balance[problem.force_names],
             lambda increment, forces: _work(problem, increment, forces),
             measure,
         )

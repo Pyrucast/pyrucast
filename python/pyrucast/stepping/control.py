@@ -6,7 +6,7 @@ model's own strain operator.
 """
 
 from .. import element_field, field, node_field
-from .fields import STRAIN_PREFIXES, part
+from .fields import STRAIN_PREFIXES
 
 __all__ = [
     "AutomaticControl",
@@ -117,8 +117,8 @@ class AutomaticControl:
     def after_solve(self, i, start, solution, materials):
         """``solution`` with its displacement increment rescaled."""
         names = self.problem.displacement_names
-        u = part(solution, names)
-        start_u = node_field.restrict_like(part(start, names), u)
+        u = solution[names]
+        start_u = node_field.restrict_like(start[names], u)
         moved = u - start_u
         if self.reductions < i // 20:
             self.reductions += 1
@@ -137,8 +137,7 @@ class AutomaticControl:
             scale = min(scale, 1.0 / self.fraction)
         self.scale = scale
         rescaled = start_u + moved * scale
-        multipliers = part(solution, self.problem.multiplier_names)
-        return rescaled if multipliers is None else rescaled | multipliers
+        return rescaled | solution[self.problem.multiplier_names]
 
     def pending(self):
         """No level change before the balance: ``α`` moves after it."""
@@ -150,8 +149,8 @@ class AutomaticControl:
         if before == 1.0 and self.scale == 1.0:
             return None
         names = self.problem.displacement_names
-        u = part(solution, names)
-        moved = u - node_field.restrict_like(part(start, names), u)
+        u = solution[names]
+        moved = u - node_field.restrict_like(start[names], u)
         along = self.work(moved, self.nominal)
         if abs(along) < 1e-300:
             return None
@@ -177,16 +176,15 @@ class IndirectControl:
 
     def after_solve(self, i, start, solution, materials):
         names = self.problem.displacement_names
-        u = part(solution, names)
-        start_u = node_field.restrict_like(part(start, names), u)
-        response = node_field.restrict_like(part(self.response, names), u)
+        u = solution[names]
+        start_u = node_field.restrict_like(start[names], u)
+        response = node_field.restrict_like(self.response[names], u)
         change = indirect_control(
             self.problem, start_u, u - start_u, response, self.target, materials
         )
         self.multiplier += change
         moved = u + response * change
-        multipliers = part(solution, self.problem.multiplier_names)
-        return moved if multipliers is None else moved | multipliers
+        return moved | solution[self.problem.multiplier_names]
 
     def pending(self):
         """The multiplier just moved: the loads follow before the balance."""

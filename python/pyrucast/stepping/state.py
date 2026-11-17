@@ -8,7 +8,7 @@ next step's predictor needs — gathered in one mutable ``State``.
 from dataclasses import dataclass, field
 
 from .. import element_field
-from .fields import domain_mesh, uniform
+from .._pyrucast import NodeField
 from .materials import materials_at
 from .problem import contacts
 
@@ -88,8 +88,9 @@ def initial_state(data, problem, options):
     if problem.heat is not None:
         temperature = initial.get("temperature")
         if temperature is None:
-            temperature = uniform(
-                domain_mesh(problem.heat_domain.fespace()), ["T"], options.t_ref
+            temperature = NodeField(
+                problem.heat_domain.fespace().mesh().deduplicate(),
+                [("T", options.t_ref)],
             )
     else:
         temperature = problem.prescribed_temperature_at(t0)
@@ -102,10 +103,10 @@ def initial_state(data, problem, options):
         )
 
     if problem.mechanics is not None:
-        mesh = domain_mesh(problem.fespace)
+        mesh = problem.fespace.mesh().deduplicate()
         names = problem.displacement_names
         at_rest = lambda key: (
-            initial[key] if initial.get(key) is not None else uniform(mesh, names, 0.0)
+            initial[key] if initial.get(key) is not None else NodeField(mesh, names)
         )
         state.solution = at_rest("displacement")
         state.behaviour = initial.get("behaviour")

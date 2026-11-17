@@ -1,6 +1,5 @@
 """The loop over time (Cast3M ``PASAPAS``)."""
 
-from .fields import infinity_norm, part
 from .heat import heat_step, heat_step_dupont, heat_step_linear
 from .mechanics import mechanical_step
 from .options import resolve_options
@@ -23,8 +22,8 @@ def _coherent(previous, current, tolerance):
     relative to its size."""
     if previous is None:
         return False
-    change = infinity_norm(part(current, ["T"]) - part(previous, ["T"]), ["T"])
-    return change <= tolerance * max(infinity_norm(current, ["T"]), 1e-300)
+    change = (current["T"] - previous["T"]).norm(0)
+    return change <= tolerance * max(current.norm(0, ["T"]), 1e-300)
 
 
 def _heat_step(data, problem, state, instant, options):
@@ -33,7 +32,7 @@ def _heat_step(data, problem, state, instant, options):
     laid here; the heat step computes on it, the reference staying active."""
     scheme = _HEAT[options.heat_scheme]
     if problem.configurations is not None:
-        problem.configurations.lay(part(state.solution, problem.displacement_names))
+        problem.configurations.lay(state.solution[problem.displacement_names])
     return scheme(data, problem, state, instant, options)
 
 

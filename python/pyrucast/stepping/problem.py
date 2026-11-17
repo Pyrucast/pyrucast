@@ -10,9 +10,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from .. import element_field, node_field
-from .._pyrucast import ElementField, Evolution, FiniteElementSpace
+from .._pyrucast import ElementField, Evolution, FiniteElementSpace, NodeField
 from .configuration import configurations
-from .fields import domain_mesh, uniform
 
 __all__ = ["Problem", "describe_problem"]
 
@@ -43,11 +42,8 @@ def _nodal_weights(domain, names):
     ``names`` — the weight that puts residuals at comparable scales before
     they are combined (Cast3M ``ZJAC``)."""
     fespace = domain.fespace()
-    ones = ElementField(fespace, list(names))
-    for zone in ones:
-        for name in names:
-            zone.set_uniform(name, 1.0)
-    centres = FiniteElementSpace(domain_mesh(fespace), quadrature="REDUCED")
+    ones = ElementField(fespace, [(name, 1.0) for name in names])
+    centres = FiniteElementSpace(fespace.mesh().deduplicate(), quadrature="REDUCED")
     volumes = node_field.sum_to_nodes(element_field.cell_integral(ones, centres))
     return (volumes + 1e-300) ** -0.5
 
@@ -63,7 +59,7 @@ def _strain_measure(domain, fespace, displacement_names, materials):
     ``H_*``) — the loop only reads it. Refuses a domain mixing a measure of
     large transformations with anything else: beams and shells have no
     large-transformation formulation yet, and a bar reads Green–Lagrange."""
-    rest = uniform(domain_mesh(fespace), displacement_names, 0.0)
+    rest = NodeField(fespace.mesh().deduplicate(), displacement_names)
     names = element_field.strain(domain, rest, materials).components()
     prefixes = {name.split("_")[0] for name in names}
     finite = prefixes & set(_MEASURES)

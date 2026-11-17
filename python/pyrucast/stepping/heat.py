@@ -23,7 +23,6 @@ from dataclasses import dataclass
 
 from .. import element_field, matrix, node_field, solver
 from .anderson import Accelerator
-from .fields import infinity_norm, part
 from .materials import materials_at
 
 __all__ = ["HeatOutcome", "heat_step", "heat_step_dupont", "heat_step_linear"]
@@ -45,16 +44,14 @@ class HeatOutcome:
 
 def _multipliers(problem, field):
     names = [v for v in problem.heat.primal_vars() if v != "T"]
-    return part(field, names) if names else None
+    return field[names]
 
 
 def _advanced(problem, temperature, increment):
     """Temperature ``+ δT``, multipliers as returned (totals)."""
-    moved = node_field.restrict_like(
-        part(temperature, ["T"]), part(increment, ["T"])
-    ) + part(increment, ["T"])
-    multipliers = _multipliers(problem, increment)
-    return moved if multipliers is None else moved | multipliers
+    step = increment["T"]
+    moved = node_field.restrict_like(temperature["T"], step) + step
+    return moved | _multipliers(problem, increment)
 
 
 def _on_current(problem):
@@ -84,7 +81,7 @@ def _frame_gradient(problem, state):
     active; ``None`` when there is nothing to turn."""
     if problem.configurations is None or problem.frame_fespace is None:
         return None
-    displacement = part(state.solution, problem.displacement_names)
+    displacement = state.solution[problem.displacement_names]
     return element_field.deformation(displacement, problem.frame_fespace, "gradient")
 
 
@@ -131,12 +128,11 @@ def _system(problem, loads, evaluated, behaviour, constrained, materials, extra=
     ``g − C T`` on the imposed rows, with ``T`` the ``constrained``
     temperature — the right-hand side whose solve returns the multipliers in
     total. Returns ``(system, out_of_balance)``, the second less ``Cᵀλ``."""
-    temperature = part(evaluated, ["T"])
+    temperature = evaluated["T"]
     internal = _internal_forces(problem, behaviour, temperature, materials)
     if problem.heat_constraints is not None and constrained is not evaluated:
-        shift = part(constrained, ["T"]) - node_field.restrict_like(
-            temperature, part(constrained, ["T"])
-        )
+        held = constrained["T"]
+        shift = held - node_field.restrict_like(temperature, held)
         internal = internal + node_field.restrict_like(
             node_field.internal_forces(
                 problem.heat_constraints, behaviour, shift, materials
@@ -149,7 +145,7 @@ def _system(problem, loads, evaluated, behaviour, constrained, materials, extra=
     if extra is not None:
         system = system - node_field.restrict_like(extra, internal)
     multipliers = _multipliers(problem, constrained)
-    if multipliers is None or problem.heat_constraints is None:
+    if len(multipliers) == 0 or problem.heat_constraints is None:
         return system, system
     constraint_forces = node_field.internal_forces(
         problem.heat_constraints, behaviour, multipliers, materials
@@ -198,7 +194,7 @@ def heat_step(data, problem, state, t_end, options):
     operator = _operator(
         problem,
         materials,
-        part(start, ["T"]),
+        start["T"],
         theta,
         capacity,
         state.heat_behaviour,
@@ -207,24 +203,22 @@ def heat_step(data, problem, state, t_end, options):
     accelerator = None
     if options.acceleration:
         accelerator = Accelerator(None, False, None)
-    size_start = infinity_norm(start, ["T"])
+    size_start = start.norm(0, ["T"])
     temperature = start
     pause = 0
     for i in range(1, options.max_iterations + 1):
         pause -= 1
         evaluated = (
-            node_field.restrict_like(
-                part(start, ["T"]) * (1.0 - theta), part(temperature, ["T"])
-            )
-            + part(temperature, ["T"]) * theta
+            node_field.restrict_like(start["T"] * (1.0 - theta), temperature["T"])
+            + temperature["T"] * theta
             if theta != 1.0
-            else part(temperature, ["T"])
+            else temperature["T"]
         )
         behaviour = _laws(problem, evaluated, materials, dt, state.heat_behaviour)
         storage = None
         if capacity is not None:
-            moved = part(temperature, ["T"]) - node_field.restrict_like(
-                part(start, ["T"]), part(temperature, ["T"])
+            moved = temperature["T"] - node_field.restrict_like(
+                start["T"], temperature["T"]
             )
             storage = capacity * moved
         system, out = _system(
@@ -233,7 +227,7 @@ def heat_step(data, problem, state, t_end, options):
         rhs = system
         if accelerator is not None:
             correction = accelerator(
-                part(out, ["q"]), pause <= 0 and i > 3 and i % 2 == 0, None
+                out["q"], pause <= 0 and i > 3 and i % 2 == 0, None
             )
             if correction is not None:
                 pause = 2
@@ -249,12 +243,12 @@ def heat_step(data, problem, state, t_end, options):
             state.heat_method, state.heat_relations = "lu", "lagrange"
             increment = solver.solve(operator, rhs)
         temperature = _advanced(problem, temperature, increment)
-        change = infinity_norm(increment, ["T"])
-        size = 0.5 * (size_start + infinity_norm(temperature, ["T"]))
+        change = increment.norm(0, ["T"])
+        size = 0.5 * (size_start + temperature.norm(0, ["T"]))
         if change <= options.precision * max(size, _TINY):
             behaviour = _laws(
                 problem,
-                part(temperature, ["T"]),
+                temperature["T"],
                 materials,
                 dt,
                 state.heat_behaviour,
@@ -288,13 +282,13 @@ def heat_step_linear(data, problem, state, t_end, options):
     operator = _operator(
         problem,
         materials,
-        part(start, ["T"]),
+        start["T"],
         theta,
         capacity,
         state.heat_behaviour,
     )
     loads = _loads(data, problem, state, t_end, materials, options)
-    behaviour = _laws(problem, part(start, ["T"]), materials, dt, state.heat_behaviour)
+    behaviour = _laws(problem, start["T"], materials, dt, state.heat_behaviour)
     system, _ = _system(problem, loads, start, behaviour, start, materials)
     try:
         increment = solver.solve(
@@ -309,7 +303,7 @@ def heat_step_linear(data, problem, state, t_end, options):
     temperature = _advanced(problem, start, increment)
     behaviour = _laws(
         problem,
-        part(temperature, ["T"]),
+        temperature["T"],
         materials,
         dt,
         state.heat_behaviour,
@@ -339,8 +333,8 @@ def heat_step_dupont(data, problem, state, t_end, options):
         return heat_step(data, problem, state, t_end, options)
     lam = options.dupont_relaxation
     middle = state.time + 0.5 * dt
-    t1 = part(state.temperature, ["T"])
-    t0 = node_field.restrict_like(part(before, ["T"]), t1)
+    t1 = state.temperature["T"]
+    t0 = node_field.restrict_like(before["T"], t1)
     extrapolated = t1 + (t1 - t0) * (0.5 * dt / state.dt_before)
     materials = _materials(
         data,
@@ -359,14 +353,14 @@ def heat_step_dupont(data, problem, state, t_end, options):
         list(problem.heat_constraints.dual_vars()) if problem.heat_constraints else []
     )
     sources = [
-        part(load, [c for c in load.components() if c not in imposed])
+        load.filter_components([c for c in load.components() if c not in imposed])
         for load in _loads(data, problem, state, middle, materials, options)
     ]
     targets = [
-        part(load, imposed)
+        load[imposed]
         for load in _loads(data, problem, state, t_end, materials, options)
     ]
-    loads = [load for load in sources + targets if load is not None]
+    loads = sources + targets
     behaviour = _laws(problem, extrapolated, materials, dt, state.heat_behaviour)
     # The flux at the weighted temperature, linearised at T*.
     weighted = t1 * (1.0 - lam) + t0 * lam
@@ -393,7 +387,7 @@ def heat_step_dupont(data, problem, state, t_end, options):
     temperature = _advanced(problem, state.temperature, increment)
     behaviour = _laws(
         problem,
-        part(temperature, ["T"]),
+        temperature["T"],
         materials,
         dt,
         state.heat_behaviour,
