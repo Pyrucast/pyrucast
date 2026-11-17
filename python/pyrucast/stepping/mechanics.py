@@ -214,7 +214,7 @@ def _work(problem, primal, dual):
     """``Σ primal·dual`` over the model's (unknown, dual) pairs — ``δu·f`` and
     ``λ·g`` — the scalar product of an increment with a force. The force is
     read on the increment's supports first: a point load has its own."""
-    on_primal = node_field.restrict(dual, primal.support().deduplicate())
+    on_primal = node_field.restrict(dual, primal.support())
     return measure.xty(primal, on_primal, list(problem.duality.items()))
 
 
