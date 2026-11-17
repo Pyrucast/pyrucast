@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from .. import element_field, node_field
-from .._pyrucast import ElementField, Evolution, FiniteElementSpace, NodeField
+from .._pyrucast import ElementField, Evolution, FiniteElementSpace, Model, NodeField
 from .configuration import configurations
 
 __all__ = ["Problem", "describe_problem"]
@@ -24,17 +24,6 @@ def _of_time(spec):
     if isinstance(spec, Evolution):
         return spec.interpolate
     return lambda _t: spec
-
-
-def _part(model, nature):
-    """The sub-models of ``model`` of one nature, its domain (constraints
-    excluded) and its constraints — ``None`` for a physics the model lacks."""
-    part = model.filter(nature)
-    domain = part.exclude("constraint")
-    if len(domain) == 0:
-        return None, None, None
-    constraints = part.filter("constraint")
-    return part, domain, (constraints if len(constraints) > 0 else None)
 
 
 def _nodal_weights(domain, names):
@@ -74,17 +63,13 @@ def _strain_measure(domain, fespace, displacement_names, materials):
     return _MEASURES[finite.pop()]
 
 
-def _sub_models(model):
-    return [model[i : i + 1] for i in range(len(model))]
-
-
 def contacts(model):
     """The contact sub-models of ``model``, together; ``None`` without any."""
-    found = None
-    for sub in _sub_models(model):
-        if sub[0].label() == "Contact":
-            found = sub if found is None else found | sub
-    return found
+    found = Model.empty()
+    for sub in model:
+        if sub.label() == "Contact":
+            found.add_sub(sub)
+    return found if len(found) > 0 else None
 
 
 def _frame_fespace(model):
@@ -92,17 +77,11 @@ def _frame_fespace(model):
     and the others), ``None`` when none does: where the gradient that turns
     those axes with the part is computed. Every physics counts — a zone the
     heat and the mechanics share carries the axes of both."""
-    oriented = [
-        sub
-        for sub in _sub_models(model)
-        if "V1X" in (sub[0].material_components() or [])
-    ]
-    if not oriented:
-        return None
-    union = oriented[0]
-    for sub in oriented[1:]:
-        union = union | sub
-    return union.fespace()
+    oriented = Model.empty()
+    for sub in model:
+        if "V1X" in (sub.material_components() or []):
+            oriented.add_sub(sub)
+    return oriented.fespace() if len(oriented) > 0 else None
 
 
 def _follower_split(mechanics):
@@ -111,15 +90,17 @@ def _follower_split(mechanics):
     ``follower`` is ``None`` when there is none. The contacts stay out of
     both: their gap follows their pairing, read on the model they are updated
     in."""
-    follower, others = None, None
-    for sub in _sub_models(mechanics):
-        if sub[0].label() == "Contact":
+    follower, others = Model.empty(), Model.empty()
+    for sub in mechanics:
+        if sub.label() == "Contact":
             continue
-        if (sub[0].material_components() or []) == ["phi_n"]:
-            follower = sub if follower is None else follower | sub
+        if (sub.material_components() or []) == ["phi_n"]:
+            follower.add_sub(sub)
         else:
-            others = sub if others is None else others | sub
-    return follower, others
+            others.add_sub(sub)
+    return (follower if len(follower) > 0 else None), (
+        others if len(others) > 0 else None
+    )
 
 
 @dataclass(frozen=True)
@@ -136,13 +117,13 @@ class Problem:
     model: object
     mechanics: object | None
     mechanics_domain: object | None
-    mechanics_constraints: object | None
     heat: object | None
     heat_domain: object | None
     heat_constraints: object | None
     fespace: object | None
     displacement_names: tuple
     multiplier_names: tuple
+    heat_multiplier_names: tuple
     translation_names: tuple
     rotation_names: tuple
     force_names: tuple
@@ -196,8 +177,19 @@ def describe_problem(data, options):
     inside out (``volume_zones``).
     """
     model = data["model"]
-    mechanics, mechanics_domain, mechanics_constraints = _part(model, "mechanical")
-    heat, heat_domain, heat_constraints = _part(model, "thermal")
+    # Each physics with its constraints, its domain without them, and the
+    # constraints alone; a physics without a domain is absent.
+    mechanics = model.filter("mechanical")
+    mechanics_domain = mechanics.exclude("constraint")
+    if len(mechanics_domain) == 0:
+        mechanics = mechanics_domain = None
+    heat = model.filter("thermal")
+    heat_domain = heat.exclude("constraint")
+    heat_constraints = heat.filter("constraint")
+    if len(heat_domain) == 0:
+        heat = heat_domain = heat_constraints = None
+    elif len(heat_constraints) == 0:
+        heat_constraints = None
     if mechanics is None and heat is None:
         raise ValueError(
             "step_by_step: the model has neither a mechanical nor a thermal domain"
@@ -274,13 +266,15 @@ def describe_problem(data, options):
         model=model,
         mechanics=mechanics,
         mechanics_domain=mechanics_domain,
-        mechanics_constraints=mechanics_constraints,
         heat=heat,
         heat_domain=heat_domain,
         heat_constraints=heat_constraints,
         fespace=fespace,
         displacement_names=displacement_names,
         multiplier_names=multiplier_names,
+        heat_multiplier_names=(
+            tuple(v for v in heat.primal_vars() if v != "T") if heat is not None else ()
+        ),
         translation_names=translation_names,
         rotation_names=rotation_names,
         force_names=force_names,

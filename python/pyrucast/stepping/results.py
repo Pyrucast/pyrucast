@@ -1,10 +1,8 @@
 """The record of a step (Cast3M ``PAS_RESU``)."""
 
+import math
+
 __all__ = ["store_step"]
-
-
-def _close(t, times, tolerance=1e-12):
-    return any(abs(t - s) <= tolerance * max(1.0, abs(s)) for s in times)
 
 
 def store_step(data, problem, state, options, initial=False):
@@ -22,7 +20,11 @@ def store_step(data, problem, state, options, initial=False):
     ``deformation(…, "gradient")`` and ``stress_measure``.
     """
     if not initial and (
-        not state.converged or not _close(state.time, options.save_times)
+        not state.converged
+        or not any(
+            math.isclose(state.time, s, rel_tol=1e-12, abs_tol=1e-12)
+            for s in options.save_times
+        )
     ):
         return
     solution, forces = state.solution, state.constraint_forces

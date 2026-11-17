@@ -42,16 +42,11 @@ class HeatOutcome:
     iterations: int
 
 
-def _multipliers(problem, field):
-    names = [v for v in problem.heat.primal_vars() if v != "T"]
-    return field[names]
-
-
 def _advanced(problem, temperature, increment):
     """Temperature ``+ δT``, multipliers as returned (totals)."""
     step = increment["T"]
     moved = node_field.restrict_like(temperature["T"], step) + step
-    return moved | _multipliers(problem, increment)
+    return moved | increment[problem.heat_multiplier_names]
 
 
 def _on_current(problem):
@@ -107,29 +102,16 @@ def _laws(problem, temperature, materials, dt, prev):
         )
 
 
-def _internal_forces(problem, behaviour, temperature, materials):
-    """``F_int(T)`` of the heat model, on the current shape."""
-    with _on_current(problem):
-        return node_field.internal_forces(
-            problem.heat, behaviour, temperature, materials
-        )
-
-
-def _tangent(problem, materials, temperature, prev):
-    """The heat domain's tangent at ``temperature``, from ``prev``, on the
-    current shape."""
-    with _on_current(problem):
-        strain = element_field.strain(problem.heat_domain, temperature, materials)
-        return matrix.tangent(problem.heat_domain, materials, strain, prev)
-
-
 def _system(problem, loads, evaluated, behaviour, constrained, materials, extra=None):
     """``Σ loads − F(T_eval) [− extra]`` on the temperature rows and
     ``g − C T`` on the imposed rows, with ``T`` the ``constrained``
     temperature — the right-hand side whose solve returns the multipliers in
     total. Returns ``(system, out_of_balance)``, the second less ``Cᵀλ``."""
     temperature = evaluated["T"]
-    internal = _internal_forces(problem, behaviour, temperature, materials)
+    with _on_current(problem):
+        internal = node_field.internal_forces(
+            problem.heat, behaviour, temperature, materials
+        )
     if problem.heat_constraints is not None and constrained is not evaluated:
         held = constrained["T"]
         shift = held - node_field.restrict_like(temperature, held)
@@ -144,7 +126,7 @@ def _system(problem, loads, evaluated, behaviour, constrained, materials, extra=
         system = system + node_field.restrict_like(load, internal)
     if extra is not None:
         system = system - node_field.restrict_like(extra, internal)
-    multipliers = _multipliers(problem, constrained)
+    multipliers = constrained[problem.heat_multiplier_names]
     if len(multipliers) == 0 or problem.heat_constraints is None:
         return system, system
     constraint_forces = node_field.internal_forces(
@@ -158,7 +140,9 @@ def _operator(problem, materials, temperature, weight, capacity_over_dt, prev):
     ``temperature`` from ``prev`` (the stiffness for a linear law, the
     radiative ``4σεT³`` film for radiation) scaled by the scheme's weight,
     the capacity, and the constraints left unscaled."""
-    operator = _tangent(problem, materials, temperature, prev) * weight
+    with _on_current(problem):
+        strain = element_field.strain(problem.heat_domain, temperature, materials)
+        operator = matrix.tangent(problem.heat_domain, materials, strain, prev) * weight
     if capacity_over_dt is not None:
         operator = operator + capacity_over_dt
     if problem.heat_constraints is not None:
@@ -364,7 +348,11 @@ def heat_step_dupont(data, problem, state, t_end, options):
     behaviour = _laws(problem, extrapolated, materials, dt, state.heat_behaviour)
     # The flux at the weighted temperature, linearised at T*.
     weighted = t1 * (1.0 - lam) + t0 * lam
-    tangent = _tangent(problem, materials, extrapolated, state.heat_behaviour)
+    with _on_current(problem):
+        strain = element_field.strain(problem.heat_domain, extrapolated, materials)
+        tangent = matrix.tangent(
+            problem.heat_domain, materials, strain, state.heat_behaviour
+        )
     system, _ = _system(
         problem,
         loads,

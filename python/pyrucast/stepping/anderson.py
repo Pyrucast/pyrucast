@@ -175,18 +175,14 @@ class Accelerator:
                 and self._stability
                 and last_increment is not None
             ):
-                correction = self._guarded(residual, correction, last_increment)
+                reference = self._pairing(last_increment, residual) + _TINY
+                ratio = self._pairing(last_increment, residual - correction) / reference
+                limit = 1.0 if reference < 0.0 else 1e5
+                if ratio <= 0.0:
+                    correction = None  # retrograde: no acceleration
+                elif ratio > limit:
+                    correction = correction * (limit / ratio)
         self._f = [weighted, self._f[0], self._f[1]]
         self._d = [direction, self._d[0]]
         self._applied = correction
-        return correction
-
-    def _guarded(self, residual, correction, increment):
-        reference = self._pairing(increment, residual) + _TINY
-        ratio = self._pairing(increment, residual - correction) / reference
-        limit = 1.0 if reference < 0.0 else 1e5
-        if ratio <= 0.0:
-            return None  # retrograde: no acceleration
-        if ratio > limit:
-            return correction * (limit / ratio)
         return correction
