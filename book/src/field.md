@@ -86,8 +86,8 @@ qui pèse chaque valeur par la taille des mailles : c'est
 `pyrucast.measure.integral`. Deux autres réductions s'appliquent aux deux
 familles, et comptent de même un nœud une fois : `pyrucast.measure.xtx(champ)`,
 la somme des carrés des valeurs, et `pyrucast.measure.xty(a, b)`, la somme des
-produits des valeurs que `a` et `b` portent sur les mêmes supports et sous les
-mêmes noms (voir [Opérateurs sur les champs](algorithmes/champs.md#réduction)).
+produits des valeurs que `a` et `b` portent sur les mêmes supports, sous les
+mêmes noms ou par paires de noms (voir [Opérateurs sur les champs](algorithmes/champs.md#réduction)).
 
 ## Calculer avec des champs
 

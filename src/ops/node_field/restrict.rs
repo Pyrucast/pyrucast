@@ -45,6 +45,9 @@ fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) {
 /// id. To land instead on the *exact* support of an **existing field** (rather
 /// than a mesh), use [`restrict_like`].
 ///
+/// An empty field carries no component: it gives an empty field, as with
+/// [`restrict_like`].
+///
 /// Errors if `mesh` is attached to a different `Coords` than
 /// `field`.
 ///
@@ -82,12 +85,15 @@ fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) {
 /// let r = node_field::restrict(&temp, &bout)?;
 /// assert_eq!(r.node_count(), 1);
 /// assert_eq!(r.get(0)?.read().value(n[0].id(), "T")?, 10.0);
+/// assert!(node_field::restrict(&NodeField::empty(), &bout)?.is_empty());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
-    let mesh_coords = mesh.coords()?;
-    let field_coords = field.coords()?;
-    if !mesh_coords.same_object(&field_coords) {
+    if field.is_empty() {
+        return Ok(NodeField::default());
+    }
+    // An empty mesh has no `Coords` to compare.
+    if !mesh.is_empty() && !mesh.coords()?.same_object(&field.coords()?) {
         return Err(PyrucastError::Message(
             "restrict: mesh is not attached to the same Coords".into(),
         ));
@@ -120,8 +126,8 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
 /// a fresh support, whereas the running field carries only the primal DOFs —
 /// `restrict_like` keeps exactly the latter, on the running field's own support.
 ///
-/// An empty `field` defines nothing: the result is `target`'s zones, every
-/// value zero. An empty `target` gives an empty field.
+/// An empty `field` gives an empty field, as with [`restrict`]; so does an
+/// empty `target`.
 ///
 /// Errors if `target` is attached to a different `Coords` than `field`.
 ///
@@ -161,14 +167,18 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
 /// let cible = NodeField::from_submesh(&bout.get(0)?, vec!["q".into()])?;
 /// let r = node_field::restrict_like(&temp, &cible)?;
 /// assert!(r.get(0)?.read().same_support(&cible.get(0)?.read()));
-/// // A field carrying none of the components gives zeros on the target.
+/// // A field carrying none of the components is empty, and so is what it
+/// // gives — on the arithmetic operators, an empty field changes nothing.
 /// let rien = node_field::restrict_like(&Field::filter_components(&temp, "q"), &cible)?;
-/// assert_eq!(rien.get(0)?.read().get(1, 0)?, 0.0);
+/// assert!(rien.is_empty());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn restrict_like(field: &NodeField, target: &NodeField) -> Result<NodeField> {
-    // An empty field has no `Coords` to compare.
-    if !field.is_empty() && !target.is_empty() && !target.coords()?.same_object(&field.coords()?) {
+    if field.is_empty() {
+        return Ok(NodeField::default());
+    }
+    // An empty target has no `Coords` to compare.
+    if !target.is_empty() && !target.coords()?.same_object(&field.coords()?) {
         return Err(PyrucastError::Message(
             "restrict_like: target is not attached to the same Coords".into(),
         ));

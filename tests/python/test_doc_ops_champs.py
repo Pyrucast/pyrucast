@@ -157,13 +157,13 @@ assert amplitude[0][n[0], "s"] == 1.0
 _, mesh, _, n = _plaque()
 support = pyrucast.mesh.poi1_from_nodes(n)
 forces = _champ_nodal(mesh, n, ["f_x", "f_y"], [[1.0, 2.0]] * 6, support)
-deplacements = _champ_nodal(mesh, n, ["f_x", "f_y"], [[0.5, 0.5]] * 6, support)
+deplacements = _champ_nodal(mesh, n, ["u_x", "u_y"], [[0.5, 0.5]] * 6, support)
 # ANCHOR: measure-xty
-# External strain energy: work of the nodal forces in the displacement field
-# (same components, same mesh).
-energie = pyrucast.measure.xty(forces, deplacements)
+# Work of the nodal forces along the displacement: each displacement component
+# multiplies its force.
+travail = pyrucast.measure.xty(deplacements, forces, [("u_x", "f_x"), ("u_y", "f_y")])
 # ANCHOR_END: measure-xty
-assert energie == 6 * (1.0 * 0.5 + 2.0 * 0.5)
+assert travail == 6 * (1.0 * 0.5 + 2.0 * 0.5)
 
 # ── psca ───────────────────────────────────────────────────
 

@@ -1233,7 +1233,7 @@ impl Mesh {
             Some((first, i)) => Err(PyrucastError::Message(format!(
                 "{op}: zones {first} and {i} are the same zone — each of its cells \
                  would count twice and nothing would be left on the boundary; take \
-                 each zone once with a union (`mesh | mesh`)"
+                 each zone once with `mesh.deduplicate()`"
             ))),
             None => Ok(()),
         }

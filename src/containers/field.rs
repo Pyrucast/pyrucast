@@ -628,10 +628,12 @@ pub trait SubField {
     /// sub-fields. Mirrors [`SubField::merge_components`]'s union/passthrough
     /// spirit at the inner-product level: a component present on only one side
     /// has no counterpart to multiply, so it contributes nothing. Both must sit
-    /// on the same support ([`SubField::same_support`]); components are aligned
-    /// by name. This is the field inner product behind Cast3M's `XTY`/`PSCA`
-    /// (energy `F·u`, residual norms, …).
-    fn dot(&self, other: &Self) -> Result<f64> {
+    /// on the same support ([`SubField::same_support`]). `pairs` lists the
+    /// products, `(a, b)` multiplying component `a` of `self` by component `b`
+    /// of `other` — a displacement by its force, `[("u_x", "f_x"), …]`; `None`
+    /// multiplies each component by its namesake. This is the field inner
+    /// product behind Cast3M's `XTY`/`PSCA` (energy `F·u`, residual norms, …).
+    fn dot(&self, other: &Self, pairs: Option<&[(&str, &str)]>) -> Result<f64> {
         if !self.same_support(other) {
             return Err(PyrucastError::Message(
                 "dot: operands are not on the same support".into(),
@@ -639,14 +641,20 @@ pub trait SubField {
         }
         let self_nc = self.component_count();
         let other_nc = other.component_count();
-        // Shared components: (self column, other column) for each name in both.
-        let pairs: Vec<(usize, usize)> = self
-            .components()
-            .iter()
-            .enumerate()
-            .filter_map(|(si, name)| other.component_index(name).map(|oi| (si, oi)))
-            .collect();
-        if pairs.is_empty() {
+        // The products, (self column, other column), each side carrying its name.
+        let terms: Vec<(usize, usize)> = match pairs {
+            None => self
+                .components()
+                .iter()
+                .enumerate()
+                .filter_map(|(si, name)| other.component_index(name).map(|oi| (si, oi)))
+                .collect(),
+            Some(pairs) => pairs
+                .iter()
+                .filter_map(|(a, b)| Some((self.component_index(a)?, other.component_index(b)?)))
+                .collect(),
+        };
+        if terms.is_empty() {
             return Ok(0.0);
         }
         let sv = self.values();
@@ -661,7 +669,7 @@ pub trait SubField {
             .with_min_len((MIN_PARALLEL_LEN / self_nc.max(1)).max(1))
             .map(|row| {
                 let mut acc = 0.0;
-                for &(si, oi) in &pairs {
+                for &(si, oi) in &terms {
                     acc += sv[row * self_nc + si] * ov[row * other_nc + oi];
                 }
                 acc
@@ -761,14 +769,30 @@ pub trait SubField {
             .sum())
     }
 
-    /// Squared Euclidean norm `xᵀx = Σ v²` over **every** value (all components)
-    /// — Cast3M `XTX`, i.e. [`SubField::dot`] of the field with itself. Like
-    /// `dot`, thread-count-dependent to the last ULP.
-    fn xtx(&self) -> f64 {
+    /// Squared Euclidean norm `xᵀx = Σ v²` — Cast3M `XTX`, i.e.
+    /// [`SubField::dot`] of the field with itself. `components` restricts it to
+    /// the components named — a name the field does not carry is ignored —,
+    /// `None` takes every component; a field carrying none of `components`
+    /// gives `0`. Like `dot`, thread-count-dependent to the last ULP.
+    fn xtx(&self, components: Option<&[&str]>) -> f64 {
+        let width = self.component_count();
+        let cols = counted_columns(self, components);
+        if cols.len() == width {
+            // Every column: the values read flat.
+            return self
+                .values()
+                .par_iter()
+                .with_min_len(MIN_PARALLEL_LEN)
+                .map(|v| v * v)
+                .sum();
+        }
+        if cols.is_empty() {
+            return 0.0;
+        }
         self.values()
-            .par_iter()
-            .with_min_len(MIN_PARALLEL_LEN)
-            .map(|v| v * v)
+            .par_chunks(width)
+            .with_min_len((MIN_PARALLEL_LEN / width).max(1))
+            .map(|r| cols.iter().map(|&c| r[c] * r[c]).sum::<f64>())
             .sum()
     }
 
@@ -807,15 +831,13 @@ pub trait SubField {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     fn norm(&self, order: u32, components: Option<&[&str]>) -> f64 {
+        if order == 2 {
+            return self.xtx(components).sqrt();
+        }
         let width = self.component_count();
         // The columns counted, resolved once, like the order: each loop below
         // carries no branch.
-        let cols: Vec<usize> = match components {
-            None => (0..width).collect(),
-            Some(names) => (0..width)
-                .filter(|&c| names.contains(&self.components()[c].as_str()))
-                .collect(),
-        };
+        let cols = counted_columns(self, components);
         if cols.is_empty() {
             return 0.0;
         }
@@ -832,10 +854,6 @@ pub trait SubField {
                 1 => rows
                     .map(|r| cols.iter().map(|&c| r[c].abs()).sum::<f64>())
                     .sum(),
-                2 => rows
-                    .map(|r| cols.iter().map(|&c| r[c] * r[c]).sum::<f64>())
-                    .sum::<f64>()
-                    .sqrt(),
                 p => {
                     let p = f64::from(p);
                     rows.map(|r| cols.iter().map(|&c| r[c].abs().powf(p)).sum::<f64>())
@@ -858,7 +876,6 @@ pub trait SubField {
                 .with_min_len(MIN_PARALLEL_LEN)
                 .map(|v| v.abs())
                 .sum(),
-            2 => self.xtx().sqrt(),
             p => {
                 let p = f64::from(p);
                 self.values()
@@ -869,35 +886,6 @@ pub trait SubField {
                     .powf(1.0 / p)
             }
         }
-    }
-
-    /// Squared Euclidean norm restricted to the named `components` — `Σ v²`
-    /// over the selected components only, the rest ignored. Components this
-    /// sub-field does not carry are silently skipped (an aggregate may spread
-    /// them across zones); errors only if **none** of them is present here.
-    /// Like [`SubField::xtx`], thread-count-dependent to the last ULP.
-    fn xtx_components(&self, components: &[&str]) -> Result<f64> {
-        let nc = self.component_count();
-        let indices: Vec<usize> = components
-            .iter()
-            .filter_map(|c| self.component_index(c))
-            .collect();
-        if indices.is_empty() {
-            return Err(PyrucastError::Message(format!(
-                "xtx_components: none of {:?} present in this sub-field",
-                components
-            )));
-        }
-        // Fast path: every component selected ⇒ the whole flat buffer.
-        if indices.len() == nc {
-            return Ok(self.xtx());
-        }
-        Ok(self
-            .values()
-            .par_chunks(nc.max(1))
-            .with_min_len((MIN_PARALLEL_LEN / nc.max(1)).max(1))
-            .map(|row| indices.iter().map(|&ci| row[ci] * row[ci]).sum::<f64>())
-            .sum())
     }
 
     /// A fresh sub-field on the **same support**, carrying only the components
@@ -966,6 +954,18 @@ pub trait SubField {
         // Same component count ⇒ identical buffer layout; copy values verbatim.
         out.values_mut().copy_from_slice(self.values());
         Ok(out)
+    }
+}
+
+/// The columns of `zone` whose component `components` names, in the zone's
+/// order; every column for `None`.
+fn counted_columns<S: SubField + ?Sized>(zone: &S, components: Option<&[&str]>) -> Vec<usize> {
+    let width = zone.component_count();
+    match components {
+        None => (0..width).collect(),
+        Some(names) => (0..width)
+            .filter(|&c| names.contains(&zone.components()[c].as_str()))
+            .collect(),
     }
 }
 
@@ -1288,61 +1288,42 @@ where
         ))
     }
 
-    /// Squared Euclidean norm `xᵀx = Σ v²` over every value of the field
-    /// (Cast3M `XTX`), a point several zones carry counted once, as in
-    /// [`Field::sum`]. Thread-count-dependent to the last ULP.
-    fn xtx(&self) -> f64 {
+    /// Squared Euclidean norm `xᵀx = Σ v²` of the field (Cast3M `XTX`), a
+    /// point several zones carry counted once, as in [`Field::sum`] — the
+    /// aggregate twin of [`SubField::xtx`]. `components` restricts it to the
+    /// components named, wherever a zone carries them — a name no zone carries
+    /// is ignored —, `None` takes every component; a field carrying none of
+    /// them gives `0`. Thread-count-dependent to the last ULP.
+    fn xtx(&self, components: Option<&[&str]>) -> f64 {
         let guards: Vec<ReadGuard<Self::Sub>> = self.iter().map(|h| h.read()).collect();
         let zones: Vec<&Self::Sub> = guards.iter().map(|g| &**g).collect();
         match zones[..] {
             [] => 0.0,
-            [zone] => SubField::xtx(zone),
+            [zone] => SubField::xtx(zone, components),
             _ => {
-                // Zones carrying the same components count whole rows — the
-                // usual field; otherwise each zone counts the columns its
-                // group shares. Decided once, not at every row.
+                // Zones carrying the same components count whole rows when
+                // every component counts — the usual field; otherwise each
+                // zone counts the columns its group shares. Decided once, not
+                // at every row.
                 let first = zones[0];
-                let alike = zones.iter().all(|z| {
-                    z.component_count() == first.component_count()
-                        && z.components()
-                            .iter()
-                            .all(|c| first.component_index(c).is_some())
-                });
+                let alike = components.is_none()
+                    && zones.iter().all(|z| {
+                        z.component_count() == first.component_count()
+                            && z.components()
+                                .iter()
+                                .all(|c| first.component_index(c).is_some())
+                    });
                 if alike {
-                    sum_once(&zones, |_, _| true, |z, _| whole_row_squares(zones[z]))
-                } else {
-                    sum_once(&zones, |_, _| true, |z, cols| row_squares(zones[z], cols))
+                    return sum_once(&zones, |_, _| true, |z, _| whole_row_squares(zones[z]));
                 }
+                // Read once per column of each zone, never per row.
+                let counts = |z: usize, c: usize| {
+                    components
+                        .is_none_or(|names| names.contains(&zones[z].components()[c].as_str()))
+                };
+                sum_once(&zones, counts, |z, cols| row_squares(zones[z], cols))
             }
         }
-    }
-
-    /// Squared Euclidean norm restricted to the named `components`, summed over
-    /// every zone that carries any of them (the aggregate twin of
-    /// [`SubField::xtx_components`]), a point several zones carry counted once.
-    /// A component may be spread across zones; each zone contributes the
-    /// squares of whichever selected components it holds. Errors if **no**
-    /// zone defines **any** of `components`.
-    fn xtx_components(&self, components: &[&str]) -> Result<f64> {
-        let guards: Vec<ReadGuard<Self::Sub>> = self.iter().map(|h| h.read()).collect();
-        let zones: Vec<&Self::Sub> = guards.iter().map(|g| &**g).collect();
-        // A zone missing all selected components contributes nothing; one
-        // carrying some contributes their squares.
-        let carries = |z: &&Self::Sub| components.iter().any(|c| z.component_index(c).is_some());
-        if !zones.iter().any(carries) {
-            return Err(PyrucastError::Message(format!(
-                "xtx_components: no zone defines any of {:?}",
-                components
-            )));
-        }
-        if let [zone] = zones[..] {
-            return zone.xtx_components(components);
-        }
-        Ok(sum_once(
-            &zones,
-            |z, c| components.contains(&zones[z].components()[c].as_str()),
-            |z, cols| row_squares(zones[z], cols),
-        ))
     }
 
     /// The `order`-norm of the field's values — the aggregate twin of
@@ -1393,8 +1374,8 @@ where
     /// ```
     fn norm(&self, order: u32, components: Option<&[&str]>) -> f64 {
         // Before any guard is taken here: `xtx` takes its own.
-        if order == 2 && components.is_none() {
-            return self.xtx().sqrt();
+        if order == 2 {
+            return self.xtx(components).sqrt();
         }
         let guards: Vec<ReadGuard<Self::Sub>> = self.iter().map(|h| h.read()).collect();
         let zones: Vec<&Self::Sub> = guards.iter().map(|g| &**g).collect();
@@ -1411,7 +1392,6 @@ where
                 .map(|z| SubField::norm(*z, 0, components))
                 .fold(0.0, f64::max),
             (1, _) => sum_once(&zones, counts, |z, cols| row_abs(zones[z], cols)),
-            (2, _) => sum_once(&zones, counts, |z, cols| row_squares(zones[z], cols)).sqrt(),
             (p, _) => {
                 let p = f64::from(p);
                 sum_once(&zones, counts, |z, cols| row_powers(zones[z], cols, p)).powf(1.0 / p)
@@ -1562,8 +1542,37 @@ where
     /// a support both carry (paired as in [`Field::merge_field`]), a point
     /// several zones carry counted once, as in [`Field::sum`]. A support — or
     /// component — present on only one side has no counterpart and contributes
-    /// nothing. The reduction behind Cast3M's `XTY`.
-    fn dot_field(&self, other: &Self) -> f64
+    /// nothing. `pairs` lists the products, `(a, b)` multiplying component `a`
+    /// of `self` by component `b` of `other`; `None` multiplies each component
+    /// by its namesake. The reduction behind Cast3M's `XTY`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::field::Field;
+    /// # use pyrucast::containers::mesh::SubMesh;
+    /// # use pyrucast::containers::node_field::{NodeField, SubNodeField};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let n: Vec<Node> = (0..2)
+    /// #     .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
+    /// #     .collect();
+    /// # let support = Handle::new(SubMesh::poi1_from_nodes(&n)?);
+    /// let mut du = SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into()])?;
+    /// let mut f = SubNodeField::from_poi1(&support, vec!["f_x".into(), "f_y".into()])?;
+    /// du.set_value(n[0].id(), "u_x", 2.0)?;
+    /// du.set_value(n[1].id(), "u_y", 3.0)?;
+    /// f.set_value(n[0].id(), "f_x", 10.0)?;
+    /// f.set_value(n[1].id(), "f_y", -1.0)?;
+    /// let (du, f) = (NodeField::from_sub(du), NodeField::from_sub(f));
+    /// // The work of the force along the displacement: 2·10 + 3·(−1).
+    /// assert_eq!(du.dot_field(&f, Some(&[("u_x", "f_x"), ("u_y", "f_y")])), 17.0);
+    /// // By name, nothing pairs.
+    /// assert_eq!(du.dot_field(&f, None), 0.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    fn dot_field(&self, other: &Self, pairs: Option<&[(&str, &str)]>) -> f64
     where
         Self::Sub: Clone,
     {
@@ -1572,32 +1581,30 @@ where
         let rights: Vec<Self::Sub> = other.iter().map(|h| (*h.read()).clone()).collect();
         let guards: Vec<ReadGuard<Self::Sub>> = self.iter().map(|h| h.read()).collect();
         let zones: Vec<&Self::Sub> = guards.iter().map(|g| &**g).collect();
-        let pairs = partners(&zones, &rights);
+        let links = product_partners(&zones, &rights, pairs);
         if let [zone] = zones[..] {
-            let mut acc = 0.0;
-            for (ci, pair) in pairs[0].iter().enumerate() {
-                if let Some((j, rc)) = *pair {
-                    acc += column_dot(zone, ci, &rights[j], rc);
-                }
-            }
-            return acc;
+            return links[0]
+                .iter()
+                .enumerate()
+                .flat_map(|(ci, partners)| partners.iter().map(move |&(j, rc)| (ci, j, rc)))
+                .map(|(ci, j, rc)| column_dot(zone, ci, &rights[j], rc))
+                // From 0, not the -0 of an empty `sum`: no product, no work.
+                .fold(0.0, |acc, v| acc + v);
         }
         sum_once(
             &zones,
-            |z, c| pairs[z][c].is_some(),
+            |z, c| !links[z][c].is_empty(),
             |z, cols| {
-                // Per counted column: its index, and the right column it
-                // pairs with — values, row width, index.
+                // Per counted column, each right column it multiplies: its
+                // index, and that column's values, row width, index.
                 let (lv, ln) = (zones[z].values(), zones[z].component_count());
-                let links: Vec<(usize, Column)> = cols
+                let terms: Vec<(usize, Column)> = cols
                     .iter()
-                    .map(|&c| {
-                        let (j, rc) = pairs[z][c].expect("a counted column has a partner");
-                        (c, (rights[j].values(), rights[j].component_count(), rc))
-                    })
+                    .flat_map(|&c| links[z][c].iter().map(move |&(j, rc)| (c, j, rc)))
+                    .map(|(c, j, rc)| (c, (rights[j].values(), rights[j].component_count(), rc)))
                     .collect();
                 move |row| {
-                    links
+                    terms
                         .iter()
                         .map(|&(lc, (rv, rn, rc))| lv[row * ln + lc] * rv[row * rn + rc])
                         .sum()
@@ -2375,6 +2382,42 @@ fn partners<S: SubField>(lefts: &[&S], rights: &[S]) -> Vec<Vec<Option<(usize, u
         .collect()
 }
 
+/// For each column of each left zone, the right columns it multiplies on the
+/// same support — (right zone, its column): its namesake for `pairs` `None`,
+/// otherwise the right component of each pair naming it on the left.
+fn product_partners<S: SubField>(
+    lefts: &[&S],
+    rights: &[S],
+    pairs: Option<&[(&str, &str)]>,
+) -> Vec<Vec<Vec<(usize, usize)>>> {
+    lefts
+        .iter()
+        .map(|l| {
+            let support = l.support();
+            let there: Vec<usize> = (0..rights.len())
+                .filter(|&j| rights[j].support().same_object(&support))
+                .collect();
+            // On a support, a component lives in one zone.
+            let find = |name: &str| {
+                there
+                    .iter()
+                    .find_map(|&j| rights[j].component_index(name).map(|rc| (j, rc)))
+            };
+            l.components()
+                .iter()
+                .map(|name| match pairs {
+                    None => find(name).into_iter().collect(),
+                    Some(pairs) => pairs
+                        .iter()
+                        .filter(|(a, _)| *a == name.as_str())
+                        .filter_map(|(_, b)| find(b))
+                        .collect(),
+                })
+                .collect()
+        })
+        .collect()
+}
+
 /// A column read in place: its zone's values, their row width, its index.
 type Column<'a> = (&'a [f64], usize, usize);
 
@@ -2795,7 +2838,7 @@ mod tests {
         assert_eq!(SubField::sum(&f, "U").unwrap(), 30.0);
         assert_eq!(SubField::sum(&f, "V").unwrap(), -30.0);
         // xtx = 10² + (-10)² + 20² + (-20)² = 1000.
-        assert_eq!(SubField::xtx(&f), 1000.0);
+        assert_eq!(SubField::xtx(&f, None), 1000.0);
         assert!(SubField::sum(&f, "nope").is_err());
     }
 
@@ -2805,7 +2848,7 @@ mod tests {
         let sm: Handle<SubMesh> = Handle::new(SubMesh::new(coords, ElementType::POI1));
         let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         assert_eq!(SubField::sum(&f, "T").unwrap(), 0.0);
-        assert_eq!(SubField::xtx(&f), 0.0);
+        assert_eq!(SubField::xtx(&f, None), 0.0);
     }
 
     fn make_two_zone_element_field() -> ElementField {
@@ -2899,9 +2942,9 @@ mod tests {
         let e1 = SubField::sum(&*ef.get(1).unwrap().read(), "E").unwrap();
         assert!((Field::sum(&ef, "E").unwrap() - e1).abs() < 1e-12);
         // xtx over the whole field = Σ of the per-zone xtx.
-        let x0 = SubField::xtx(&*ef.get(0).unwrap().read());
-        let x1 = SubField::xtx(&*ef.get(1).unwrap().read());
-        assert!((Field::xtx(&ef) - (x0 + x1)).abs() < 1e-9);
+        let x0 = SubField::xtx(&*ef.get(0).unwrap().read(), None);
+        let x1 = SubField::xtx(&*ef.get(1).unwrap().read(), None);
+        assert!((Field::xtx(&ef, None) - (x0 + x1)).abs() < 1e-9);
         assert!(Field::sum(&ef, "missing").is_err());
     }
 
@@ -2914,17 +2957,17 @@ mod tests {
         f.set(1, 0, 0.0).unwrap();
         f.set(1, 1, 12.0).unwrap();
         // Whole field: 3² + 4² + 0² + 12² = 169.
-        assert_eq!(SubField::xtx(&f), 169.0);
+        assert_eq!(SubField::xtx(&f, None), 169.0);
         // U only: 3² + 0² = 9.
-        assert_eq!(f.xtx_components(&["U"]).unwrap(), 9.0);
+        assert_eq!(f.xtx(Some(&["U"])), 9.0);
         // V only: 4² + 12² = 160.
-        assert_eq!(f.xtx_components(&["V"]).unwrap(), 160.0);
+        assert_eq!(f.xtx(Some(&["V"])), 160.0);
         // Both selected ⇒ same as the whole field.
-        assert_eq!(f.xtx_components(&["U", "V"]).unwrap(), 169.0);
+        assert_eq!(f.xtx(Some(&["U", "V"])), 169.0);
         // An unknown component alongside a known one is ignored, not an error.
-        assert_eq!(f.xtx_components(&["U", "nope"]).unwrap(), 9.0);
+        assert_eq!(f.xtx(Some(&["U", "nope"])), 9.0);
         // None present ⇒ error.
-        assert!(f.xtx_components(&["nope"]).is_err());
+        assert_eq!(f.xtx(Some(&["nope"])), 0.0);
     }
 
     #[test]
@@ -2937,14 +2980,14 @@ mod tests {
             s.set_uniform("E", 5.0).unwrap();
         }
         // "k" lives on both zones: Σ of the per-zone k-only xtx.
-        let k0 = ef.get(0).unwrap().read().xtx_components(&["k"]).unwrap();
-        let k1 = ef.get(1).unwrap().read().xtx_components(&["k"]).unwrap();
-        assert!((ef.xtx_components(&["k"]).unwrap() - (k0 + k1)).abs() < 1e-9);
+        let k0 = ef.get(0).unwrap().read().xtx(Some(&["k"]));
+        let k1 = ef.get(1).unwrap().read().xtx(Some(&["k"]));
+        assert!((ef.xtx(Some(&["k"])) - (k0 + k1)).abs() < 1e-9);
         // "E" lives on zone 1 only; zone 0 (no E) is skipped, not an error.
-        let e1 = ef.get(1).unwrap().read().xtx_components(&["E"]).unwrap();
-        assert!((ef.xtx_components(&["E"]).unwrap() - e1).abs() < 1e-9);
+        let e1 = ef.get(1).unwrap().read().xtx(Some(&["E"]));
+        assert!((ef.xtx(Some(&["E"])) - e1).abs() < 1e-9);
         // No zone defines "missing" ⇒ error.
-        assert!(ef.xtx_components(&["missing"]).is_err());
+        assert_eq!(ef.xtx(Some(&["missing"])), 0.0);
     }
 
     // ─── SubField::select_components / rename_component ───────────────────────
@@ -3173,7 +3216,7 @@ mod tests {
             g.set(i, 0, b).unwrap();
         }
         // 1·4 + 2·5 + 3·6 = 32
-        assert_eq!(f.dot(&g).unwrap(), 32.0);
+        assert_eq!(f.dot(&g, None).unwrap(), 32.0);
     }
 
     #[test]
@@ -3187,7 +3230,7 @@ mod tests {
         g.set_value(nodes[0].id(), "U", 10.0).unwrap();
         g.set_value(nodes[0].id(), "V", 100.0).unwrap();
         // 2·10 (U) + 3·100 (V) = 320
-        assert_eq!(f.dot(&g).unwrap(), 320.0);
+        assert_eq!(f.dot(&g, None).unwrap(), 320.0);
     }
 
     #[test]
@@ -3196,7 +3239,7 @@ mod tests {
         let (sm_b, _) = poi1_support(1);
         let f = SubNodeField::from_poi1(&sm_a, vec!["T".into()]).unwrap();
         let g = SubNodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap();
-        assert!(f.dot(&g).is_err());
+        assert!(f.dot(&g, None).is_err());
     }
 
     #[test]
@@ -3205,7 +3248,7 @@ mod tests {
         let (sm, _) = poi1_support(1);
         let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         let g = SubNodeField::from_poi1(&sm, vec!["P".into()]).unwrap();
-        assert_eq!(f.dot(&g).unwrap(), 0.0);
+        assert_eq!(f.dot(&g, None).unwrap(), 0.0);
     }
 
     #[test]
@@ -3218,7 +3261,7 @@ mod tests {
         let mut g = SubNodeField::from_poi1(&sm, vec!["V".into()]).unwrap();
         g.set_value(nodes[0].id(), "V", 10.0).unwrap();
         // Only V: 3·10 = 30 (U has no counterpart).
-        assert_eq!(f.dot(&g).unwrap(), 30.0);
+        assert_eq!(f.dot(&g, None).unwrap(), 30.0);
     }
 
     #[test]
@@ -3246,7 +3289,63 @@ mod tests {
         let mut nf = NodeField::from_sub(za);
         nf.add_sub(Handle::new(zb)).unwrap();
         // Dot with itself = Σ value²: 2² + 3² (zone A) + 5² (zone B) = 38.
-        assert_eq!(nf.dot_field(&nf), 38.0);
+        assert_eq!(nf.dot_field(&nf, None), 38.0);
+    }
+
+    #[test]
+    fn the_products_named_pair_components_of_other_names() {
+        // Two zones sharing node b: (u_x, u_y) on [a, b] and on [b, c], holding
+        // the same values at b; the force (f_x, f_y) on each support.
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let node = |x: f64| Node::create_in(coords.clone(), &[x]).unwrap();
+        let (a, b, c) = (node(0.0), node(1.0), node(2.0));
+        let poi1 = |ns: &[&Node]| {
+            Handle::new(
+                SubMesh::poi1_from_nodes(&ns.iter().map(|n| (*n).clone()).collect::<Vec<_>>())
+                    .unwrap(),
+            )
+        };
+        let (left, right) = (poi1(&[&a, &b]), poi1(&[&b, &c]));
+        let u_at = [(a.id(), 1.0, 2.0), (b.id(), 3.0, 4.0), (c.id(), 5.0, 6.0)];
+        let f_at = [
+            (a.id(), 10.0, 20.0),
+            (b.id(), 30.0, 40.0),
+            (c.id(), 50.0, 60.0),
+        ];
+        let field = |support: &Handle<SubMesh>, names: [&str; 2], at: &[(NodeId, f64, f64)]| {
+            let mut z = SubNodeField::from_poi1(support, names.map(String::from).to_vec()).unwrap();
+            for &(id, x, y) in at {
+                if z.node_ids().contains(&id) {
+                    z.set_value(id, names[0], x).unwrap();
+                    z.set_value(id, names[1], y).unwrap();
+                }
+            }
+            z
+        };
+        let mut du = NodeField::from_sub(field(&left, ["u_x", "u_y"], &u_at));
+        du.add_sub(Handle::new(field(&right, ["u_x", "u_y"], &u_at)))
+            .unwrap();
+        let mut f = NodeField::from_sub(field(&left, ["f_x", "f_y"], &f_at));
+        f.add_sub(Handle::new(field(&right, ["f_x", "f_y"], &f_at)))
+            .unwrap();
+        // b counts once: Σ u·f = (10 + 40) + (90 + 160) + (250 + 360).
+        let pairs = [("u_x", "f_x"), ("u_y", "f_y")];
+        assert_eq!(du.dot_field(&f, Some(&pairs)), 910.0);
+        // A component in two products counts in each; one in none, in none:
+        // u_x·f_x + u_x·f_y = 1·30 + 3·70 + 5·110.
+        assert_eq!(
+            du.dot_field(&f, Some(&[("u_x", "f_x"), ("u_x", "f_y")])),
+            790.0
+        );
+        // A pair one side does not carry adds nothing; by name, nothing pairs.
+        assert_eq!(du.dot_field(&f, Some(&[("u_x", "T")])), 0.0);
+        assert_eq!(du.dot_field(&f, None), 0.0);
+        // A zone alone: a, b.
+        let (z, g) = (du.get(0).unwrap(), f.get(0).unwrap());
+        assert_eq!(
+            z.read().dot(&g.read(), Some(&pairs)).unwrap(),
+            10.0 + 40.0 + 90.0 + 160.0
+        );
     }
 
     #[test]
@@ -3257,7 +3356,7 @@ mod tests {
         let a = NodeField::from_sub(SubNodeField::from_poi1(&sm_a, vec!["T".into()]).unwrap());
         let b = NodeField::from_sub(SubNodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap());
         // No zone of `a` shares a support with `b`: nothing to pair ⇒ 0.
-        assert_eq!(a.dot_field(&b), 0.0);
+        assert_eq!(a.dot_field(&b, None), 0.0);
     }
 
     // ─── SubField::pscal (per-node scalar product) ───────────────────────────
@@ -3594,9 +3693,9 @@ mod tests {
         u.add_to_component("T", 1.0).unwrap();
         // Four nodes, two of them in both zones: each counted once.
         assert_eq!(Field::sum(&u, "T").unwrap(), 4.0);
-        assert_eq!(Field::xtx(&u), 4.0);
-        assert_eq!(Field::xtx_components(&u, &["T"]).unwrap(), 4.0);
-        assert_eq!(u.dot_field(&u), 4.0);
+        assert_eq!(Field::xtx(&u, None), 4.0);
+        assert_eq!(Field::xtx(&u, Some(&["T"])), 4.0);
+        assert_eq!(u.dot_field(&u, None), 4.0);
         // The same values in a single zone give the same numbers.
         let one = NodeField::new(
             &crate::ops::mesh::poi1_from_nodes(&square_in_two().3).unwrap(),
@@ -3650,9 +3749,9 @@ mod tests {
         let distinct: f64 = (1..=6).map(|v| v as f64).sum();
         let squares: f64 = (1..=6).map(|v| (v * v) as f64).sum();
         assert_eq!(Field::sum(&u, "T").unwrap(), distinct);
-        assert_eq!(Field::xtx(&u), squares);
-        assert_eq!(Field::xtx_components(&u, &["T"]).unwrap(), squares);
-        assert_eq!(u.dot_field(&u), squares);
+        assert_eq!(Field::xtx(&u, None), squares);
+        assert_eq!(Field::xtx(&u, Some(&["T"])), squares);
+        assert_eq!(u.dot_field(&u, None), squares);
     }
 
     #[test]
@@ -3673,8 +3772,8 @@ mod tests {
         u.add_to_component("T", 1.0).unwrap();
         u.add_to_component("P", 2.0).unwrap();
         // Four distinct nodes carry T = 1, three carry P = 2.
-        assert_eq!(Field::xtx(&u), 4.0 * 1.0 + 3.0 * 4.0);
-        assert_eq!(Field::xtx_components(&u, &["T"]).unwrap(), 4.0);
+        assert_eq!(Field::xtx(&u, None), 4.0 * 1.0 + 3.0 * 4.0);
+        assert_eq!(Field::xtx(&u, Some(&["T"])), 4.0);
     }
 
     /// Large enough for the parallel chunks: three zones of a line, overlapping,
@@ -3735,7 +3834,7 @@ mod tests {
         let n = nodes_on_a_line(10_000);
         let u = field_on(&n, &[&[9_000, 9_001, 9_999], &[9_999, 3, 4]], |_| 1.0);
         assert_eq!(Field::sum(&u, "T").unwrap(), 5.0);
-        assert_eq!(Field::xtx(&u), 5.0);
+        assert_eq!(Field::xtx(&u, None), 5.0);
     }
 
     #[test]
@@ -3755,8 +3854,8 @@ mod tests {
             pool.install(|| {
                 [
                     Field::sum(&u, "T").unwrap(),
-                    Field::xtx(&u),
-                    u.dot_field(&u),
+                    Field::xtx(&u, None),
+                    u.dot_field(&u, None),
                 ]
             })
         };
@@ -3831,8 +3930,8 @@ mod tests {
         drop(z);
         // Paired the same way from both ends: the product is symmetric.
         let points = left.get(0).unwrap().read().gauss_count() as f64;
-        assert_eq!(left.dot_field(&right), 50.0 * points);
-        assert_eq!(right.dot_field(&left), 50.0 * points);
+        assert_eq!(left.dot_field(&right, None), 50.0 * points);
+        assert_eq!(right.dot_field(&left, None), 50.0 * points);
         // One product per subspace, over every component both carry.
         let p = left.pscal_field(&right).unwrap();
         assert_eq!(p.len(), 1);

@@ -251,9 +251,8 @@ par la sortie.
 | Rust (`ops::measure::…`) | Python (`pyrucast.measure.…`) |
 |---|---|
 | `integral(field: &NodeField, fespace, component) -> f64` / `integral_element(field: &ElementField, component) -> f64` | `integral(field, component, fespace=None) -> float` (dispatch par type ; `∫ f dΩ`, `fespace` requis pour un `NodeField`) |
-| `SubField::dot(&self, other) -> Result<f64>` / `Field::dot_field(&self, other) -> f64` | `xty(x, y) -> float` (dispatch par type ; produit scalaire **global** de deux champs) |
-| `SubField::xtx(&self) -> f64` / `Field::xtx(&self) -> f64` | `xtx(x) -> float` (dispatch par type ; `Σ v²`, norme au carré `XTX`) |
-| `SubField::xtx_components(&self, &[&str]) -> Result<f64>` | `xtx(x, components=[…]) -> float` (norme au carré restreinte à ces composantes) |
+| `SubField::dot(&self, other, pairs: Option<&[(&str, &str)]>) -> Result<f64>` / `Field::dot_field(&self, other, pairs) -> f64` | `xty(x, y, pairs=None) -> float` (dispatch par type ; produit scalaire **global** de deux champs, composantes appariées par nom ou par `pairs`) |
+| `SubField::xtx(&self, components: Option<&[&str]>) -> f64` / `Field::xtx(&self, components) -> f64` | `xtx(x, components=None) -> float` (dispatch par type ; `Σ v²`, norme au carré `XTX`, restreinte aux composantes nommées si on les donne) |
 
 ### `ops::field` — opérateurs génériques
 

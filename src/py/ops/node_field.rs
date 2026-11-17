@@ -67,7 +67,8 @@ pub fn positions(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResu
 ///
 /// A new `NodeField` with one zone per submesh of `mesh`, each carrying the
 /// union of the components of `field`. A node of `mesh` the field does not
-/// define gets `0.0`; the nodes outside `mesh` are dropped.
+/// define gets `0.0`; the nodes outside `mesh` are dropped. An empty field
+/// carries no component, and gives an empty field, as with `restrict_like`.
 ///
 /// # Raises
 ///
@@ -262,7 +263,8 @@ pub fn project_sub_element(
 ///
 /// A new `NodeField` zone for zone like `target`. A `(node, component)` pair
 /// takes the value of `field` when it defines it, `0.0` otherwise; the nodes
-/// and components of `field` absent from `target` are dropped.
+/// and components of `field` absent from `target` are dropped. An empty field
+/// gives an empty field, as with `restrict`.
 ///
 /// # Raises
 ///

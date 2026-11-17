@@ -240,20 +240,10 @@ def _advanced(problem, solution, increment):
 
 def _work(problem, primal, dual):
     """``Σ primal·dual`` over the model's (unknown, dual) pairs — ``δu·f`` and
-    ``λ·g`` — the scalar product of an increment with a force."""
-    names = [p for p in primal.components() if p in problem.duality]
-    if not names:
-        return 0.0
-    renamed = primal.filter_components(names)
-    for name in names:
-        renamed = renamed.rename_component(name, problem.duality[name])
-    duals = [
-        problem.duality[n] for n in names if problem.duality[n] in dual.components()
-    ]
-    if not duals:
-        return 0.0
-    against = dual.filter_components(duals)
-    return measure.xty(node_field.restrict_like(renamed, against), against)
+    ``λ·g`` — the scalar product of an increment with a force. The force is
+    read on the increment's supports first: a point load has its own."""
+    on_primal = node_field.restrict(dual, primal.support().deduplicate())
+    return measure.xty(primal, on_primal, list(problem.duality.items()))
 
 
 # ─── The operator ───────────────────────────────────────────────────────────

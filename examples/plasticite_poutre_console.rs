@@ -233,7 +233,7 @@ fn main() -> Result<()> {
             unreachable!("evolution with nodal values")
         };
         // Norm of the step load (relative scale of the residual): xᵀx of the field.
-        let ext_norm = load_scaled.xtx().sqrt();
+        let ext_norm = load_scaled.norm(2, None);
         let tol = 1e-6 * ext_norm + 1e-12;
 
         // Modified Newton: iterate until the residual (out-of-balance forces at
@@ -261,7 +261,7 @@ fn main() -> Result<()> {
             //   to `free_mesh` then `xtx` (the clamped nodes carry the reaction).
             let f_ext = restrict_like(&load_scaled, &f_int)?;
             let residual = (f_ext - f_int)?;
-            res_norm = restrict(&residual, &free_mesh)?.xtx().sqrt();
+            res_norm = restrict(&residual, &free_mesh)?.norm(2, None);
             last_state = Some(out);
 
             if res_norm <= tol {

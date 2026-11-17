@@ -658,7 +658,7 @@ réduit** et donc par le **type du résultat** :
 
 Les deux exigent la **même saveur** d'opérandes (`NodeField`, `SubNodeField`,
 `ElementField`, `SubElementField`), alignent les composantes **par nom** (l'ordre
-peut différer) et associent les valeurs comme l'arithmétique de
+peut différer ; `xty` accepte aussi des paires de noms, voir plus bas) et associent les valeurs comme l'arithmétique de
 [Champ](../field.md#entre-deux-champs) : la somme ne porte que sur les
 `(support, composante)` **partagés** par les deux champs ; un support ou une
 composante d'un seul côté n'a pas de vis-à-vis et **ne contribue pas**. Un nœud
@@ -678,7 +678,24 @@ x \cdot y = \sum_i \sum_c x_{i,c}\\, y_{i,c},
 \\]
 
 la somme parcourant **toutes** les valeurs, un nœud que plusieurs zones portent
-compté une fois. L'addition flottante n'étant pas associative, le total dépend
+compté une fois.
+
+Quand les noms diffèrent d'un champ à l'autre, `pairs` dit quelles composantes
+multiplier : `xty(du, f, [("u_x", "f_x"), ("u_y", "f_y")])` est le travail de la
+force `f` le long du déplacement `du`,
+
+\\[
+x \cdot y = \sum_i \sum_{(a, b)} x_{i,a}\\, y_{i,b}.
+\\]
+
+Une composante peut entrer dans plusieurs paires ; une paire qu'un des deux
+champs ne porte pas n'ajoute rien.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_champs.py:measure-xty}}
+```
+
+L'addition flottante n'étant pas associative, le total dépend
 du nombre de threads jusqu'au dernier ULP — comme le solveur, ce n'est pas
 reproductible bit à bit.
 
@@ -731,9 +748,9 @@ Elles regroupent la somme en parallèle : dépendantes du nombre de threads au
 dernier ULP (contrairement à `min` / `max`, exactes quel que soit l'ordre).
 `norm()` vaut `√xtx(field)`, et `norm(components=[…])` vaut
 `√xtx(field, components=[…])`. Un champ sans valeur, par exemple un
-`filter_components` qui ne garde rien, a une norme nulle ; de même, `norm`
-ignore une composante que le champ ne porte pas, et vaut `0` s'il n'en porte
-aucune, là où `xtx` lève une erreur.
+`filter_components` qui ne garde rien, a une norme nulle ; de même, `norm` et
+`xtx` ignorent une composante que le champ ne porte pas, et valent `0` s'il
+n'en porte aucune.
 
 Appelées **sans argument**, `min` et `max` lisent le champ comme la liste plate
 de ses valeurs — toutes composantes confondues, et, au niveau agrégat, toutes

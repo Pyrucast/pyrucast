@@ -4254,7 +4254,8 @@ class NodeField:
         
         A new `NodeField` with one zone per submesh of `mesh`, each carrying the
         union of the components of `field`. A node of `mesh` the field does not
-        define gets `0.0`; the nodes outside `mesh` are dropped.
+        define gets `0.0`; the nodes outside `mesh` are dropped. An empty field
+        carries no component, and gives an empty field, as with `restrict_like`.
         
         # Raises
         
@@ -4293,7 +4294,8 @@ class NodeField:
         
         A new `NodeField` zone for zone like `target`. A `(node, component)` pair
         takes the value of `field` when it defines it, `0.0` otherwise; the nodes
-        and components of `field` absent from `target` are dropped.
+        and components of `field` absent from `target` are dropped. An empty field
+        gives an empty field, as with `restrict`.
         
         # Raises
         
@@ -8903,7 +8905,8 @@ def restrict(field: NodeField, mesh: Mesh) -> NodeField:
     
     A new `NodeField` with one zone per submesh of `mesh`, each carrying the
     union of the components of `field`. A node of `mesh` the field does not
-    define gets `0.0`; the nodes outside `mesh` are dropped.
+    define gets `0.0`; the nodes outside `mesh` are dropped. An empty field
+    carries no component, and gives an empty field, as with `restrict_like`.
     
     # Raises
     
@@ -8931,7 +8934,8 @@ def restrict_like(field: NodeField, target: NodeField) -> NodeField:
     
     A new `NodeField` zone for zone like `target`. A `(node, component)` pair
     takes the value of `field` when it defines it, `0.0` otherwise; the nodes
-    and components of `field` absent from `target` are dropped.
+    and components of `field` absent from `target` are dropped. An empty field
+    gives an empty field, as with `restrict`.
     
     # Raises
     
@@ -10112,16 +10116,16 @@ def xtx(x: typing.Any, components: typing.Optional[typing.Sequence[builtins.str]
     
     - `x`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
     - `components`: the components to sum, the others ignored; `None` takes
-      every component. A component absent from a zone is ignored there.
+      every component. A name the field does not carry is ignored.
     
     # Returns
     
-    The squared norm, a `float`.
+    The squared norm, a `float`; `0.0` for a field carrying none of
+    `components`.
     
     # Raises
     
-    - `TypeError` if `x` is none of the four field types.
-    - `RuntimeError` if no zone of `x` carries any of `components`.
+    `TypeError` if `x` is none of the four field types.
     
     # Notes
     
@@ -10129,21 +10133,25 @@ def xtx(x: typing.Any, components: typing.Optional[typing.Sequence[builtins.str]
     the number of threads.
     """
 
-def xty(x: typing.Any, y: typing.Any) -> builtins.float:
+def xty(x: typing.Any, y: typing.Any, pairs: typing.Optional[typing.Sequence[tuple[builtins.str, builtins.str]]] = None) -> builtins.float:
     r"""
     Global scalar product `Σ xᵢ·yᵢ` of two whole fields, a single number.
     
     The inner product of fields used for energies (`F·u`) and residual norms.
     The sum runs over the supports both fields carry and, on each, over the
-    components both carry, aligned by name (their order may differ); a node
-    that several zones carry counts once. A support or a component on one side
-    only has no counterpart and adds nothing.
+    products `pairs` names; a node that several zones carry counts once. A
+    support on one side only has no counterpart and adds nothing.
     
     # Parameters
     
     - `x`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
     - `y`: a field of the same type as `x`; two sub-fields must sit on the same
       support.
+    - `pairs`: the products to sum, `(a, b)` multiplying component `a` of `x` by
+      component `b` of `y` — a displacement by its force,
+      `[("u_x", "f_x"), ("u_y", "f_y")]`. A component may appear in several
+      pairs; a pair one side does not carry adds nothing. `None` multiplies
+      each component by its namesake, whatever the order of the components.
     
     # Returns
     

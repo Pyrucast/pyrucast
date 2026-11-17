@@ -913,7 +913,7 @@ impl NodeField {
             return Err(PyrucastError::Message(format!(
                 "NodeField: zones {first} and {i} of the mesh are the same zone, and a \
                  field carries each component once on a zone — take each zone once \
-                 with a union (`mesh | mesh`)"
+                 with `mesh.deduplicate()`"
             )));
         }
         let mut field = Self::default();

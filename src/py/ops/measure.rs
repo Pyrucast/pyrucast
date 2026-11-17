@@ -72,16 +72,16 @@ pub fn integral(
 ///
 /// - `x`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
 /// - `components`: the components to sum, the others ignored; `None` takes
-///   every component. A component absent from a zone is ignored there.
+///   every component. A name the field does not carry is ignored.
 ///
 /// # Returns
 ///
-/// The squared norm, a `float`.
+/// The squared norm, a `float`; `0.0` for a field carrying none of
+/// `components`.
 ///
 /// # Raises
 ///
-/// - `TypeError` if `x` is none of the four field types.
-/// - `RuntimeError` if no zone of `x` carries any of `components`.
+/// `TypeError` if `x` is none of the four field types.
 ///
 /// # Notes
 ///
@@ -92,36 +92,21 @@ pub fn integral(
 #[pyo3(signature = (x, components = None))]
 pub fn xtx(x: &Bound<'_, PyAny>, components: Option<Vec<String>>) -> PyResult<f64> {
     use crate::containers::field::{Field, SubField};
-    let refs: Option<Vec<&str>> = components
+    let names: Option<Vec<&str>> = components
         .as_ref()
         .map(|v| v.iter().map(String::as_str).collect());
-    macro_rules! aggregate {
-        ($inner:expr) => {
-            match &refs {
-                Some(c) => $inner.xtx_components(c)?,
-                None => $inner.xtx(),
-            }
-        };
-    }
-    macro_rules! sub {
-        ($guard:expr) => {
-            match &refs {
-                Some(c) => $guard.xtx_components(c)?,
-                None => $guard.xtx(),
-            }
-        };
-    }
+    let names = names.as_deref();
     if let Ok(a) = x.extract::<PyRef<PyNodeField>>() {
-        return Ok(aggregate!(a.inner));
+        return Ok(Field::xtx(&a.inner, names));
     }
     if let Ok(a) = x.extract::<PyRef<PyElementField>>() {
-        return Ok(aggregate!(a.inner));
+        return Ok(Field::xtx(&a.inner, names));
     }
     if let Ok(a) = x.extract::<PyRef<PySubNodeField>>() {
-        return Ok(sub!(a.handle.read()));
+        return Ok(SubField::xtx(&*a.handle.read(), names));
     }
     if let Ok(a) = x.extract::<PyRef<PySubElementField>>() {
-        return Ok(sub!(a.handle.read()));
+        return Ok(SubField::xtx(&*a.handle.read(), names));
     }
     Err(PyTypeError::new_err(
         "expected a NodeField, SubNodeField, ElementField or SubElementField",
@@ -132,15 +117,19 @@ pub fn xtx(x: &Bound<'_, PyAny>, components: Option<Vec<String>>) -> PyResult<f6
 ///
 /// The inner product of fields used for energies (`F·u`) and residual norms.
 /// The sum runs over the supports both fields carry and, on each, over the
-/// components both carry, aligned by name (their order may differ); a node
-/// that several zones carry counts once. A support or a component on one side
-/// only has no counterpart and adds nothing.
+/// products `pairs` names; a node that several zones carry counts once. A
+/// support on one side only has no counterpart and adds nothing.
 ///
 /// # Parameters
 ///
 /// - `x`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
 /// - `y`: a field of the same type as `x`; two sub-fields must sit on the same
 ///   support.
+/// - `pairs`: the products to sum, `(a, b)` multiplying component `a` of `x` by
+///   component `b` of `y` — a displacement by its force,
+///   `[("u_x", "f_x"), ("u_y", "f_y")]`. A component may appear in several
+///   pairs; a pair one side does not carry adds nothing. `None` multiplies
+///   each component by its namesake, whatever the order of the components.
 ///
 /// # Returns
 ///
@@ -162,31 +151,40 @@ pub fn xtx(x: &Bound<'_, PyAny>, components: Option<Vec<String>>) -> PyResult<f6
 /// per node.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn xty(x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyResult<f64> {
+#[pyo3(signature = (x, y, pairs = None))]
+pub fn xty(
+    x: &Bound<'_, PyAny>,
+    y: &Bound<'_, PyAny>,
+    pairs: Option<Vec<(String, String)>>,
+) -> PyResult<f64> {
     use crate::containers::field::{Field, SubField};
+    let pairs: Option<Vec<(&str, &str)>> = pairs
+        .as_ref()
+        .map(|v| v.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect());
+    let pairs = pairs.as_deref();
     if let Ok(a) = x.extract::<PyRef<PyNodeField>>() {
         let b = y
             .extract::<PyRef<PyNodeField>>()
             .map_err(|_| PyTypeError::new_err("xty: both operands must be NodeFields"))?;
-        return Ok(a.inner.dot_field(&b.inner));
+        return Ok(a.inner.dot_field(&b.inner, pairs));
     }
     if let Ok(a) = x.extract::<PyRef<PyElementField>>() {
         let b = y
             .extract::<PyRef<PyElementField>>()
             .map_err(|_| PyTypeError::new_err("xty: both operands must be ElementFields"))?;
-        return Ok(a.inner.dot_field(&b.inner));
+        return Ok(a.inner.dot_field(&b.inner, pairs));
     }
     if let Ok(a) = x.extract::<PyRef<PySubNodeField>>() {
         let b = y
             .extract::<PyRef<PySubNodeField>>()
             .map_err(|_| PyTypeError::new_err("xty: both operands must be SubNodeFields"))?;
-        return Ok(a.handle.read().dot(&*b.handle.read())?);
+        return Ok(a.handle.read().dot(&*b.handle.read(), pairs)?);
     }
     if let Ok(a) = x.extract::<PyRef<PySubElementField>>() {
         let b = y
             .extract::<PyRef<PySubElementField>>()
             .map_err(|_| PyTypeError::new_err("xty: both operands must be SubElementFields"))?;
-        return Ok(a.handle.read().dot(&*b.handle.read())?);
+        return Ok(a.handle.read().dot(&*b.handle.read(), pairs)?);
     }
     Err(PyTypeError::new_err(
         "expected a NodeField, SubNodeField, ElementField or SubElementField",

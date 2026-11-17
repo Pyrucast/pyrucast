@@ -665,16 +665,18 @@ def test_restrict_like_lands_on_target_support():
     assert s.value(nodes[1], "u_y") == 2.0
 
 
-def test_restrict_like_with_an_empty_field():
-    """An empty field defines nothing: zeros on the target. An empty target
-    gives an empty field."""
-    _c, nodes, sm = _poi1_with(2)
+def test_restrict_and_restrict_like_give_an_empty_field_for_an_empty_field():
+    """An empty field carries nothing: both restrictions give an empty field,
+    which the arithmetic operators pass over. An empty target or mesh gives
+    an empty field too."""
+    _c, _nodes, sm = _poi1_with(2)
     target = pyrucast.NodeField(sm, [("u_x", 3.0)])
     nothing = target["lambda"]
-    zeros = pyrucast.node_field.restrict_like(nothing, target)
-    assert zeros.components() == ["u_x"]
-    assert zeros.values(nodes, "u_x") == [0.0, 0.0]
+    assert len(pyrucast.node_field.restrict_like(nothing, target)) == 0
+    assert len(pyrucast.node_field.restrict(nothing, sm)) == 0
     assert len(pyrucast.node_field.restrict_like(target, nothing)) == 0
+    moved = target + pyrucast.node_field.restrict_like(nothing, target)
+    assert moved.max("u_x") == moved.min("u_x") == 3.0
 
 
 # ─── min / max ───────────────────────────────────────────────────────────────
@@ -1001,6 +1003,31 @@ def test_a_node_two_zones_share_counts_once():
     assert u.sum("T") == 4.0
     assert pyrucast.measure.xtx(u) == 4.0
     assert pyrucast.measure.xty(u, u) == 4.0
+
+
+def test_xty_multiplies_the_components_paired():
+    """The work of a force along a displacement: u_x by f_x, u_y by f_y, on
+    the four nodes of two zones sharing two of them."""
+    _, _, both, _ = _square_in_two()
+    du = pyrucast.NodeField(both, [("u_x", 2.0), ("u_y", 3.0)])
+    f = pyrucast.NodeField(both, [("f_x", 10.0), ("f_y", -1.0)])
+    pairs = [("u_x", "f_x"), ("u_y", "f_y")]
+    assert pyrucast.measure.xty(du, f, pairs) == 4 * (20.0 - 3.0)
+    # By name nothing pairs; a component may enter several products.
+    assert pyrucast.measure.xty(du, f) == 0.0
+    assert pyrucast.measure.xty(du, f, [("u_x", "f_x"), ("u_x", "f_y")]) == 4 * 18.0
+    # A pair one side does not carry adds nothing.
+    assert pyrucast.measure.xty(du, f, [("u_x", "T")]) == 0.0
+    # A zone alone: three nodes.
+    assert pyrucast.measure.xty(du[0], f[0], pairs) == 3 * 17.0
+
+
+def test_xtx_ignores_a_component_the_field_does_not_carry():
+    _, _, both, _ = _square_in_two()
+    u = pyrucast.NodeField(both, [("T", 1.0)])
+    assert pyrucast.measure.xtx(u, ["T", "nope"]) == 4.0
+    assert pyrucast.measure.xtx(u, ["nope"]) == 0.0
+    assert pyrucast.measure.xtx(u[0], ["nope"]) == 0.0
 
 
 def test_regions_meeting_at_a_node_are_brought_onto_the_same_supports_first():
