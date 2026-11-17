@@ -769,10 +769,9 @@ class ElementField:
         """
     def restrict(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
-        Restrict `field` to the cells of `fespace`, with every component of
-        `field` — same cells and same finite-element definition.
+        Restrict `field` to the cells of `fespace`, with every component of `field`.
         
-        A cell of `fespace` takes the values of `field` at its Gauss points when a
+        Same cells and same finite-element definition: a cell of `fespace` takes the values of `field` at its Gauss points when a
         zone of `field` holds that cell (same nodes in the same order) under the
         same definition: same element type, interpolation and quadrature. A zone of
         another definition is not read. To move a field to another definition,
@@ -794,10 +793,9 @@ class ElementField:
         """
     def restrict_like(self, target: ElementField) -> ElementField:
         r"""
-        Read `field` on the subspaces **and the components** of `target` — same
-        cells and same finite-element definition.
+        Read `field` on the subspaces **and the components** of `target`.
         
-        Zone by zone, it is `restrict(field, target.support())` cut down to the
+        Same cells and same finite-element definition. Zone by zone, it is `restrict(field, target.support())` cut down to the
         components of that zone of `target`: those `target` lacks are dropped,
         those `field` lacks are created at `0.0`. The result combines with `target`
         directly by the arithmetic operators (`target + restrict_like(f, target)`),
@@ -1423,10 +1421,9 @@ class FiniteElementSpace:
     def __len__(self) -> builtins.int: ...
     def restrict(self, mesh: Mesh) -> FiniteElementSpace:
         r"""
-        Restrict `fespace` to the cells of `mesh`, each subspace keeping its
-        interpolation and its quadrature.
+        Restrict `fespace` to the cells of `mesh`, keeping each subspace's definition.
         
-        A cell is kept when `mesh` holds it too — same type, same nodes in the same
+        Each subspace keeps its interpolation and its quadrature. A cell is kept when `mesh` holds it too — same type, same nodes in the same
         order, as `pyrucast.mesh.intersection`. It is the way to a field at the
         Gauss points on part of a mesh:
         `pyrucast.element_field.restrict(f, f.support().restrict(part))`.
@@ -1989,10 +1986,10 @@ class Mesh:
         """
     def intersection(self, b: Mesh) -> Mesh:
         r"""
-        The cells of `a` that `b` holds too — same type, same nodes in the same
-        order.
+        The cells of `a` that `b` holds too.
         
-        A cell numbered from another node, or turned over, is not the same cell.
+        Two cells are the same with the same type and the same nodes in the same
+        order: a cell numbered from another node, or turned over, is another cell.
         Meshes on two different `Coords` share no cell.
         
         # Parameters
@@ -2009,10 +2006,10 @@ class Mesh:
         """
     def difference(self, b: Mesh) -> Mesh:
         r"""
-        The cells of `a` that `b` does not hold — same type, same nodes in the same
-        order.
+        The cells of `a` that `b` does not hold.
         
-        With `intersection(a, b)`, it splits each zone of `a` in two; the symmetric
+        Two cells are the same with the same type and the same nodes in the same
+        order, as for `intersection`. With `intersection(a, b)`, it splits each zone of `a` in two; the symmetric
         difference is `difference(a, b) | difference(b, a)`. Meshes on two
         different `Coords` share no cell, so all of `a` is kept.
         
@@ -6863,10 +6860,10 @@ def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str
 
 def difference(a: Mesh, b: Mesh) -> Mesh:
     r"""
-    The cells of `a` that `b` does not hold — same type, same nodes in the same
-    order.
+    The cells of `a` that `b` does not hold.
     
-    With `intersection(a, b)`, it splits each zone of `a` in two; the symmetric
+    Two cells are the same with the same type and the same nodes in the same
+    order, as for `intersection`. With `intersection(a, b)`, it splits each zone of `a` in two; the symmetric
     difference is `difference(a, b) | difference(b, a)`. Meshes on two
     different `Coords` share no cell, so all of `a` is kept.
     
@@ -7871,10 +7868,10 @@ def interp_to_gauss(field: NodeField, fespace: FiniteElementSpace) -> ElementFie
 
 def intersection(a: Mesh, b: Mesh) -> Mesh:
     r"""
-    The cells of `a` that `b` holds too — same type, same nodes in the same
-    order.
+    The cells of `a` that `b` holds too.
     
-    A cell numbered from another node, or turned over, is not the same cell.
+    Two cells are the same with the same type and the same nodes in the same
+    order: a cell numbered from another node, or turned over, is another cell.
     Meshes on two different `Coords` share no cell.
     
     # Parameters
@@ -9081,10 +9078,9 @@ def regularize(mesh: Mesh, sweeps: builtins.int = 20, angular: builtins.bool = T
 
 def restrict_element(field: ElementField, fespace: FiniteElementSpace) -> ElementField:
     r"""
-    Restrict `field` to the cells of `fespace`, with every component of
-    `field` — same cells and same finite-element definition.
+    Restrict `field` to the cells of `fespace`, with every component of `field`.
     
-    A cell of `fespace` takes the values of `field` at its Gauss points when a
+    Same cells and same finite-element definition: a cell of `fespace` takes the values of `field` at its Gauss points when a
     zone of `field` holds that cell (same nodes in the same order) under the
     same definition: same element type, interpolation and quadrature. A zone of
     another definition is not read. To move a field to another definition,
@@ -9107,10 +9103,9 @@ def restrict_element(field: ElementField, fespace: FiniteElementSpace) -> Elemen
 
 def restrict_fespace(fespace: FiniteElementSpace, mesh: Mesh) -> FiniteElementSpace:
     r"""
-    Restrict `fespace` to the cells of `mesh`, each subspace keeping its
-    interpolation and its quadrature.
+    Restrict `fespace` to the cells of `mesh`, keeping each subspace's definition.
     
-    A cell is kept when `mesh` holds it too — same type, same nodes in the same
+    Each subspace keeps its interpolation and its quadrature. A cell is kept when `mesh` holds it too — same type, same nodes in the same
     order, as `pyrucast.mesh.intersection`. It is the way to a field at the
     Gauss points on part of a mesh:
     `pyrucast.element_field.restrict(f, f.support().restrict(part))`.
@@ -9129,10 +9124,9 @@ def restrict_fespace(fespace: FiniteElementSpace, mesh: Mesh) -> FiniteElementSp
 
 def restrict_like_element(field: ElementField, target: ElementField) -> ElementField:
     r"""
-    Read `field` on the subspaces **and the components** of `target` — same
-    cells and same finite-element definition.
+    Read `field` on the subspaces **and the components** of `target`.
     
-    Zone by zone, it is `restrict(field, target.support())` cut down to the
+    Same cells and same finite-element definition. Zone by zone, it is `restrict(field, target.support())` cut down to the
     components of that zone of `target`: those `target` lacks are dropped,
     those `field` lacks are created at `0.0`. The result combines with `target`
     directly by the arithmetic operators (`target + restrict_like(f, target)`),

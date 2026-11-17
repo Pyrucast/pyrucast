@@ -17,10 +17,9 @@ fn fill_from(sub: &mut SubElementField, source: &ElementFieldView) {
     source.gather_cells(&target, &reads, sub.values_mut());
 }
 
-/// Restrict `field` to the cells of `fespace`, with every component of `field`
-/// — same cells and same finite-element definition.
+/// Restrict `field` to the cells of `fespace`, with every component of `field`.
 ///
-/// Returns a new [`ElementField`] with one zone per subspace of `fespace`, on
+/// Same cells and same finite-element definition. Returns a new [`ElementField`] with one zone per subspace of `fespace`, on
 /// that very subspace, each subspace once: one listed twice gives one zone.
 /// Each zone carries the union of `field`'s components. A cell of the subspace
 /// takes the values of `field` at its Gauss points when a zone of `field` holds
@@ -86,10 +85,9 @@ pub fn restrict(field: &ElementField, fespace: &FiniteElementSpace) -> ElementFi
     out
 }
 
-/// Read `field` on the subspaces **and the components** of `target` — same
-/// cells and same finite-element definition.
+/// Read `field` on the subspaces **and the components** of `target`.
 ///
-/// Zone by zone, it is [`restrict`]`(field, &target.support())` cut down to the
+/// Same cells and same finite-element definition. Zone by zone, it is [`restrict`]`(field, &target.support())` cut down to the
 /// components of that zone of `target`: those `target` lacks are dropped, those
 /// `field` lacks are created at `0.0`. [`restrict`] alone lands on the same
 /// subspaces but keeps the components of `field`.

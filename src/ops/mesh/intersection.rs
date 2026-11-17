@@ -5,10 +5,10 @@ use crate::handle::{Handle, ReadGuard};
 use crate::parallel::*;
 use std::collections::HashSet;
 
-/// The cells of `a` that `b` holds too — same type, same nodes in the same
-/// order.
+/// The cells of `a` that `b` holds too.
 ///
-/// Zone by zone of `a`, in order: each zone of the result keeps the cells of
+/// Two cells are the same with the same type and the same nodes in the same
+/// order. Zone by zone of `a`, in order: each zone of the result keeps the cells of
 /// that zone found in a zone of `b` of the same element type, in `a`'s order,
 /// with `a`'s connectivity and face colour. A zone with no cell in common stays
 /// in place, empty — zone `i` of the result is zone `i` of `a`. A zone kept
@@ -52,10 +52,10 @@ pub fn intersection(a: &Mesh, b: &Mesh) -> Mesh {
     out
 }
 
-/// The cells of `a` that `b` does not hold — same type, same nodes in the same
-/// order.
+/// The cells of `a` that `b` does not hold.
 ///
-/// Zone by zone of `a`, in order, as [`intersection`]: each zone of the result
+/// Two cells are the same with the same type and the same nodes in the same
+/// order. Zone by zone of `a`, in order, as [`intersection`]: each zone of the result
 /// keeps the cells of that zone that no zone of `b` of the same element type
 /// holds, in `a`'s order, with `a`'s connectivity and face colour. A zone with
 /// no cell left stays in place, empty; a zone kept whole — `b` holds none of

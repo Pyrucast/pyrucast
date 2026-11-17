@@ -41,10 +41,9 @@ pub fn consolidate(field: PyRef<PyElementField>) -> PyResult<PyElementField> {
     })
 }
 
-/// Restrict `field` to the cells of `fespace`, with every component of
-/// `field` — same cells and same finite-element definition.
+/// Restrict `field` to the cells of `fespace`, with every component of `field`.
 ///
-/// A cell of `fespace` takes the values of `field` at its Gauss points when a
+/// Same cells and same finite-element definition: a cell of `fespace` takes the values of `field` at its Gauss points when a
 /// zone of `field` holds that cell (same nodes in the same order) under the
 /// same definition: same element type, interpolation and quadrature. A zone of
 /// another definition is not read. To move a field to another definition,
@@ -76,10 +75,9 @@ pub fn restrict(
     }
 }
 
-/// Read `field` on the subspaces **and the components** of `target` — same
-/// cells and same finite-element definition.
+/// Read `field` on the subspaces **and the components** of `target`.
 ///
-/// Zone by zone, it is `restrict(field, target.support())` cut down to the
+/// Same cells and same finite-element definition. Zone by zone, it is `restrict(field, target.support())` cut down to the
 /// components of that zone of `target`: those `target` lacks are dropped,
 /// those `field` lacks are created at `0.0`. The result combines with `target`
 /// directly by the arithmetic operators (`target + restrict_like(f, target)`),

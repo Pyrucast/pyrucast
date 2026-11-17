@@ -128,10 +128,10 @@ pub fn elements_on(mesh: PyRef<PyMesh>, points: PyRef<PyMesh>, strict: bool) -> 
     Ok(PyMesh { inner: result })
 }
 
-/// The cells of `a` that `b` holds too — same type, same nodes in the same
-/// order.
+/// The cells of `a` that `b` holds too.
 ///
-/// A cell numbered from another node, or turned over, is not the same cell.
+/// Two cells are the same with the same type and the same nodes in the same
+/// order: a cell numbered from another node, or turned over, is another cell.
 /// Meshes on two different `Coords` share no cell.
 ///
 /// # Parameters
@@ -154,10 +154,10 @@ pub fn intersection(a: PyRef<PyMesh>, b: PyRef<PyMesh>) -> PyMesh {
     }
 }
 
-/// The cells of `a` that `b` does not hold — same type, same nodes in the same
-/// order.
+/// The cells of `a` that `b` does not hold.
 ///
-/// With `intersection(a, b)`, it splits each zone of `a` in two; the symmetric
+/// Two cells are the same with the same type and the same nodes in the same
+/// order, as for `intersection`. With `intersection(a, b)`, it splits each zone of `a` in two; the symmetric
 /// difference is `difference(a, b) | difference(b, a)`. Meshes on two
 /// different `Coords` share no cell, so all of `a` is kept.
 ///

@@ -4,10 +4,9 @@ use crate::containers::mesh::Mesh;
 use crate::handle::Handle;
 use crate::ops::mesh::intersection::keep_cells;
 
-/// Restrict `fespace` to the cells of `mesh`, each subspace keeping its
-/// interpolation and its quadrature.
+/// Restrict `fespace` to the cells of `mesh`, keeping each subspace's definition.
 ///
-/// Zone by zone of `fespace`, in order: each subspace of the result lies on
+/// Each subspace keeps its interpolation and its quadrature. Zone by zone of `fespace`, in order: each subspace of the result lies on
 /// the cells of its zone that `mesh` holds too — same type, same nodes in the
 /// same order, as [`intersection`](fn@crate::ops::mesh::intersection) — with the
 /// same interpolation and the same quadrature. A zone with no cell in common

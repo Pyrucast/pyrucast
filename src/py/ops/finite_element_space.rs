@@ -6,10 +6,9 @@ use crate::py::mesh::PyMesh;
 use pyo3::prelude::*;
 use pyrucast_macros::py_op;
 
-/// Restrict `fespace` to the cells of `mesh`, each subspace keeping its
-/// interpolation and its quadrature.
+/// Restrict `fespace` to the cells of `mesh`, keeping each subspace's definition.
 ///
-/// A cell is kept when `mesh` holds it too — same type, same nodes in the same
+/// Each subspace keeps its interpolation and its quadrature. A cell is kept when `mesh` holds it too — same type, same nodes in the same
 /// order, as `pyrucast.mesh.intersection`. It is the way to a field at the
 /// Gauss points on part of a mesh:
 /// `pyrucast.element_field.restrict(f, f.support().restrict(part))`.

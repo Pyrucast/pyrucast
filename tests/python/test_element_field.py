@@ -642,7 +642,7 @@ def _per_cell(field, component):
 def test_restrict_onto_a_second_space_of_the_same_mesh():
     """Two spaces on one mesh: the values pass, and the result adds to a field
     of the second space point by point, in one zone."""
-    grid, _, fes, k = _grid_and_rank()
+    grid, _, _, k = _grid_and_rank()
     other = pyrucast.FiniteElementSpace(grid)
     assert len(k + pyrucast.ElementField(other, [("k", 1.0)])) == 2
     moved = pyrucast.element_field.restrict(k, other)
