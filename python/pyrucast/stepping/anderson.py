@@ -68,8 +68,9 @@ class _NormalEquations:
 
 
 def _near(weights, one_at):
-    """Whether the weights are the unit vector ``one_at`` to 0.1: the
-    combination would only return a point already visited."""
+    """Whether the weights are within 0.1 of the unit vector ``one_at``,
+    weight by weight (``max |wₖ − δₖ| < 0.1``): the combination would only
+    return to the residual of that earlier iteration."""
     return all(
         abs(w - (1.0 if k == one_at else 0.0)) < 0.1 for k, w in enumerate(weights)
     )

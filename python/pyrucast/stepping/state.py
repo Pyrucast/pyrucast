@@ -10,7 +10,6 @@ from dataclasses import dataclass, field
 from .. import element_field
 from .._pyrucast import NodeField
 from .materials import materials_at
-from .problem import contacts
 
 __all__ = ["State", "initial_state"]
 
@@ -119,7 +118,7 @@ def initial_state(data, problem, options):
             state.acceleration = at_rest("acceleration")
         # With contact, the active-set loop factorizes by LU whatever is asked:
         # eliminating the other relations would only cost.
-        if contacts(problem.mechanics) is not None:
+        if len(problem.mechanics.filter("contact")) > 0:
             state.mechanics_method = "lu"
             state.mechanics_relations = "lagrange"
     return state

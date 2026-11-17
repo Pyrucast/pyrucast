@@ -52,15 +52,6 @@ def _strain_measure(domain, fespace, displacement_names, materials):
     return _MEASURES[finite.pop()]
 
 
-def contacts(model):
-    """The contact sub-models of ``model``, together; ``None`` without any."""
-    found = Model.empty()
-    for sub in model:
-        if sub.label() == "Contact":
-            found.add_sub(sub)
-    return found if len(found) > 0 else None
-
-
 @dataclass(frozen=True)
 class Problem:
     """The model split by physics, and the data as functions of time.
@@ -228,7 +219,7 @@ def describe_problem(data, options):
                 step_loads.add_sub(sub)
         follower_loads = follower_loads if len(follower_loads) > 0 else None
         step_loads = step_loads if len(step_loads) > 0 else None
-        updates_contact = contacts(mechanics) is not None
+        updates_contact = len(mechanics.filter("contact")) > 0
         volume_zones = tuple(
             i for i in range(len(fespace)) if fespace[i].ref_dim == fespace[i].space_dim
         )

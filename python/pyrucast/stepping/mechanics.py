@@ -24,6 +24,7 @@ by integrating the laws, Anderson acceleration every other iteration, and
 substeps of forced convergence when an iteration stalls.
 """
 
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 
 from .. import element_field, matrix, measure, node_field, solver
@@ -32,7 +33,6 @@ from .anderson import Accelerator
 from .control import AutomaticControl, IndirectControl
 from .fields import STRAIN_PREFIXES
 from .materials import materials_at
-from .problem import contacts
 
 __all__ = [
     "Balance",
@@ -184,7 +184,7 @@ def balance(problem, mechanics, solution, behaviour, step, inertia=None):
             )
         system = system + node_field.restrict_like(follower, internal)
     if problem.updates_contact:
-        gaps = node_field.external_forces(contacts(mechanics), step.materials)
+        gaps = node_field.external_forces(mechanics.filter("contact"), step.materials)
         system = system + node_field.restrict_like(gaps, internal)
     if inertia is not None:
         system = system - node_field.restrict_like(inertia, internal)
@@ -241,47 +241,32 @@ def iteration_operator(
     next.
     """
     dt = step.t_end - step.t_start
-    if problem.configurations is not None:
-        return _current_operator(
-            problem, state, step, options, mechanics, strain, behaviour, at
-        )
-    if options.tangent and strain is not None:
-        operator = matrix.tangent(mechanics, step.materials, strain, behaviour, dt=dt)
-    else:
-        key = (step.materials, dt if options.dynamics else None)
+    tangent = options.tangent and strain is not None
+    kept = problem.configurations is None and not tangent
+    key = (step.materials, dt if options.dynamics else None)
+    if kept and state.operator is not None:
         cached = state.operator_key
-        if state.operator is not None and cached[0] is key[0] and cached[1] == key[1]:
+        if cached[0] is key[0] and cached[1] == key[1]:
             return state.operator
-        operator = matrix.stiffness(mechanics, step.materials)
-    if options.augmented_stiffness is not None:
-        operator = operator + options.augmented_stiffness
-    if options.dynamics and dt > 0.0:
-        operator = operator + _mass(problem, state, step.materials) * (4.0 / dt**2)
-    if not (options.tangent and strain is not None):
-        state.operator = operator
-        state.operator_key = (step.materials, dt if options.dynamics else None)
-    return operator
-
-
-def _current_operator(problem, state, step, options, mechanics, strain, behaviour, at):
-    """The operator of an iterate in large displacements: ``K_e + K_σ`` on its
-    configuration (Cast3M ``K_e(GEOM2) + K_σ``)."""
-    dt = step.t_end - step.t_start
-    solution, reached = at
-    displacement = solution[problem.displacement_names]
-    sigma = None
-    if options.geometric_stiffness is not False and reached is not None:
-        # F and σ belong to the reference configuration: evaluated before the
-        # current one becomes active.
-        gradient = element_field.deformation(displacement, problem.fespace, "gradient")
-        sigma = element_field.stress_measure(reached, gradient, "cauchy")
+    # The mass, F and σ belong to the reference configuration: evaluated
+    # before the current one becomes active. The mass is ρ₀ dV₀, as the
+    # inertia of the residual: built there, it keeps those values in the sum.
     mass = None
     if options.dynamics and dt > 0.0:
-        # On the reference configuration, ρ₀ dV₀, as the inertia of the residual:
-        # built there, it keeps those values in the sum.
         mass = _mass(problem, state, step.materials) * (4.0 / dt**2)
-    with problem.configurations.current_at(displacement):
-        if options.tangent and strain is not None:
+    sigma = None
+    on_current = nullcontext()
+    if problem.configurations is not None:
+        solution, reached = at
+        displacement = solution[problem.displacement_names]
+        if options.geometric_stiffness is not False and reached is not None:
+            gradient = element_field.deformation(
+                displacement, problem.fespace, "gradient"
+            )
+            sigma = element_field.stress_measure(reached, gradient, "cauchy")
+        on_current = problem.configurations.current_at(displacement)
+    with on_current:
+        if tangent:
             operator = matrix.tangent(
                 mechanics, step.materials, strain, behaviour, dt=dt
             )
@@ -295,6 +280,9 @@ def _current_operator(problem, state, step, options, mechanics, strain, behaviou
         operator = operator + options.augmented_stiffness
     if mass is not None:
         operator = operator + mass
+    if kept:
+        state.operator = operator
+        state.operator_key = key
     return operator
 
 

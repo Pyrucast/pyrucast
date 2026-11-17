@@ -22,6 +22,7 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 
 from .. import element_field, matrix, node_field, solver
+from .._pyrucast import Matrix
 from .anderson import Accelerator
 from .materials import materials_at
 
@@ -93,8 +94,9 @@ def _materials(data, problem, state, temperature, t, options, gradient):
 
 
 def _laws(problem, temperature, materials, dt, prev):
-    """The heat laws integrated at ``temperature`` from ``prev``, their state
-    at the start of the step, on the current shape."""
+    """The heat flux at ``temperature``: its gradient (what ``strain`` gives
+    on a heat model) put through the heat laws from ``prev``, their state at
+    the start of the step, on the current shape."""
     with _on_current(problem):
         strain = element_field.strain(problem.heat_domain, temperature, materials)
         return element_field.integrate_behavior(
@@ -144,19 +146,17 @@ def _operator(problem, materials, temperature, weight, capacity_over_dt, prev):
     with _on_current(problem):
         strain = element_field.strain(problem.heat_domain, temperature, materials)
         tangent = matrix.tangent(problem.heat_domain, materials, strain, prev)
-    operator = tangent * weight
-    if capacity_over_dt is not None:
-        operator = operator + capacity_over_dt
+    operator = tangent * weight + capacity_over_dt
     if problem.heat_constraints is not None:
         operator = operator + matrix.stiffness(problem.heat_constraints, materials)
     return operator, tangent
 
 
 def _capacity(problem, materials, dt):
-    """``C/Δt``, or ``None`` for a steady problem — on the active
-    configuration, the reference: ``ρ₀ c dV₀``."""
+    """``C/Δt``, empty for a steady problem — on the active configuration,
+    the reference: ``ρ₀ c dV₀``."""
     if not problem.transient_heat or dt <= 0.0:
-        return None
+        return Matrix.empty()
     return matrix.mass(problem.heat_domain, materials) * (1.0 / dt)
 
 
@@ -201,12 +201,10 @@ def heat_step(data, problem, state, t_end, options):
             else temperature["T"]
         )
         behaviour = _laws(problem, evaluated, materials, dt, state.heat_behaviour)
-        storage = None
-        if capacity is not None:
-            moved = temperature["T"] - node_field.restrict_like(
-                start["T"], temperature["T"]
-            )
-            storage = capacity * moved
+        moved = temperature["T"] - node_field.restrict_like(
+            start["T"], temperature["T"]
+        )
+        storage = capacity * moved
         system, out = _system(
             problem, loads, evaluated, behaviour, temperature, materials, storage
         )
