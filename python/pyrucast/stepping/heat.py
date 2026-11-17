@@ -139,15 +139,17 @@ def _operator(problem, materials, temperature, weight, capacity_over_dt, prev):
     """``weight·K(T) + C/Δt + constraints``: the domain's tangent at
     ``temperature`` from ``prev`` (the stiffness for a linear law, the
     radiative ``4σεT³`` film for radiation) scaled by the scheme's weight,
-    the capacity, and the constraints left unscaled."""
+    the capacity, and the constraints left unscaled. Returns the operator and
+    the tangent ``K`` alone, which the Dupont scheme also reads."""
     with _on_current(problem):
         strain = element_field.strain(problem.heat_domain, temperature, materials)
-        operator = matrix.tangent(problem.heat_domain, materials, strain, prev) * weight
+        tangent = matrix.tangent(problem.heat_domain, materials, strain, prev)
+    operator = tangent * weight
     if capacity_over_dt is not None:
         operator = operator + capacity_over_dt
     if problem.heat_constraints is not None:
         operator = operator + matrix.stiffness(problem.heat_constraints, materials)
-    return operator
+    return operator, tangent
 
 
 def _capacity(problem, materials, dt):
@@ -175,7 +177,7 @@ def heat_step(data, problem, state, t_end, options):
     gradient = _frame_gradient(problem, state)
     materials = _materials(data, problem, state, start, t_end, options, gradient)
     capacity = _capacity(problem, materials, dt)
-    operator = _operator(
+    operator, _ = _operator(
         problem,
         materials,
         start["T"],
@@ -263,7 +265,7 @@ def heat_step_linear(data, problem, state, t_end, options):
         _frame_gradient(problem, state),
     )
     capacity = _capacity(problem, materials, dt)
-    operator = _operator(
+    operator, _ = _operator(
         problem,
         materials,
         start["T"],
@@ -330,7 +332,7 @@ def heat_step_dupont(data, problem, state, t_end, options):
         _frame_gradient(problem, state),
     )
     capacity = _capacity(problem, materials, dt)
-    operator = _operator(
+    operator, tangent = _operator(
         problem, materials, extrapolated, 0.5 + lam, capacity, state.heat_behaviour
     )
     imposed = (
@@ -348,11 +350,6 @@ def heat_step_dupont(data, problem, state, t_end, options):
     behaviour = _laws(problem, extrapolated, materials, dt, state.heat_behaviour)
     # The flux at the weighted temperature, linearised at T*.
     weighted = t1 * (1.0 - lam) + t0 * lam
-    with _on_current(problem):
-        strain = element_field.strain(problem.heat_domain, extrapolated, materials)
-        tangent = matrix.tangent(
-            problem.heat_domain, materials, strain, state.heat_behaviour
-        )
     system, _ = _system(
         problem,
         loads,
