@@ -113,7 +113,7 @@ pub fn along(field: &NodeField, line: &Mesh, components: &[&str]) -> Result<Evol
 
     // Every value at once, node-major, then one curve per component.
     let wanted: Vec<String> = components.iter().map(|c| c.to_string()).collect();
-    let view = field.view()?;
+    let view = field.view();
     let reads = view.resolve_reads(&wanted);
     let n_comp = wanted.len();
     let mut values = vec![0.0; nodes.len() * n_comp];

@@ -254,7 +254,7 @@ mod tests {
         ef.add_sub(Handle::new(field)).unwrap();
 
         let div = divergence(&ef, "F").unwrap();
-        let view = div.view().unwrap();
+        let view = div.view();
         let tol = 1e-12;
         assert!((view.value(n0.id(), "div_F").unwrap() + a).abs() < tol); // −a
         assert!(view.value(n1.id(), "div_F").unwrap().abs() < tol); //  0
@@ -305,8 +305,8 @@ mod tests {
 
         // ⟨f, div F⟩ over the nodes.
         let div = divergence(&ef, "F").unwrap();
-        let dview = div.view().unwrap();
-        let fview = f.view().unwrap();
+        let dview = div.view();
+        let fview = f.view();
         let mut rhs = 0.0;
         for nid in [a.id(), b.id(), c.id()] {
             rhs += fview.value(nid, "f").unwrap() * dview.value(nid, "div_F").unwrap();

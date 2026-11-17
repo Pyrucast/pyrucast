@@ -875,7 +875,7 @@ impl NodeField {
     /// `NodeId → index` map in O(1). Shadows the generic
     /// [`crate::containers::field::Field::view`] to return the node-specific
     /// [`NodeFieldView`].
-    pub(crate) fn view(&self) -> Result<NodeFieldView> {
+    pub(crate) fn view(&self) -> NodeFieldView {
         NodeFieldView::new(self)
     }
 
@@ -1120,7 +1120,7 @@ impl NodeField {
     /// assert_eq!(u.values_at(&[a.id(), b.id()], "T").unwrap(), vec![0.0, 1.5]);
     /// ```
     pub fn values_at(&self, nodes: &[NodeId], component: &str) -> Result<Vec<f64>> {
-        let view = self.view()?;
+        let view = self.view();
         nodes
             .iter()
             .map(|&nid| view.value(nid, component))
@@ -1342,7 +1342,7 @@ impl NodeField {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn gather(&self, dofs: &[(NodeId, String)]) -> Result<Vec<f64>> {
-        let view = self.view()?;
+        let view = self.view();
         Ok(dofs
             .iter()
             .map(|(nid, name)| view.value_opt(*nid, name).unwrap_or(0.0))
@@ -1391,7 +1391,7 @@ impl NodeField {
         vars: &[String],
     ) -> Result<Vec<f64>> {
         use crate::containers::matrix::{dof_node, dof_var};
-        let view = self.view()?;
+        let view = self.view();
         let reads = view.resolve_reads(vars);
         Ok(keys
             .iter()
@@ -1563,10 +1563,10 @@ pub(crate) struct NodeFieldView {
 impl NodeFieldView {
     /// Build the view: read every zone in place, and open a read guard on
     /// each zone's support so its node-index map can be queried lock-free.
-    pub(crate) fn new(field: &NodeField) -> Result<Self> {
-        let inner = crate::containers::field::Field::view(field)?;
+    pub(crate) fn new(field: &NodeField) -> Self {
+        let inner = crate::containers::field::Field::view(field);
         let supports = inner.zones.iter().map(|z| z.support.read()).collect();
-        Ok(Self { inner, supports })
+        Self { inner, supports }
     }
 
     /// Union of the zones' component names, first-seen order.

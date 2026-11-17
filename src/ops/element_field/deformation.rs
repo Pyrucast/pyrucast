@@ -291,7 +291,7 @@ pub fn deformation(
     measure: StrainMeasure,
 ) -> Result<ElementField> {
     let components = Field::components(u);
-    let view = u.view()?;
+    let view = u.view();
     let mut out = ElementField::empty();
     for sub in fespace {
         out.add_sub(Handle::new(deformation_zone(

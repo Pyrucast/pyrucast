@@ -101,7 +101,7 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
     }
 
     let components = Field::components(field);
-    let view = field.view()?;
+    let view = field.view();
     let mut out = NodeField::default();
     for sm in mesh {
         let mut sub = SubNodeField::from_support(sm, components.clone())?;
@@ -196,7 +196,7 @@ pub fn restrict_like(field: &NodeField, target: &NodeField) -> Result<NodeField>
         ));
     }
 
-    let view = field.view()?;
+    let view = field.view();
     let mut out = NodeField::default();
     for h in target.iter() {
         let zone = h.read();

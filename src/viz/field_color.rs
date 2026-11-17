@@ -738,7 +738,7 @@ mod tests {
         nf.set_value(a.id(), "T", 1.0).unwrap();
         nf.set_value(b.id(), "T", 2.0).unwrap();
         nf.set_value(c.id(), "T", 3.0).unwrap();
-        let view = NodeField::from_sub(nf).view().unwrap();
+        let view = NodeField::from_sub(nf).view();
 
         let data = FieldData::Node(view);
         let ctx = data.for_submesh(&sm_h).unwrap();
@@ -758,7 +758,7 @@ mod tests {
         let poi1_h = Handle::new(poi1);
         let mut nf = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
         nf.set_value(a.id(), "T", 4.0).unwrap();
-        let view = NodeField::from_sub(nf).view().unwrap();
+        let view = NodeField::from_sub(nf).view();
         // SEG2 cell [a, b]: only `a` is in the field; missing node takes
         // the mean of the present ones → flat value 4.0.
         let mut seg = RawSubMesh::new(coords.clone(), ElementType::SEG2);
@@ -845,7 +845,7 @@ mod tests {
                 zone.set(0, g, 0, f).unwrap();
             }
         }
-        let data = FieldData::Element(ef.view().unwrap());
+        let data = FieldData::Element(ef.view());
         let sm = mesh.get(0).unwrap();
         let ctx = data.for_submesh(&sm).unwrap();
         let nodal = ctx.cell_node_values(&sm.read(), 0, "q").unwrap();
@@ -866,7 +866,7 @@ mod tests {
             zone.set_cell_uniform(0, "q", 1.0).unwrap();
             zone.set_cell_uniform(1, "q", 5.0).unwrap();
         }
-        let data = FieldData::Element(ef.view().unwrap());
+        let data = FieldData::Element(ef.view());
         let sm = mesh.get(0).unwrap();
         let ctx = data.for_submesh(&sm).unwrap();
         let guard = sm.read();
@@ -895,7 +895,7 @@ mod tests {
         let mut poi1 = RawSubMesh::new(coords, ElementType::POI1);
         poi1.add_cell(&[a.id()]).unwrap();
         let other = Handle::new(poi1);
-        let data = FieldData::Element(ef.view().unwrap());
+        let data = FieldData::Element(ef.view());
         assert!(data.for_submesh(&mesh.get(0).unwrap()).is_ok());
         assert!(data.for_submesh(&other).is_err());
     }

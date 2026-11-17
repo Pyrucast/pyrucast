@@ -100,7 +100,7 @@ pub fn strain(
     materials: &ElementField,
 ) -> Result<ElementField> {
     // One view of the solution for every law: building it indexes every node.
-    let view = solution.view()?;
+    let view = solution.view();
     let mut out = ElementField::empty();
     for h in model {
         let sub = h.read();

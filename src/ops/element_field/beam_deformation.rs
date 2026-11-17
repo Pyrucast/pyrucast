@@ -100,7 +100,7 @@ pub fn beam_deformation(
     material: &ElementField,
 ) -> Result<ElementField> {
     let components = Field::components(field);
-    let view = field.view()?;
+    let view = field.view();
     let mut out = ElementField::empty();
     for sub in fespace {
         let mat = material.sub_for_fespace(sub)?;

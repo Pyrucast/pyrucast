@@ -69,7 +69,7 @@ pub(crate) const AXES: [&str; 3] = ["x", "y", "z"];
 /// ```
 pub fn gradient(field: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
     let components = Field::components(field);
-    let view = field.view()?;
+    let view = field.view();
     let mut out = ElementField::empty();
     for sub in fespace {
         out.add_sub(Handle::new(gradient_zone(sub, &view, &components)?))?;

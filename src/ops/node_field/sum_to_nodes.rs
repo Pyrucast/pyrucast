@@ -156,7 +156,7 @@ mod tests {
             z.write().set_uniform("un", 1.0).unwrap();
         }
         let volumes = sum_to_nodes(&cell_integral(&un, &centres).unwrap()).unwrap();
-        let v = volumes.view().unwrap();
+        let v = volumes.view();
         let at = |i: usize, j: usize| ids[j * 5 + i];
         assert!((v.value(at(2, 1), "un").unwrap() - 4.0).abs() < 1e-12); // on the seam
         assert!((v.value(at(1, 2), "un").unwrap() - 4.0).abs() < 1e-12);

@@ -760,13 +760,13 @@ impl<'a> EvolutionFrames<'a> {
         initial_component: &str,
         scale: crate::viz::ColorScale,
         smooth: usize,
-    ) -> Result<Self> {
+    ) -> Self {
         let components = match &frames[0] {
-            crate::viz::FrameField::Node(f) => crate::viz::field_color::FieldData::Node(f.view()?)
+            crate::viz::FrameField::Node(f) => crate::viz::field_color::FieldData::Node(f.view())
                 .components()
                 .to_vec(),
             crate::viz::FrameField::Element(f) => {
-                crate::viz::field_color::FieldData::Element(f.view()?)
+                crate::viz::field_color::FieldData::Element(f.view())
                     .components()
                     .to_vec()
             }
@@ -775,7 +775,7 @@ impl<'a> EvolutionFrames<'a> {
             .iter()
             .position(|c| c == initial_component)
             .unwrap_or(0);
-        Ok(Self {
+        Self {
             mesh,
             frames,
             abscissas,
@@ -785,7 +785,7 @@ impl<'a> EvolutionFrames<'a> {
             smooth,
             selected_frame: Cell::new(0),
             selected_comp: Cell::new(selected_comp),
-        })
+        }
     }
 
     fn current_component(&self) -> &str {
@@ -816,7 +816,7 @@ impl<'a> Drawable for EvolutionFrames<'a> {
         let comp = self.current_component();
         match (self.mesh, &self.frames[k]) {
             (Some(m), crate::viz::FrameField::Node(f)) => {
-                let data = crate::viz::field_color::FieldData::Node(f.view()?);
+                let data = crate::viz::field_color::FieldData::Node(f.view());
                 crate::viz::field_color::MeshFieldView {
                     mesh: m,
                     field: &data,
@@ -827,7 +827,7 @@ impl<'a> Drawable for EvolutionFrames<'a> {
                 .draw_on(area, view)?;
             }
             (Some(m), crate::viz::FrameField::Element(f)) => {
-                let data = crate::viz::field_color::FieldData::Element(f.view()?);
+                let data = crate::viz::field_color::FieldData::Element(f.view());
                 crate::viz::field_color::MeshFieldView {
                     mesh: m,
                     field: &data,
@@ -932,7 +932,7 @@ pub(crate) fn run_interactive_evolution(
         initial_component.unwrap_or(""),
         scale,
         smooth,
-    )?;
+    );
     crate::viz::check_revolve(&drawable, &view)?;
     let bbox = drawable.bbox()?;
     EVENT_LOOP.with(|cell| -> Result<()> {

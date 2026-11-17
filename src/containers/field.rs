@@ -177,7 +177,7 @@ impl<const N: usize> IntoComponentNames for [&str; N] {
 /// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
 /// // A read view on **every** zone at once: the guards are taken once, and
 /// // concurrent reads do not wait for each other.
-/// let vue = temp.view()?;
+/// let vue = temp.view();
 /// assert_eq!(vue.components(), &["T".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -210,7 +210,7 @@ impl<S: Any + Send + Sync> FieldView<S> {
     /// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
     /// // The union of the zones' components, in first-appearance order — the
     /// // same rule as everywhere else in the aggregates.
-    /// assert_eq!(temp.view()?.components(), &["T".to_string()]);
+    /// assert_eq!(temp.view().components(), &["T".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn components(&self) -> &[String] {
@@ -1401,11 +1401,11 @@ where
     /// Zero-copy view of the zones, for operators doing many reads
     /// (gradient, deformation, restrict, viz, …): one read guard per sub, data
     /// read **in place** for the lifetime of the view.
-    fn view(&self) -> Result<FieldView<Self::Sub>> {
-        Ok(FieldView {
+    fn view(&self) -> FieldView<Self::Sub> {
+        FieldView {
             components: self.components(),
             zones: self.iter().map(|h| h.read()).collect(),
-        })
+        }
     }
 
     /// Rebuild the aggregate, mapping each sub-field through `f` (the sub is
@@ -3408,7 +3408,7 @@ mod tests {
         nf.add_sub(Handle::new(zb)).unwrap();
         // pscal with itself → per-node square, two zones preserved.
         let p = nf.pscal_field(&nf).unwrap();
-        let view = p.view().unwrap();
+        let view = p.view();
         assert_eq!(view.value(na.id(), "psca").unwrap(), 9.0);
         assert_eq!(view.value(nb.id(), "psca").unwrap(), 25.0);
     }
@@ -3607,12 +3607,12 @@ mod tests {
 
         // field ∘ field, zone by zone.
         let sum = (&a + &b).unwrap();
-        let view = sum.view().unwrap();
+        let view = sum.view();
         assert_eq!(view.value(nodes[0].id(), "T").unwrap(), 4.0);
 
         // field ∘ scalar broadcast.
         let doubled = (&a * 2.0).unwrap();
-        let v2 = doubled.view().unwrap();
+        let v2 = doubled.view();
         assert_eq!(v2.value(nodes[0].id(), "T").unwrap(), 6.0);
     }
 
