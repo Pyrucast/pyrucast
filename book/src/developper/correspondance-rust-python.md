@@ -155,6 +155,8 @@ degré des lignes (`"QUA4"` entre deux `SEG2`, `"QUA8"` entre deux `SEG3`).
 | `barycenter(mesh: &Mesh) -> Mesh` | `barycenter(mesh) -> Mesh` |
 | `to_poi1(mesh: &Mesh) -> Mesh` | `to_poi1(mesh) -> Mesh` |
 | `elements_on(mesh: &Mesh, points: &Mesh, strict: bool) -> Mesh` | `elements_on(mesh, points, strict=True) -> Mesh` |
+| `intersection(a: &Mesh, b: &Mesh) -> Mesh` | `intersection(a, b) -> Mesh` |
+| `difference(a: &Mesh, b: &Mesh) -> Mesh` | `difference(a, b) -> Mesh` |
 | `points_in_sphere(mesh: &Mesh, center: &[f64], radius: f64, tol: Option<f64>) -> Mesh` | `points_in_sphere(mesh, center, radius, tol=None) -> Mesh` |
 | `points_on_sphere(mesh: &Mesh, center: &[f64], radius: f64, tol: Option<f64>) -> Mesh` | `points_on_sphere(mesh, center, radius, tol=None) -> Mesh` |
 | `points_on_plane(mesh: &Mesh, origin: &[f64], normal: &[f64], tol: Option<f64>) -> Mesh` | `points_on_plane(mesh, origin, normal, tol=None) -> Mesh` |

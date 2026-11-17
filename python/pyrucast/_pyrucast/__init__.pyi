@@ -52,6 +52,7 @@ __all__ = [
     "damage_sic_sic",
     "damage_tc",
     "deformation",
+    "difference",
     "dirichlet",
     "displace",
     "displace_from",
@@ -84,6 +85,7 @@ __all__ = [
     "interface_transfer",
     "internal_forces",
     "interp_to_gauss",
+    "intersection",
     "invert",
     "line",
     "load",
@@ -1912,6 +1914,46 @@ class Mesh:
         # Raises
         
         `RuntimeError` if `mesh` and `points` are not attached to the same `Coords`.
+        """
+    def intersection(self, b: Mesh) -> Mesh:
+        r"""
+        The cells of `a` that `b` holds too — same type, same nodes in the same
+        order.
+        
+        A cell numbered from another node, or turned over, is not the same cell.
+        Meshes on two different `Coords` share no cell.
+        
+        # Parameters
+        
+        - `a`: the cells to sort.
+        - `b`: the cells to look for in `a`.
+        
+        # Returns
+        
+        A `Mesh` mirroring `a` zone by zone — same types, same order of cells,
+        same face colours, possibly empty zones. A zone kept whole comes back as it
+        is, shared, so a field laid on it still combines with one laid on the
+        result.
+        """
+    def difference(self, b: Mesh) -> Mesh:
+        r"""
+        The cells of `a` that `b` does not hold — same type, same nodes in the same
+        order.
+        
+        With `intersection(a, b)`, it splits each zone of `a` in two; the symmetric
+        difference is `difference(a, b) | difference(b, a)`. Meshes on two
+        different `Coords` share no cell, so all of `a` is kept.
+        
+        # Parameters
+        
+        - `a`: the cells to sort.
+        - `b`: the cells to take out of `a`.
+        
+        # Returns
+        
+        A `Mesh` mirroring `a` zone by zone — same types, same order of cells,
+        same face colours, possibly empty zones. A zone kept whole comes back as it
+        is, shared.
         """
     def points_in_sphere(self, center: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
@@ -6746,6 +6788,27 @@ def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str
     `C = FᵀF` stays positive definite when `F` changes sign.
     """
 
+def difference(a: Mesh, b: Mesh) -> Mesh:
+    r"""
+    The cells of `a` that `b` does not hold — same type, same nodes in the same
+    order.
+    
+    With `intersection(a, b)`, it splits each zone of `a` in two; the symmetric
+    difference is `difference(a, b) | difference(b, a)`. Meshes on two
+    different `Coords` share no cell, so all of `a` is kept.
+    
+    # Parameters
+    
+    - `a`: the cells to sort.
+    - `b`: the cells to take out of `a`.
+    
+    # Returns
+    
+    A `Mesh` mirroring `a` zone by zone — same types, same order of cells,
+    same face colours, possibly empty zones. A zone kept whole comes back as it
+    is, shared.
+    """
+
 def dirichlet(imposed_mesh: Mesh, target: Model, variable: builtins.str, sense: builtins.str = '=') -> Model:
     r"""
     Hold `variable` at imposed values on the nodes of `imposed_mesh`.
@@ -7731,6 +7794,27 @@ def interp_to_gauss(field: NodeField, fespace: FiniteElementSpace) -> ElementFie
     
     An `ElementField` on `fespace` with the components of `field`, one value per
     cell and Gauss point.
+    """
+
+def intersection(a: Mesh, b: Mesh) -> Mesh:
+    r"""
+    The cells of `a` that `b` holds too — same type, same nodes in the same
+    order.
+    
+    A cell numbered from another node, or turned over, is not the same cell.
+    Meshes on two different `Coords` share no cell.
+    
+    # Parameters
+    
+    - `a`: the cells to sort.
+    - `b`: the cells to look for in `a`.
+    
+    # Returns
+    
+    A `Mesh` mirroring `a` zone by zone — same types, same order of cells,
+    same face colours, possibly empty zones. A zone kept whole comes back as it
+    is, shared, so a field laid on it still combines with one laid on the
+    result.
     """
 
 def invert(mesh: Mesh) -> Mesh:

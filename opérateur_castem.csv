@@ -23,8 +23,8 @@ Maillage - génération;AFFI;Affinité (mise à l'échelle anisotrope);—
 Maillage - assemblage;ET;Union (assemblage) de plusieurs maillages;union (opérateur |)
 Maillage - assemblage;ELIM;Élimine les nœuds doubles (fusion par tolérance);merge_nodes (drapeau in_place pour souder les maillages en place)
 Maillage - assemblage;ENLE;Enlève des éléments d'un maillage;—
-Maillage - assemblage;DIFF;Différence de maillages;—
-Maillage - assemblage;INTE;Intersection de maillages;—
+Maillage - assemblage;DIFF;Différence de maillages;difference (A \ B ; la différence symétrique de DIFF = difference(a, b) | difference(b, a))
+Maillage - assemblage;INTE;Intersection de maillages;intersection (même maille = mêmes nœuds dans le même ordre)
 Maillage - transformation;CHAN;Change le type d'élément (POI1, passage quadratique…);to_poi1 (cas POI1) / to_quadratic (linéaire→quadratique) / convert (QUA4→TRI3, HEX8→TET4)
 Maillage - transformation;PLUS;Translate les coordonnées des nœuds;coords.displace / coords.set
 Maillage - transformation;FORM;Configuration déformée (coordonnées courantes = initiales + déplacement);coords.displace_from (pose en absolu la configuration cible X + u, sans changer la configuration active) · Coords.add_config / select · coords.in_config (calculer le temps d'un bloc sur une configuration)

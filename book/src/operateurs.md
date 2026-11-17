@@ -60,7 +60,8 @@ mesh.project_on_sphere}}
 ### Extraire une partie
 
 {{#pysummary
-mesh.border mesh.skin mesh.elements_on mesh.barycenter
+mesh.border mesh.skin mesh.elements_on mesh.intersection mesh.difference
+mesh.barycenter
 mesh.poi1_from_nodes mesh.from_live_nodes mesh.select}}
 
 ### Ordonner et regrouper
