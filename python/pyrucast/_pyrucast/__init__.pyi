@@ -1460,7 +1460,7 @@ class Matrix:
         r"""
         `Matrix.filter(physics)` — a new `Matrix` holding only the blocks **whose
         nature set contains** the given physics (`"mechanical"`, `"thermal"`,
-        `"constraint"`, `"other"`, `"diffusion"`, `"radiation"`). The result is
+        `"constraint"`, `"other"`, `"diffusion"`, `"radiation"`, `"contact"`). The result is
         without values: call `assemble()` before solving.
         """
     def exclude(self, physics: builtins.str) -> Matrix:
@@ -3083,12 +3083,12 @@ class Model:
         r"""
         `Model.filter(physics)` — a new `Model` holding only the sub-models **whose
         nature set contains** the given physics. `physics` is a tag: `"mechanical"`,
-        `"thermal"`, `"constraint"`, `"other"`, `"diffusion"` or `"radiation"`.
-        Sub-model order is preserved; the result may be empty.
+        `"thermal"`, `"constraint"`, `"other"`, `"diffusion"`, `"radiation"` or
+        `"contact"`. Sub-model order is preserved; the result may be empty.
         
         A coupled physics declares several natures and is therefore returned by
         each of its filters — a radiation boundary is both `"thermal"` and
-        `"radiation"`.
+        `"radiation"`, a contact both `"constraint"` and `"contact"`.
         """
     def exclude(self, physics: builtins.str) -> Model:
         r"""
@@ -5185,7 +5185,7 @@ class SubMatrix:
         r"""
         The physics nature(s) of the sub-model that produced this block, as a list
         of tags (`"mechanical"`, `"thermal"`, `"diffusion"`, `"radiation"`,
-        `"constraint"`, `"other"`). **Empty** for a block built outside assembly
+        `"constraint"`, `"contact"`, `"other"`). **Empty** for a block built outside assembly
         (the "rien" case), or several tags for a coupled physics. Set by the
         assembler; used by `Matrix.filter`.
         """
@@ -5397,11 +5397,12 @@ class SubModel:
     def physics(self) -> builtins.list[builtins.str]:
         r"""
         The physics nature(s) of this sub-model as a list of tags among
-        `"mechanical"`, `"thermal"`, `"diffusion"`, `"radiation"` and
-        `"constraint"`. A flux or an exchange takes the nature of the model it
-        targets; a constraint carries `"constraint"` plus that nature, or alone
-        when its relation spans two physics; radiation carries `"thermal"` and
-        `"radiation"`.
+        `"mechanical"`, `"thermal"`, `"diffusion"`, `"radiation"`,
+        `"constraint"` and `"contact"`. A flux or an exchange takes the nature
+        of the model it targets; a constraint carries `"constraint"` plus that
+        nature, or alone when its relation spans two physics; radiation carries
+        `"thermal"` and `"radiation"`; a contact carries `"constraint"`,
+        `"mechanical"` and `"contact"`.
         """
     def label(self) -> builtins.str:
         r"""

@@ -97,7 +97,9 @@ ses valeurs.
 {{#include ../../tests/python/test_doc_matrice.py:assembler}}
 ```
 
-Sur une matrice sans valeurs, `K * x` et `solve` lèvent une erreur. `get` et
+Sur une matrice sans valeurs, `K * x` et `solve` lèvent une erreur, sauf sur
+la matrice vide `Matrix.empty()`, qui vaut zéro : `K + Matrix.empty()` a les
+valeurs de `K`, et `Matrix.empty() * x` est un champ vide. `get` et
 `entries` lisent les valeurs écrites dans les blocs, et lèvent une erreur dès
 qu'un bloc est calculé.
 

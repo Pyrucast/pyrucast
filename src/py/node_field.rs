@@ -309,7 +309,7 @@ impl PyNodeField {
         } else {
             return Err(PyTypeError::new_err("expected a Mesh or a SubMesh"));
         };
-        InitialComponent::fill(&inner, &components)?;
+        InitialComponent::fill(&inner, &components);
         Ok(Self { inner })
     }
 

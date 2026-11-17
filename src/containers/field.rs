@@ -632,7 +632,7 @@ pub trait SubField {
     /// products, `(a, b)` multiplying component `a` of `self` by component `b`
     /// of `other` — a displacement by its force, `[("u_x", "f_x"), …]`; `None`
     /// multiplies each component by its namesake. This is the field inner
-    /// product behind Cast3M's `XTY`/`PSCA` (energy `F·u`, residual norms, …).
+    /// product: the work `F·u` of a force, a residual norm…
     fn dot(&self, other: &Self, pairs: Option<&[(&str, &str)]>) -> Result<f64> {
         if !self.same_support(other) {
             return Err(PyrucastError::Message(
@@ -769,14 +769,18 @@ pub trait SubField {
             .sum())
     }
 
-    /// Squared Euclidean norm `xᵀx = Σ v²` — Cast3M `XTX`, i.e.
-    /// [`SubField::dot`] of the field with itself. `components` restricts it to
+    /// Squared Euclidean norm `xᵀx = Σ v²`, i.e. [`SubField::dot`] of the
+    /// field with itself. `components` restricts it to
     /// the components named — a name the field does not carry is ignored —,
     /// `None` takes every component; a field carrying none of `components`
     /// gives `0`. Like `dot`, thread-count-dependent to the last ULP.
     fn xtx(&self, components: Option<&[&str]>) -> f64 {
         let width = self.component_count();
-        let cols = counted_columns(self, components);
+        let cols: Vec<usize> = (0..width)
+            .filter(|&c| {
+                components.is_none_or(|names| names.contains(&self.components()[c].as_str()))
+            })
+            .collect();
         if cols.len() == width {
             // Every column: the values read flat.
             return self
@@ -837,7 +841,11 @@ pub trait SubField {
         let width = self.component_count();
         // The columns counted, resolved once, like the order: each loop below
         // carries no branch.
-        let cols = counted_columns(self, components);
+        let cols: Vec<usize> = (0..width)
+            .filter(|&c| {
+                components.is_none_or(|names| names.contains(&self.components()[c].as_str()))
+            })
+            .collect();
         if cols.is_empty() {
             return 0.0;
         }
@@ -954,18 +962,6 @@ pub trait SubField {
         // Same component count ⇒ identical buffer layout; copy values verbatim.
         out.values_mut().copy_from_slice(self.values());
         Ok(out)
-    }
-}
-
-/// The columns of `zone` whose component `components` names, in the zone's
-/// order; every column for `None`.
-fn counted_columns<S: SubField + ?Sized>(zone: &S, components: Option<&[&str]>) -> Vec<usize> {
-    let width = zone.component_count();
-    match components {
-        None => (0..width).collect(),
-        Some(names) => (0..width)
-            .filter(|&c| names.contains(&zone.components()[c].as_str()))
-            .collect(),
     }
 }
 
@@ -1288,7 +1284,7 @@ where
         ))
     }
 
-    /// Squared Euclidean norm `xᵀx = Σ v²` of the field (Cast3M `XTX`), a
+    /// Squared Euclidean norm `xᵀx = Σ v²` of the field, a
     /// point several zones carry counted once, as in [`Field::sum`] — the
     /// aggregate twin of [`SubField::xtx`]. `components` restricts it to the
     /// components named, wherever a zone carries them — a name no zone carries
@@ -1321,7 +1317,7 @@ where
                     components
                         .is_none_or(|names| names.contains(&zones[z].components()[c].as_str()))
                 };
-                sum_once(&zones, counts, |z, cols| row_squares(zones[z], cols))
+                sum_once(&zones, counts, |z, cols| row_sum(zones[z], cols, |v| v * v))
             }
         }
     }
@@ -1391,10 +1387,13 @@ where
                 .iter()
                 .map(|z| SubField::norm(*z, 0, components))
                 .fold(0.0, f64::max),
-            (1, _) => sum_once(&zones, counts, |z, cols| row_abs(zones[z], cols)),
+            (1, _) => sum_once(&zones, counts, |z, cols| row_sum(zones[z], cols, f64::abs)),
             (p, _) => {
                 let p = f64::from(p);
-                sum_once(&zones, counts, |z, cols| row_powers(zones[z], cols, p)).powf(1.0 / p)
+                sum_once(&zones, counts, |z, cols| {
+                    row_sum(zones[z], cols, |v| v.abs().powf(p))
+                })
+                .powf(1.0 / p)
             }
         }
     }
@@ -1544,7 +1543,7 @@ where
     /// component — present on only one side has no counterpart and contributes
     /// nothing. `pairs` lists the products, `(a, b)` multiplying component `a`
     /// of `self` by component `b` of `other`; `None` multiplies each component
-    /// by its namesake. The reduction behind Cast3M's `XTY`.
+    /// by its namesake.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -1581,7 +1580,35 @@ where
         let rights: Vec<Self::Sub> = other.iter().map(|h| (*h.read()).clone()).collect();
         let guards: Vec<ReadGuard<Self::Sub>> = self.iter().map(|h| h.read()).collect();
         let zones: Vec<&Self::Sub> = guards.iter().map(|g| &**g).collect();
-        let links = product_partners(&zones, &rights, pairs);
+        // For each column of each zone, the right columns it multiplies on the
+        // same support — (right zone, its column): its namesake for `pairs`
+        // `None`, otherwise the right component of each pair naming it.
+        let links: Vec<Vec<Vec<(usize, usize)>>> = zones
+            .iter()
+            .map(|l| {
+                let support = l.support();
+                let there: Vec<usize> = (0..rights.len())
+                    .filter(|&j| rights[j].support().same_object(&support))
+                    .collect();
+                // On a support, a component lives in one zone.
+                let find = |name: &str| {
+                    there
+                        .iter()
+                        .find_map(|&j| rights[j].component_index(name).map(|rc| (j, rc)))
+                };
+                l.components()
+                    .iter()
+                    .map(|name| match pairs {
+                        None => find(name).into_iter().collect(),
+                        Some(pairs) => pairs
+                            .iter()
+                            .filter(|(a, _)| *a == name.as_str())
+                            .filter_map(|(_, b)| find(b))
+                            .collect(),
+                    })
+                    .collect()
+            })
+            .collect();
         if let [zone] = zones[..] {
             return links[0]
                 .iter()
@@ -2075,43 +2102,17 @@ fn whole_row_squares<S: SubField>(zone: &S) -> impl Fn(usize) -> f64 + Sync + us
     }
 }
 
-/// `row ↦ Σ v²` over the columns `cols` of `zone`.
-fn row_squares<'a, S: SubField>(
+/// `row ↦ Σ term(v)` over the columns `cols` of `zone` — `v²`, `|v|`, `|v|ᵖ`.
+fn row_sum<'a, S: SubField, T: Fn(f64) -> f64 + Sync>(
     zone: &'a S,
     cols: &[usize],
-) -> impl Fn(usize) -> f64 + Sync + use<'a, S> {
+    term: T,
+) -> impl Fn(usize) -> f64 + Sync + use<'a, S, T> {
     let (values, width) = (zone.values(), zone.component_count());
     let cols = cols.to_vec();
     move |row| {
         let r = &values[row * width..(row + 1) * width];
-        cols.iter().map(|&c| r[c] * r[c]).sum()
-    }
-}
-
-/// `Σ |v|` over the columns `cols` of a row of `zone`.
-fn row_abs<'a, S: SubField>(
-    zone: &'a S,
-    cols: &[usize],
-) -> impl Fn(usize) -> f64 + Sync + use<'a, S> {
-    let (values, width) = (zone.values(), zone.component_count());
-    let cols = cols.to_vec();
-    move |row| {
-        let r = &values[row * width..(row + 1) * width];
-        cols.iter().map(|&c| r[c].abs()).sum()
-    }
-}
-
-/// `Σ |v|ᵖ` over the columns `cols` of a row of `zone`.
-fn row_powers<'a, S: SubField>(
-    zone: &'a S,
-    cols: &[usize],
-    p: f64,
-) -> impl Fn(usize) -> f64 + Sync + use<'a, S> {
-    let (values, width) = (zone.values(), zone.component_count());
-    let cols = cols.to_vec();
-    move |row| {
-        let r = &values[row * width..(row + 1) * width];
-        cols.iter().map(|&c| r[c].abs().powf(p)).sum()
+        cols.iter().map(|&c| term(r[c])).sum()
     }
 }
 
@@ -2376,42 +2377,6 @@ fn partners<S: SubField>(lefts: &[&S], rights: &[S]) -> Vec<Vec<Option<(usize, u
                     there
                         .iter()
                         .find_map(|&j| rights[j].component_index(name).map(|rc| (j, rc)))
-                })
-                .collect()
-        })
-        .collect()
-}
-
-/// For each column of each left zone, the right columns it multiplies on the
-/// same support — (right zone, its column): its namesake for `pairs` `None`,
-/// otherwise the right component of each pair naming it on the left.
-fn product_partners<S: SubField>(
-    lefts: &[&S],
-    rights: &[S],
-    pairs: Option<&[(&str, &str)]>,
-) -> Vec<Vec<Vec<(usize, usize)>>> {
-    lefts
-        .iter()
-        .map(|l| {
-            let support = l.support();
-            let there: Vec<usize> = (0..rights.len())
-                .filter(|&j| rights[j].support().same_object(&support))
-                .collect();
-            // On a support, a component lives in one zone.
-            let find = |name: &str| {
-                there
-                    .iter()
-                    .find_map(|&j| rights[j].component_index(name).map(|rc| (j, rc)))
-            };
-            l.components()
-                .iter()
-                .map(|name| match pairs {
-                    None => find(name).into_iter().collect(),
-                    Some(pairs) => pairs
-                        .iter()
-                        .filter(|(a, _)| *a == name.as_str())
-                        .filter_map(|(_, b)| find(b))
-                        .collect(),
                 })
                 .collect()
         })

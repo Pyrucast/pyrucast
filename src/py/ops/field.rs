@@ -50,10 +50,7 @@ impl InitialComponent {
     /// Give each `(name, value)` entry of `components` its value on every zone
     /// of `field`, just built on them — a bare name keeps the zero it was
     /// built with.
-    pub(crate) fn fill<F: crate::containers::field::Field>(
-        field: &F,
-        components: &[Self],
-    ) -> PyResult<()>
+    pub(crate) fn fill<F: crate::containers::field::Field>(field: &F, components: &[Self])
     where
         F::Sub: crate::containers::field::SubField,
     {
@@ -61,11 +58,12 @@ impl InitialComponent {
         for c in components {
             if let Self::Valued(name, value) = c {
                 for zone in field.iter() {
-                    zone.write().set_uniform(name, *value)?;
+                    zone.write()
+                        .set_uniform(name, *value)
+                        .expect("every zone was built with every name");
                 }
             }
         }
-        Ok(())
     }
 }
 

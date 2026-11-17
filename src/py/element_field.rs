@@ -247,7 +247,7 @@ impl PyElementField {
     ) -> PyResult<Self> {
         use crate::py::ops::field::InitialComponent;
         let ef = ElementField::new(&fespace.inner, InitialComponent::names(&components))?;
-        InitialComponent::fill(&ef, &components)?;
+        InitialComponent::fill(&ef, &components);
         Ok(Self { inner: ef })
     }
 

@@ -24,7 +24,7 @@ Les pages sont rangées par tag :
 | `thermal` | conduction ; rayonnement, qui porte aussi `radiation` |
 | `diffusion` | diffusion de Fick |
 | `mechanical` | élasticité, plasticité, endommagement, barre, poutres, coques |
-| `constraint` | Dirichlet, multi-points, baignage, contact |
+| `constraint` | Dirichlet, multi-points, baignage ; contact, qui porte aussi `contact` |
 
 Les échanges et le flux imposé n'ont pas de tag propre : ils prennent celui de
 la physique qu'ils visent, `thermal` sur une conduction, `mechanical` sur une

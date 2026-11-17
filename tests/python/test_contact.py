@@ -138,6 +138,17 @@ def test_the_contact_carries_its_gap():
         assert abs(gaps.value(mult_mesh.node(0, r, 0), "imposed") + G0) < TOL
 
 
+def test_filter_contact_keeps_the_contacts_alone():
+    """A contact carries the natures of a constraint and `"contact"`: the
+    constraints keep it, `filter("contact")` finds it alone."""
+    _c, _bottom, _top, model, contact, _materials = _two_blocks()
+    assert contact.unit().physics() == ["constraint", "mechanical", "contact"]
+    contacts = model.filter("contact")
+    assert [sub.label() for sub in contacts] == ["Contact"]
+    assert len(model.filter("constraint")) == 3
+    assert len(model.exclude("contact")) == len(model) - 1
+
+
 def test_components_must_match_dimension():
     """One (variable, dual) pair per space dimension, in ambient order."""
     c = pyrucast.Coords(2)
@@ -150,6 +161,24 @@ def test_components_must_match_dimension():
     barre = pyrucast.model.truss(pyrucast.FiniteElementSpace(master))
     with pytest.raises(Exception, match="component"):
         pyrucast.model.contact(slave, master, barre, ["u_y"])
+
+
+def test_a_contact_holds_displacements_only():
+    """Two diffused species give one unknown per dimension, but no body: a
+    contact on them is refused."""
+    c = pyrucast.Coords(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    s = c.add_node([0.5, 0.5])
+    master = pyrucast.Mesh(c, "SEG2")
+    master.unit().add_cell([a, b])
+    slave = pyrucast.mesh.poi1_from_nodes([s])
+    fes = pyrucast.FiniteElementSpace(master)
+    species = pyrucast.model.fick(fes, "a") | pyrucast.model.fick(fes, "b")
+    names = list(species.primal_vars())
+    assert len(names) == 2
+    with pytest.raises(Exception, match="not the displacements of a mechanical model"):
+        pyrucast.model.contact(slave, master, species, names)
 
 
 def test_update_contact_pairs_the_slaves_again():

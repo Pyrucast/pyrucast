@@ -332,6 +332,24 @@ def test_matrix_mul_field_returns_matrix_vector_product():
     assert y.value(b, "q") == 1.0
 
 
+def test_an_empty_matrix_adds_and_multiplies_as_zero():
+    """`Matrix.empty()` is zero: it adds nothing to a matrix, and its product
+    with a field is an empty field."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    block = _make_block(c, [a], [a], ["q"], ["T"], symmetry="full")
+    block.add_entry(a, "q", a, "T", 2.0)
+    k = pyrucast.Matrix.empty()
+    k.add_sub(block)
+    k.assemble()
+    x_mesh = pyrucast.Mesh(c, "POI1")
+    x_mesh.unit().add_cell([a])
+    x = pyrucast.NodeField(x_mesh, [("T", 1.0)])
+
+    assert len(pyrucast.Matrix.empty() * x) == 0
+    assert ((k + pyrucast.Matrix.empty()) * x).value(a, "q") == 2.0
+
+
 def test_matrix_mul_and_truediv_scale_by_factor():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
