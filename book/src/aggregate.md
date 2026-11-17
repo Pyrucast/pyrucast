@@ -16,6 +16,7 @@ porter la même zone, et la modifier par l'un se voit par l'autre.
 
 | Opération | Sens |
 |---|---|
+| `Type.empty()` | un agrégat sans zone (`Mesh.empty()`, `NodeField.empty()`…), que `\|` ou `add_sub` complètent |
 | `len(agg)` | nombre de zones |
 | `agg[i]` | **vue** sur la zone `i` (un `Sub…`) — jamais une copie |
 | `agg[i:j:k]` | **nouvel agrégat** du même type portant ces zones (slicing Python : pas, bornes négatives) |
@@ -117,7 +118,7 @@ de références de leur `Handle`, ce qui explique qu'il ne les copie jamais.
 Tout le contrat est porté par le trait `Aggregate` (`src/aggregate.rs`), qui
 le dérive de deux accesseurs, `items()` et `items_mut()` : `len`, `is_empty`,
 `get(i)`, `subset(indices)` (sur lequel s'appuie le slicing Python), `iter`,
-`unit`, `push`, `add_sub` / `add_subs`, `deduplicate`, et l'union sous des noms explicites —
+`empty`, `unit`, `push`, `add_sub` / `add_subs`, `deduplicate`, et l'union sous des noms explicites —
 `a.union(&b)`, `a.union_sub(&h)` (zone en queue), `a.union_sub_first(&h)`
 (zone en tête), `T::union_subs(&a, &b)`. « Pas de doublon » y veut dire : pas
 deux `Handle` sur le même objet (`Handle::same_object`). Deux points de

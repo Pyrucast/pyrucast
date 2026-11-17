@@ -1,6 +1,5 @@
 //! Python wrappers for [`crate::containers::model::SubModel`] and [`crate::containers::model::Model`].
 
-use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::model::{Model, SubModel};
 use crate::handle::Handle;
@@ -109,14 +108,6 @@ pub struct PyModel {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyModel {
-    /// `Model()` — an empty model; add physics with `|`.
-    #[new]
-    fn py_new() -> Self {
-        Self {
-            inner: Model::empty(),
-        }
-    }
-
     /// Names of the primal (primary) variables across the whole model.
     fn primal_vars(&self) -> Vec<String> {
         self.inner.primal_vars()

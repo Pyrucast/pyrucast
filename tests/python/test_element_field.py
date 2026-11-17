@@ -57,6 +57,16 @@ def test_a_component_given_a_value_holds_it_at_every_gauss_point():
     assert ef.min("sigma_y") == ef.max("sigma_y") == 0.0
 
 
+def test_an_empty_field_takes_zones_with_the_union():
+    _, _, fes = _tri3_subspace()
+    empty = pyrucast.ElementField.empty()
+    assert len(empty) == 0
+    assert empty.components() == []
+    filled = empty | pyrucast.ElementField(fes, [("E", 1.0)])
+    assert len(filled) == 1
+    assert filled.max("E") == 1.0
+
+
 def test_new_zero_initialized():
     _, _, fes = _tri3_subspace()
     f = _subfield(fes, ["E", "nu"])

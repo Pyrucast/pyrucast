@@ -261,7 +261,14 @@ print(len(tri))  # 2 sous-maillages
 # A zone listed twice, kept once, where it came first.
 tri.add_subs(qua)
 print(len(tri), len(tri.deduplicate()))  # 3 2
+
+# An aggregate without any zone, filled here by the union.
+tout = pyrucast.Mesh.empty()
+for zone_mesh in (tri, qua):
+    tout = tout | zone_mesh
+print(len(tout))  # 2 sous-maillages
 # ANCHOR_END: aggregat
+assert len(tout) == 2
 assert len(mesh) == 2
 assert len(tri) == 3
 assert len(tri.deduplicate()) == 2
@@ -356,6 +363,12 @@ T.check()  # les deux zones s'accordent de nouveau
 # Une liste de composantes par zone.
 mixte = pyrucast.NodeField.with_components_per_submesh(carre, [["T", "ux"], ["T"]])
 print(mixte.components())  # ['T', 'ux']
+
+# Un champ vide, que l'union complète : les zones d'un même support fusionnent.
+cumul = pyrucast.NodeField.empty()
+for nom in ("q_x", "q_y"):
+    cumul = cumul | pyrucast.NodeField(carre, [nom])
+print(len(cumul), cumul.components())  # 2 ['q_x', 'q_y']
 # ANCHOR_END: node_field_api
 assert T.values([a, b, d, e], "T") == [20.0, 20.0, 30.0, 25.0]
 assert T.sum("T") == 95.0
@@ -561,6 +574,9 @@ print(mat.max("E"), mat.min("E"))  # 210000000000.0 70000000000.0
 # Une liste de composantes par sous-espace (fes n'en a qu'un).
 cond = pyrucast.ElementField.with_components_per_subspace(fes, [["k"]])
 print(cond.components())  # ['k']
+
+# Un champ vide, que l'union complète.
+print(len(pyrucast.ElementField.empty() | cond))  # 1
 # ANCHOR_END: element_field_api
 assert mat[0].value(1, 1, "E") == 70e9
 assert mat.components() == ["E", "nu"]

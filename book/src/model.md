@@ -32,7 +32,7 @@ de zones.
 
 On compose les modèles avec `|`, qui rend un nouveau modèle : les sous-modèles
 des deux côtés, dans l'ordre, sans répéter un sous-modèle déjà présent.
-`Model()` est un modèle vide ; `add_sub` et `add_subs` ajoutent des
+`Model.empty()` est un modèle vide ; `add_sub` et `add_subs` ajoutent des
 sous-modèles en place. Tous les sous-modèles d'un modèle vivent dans un même
 `Coords` : en composer deux de `Coords` différents est refusé.
 

@@ -264,17 +264,14 @@ pub struct PyMesh {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyMesh {
-    /// `Mesh(coords)` — empty mesh.
-    /// `Mesh(coords, element_type)` — mesh with one pre-created submesh.
+    /// `Mesh(coords, element_type)` — a mesh of one empty zone of that type,
+    /// whose cells `add_cell` lays. `Mesh.empty()` gives a mesh without any
+    /// zone.
     #[new]
-    #[pyo3(signature = (coords, element_type=None))]
-    fn py_new(coords: PyRef<PyCoords>, element_type: Option<ElementType>) -> Self {
-        let coords = coords.handle.clone();
-        let mesh = match element_type {
-            Some(et) => Mesh::from_submesh(SubMesh::new(coords, et)),
-            None => Mesh::empty(),
-        };
-        Self { inner: mesh }
+    fn py_new(coords: PyRef<PyCoords>, element_type: ElementType) -> Self {
+        Self {
+            inner: Mesh::from_submesh(SubMesh::new(coords.handle.clone(), element_type)),
+        }
     }
 
     /// Element type name of each submesh, in order.

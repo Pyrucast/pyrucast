@@ -22,7 +22,7 @@ aux tests.
 ## Créer et lire un maillage
 
 `pyrucast.Mesh(coords, "TRI3")` crée un maillage d'**une** zone vide de ce type
-(`pyrucast.Mesh(coords)`, sans type, un maillage sans zone). `mesh.unit()`
+(`pyrucast.Mesh.empty()`, un maillage sans zone). `mesh.unit()`
 atteint cette zone, et `zone.add_cell([n0, n1, n2])` y pose une maille et rend
 son indice. Les nœuds se donnent dans l'**ordre local** de l'élément, celui
 que décrit sa [fiche](elements/index.md), section « Élément de

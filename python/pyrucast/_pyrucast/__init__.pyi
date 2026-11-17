@@ -657,6 +657,11 @@ class ElementField:
         twice a zone two physics share; deduplicated, a field can be
         built on it.
         """
+    @staticmethod
+    def empty() -> ElementField:
+        r"""
+        An aggregate without any zone, which `|` or `add_sub` fill.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -1233,6 +1238,11 @@ class Evolution:
         twice a zone two physics share; deduplicated, a field can be
         built on it.
         """
+    @staticmethod
+    def empty() -> Evolution:
+        r"""
+        An aggregate without any zone, which `|` or `add_sub` fill.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -1343,6 +1353,11 @@ class FiniteElementSpace:
         A mesh built one zone per subspace (`fespace.mesh()`) lists
         twice a zone two physics share; deduplicated, a field can be
         built on it.
+        """
+    @staticmethod
+    def empty() -> FiniteElementSpace:
+        r"""
+        An aggregate without any zone, which `|` or `add_sub` fill.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -1585,6 +1600,11 @@ class Matrix:
         twice a zone two physics share; deduplicated, a field can be
         built on it.
         """
+    @staticmethod
+    def empty() -> Matrix:
+        r"""
+        An aggregate without any zone, which `|` or `add_sub` fill.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -1707,10 +1727,11 @@ class Mesh:
         r"""
         Total number of cells across all submeshes.
         """
-    def __new__(cls, coords: Coords, element_type: typing.Optional[builtins.str] = None) -> Mesh:
+    def __new__(cls, coords: Coords, element_type: builtins.str) -> Mesh:
         r"""
-        `Mesh(coords)` — empty mesh.
-        `Mesh(coords, element_type)` — mesh with one pre-created submesh.
+        `Mesh(coords, element_type)` — a mesh of one empty zone of that type,
+        whose cells `add_cell` lays. `Mesh.empty()` gives a mesh without any
+        zone.
         """
     def element_types(self) -> builtins.list[builtins.str]:
         r"""
@@ -1826,6 +1847,11 @@ class Mesh:
         A mesh built one zone per subspace (`fespace.mesh()`) lists
         twice a zone two physics share; deduplicated, a field can be
         built on it.
+        """
+    @staticmethod
+    def empty() -> Mesh:
+        r"""
+        An aggregate without any zone, which `|` or `add_sub` fill.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -3030,10 +3056,6 @@ class Model:
     (`model.heat_conduction(fes)`, `model.dirichlet(...)`) and compose them
     with `|`; assemble with `stiffness` / `mass`.
     """
-    def __new__(cls) -> Model:
-        r"""
-        `Model()` — an empty model; add physics with `|`.
-        """
     def primal_vars(self) -> builtins.list[builtins.str]:
         r"""
         Names of the primal (primary) variables across the whole model.
@@ -3164,6 +3186,11 @@ class Model:
         A mesh built one zone per subspace (`fespace.mesh()`) lists
         twice a zone two physics share; deduplicated, a field can be
         built on it.
+        """
+    @staticmethod
+    def empty() -> Model:
+        r"""
+        An aggregate without any zone, which `|` or `add_sub` fill.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -3861,6 +3888,11 @@ class NodeField:
         A mesh built one zone per subspace (`fespace.mesh()`) lists
         twice a zone two physics share; deduplicated, a field can be
         built on it.
+        """
+    @staticmethod
+    def empty() -> NodeField:
+        r"""
+        An aggregate without any zone, which `|` or `add_sub` fill.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...

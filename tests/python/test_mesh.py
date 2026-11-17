@@ -607,7 +607,7 @@ def test_repr_str_submesh_and_mesh():
     sm = pyrucast.Mesh(c, "SEG2")[0]
     assert "SubMesh" in repr(sm)
     assert "SEG2" in str(sm)
-    mesh = pyrucast.Mesh(c)
+    mesh = pyrucast.Mesh.empty()
     assert "Mesh" in repr(mesh)
     assert "submesh" in str(mesh)
 

@@ -21,7 +21,8 @@ cette page en donne ce qui est propre aux nœuds.
 `pyrucast.NodeField(maillage, [("T", 20.0), "ux"])` crée une zone par zone du
 maillage, avec ces composantes ; sur une seule zone de maillage (`SubMesh`), le
 champ a une zone. Un couple `(nom, valeur)` donne à la composante cette valeur
-en tout nœud, un nom seul la met à zéro.
+en tout nœud, un nom seul la met à zéro. `pyrucast.NodeField.empty()` est un
+champ vide, que `|` complète.
 `NodeField.with_components_per_submesh(maillage, [["T", "ux"], ["T"]])` donne
 une liste de composantes **par** zone. Une liste vide, un nom en double, un
 nombre de listes qui ne correspond pas aux zones ou un maillage qui liste deux

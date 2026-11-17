@@ -49,6 +49,16 @@ def test_a_component_given_a_value_holds_it_at_every_node():
         pyrucast.NodeField(mesh, [("T", "hot")])
 
 
+def test_an_empty_field_takes_zones_with_the_union():
+    _, nodes, mesh = _two_zone_mesh()
+    empty = pyrucast.NodeField.empty()
+    assert len(empty) == 0
+    assert empty.components() == []
+    filled = empty | pyrucast.NodeField(mesh, [("T", 2.0)])
+    assert len(filled) == 2
+    assert filled.values(nodes, "T") == [2.0] * 4
+
+
 def test_from_mesh_zero_initialized():
     _c, _nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["T"])

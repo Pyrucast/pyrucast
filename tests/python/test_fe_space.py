@@ -141,8 +141,7 @@ def test_rejects_mesh_with_poi1_submesh():
 
 
 def test_rejects_empty_mesh():
-    c = pyrucast.Coords(2)
-    mesh = pyrucast.Mesh(c)
+    mesh = pyrucast.Mesh.empty()
     try:
         pyrucast.FiniteElementSpace(mesh)
     except RuntimeError:

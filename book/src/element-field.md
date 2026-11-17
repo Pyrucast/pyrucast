@@ -32,6 +32,7 @@ champs (composantes, statistiques, arithmétique) sont décrites dans
 `pyrucast.ElementField(fes, [("E", 210e9), "nu"])` crée une zone par
 sous-espace de `fes`, avec ces composantes. Un couple `(nom, valeur)` donne à la
 composante cette valeur en tout point de Gauss, un nom seul la met à zéro.
+`pyrucast.ElementField.empty()` est un champ vide, que `|` complète.
 `ElementField.with_components_per_subspace(fes, [["E", "nu"], ["k"]])` donne
 une liste de composantes **par** sous-espace. Une liste vide, un nom en double
 ou un nombre de listes qui ne correspond pas aux sous-espaces sont refusés.

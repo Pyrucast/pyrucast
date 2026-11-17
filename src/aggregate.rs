@@ -732,6 +732,14 @@ macro_rules! impl_aggregate_pymethods {
                     }
                 }
 
+                /// An aggregate without any zone, which `|` or `add_sub` fill.
+                #[staticmethod]
+                fn empty() -> Self {
+                    Self {
+                        inner: $crate::aggregate::Aggregate::empty(),
+                    }
+                }
+
                 fn __repr__(&self) -> pyo3::PyResult<String> {
                     Ok(format!("{:?}", self.inner))
                 }
