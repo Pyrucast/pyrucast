@@ -22,8 +22,8 @@ fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) {
 
 /// Restrict `field` to the nodes used by `mesh`, with every component of `field`.
 ///
-/// Returns a new [`NodeField`] with one zone per submesh of `mesh`. Each zone
-/// is supported on the submesh's **canonical POI1 node cloud** — its distinct
+/// Returns a new [`NodeField`] with one zone per submesh of `mesh`, each
+/// submesh once: one listed twice gives one zone. Each zone is supported on the submesh's **canonical POI1 node cloud** — its distinct
 /// nodes, via [`SubMesh::to_poi1`](crate::containers::mesh::SubMesh::to_poi1),
 /// which is materialised once and cached. Two restrictions onto the **same**
 /// `mesh` therefore land on the **same support slot** and combine directly by
@@ -103,7 +103,7 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
     let components = Field::components(field);
     let view = field.view();
     let mut out = NodeField::default();
-    for sm in mesh {
+    for sm in &mesh.deduplicate() {
         let mut sub = SubNodeField::from_support(sm, components.clone())?;
         fill_from(&mut sub, &view);
         out.add_sub(Handle::new(sub))?;
@@ -278,6 +278,20 @@ mod tests {
         assert_eq!(r.node_count(), 2);
         assert_eq!(r.value(nodes[0].id(), "T").unwrap(), 7.0);
         assert_eq!(r.value(nb.id(), "T").unwrap(), 0.0);
+    }
+
+    #[test]
+    fn restrict_onto_a_submesh_listed_twice_gives_one_zone() {
+        let (coords, nodes, f) = poi1_field(2, vec!["T".into()]);
+        let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+        sm.add_cell(&[nodes[0].id()]).unwrap();
+        let sm = Handle::new(sm);
+        let mut twice = Mesh::empty();
+        twice.add_sub(sm.clone()).unwrap();
+        twice.add_sub(sm).unwrap();
+        let r = restrict(&f, &twice).unwrap();
+        assert_eq!(r.len(), 1, "each submesh once");
+        assert_eq!(r.node_count(), 1);
     }
 
     #[test]

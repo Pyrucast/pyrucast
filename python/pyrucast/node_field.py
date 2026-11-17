@@ -18,12 +18,16 @@ from ._pyrucast import (
     merge,
     positions,
     project,
-    restrict,
-    restrict_like,
     sum_to_nodes,
 )
 from ._pyrucast import (
     mask_node as mask,
+)
+from ._pyrucast import (
+    restrict_like_node as restrict_like,
+)
+from ._pyrucast import (
+    restrict_node as restrict,
 )
 
 __all__ = [

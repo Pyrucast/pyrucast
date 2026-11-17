@@ -1136,3 +1136,19 @@ def test_norm_measures_the_components_named():
     # A name the field does not carry is ignored.
     assert f.norm(components=["nope"]) == 0.0
     assert f.norm(components=["T", "nope"]) == 2.0
+
+
+def test_restrict_onto_a_submesh_listed_twice_gives_one_zone():
+    """A mesh listing one submesh twice (as `fes.mesh()` does for a zone two
+    physics share): one zone, no error."""
+    c = pyrucast.Coords(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    line = pyrucast.mesh.line(a, b, 2)
+    twice = pyrucast.Mesh.empty()
+    twice.add_subs(line)
+    twice.add_subs(line)
+    t = pyrucast.NodeField(line, [("T", 3.0)])
+    r = pyrucast.node_field.restrict(t, twice)
+    assert len(r) == 1
+    assert r.value(a, "T") == 3.0

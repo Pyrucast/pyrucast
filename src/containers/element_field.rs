@@ -90,11 +90,15 @@
 //! ```
 
 use crate::aggregate::Aggregate;
-use crate::containers::field::SubField;
+use crate::atoms::NodeId;
+use crate::containers::field::{SubField, ABSENT_COMPONENT};
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+use crate::containers::mesh::SubMesh;
 use crate::error::{PyrucastError, Result};
-use crate::handle::Handle;
+use crate::handle::{Handle, ReadGuard};
+use crate::parallel::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt;
 
 // ─── SubElementField ───────────────────────────────────────────────────────
@@ -1083,6 +1087,141 @@ impl ElementFieldView {
             }
         }
         None
+    }
+
+    /// Gather the requested components at the Gauss points of every cell of
+    /// `target` into `out` — cell by cell, then point, then component: the
+    /// layout of a zone on `target`.
+    ///
+    /// A zone of this view gives values to `target` only under the **same
+    /// finite-element definition** — same element type, interpolation and
+    /// quadrature, on the same `Coords` — checked once per zone before any cell
+    /// is looked at; any other zone is not read. Such a zone gives a cell of
+    /// `target` when it holds the same cell: the same nodes in the same order. A
+    /// zone on the same submesh as `target` holds cell `i` as its own cell `i`;
+    /// any other finds it through a table of its cells, built once per submesh.
+    ///
+    /// For each component, the first zone that holds the cell and carries the
+    /// component wins, as [`NodeFieldView::value_at_slot`] does for a node. A
+    /// component no zone gives at a cell keeps what `out` holds — `0.0` for a
+    /// fresh zone. `reads` comes from
+    /// [`resolve_reads`](crate::containers::field::FieldView::resolve_reads).
+    ///
+    /// The pendant of [`NodeFieldView::gather_cell`], over all the cells of a
+    /// subspace at once: the zones that may give and their tables are prepared
+    /// for that subspace, then the cells are filled in parallel, each by one
+    /// task.
+    ///
+    /// [`NodeFieldView::value_at_slot`]: crate::containers::node_field::NodeFieldView::value_at_slot
+    /// [`NodeFieldView::gather_cell`]: crate::containers::node_field::NodeFieldView::gather_cell
+    pub(crate) fn gather_cells(
+        &self,
+        target: &Handle<SubFiniteElementSpace>,
+        reads: &[Vec<u32>],
+        out: &mut [f64],
+    ) {
+        let (definition, coords, n_gauss, target_mesh) = {
+            let t = target.read();
+            (
+                (t.element_type(), t.interpolation(), t.quadrature()),
+                t.coords(),
+                t.gauss_count(),
+                t.submesh(),
+            )
+        };
+        let n_out = reads.first().map_or(0, Vec::len);
+
+        // 1. The zones that may give: same definition, and at least one of the
+        //    requested components — with the (column read, column written)
+        //    pairs each gives, and its submesh.
+        let mut sources: Vec<(usize, Vec<(usize, usize)>, Handle<SubMesh>)> = Vec::new();
+        for (z, zone) in self.zones.iter().enumerate() {
+            let columns: Vec<(usize, usize)> = reads[z]
+                .iter()
+                .enumerate()
+                .filter(|&(_, &ci)| ci != ABSENT_COMPONENT)
+                .map(|(c, &ci)| (ci as usize, c))
+                .collect();
+            if columns.is_empty() {
+                continue;
+            }
+            let support = zone.support();
+            let same = support.same_object(target) || {
+                let s = support.read();
+                (s.element_type(), s.interpolation(), s.quadrature()) == definition
+                    && s.coords().same_object(&coords)
+            };
+            if same {
+                let submesh = support.read().submesh();
+                sources.push((z, columns, submesh));
+            }
+        }
+        if sources.is_empty() || n_out == 0 || n_gauss == 0 {
+            return;
+        }
+
+        // 2. How each source finds a cell of `target`: by its rank on the same
+        //    submesh (`None`), or through the table of its submesh — one table
+        //    per distinct submesh, read in place under its guard.
+        let npc = definition.0.nodes_per_cell();
+        let mut meshes: Vec<Handle<SubMesh>> = Vec::new();
+        let locate: Vec<Option<usize>> = sources
+            .iter()
+            .map(|(_, _, m)| {
+                if m.same_object(&target_mesh) {
+                    return None;
+                }
+                Some(match meshes.iter().position(|x| x.same_object(m)) {
+                    Some(k) => k,
+                    None => {
+                        meshes.push(m.clone());
+                        meshes.len() - 1
+                    }
+                })
+            })
+            .collect();
+        let guards: Vec<ReadGuard<SubMesh>> = meshes.iter().map(|m| m.read()).collect();
+        // From the last cell to the first: a cell listed twice finds its first.
+        let tables: Vec<HashMap<&[NodeId], u32>> = guards
+            .iter()
+            .map(|g| {
+                g.connectivity()
+                    .chunks_exact(npc)
+                    .enumerate()
+                    .rev()
+                    .map(|(i, cell)| (cell, i as u32))
+                    .collect()
+            })
+            .collect();
+
+        // 3. Cell by cell, in parallel. The sources go from last to first, so
+        //    the first one holding the cell writes each of its components last.
+        let target_guard = target_mesh.read();
+        let connectivity = target_guard.connectivity();
+        let row = n_gauss * n_out;
+        out.par_chunks_mut(row)
+            .with_min_len((MIN_PARALLEL_LEN / row).max(1))
+            .enumerate()
+            .for_each(|(t, dst)| {
+                let cell = &connectivity[t * npc..(t + 1) * npc];
+                for ((z, columns, _), at) in sources.iter().zip(&locate).rev() {
+                    let s = match at {
+                        None => t,
+                        Some(k) => match tables[*k].get(cell) {
+                            Some(&s) => s as usize,
+                            None => continue,
+                        },
+                    };
+                    let zone = &self.zones[*z];
+                    let stride = zone.component_count();
+                    let src = &zone.values()[s * n_gauss * stride..(s + 1) * n_gauss * stride];
+                    for g in 0..n_gauss {
+                        for &(ci, c) in columns {
+                            dst[g * n_out + c] = src[g * stride + ci];
+                        }
+                    }
+                }
+            });
     }
 }
 

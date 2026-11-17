@@ -269,6 +269,8 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesh::consolidate, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::consolidate, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::consolidate, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::restrict, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::restrict_like, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::positions, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::coords::set, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::coords::displace, m)?)?;

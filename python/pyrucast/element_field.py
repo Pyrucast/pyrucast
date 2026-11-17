@@ -34,6 +34,12 @@ from ._pyrucast import (
 from ._pyrucast import (
     mask_element as mask,
 )
+from ._pyrucast import (
+    restrict_element as restrict,
+)
+from ._pyrucast import (
+    restrict_like_element as restrict_like,
+)
 
 __all__ = [
     "beam_deformation",
@@ -49,6 +55,8 @@ __all__ = [
     "mask",
     "material_field",
     "material_field_per_sub_model",
+    "restrict",
+    "restrict_like",
     "rotate_frame",
     "shell_deformation",
     "strain",

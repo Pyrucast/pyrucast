@@ -66,8 +66,9 @@ pub fn positions(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResu
 ///
 /// # Returns
 ///
-/// A new `NodeField` with one zone per submesh of `mesh`, each carrying the
-/// union of the components of `field`. A node of `mesh` the field does not
+/// A new `NodeField` with one zone per submesh of `mesh`, each submesh once
+/// (one listed twice gives one zone), each carrying the union of the
+/// components of `field`. A node of `mesh` the field does not
 /// define gets `0.0`; the nodes outside `mesh` are dropped. An empty field
 /// carries no component, and gives an empty field, as with `restrict_like`.
 ///
@@ -77,6 +78,7 @@ pub fn positions(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResu
 #[py_op(method_on = PyNodeField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
+#[pyo3(name = "restrict_node")]
 pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNodeField> {
     Ok(PyNodeField {
         inner: crate::ops::node_field::restrict(&field.inner, &mesh.inner)?,
@@ -281,6 +283,7 @@ pub fn project_sub_element(
 #[py_op(method_on = PyNodeField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
+#[pyo3(name = "restrict_like_node")]
 pub fn restrict_like(
     field: PyRef<PyNodeField>,
     target: PyRef<PyNodeField>,

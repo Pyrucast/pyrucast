@@ -612,3 +612,70 @@ def test_a_field_is_not_built_on_a_subspace_listed_twice():
     with pytest.raises(RuntimeError, match="subspaces 0 and 1"):
         pyrucast.ElementField(fes, ["E"])
     assert len(pyrucast.ElementField(fes | fes, ["E"])) == 1
+
+
+def _grid_and_rank():
+    """A 2×2 QUA4 grid (cells 0, 1 below, 2, 3 above), its left column `sel`
+    (cells 0 and 2), its space `fes`, and `k`: the rank of the cell at each
+    Gauss point."""
+    c = pyrucast.Coords(2)
+    n = [c.add_node([float(i % 3), float(i // 3)]) for i in range(9)]
+    grid = pyrucast.Mesh(c, "QUA4")
+    for i, j in [(0, 0), (1, 0), (0, 1), (1, 1)]:
+        m = 3 * j + i
+        grid.unit().add_cell([n[m], n[m + 1], n[m + 4], n[m + 3]])
+    sel = pyrucast.mesh.elements_on(
+        grid, pyrucast.mesh.poi1_from_nodes([n[i] for i in (0, 1, 3, 4, 6, 7)])
+    )
+    fes = pyrucast.FiniteElementSpace(grid)
+    k = pyrucast.ElementField(fes, ["k"])
+    for cell in range(4):
+        k[0].set_cell_uniform(cell, "k", float(cell))
+    return grid, sel, fes, k
+
+
+def _per_cell(field, component):
+    zone = field[0]
+    return [zone.value(cell, 0, component) for cell in range(zone.cell_count)]
+
+
+def test_restrict_onto_a_second_space_of_the_same_mesh():
+    """Two spaces on one mesh: the values pass, and the result adds to a field
+    of the second space point by point, in one zone."""
+    grid, _, fes, k = _grid_and_rank()
+    other = pyrucast.FiniteElementSpace(grid)
+    assert len(k + pyrucast.ElementField(other, [("k", 1.0)])) == 2
+    moved = pyrucast.element_field.restrict(k, other)
+    total = moved + pyrucast.ElementField(other, [("k", 1.0)])
+    assert len(total) == 1
+    assert _per_cell(total, "k") == [1.0, 2.0, 3.0, 4.0]
+
+
+def test_restrict_onto_a_selection_and_back():
+    """On the left column: cells 0 and 2. Read back on the grid, the cells the
+    selection lacks are 0."""
+    _, sel, fes, k = _grid_and_rank()
+    part = fes.restrict(sel)
+    left = k.restrict(part)
+    assert _per_cell(left, "k") == [0.0, 2.0]
+    assert _per_cell(left.restrict(fes), "k") == [0.0, 0.0, 2.0, 0.0]
+
+
+def test_restrict_does_not_read_another_definition():
+    """A REDUCED space is another definition: nothing is read, all is 0."""
+    grid, _, _, k = _grid_and_rank()
+    reduced = pyrucast.FiniteElementSpace(grid, quadrature="REDUCED")
+    r = pyrucast.element_field.restrict(k, reduced)
+    assert r[0].gauss_count == 1
+    assert _per_cell(r, "k") == [0.0] * 4
+
+
+def test_restrict_like_takes_the_target_components():
+    """The components of the target, those `k` lacks at 0."""
+    grid, _, _, k = _grid_and_rank()
+    target = pyrucast.ElementField(pyrucast.FiniteElementSpace(grid), ["q", "k"])
+    r = pyrucast.element_field.restrict_like(k, target)
+    assert r.components() == ["q", "k"]
+    assert _per_cell(r, "k") == [0.0, 1.0, 2.0, 3.0]
+    assert _per_cell(r, "q") == [0.0] * 4
+    assert len(target + r) == 1

@@ -23,7 +23,10 @@
 //!   [`crate::ops::matrix::stiffness`] linearization;
 //! - [`cell_integral`](fn@cell_integral), one integral per cell (Cast3M
 //!   `INTG 'ELEM'`);
-//! - [`consolidate`](fn@consolidate), the aggregate-level fusion.
+//! - [`consolidate`](fn@consolidate), the aggregate-level fusion;
+//! - [`restrict`](fn@restrict) and [`restrict_like`](fn@restrict_like), a
+//!   field read on other subspaces with the same cells and the same
+//!   finite-element definition.
 
 pub mod beam_deformation;
 pub mod behavior;
@@ -37,6 +40,7 @@ pub mod interp_to_gauss;
 pub mod mask;
 pub mod material_field;
 pub mod methods;
+pub mod restrict;
 pub mod rotate_frame;
 pub mod shell_deformation;
 pub mod strain;
@@ -54,6 +58,7 @@ pub use gradient::gradient;
 pub use interp_to_gauss::interp_to_gauss;
 pub use mask::{mask, mask_sub};
 pub use material_field::{material_field, material_field_per_sub_model, sub_material_field};
+pub use restrict::{restrict, restrict_like};
 pub use rotate_frame::rotate_frame;
 pub use shell_deformation::shell_deformation;
 pub use strain::strain;

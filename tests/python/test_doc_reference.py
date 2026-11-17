@@ -80,6 +80,32 @@ assert partie[0].cell_count == 1
 assert partie[0].interpolation == fes[0].interpolation
 assert partie[0].quadrature == fes[0].quadrature
 
+# ── element_field ───────────────────────────────────────────────────────────
+
+_, mesh, fes, n = _plaque()
+k = pyrucast.ElementField(fes, ["k"])
+k[0].set_cell_uniform(1, "k", 5.0)
+droite = pyrucast.mesh.elements_on(
+    mesh, pyrucast.mesh.poi1_from_nodes([n[1], n[2], n[4], n[5]])
+)
+# ANCHOR: element_field-restrict
+# The field on the right cell alone: its own values, at each Gauss point.
+partie = pyrucast.element_field.restrict(k, fes.restrict(droite))
+print(partie[0].cell_count, partie[0].value(0, 0, "k"))  # 1 5.0
+# ANCHOR_END: element_field-restrict
+assert partie[0].cell_count == 1
+assert partie[0].value(0, 0, "k") == 5.0
+
+autre = pyrucast.ElementField(pyrucast.FiniteElementSpace(mesh), [("k", 1.0)])
+# ANCHOR: element_field-restrict_like
+# Two spaces on one mesh: read on `autre`'s subspaces and components, `k` adds
+# to it point by point.
+somme = autre + pyrucast.element_field.restrict_like(k, autre)
+print(len(somme), somme[0].value(1, 0, "k"))  # 1 6.0
+# ANCHOR_END: element_field-restrict_like
+assert len(somme) == 1
+assert somme[0].value(1, 0, "k") == 6.0
+
 # ── node_field ──────────────────────────────────────────────────────────────
 
 _, mesh, fes, n = _plaque()

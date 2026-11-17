@@ -235,6 +235,8 @@ par la sortie.
 | `shell_deformation(field: &NodeField, fespace: &FiniteElementSpace, formulation: ShellFormulation) -> ElementField` | `shell_deformation(field, fespace, formulation) -> ElementField` |
 | `beam_deformation(field: &NodeField, fespace: &FiniteElementSpace, material: &ElementField) -> ElementField` | `beam_deformation(field, fespace, material) -> ElementField` (1-D, plan ou spatial selon le maillage ; le matériau est requis, l'interpolation dépendant de `Φ`) |
 | `consolidate(field: &ElementField) -> ElementField` | `consolidate(field) -> ElementField` (fusionne les zones d'une même fespace) |
+| `restrict(field: &ElementField, fespace: &FiniteElementSpace) -> ElementField` | `restrict(field, fespace) -> ElementField` |
+| `restrict_like(field: &ElementField, target: &ElementField) -> ElementField` | `restrict_like(field, target) -> ElementField` |
 | `mask(field: &ElementField, band: &Band, …) -> ElementField` / `mask_sub(sub: &SubElementField, …) -> SubElementField` | `mask(field, ge=None, …) -> ElementField` ; accepte aussi un `SubElementField` |
 | `sub_material_field(sub: &SubModel, components_and_values: &[(&str, f64)]) -> SubElementField` | `sub_material_field(sub_model, components_and_values) -> SubElementField` |
 | `material_field(model: &Model, components_and_values: &[(&str, f64)]) -> ElementField` | `material_field(model, components_and_values) -> ElementField` |

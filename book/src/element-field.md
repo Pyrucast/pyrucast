@@ -58,6 +58,7 @@ bornes ou une composante inconnue lèvent une erreur.
 | `champ["c"]`, `filter_components([…])`, `rename_component(a, b)` | un champ réduit à ces composantes, ou une composante renommée |
 | `add_to_component(c, s)`, `mul_to_component(c, s)`… | une opération sur une composante, en place |
 | `consolidate()` | fond les zones posées sur un même sous-espace (voir [Combiner](#combiner-des-champs)) |
+| `restrict(espace)`, `restrict_like(cible)` | le champ relu sur d'autres sous-espaces, à mailles et définition égales (voir [Le support](#le-support--un-espace-éléments-finis)) |
 | `plot(…)` | le tracé, voir [Visualisation](#visualisation) |
 
 | `SubElementField` (zone) | |
@@ -115,10 +116,23 @@ zone, dans l'ordre (`champ.support()[i]` est `champ[i].support()`), et
 construit dessus se combine point à point avec le premier. Deux zones posées sur
 un même sous-espace le citent deux fois ; `s | s` le garde une fois.
 
-Un champ reste sur sa quadrature : aucun opérateur ne transporte des valeurs
-d'une quadrature à une autre. Pour obtenir un champ sur un autre espace, on
-l'interpole depuis les nœuds (`interp_to_gauss`), ou on l'intègre maille par
-maille vers un espace à un point par maille (`cell_integral`).
+Pour relire un champ sur un autre espace qui a **les mêmes mailles et la même
+définition** (même type d'élément, même interpolation, même quadrature),
+`element_field.restrict(champ, espace)` le pose sur les sous-espaces de
+`espace`, avec toutes ses composantes. `element_field.restrict_like(champ,
+cible)` reprend en plus les composantes de `cible`, zone par zone, à 0 celles
+que le champ n'a pas : le résultat s'additionne alors toujours à `cible`. Une
+maille est la même quand elle a les mêmes nœuds dans le même ordre ; une
+maille que le champ ne donne pas vaut 0. Pour garder la partie d'un champ
+posée sur un maillage, on restreint d'abord son espace :
+`champ.restrict(champ.support().restrict(partie))` (voir [Espace éléments
+finis](fe-space.md#restreindre-un-espace)).
+
+Un champ reste en revanche sur sa quadrature : une zone d'une autre définition
+n'est pas lue, et aucun opérateur ne transporte des valeurs d'une quadrature à
+une autre. Pour obtenir un champ sur un autre espace, on l'interpole depuis les
+nœuds (`interp_to_gauss`), ou on l'intègre maille par maille vers un espace à un
+point par maille (`cell_integral`).
 
 Un champ garde son espace en vie, et l'espace garde son maillage et son
 `Coords` : qu'un script ne tienne plus de variable sur l'espace ou le maillage
@@ -168,7 +182,7 @@ champs](algorithmes/champs.md), [Construction](algorithmes/champs-materiau.md) e
 | matériau | `material_field(modele, [(nom, valeur)…])`, `material_field_per_sub_model`, `sub_material_field` |
 | d'un champ aux nœuds | `interp_to_gauss`, `gradient`, `deformation`, `beam_deformation`, `shell_deformation`, `strain` |
 | comportement | `integrate_behavior`, `elastic_stress`, `elastic_strain`, `thermal_strain`, `stress_measure`, `rotate_frame` |
-| d'un champ aux points de Gauss | `cell_integral`, `mask`, `consolidate` |
+| d'un champ aux points de Gauss | `cell_integral`, `mask`, `consolidate`, `restrict`, `restrict_like` |
 
 `material_field` crée une zone par sous-modèle qui consomme du matériau, sur
 l'espace de ce sous-modèle, et ignore les autres (Dirichlet…). Il refuse une

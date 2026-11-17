@@ -218,6 +218,31 @@ impl<S: Any + Send + Sync> FieldView<S> {
     }
 }
 
+impl<S: SubField + Any + Send + Sync> FieldView<S> {
+    /// Resolve `components` against every zone of this view — **once**, for the
+    /// whole gather that follows.
+    ///
+    /// Row `z` of the result gives, for zone `z`, the position of each requested
+    /// component, or [`ABSENT_COMPONENT`] where that zone does not carry it.
+    /// Without this, a gather compares component *names* at every node or point
+    /// of every cell, which is the same string comparison repeated for a
+    /// property of the zone.
+    pub(crate) fn resolve_reads(&self, components: &[String]) -> Vec<Vec<u32>> {
+        self.zones
+            .iter()
+            .map(|zone| {
+                components
+                    .iter()
+                    .map(|c| {
+                        zone.component_index(c)
+                            .map_or(ABSENT_COMPONENT, |i| i as u32)
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+}
+
 // ─── SubField ───────────────────────────────────────────────────────────────
 
 /// Marks a slot a field does not carry, in a table built by

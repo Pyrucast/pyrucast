@@ -186,7 +186,9 @@ que le champ restreint ne portait pas y vaut 0.
 ```
 
 Pour un champ aux points de Gauss, le support est le sous-espace : deux espaces
-construits sur le même maillage sont deux supports (voir [Champ aux points de
+construits sur le même maillage sont deux supports. `element_field.restrict(b,
+espace)` et `element_field.restrict_like(b, a)` y jouent le même rôle, à
+mailles et définition d'éléments finis égales (voir [Champ aux points de
 Gauss](element-field.md#le-support--un-espace-éléments-finis)).
 
 ### Fonctions mathématiques et masques

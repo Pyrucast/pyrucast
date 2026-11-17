@@ -72,6 +72,10 @@ RENAMED = {
     "mask_node": "mask",
     "mask_element": "mask",
     "restrict_fespace": "restrict",
+    "restrict_node": "restrict",
+    "restrict_like_node": "restrict_like",
+    "restrict_element": "restrict",
+    "restrict_like_element": "restrict_like",
 }
 
 # Whole Python modules without a method, with the reason. The waiver holds by
