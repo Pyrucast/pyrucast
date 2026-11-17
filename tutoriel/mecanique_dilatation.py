@@ -143,10 +143,11 @@ def main() -> None:
 
     # ANCHOR: second_membre
     # FR — Les deux chargements partagent les nœuds de l'alésage : la force
-    #      surfacique est ramenée sur le support de la dilatation, puis `+`
-    #      somme nœud à nœud.
+    #      surfacique est ramenée sur le support et les composantes de la
+    #      dilatation, puis `+` somme nœud à nœud.
     # EN — Both loads share the bore's nodes: the surface force is brought
-    #      onto the expansion's support, then `+` sums node by node.
+    #      onto the expansion's support and components, then `+` sums node
+    #      by node.
     second_membre = force_th + pc.node_field.restrict_like(force_surfacique, force_th)
     # ANCHOR_END: second_membre
 

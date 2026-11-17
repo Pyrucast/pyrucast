@@ -20,7 +20,7 @@ fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) {
     source.gather_cell(&nodes, &reads, sub.values_mut());
 }
 
-/// Restrict `field` to the nodes used by `mesh`.
+/// Restrict `field` to the nodes used by `mesh`, with every component of `field`.
 ///
 /// Returns a new [`NodeField`] with one zone per submesh of `mesh`. Each zone
 /// is supported on the submesh's **canonical POI1 node cloud** — its distinct
@@ -42,8 +42,9 @@ fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) {
 /// [`deformation`](fn@crate::ops::element_field::deformation),
 /// [`interp_to_gauss`](fn@crate::ops::element_field::interp_to_gauss) — take the mesh /
 /// finite-element space as a **separate argument** and read the field by node
-/// id. To land instead on the *exact* support of an **existing field** (rather
-/// than a mesh), use [`restrict_like`].
+/// id. To land on the supports of an existing field `a`, pass `&a.support()`:
+/// the result keeps the components of `field`, where [`restrict_like`] takes
+/// those of `a`, zone by zone.
 ///
 /// An empty field carries no component: it gives an empty field, as with
 /// [`restrict_like`].
@@ -110,16 +111,20 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
     Ok(out)
 }
 
-/// Reproject `field` onto the **exact support and components of `target`**,
-/// zone by zone.
+/// Read `field` on the supports **and the components** of `target`.
 ///
-/// Unlike [`restrict`] (which lands on a *fresh* support materialised from a
-/// mesh, carrying the union of `field`'s components), this reuses each zone of
-/// `target` **as-is** — the same support object, the same component list — so the result is
-/// on the very same support as `target` and can be combined with it directly by
-/// the arithmetic operators (`&target + &field.restrict_like(target)`). Each
-/// `(node, component)` pair is filled from `field` when it covers it, `0.0`
-/// otherwise; nodes and components of `field` absent from `target` are dropped.
+/// Zone by zone, it is [`restrict`]`(field, &target.support())` cut down to the
+/// components of that zone of `target`: those `target` lacks are dropped, those
+/// `field` lacks are created at `0.0`. [`restrict`] alone lands on the same
+/// supports but keeps the components of `field`.
+///
+/// Taking the components of `target` too is what lets the result combine with
+/// `target` by the arithmetic operators (`&target + &field.restrict_like(target)`),
+/// whatever its zones. A field from a solve has one zone per block, the zones
+/// meeting at shared nodes with a part of the components each: with the
+/// components of `field`, a component would land in a zone where `target` lacks
+/// it, pass through unchanged there while another zone sums it at the same
+/// node, and the operation would refuse the two values.
 ///
 /// The typical use is folding a solver increment back into a running solution:
 /// a `solve` result carries the primal *and* dual (Lagrange multiplier) DOFs on
@@ -167,6 +172,13 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
 /// let cible = NodeField::from_submesh(&bout.get(0)?, vec!["q".into()])?;
 /// let r = node_field::restrict_like(&temp, &cible)?;
 /// assert!(r.get(0)?.read().same_support(&cible.get(0)?.read()));
+/// // The components are those of `cible`: `q`, which `temp` lacks, is 0.
+/// assert_eq!(Field::components(&r), vec!["q"]);
+/// assert_eq!(r.value(n[0].id(), "q")?, 0.0);
+/// // `restrict` onto the same supports keeps those of `temp`.
+/// let sur = node_field::restrict(&temp, &cible.support())?;
+/// assert!(sur.get(0)?.read().same_support(&cible.get(0)?.read()));
+/// assert_eq!(Field::components(&sur), vec!["T"]);
 /// // A field carrying none of the components is empty, and so is what it
 /// // gives — on the arithmetic operators, an empty field changes nothing.
 /// let rien = node_field::restrict_like(&Field::filter_components(&temp, "q"), &cible)?;

@@ -44,7 +44,7 @@ pub fn positions(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResu
     })
 }
 
-/// Restrict `field` to the nodes of `mesh`.
+/// Restrict `field` to the nodes of `mesh`, with every component of `field`.
 ///
 /// Each zone of the result lies on the POI1 cloud of a submesh of `mesh` — its
 /// distinct nodes, built once and kept with the submesh. Two restrictions onto
@@ -55,8 +55,9 @@ pub fn positions(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResu
 ///
 /// Element operations on the region (`gradient`, `integral`, `deformation`,
 /// `interp_to_gauss`) take `mesh` as a separate argument and read the field by
-/// node. To land on the support of an existing field rather than a mesh, use
-/// `pyrucast.node_field.restrict_like`.
+/// node. To land on the supports of an existing field `a`, pass `a.support()`:
+/// the result keeps the components of `field`, where
+/// `pyrucast.node_field.restrict_like` takes those of `a`, zone by zone.
 ///
 /// # Parameters
 ///
@@ -244,14 +245,22 @@ pub fn project_sub_element(
     })
 }
 
-/// Read `field` on the support and the components of `target`, zone by zone.
+/// Read `field` on the supports **and the components** of `target`.
 ///
-/// Unlike `pyrucast.node_field.restrict`, which lands on a support built from
-/// a mesh and carries every component of `field`, this reuses each zone of
-/// `target` as it is — same support, same components. The result combines with
-/// `target` directly by the arithmetic operators: typically, to fold an
-/// increment from `pyrucast.solver.solve`, which also carries the
-/// multipliers, into a current solution (`target + restrict_like(du, target)`).
+/// Zone by zone, it is `restrict(field, target.support())` cut down to the
+/// components of that zone of `target`: those `target` lacks are dropped,
+/// those `field` lacks are created at `0.0`. `pyrucast.node_field.restrict`
+/// alone lands on the same supports but keeps the components of `field`.
+///
+/// Taking the components of `target` too is what lets the result combine with
+/// `target` directly by the arithmetic operators, whatever its zones. A field
+/// from `pyrucast.solver.solve` has one zone per block, the zones meeting at
+/// shared nodes with a part of the components each: with the components of
+/// `field`, a component would land in a zone where `target` lacks it, pass
+/// through unchanged there while another zone sums it at the same node, and
+/// the operation would refuse the two values. The typical use folds an
+/// increment from `solve`, which also carries the multipliers, into a current
+/// solution (`target + restrict_like(du, target)`).
 ///
 /// # Parameters
 ///

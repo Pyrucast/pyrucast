@@ -172,8 +172,12 @@ erreur, qui renvoie à `restrict_like`.
 
 Pour additionner deux régions, on les ramène d'abord sur les mêmes supports.
 `restrict(champ, maillage)` pose un champ aux nœuds sur les zones de
-`maillage`, et deux champs restreints au même maillage ont les mêmes supports ;
-`restrict_like(b, a)` pose `b` sur les supports de `a` (voir [Opérateurs sur
+`maillage`, avec toutes ses composantes, et deux champs restreints au même
+maillage ont les mêmes supports ; `restrict(b, a.support())` pose ainsi `b` sur
+les supports de `a`. `restrict_like(b, a)` reprend les supports **et les
+composantes** de `a`, zone par zone : les composantes que `a` ne porte pas
+disparaissent, celles que `b` n'a pas valent 0, et le résultat s'additionne
+toujours à `a` (voir [Opérateurs sur
 les champs](algorithmes/champs.md#restriction-fusion-consolidation)). Un nœud
 que le champ restreint ne portait pas y vaut 0.
 

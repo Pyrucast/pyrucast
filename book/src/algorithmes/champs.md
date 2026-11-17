@@ -35,8 +35,8 @@ actif le temps d'un calcul par `in_config` : voir
 
 | Python | Effet |
 |---|---|
-| [`node_field.restrict(field, mesh)`](../reference/node_field.md#node_field-restrict) | restreint un `NodeField` aux nœuds de `mesh`, sur un support que partagent toutes les restrictions au même `mesh`. |
-| [`node_field.restrict_like(field, target)`](../reference/node_field.md#node_field-restrict_like) | relit `field` sur le support **et** les composantes de `target`, pour le combiner directement avec lui. |
+| [`node_field.restrict(field, mesh)`](../reference/node_field.md#node_field-restrict) | restreint un `NodeField` aux nœuds de `mesh`, avec toutes ses composantes, sur un support que partagent toutes les restrictions au même `mesh`. |
+| [`node_field.restrict_like(field, target)`](../reference/node_field.md#node_field-restrict_like) | relit `field` sur le support **et** les composantes de `target`, zone par zone : `restrict(field, target.support())`, réduit aux composantes de `target`, celles que `field` n'a pas valant 0. Le résultat se combine directement avec `target`. |
 | [`node_field.merge(a, b)`](../reference/node_field.md#node_field-merge) | union de deux `NodeField`, consolidée — c'est le nom de `a \| b`. |
 | [`node_field.consolidate(field)`](../reference/node_field.md#node_field-consolidate) | fusionne les zones de **même support** en vérifiant la cohérence des valeurs partagées. |
 | [`element_field.consolidate(field)`](../reference/element_field.md#element_field-consolidate) | fusionne les zones d'une même `FiniteElementSpace` (union des composantes) — le pendant de `\|`, qui les laisse côte à côte. |

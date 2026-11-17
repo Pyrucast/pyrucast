@@ -26,7 +26,7 @@ impl NodeField {
         crate::ops::node_field::restrict(self, mesh)
     }
 
-    /// See [`node_field::restrict_like`](fn@crate::ops::node_field::restrict_like).
+    /// `self` on the supports **and the components** of `target`, see [`node_field::restrict_like`](fn@crate::ops::node_field::restrict_like).
     pub fn restrict_like(&self, target: &NodeField) -> Result<NodeField> {
         crate::ops::node_field::restrict_like(self, target)
     }
