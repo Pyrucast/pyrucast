@@ -34,6 +34,21 @@ def _two_zone_mesh():
 # ─── Construction ────────────────────────────────────────────────────────────
 
 
+def test_a_component_given_a_value_holds_it_at_every_node():
+    """A `(name, value)` entry starts at `value`, a bare name at zero."""
+    _, nodes, mesh = _two_zone_mesh()
+    f = pyrucast.NodeField(mesh, [("T", 20.0), "u_x"])
+    assert f.components() == ["T", "u_x"]
+    assert f.values(nodes, "T") == [20.0] * 4
+    assert f.values(nodes, "u_x") == [0.0] * 4
+    # Every zone holds it: the two zones agree at the nodes they share.
+    f.check()
+    g = pyrucast.NodeField(mesh[0], [("T", -1.5)])
+    assert g.min("T") == g.max("T") == -1.5
+    with pytest.raises(TypeError):
+        pyrucast.NodeField(mesh, [("T", "hot")])
+
+
 def test_from_mesh_zero_initialized():
     _c, _nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["T"])
@@ -1054,3 +1069,21 @@ def test_norm_counts_a_node_two_zones_share_once():
     assert f[1].norm(1) == 16.0
     # Nothing carried, nothing measured.
     assert f.filter_components("nope").norm() == 0.0
+
+
+def test_norm_measures_the_components_named():
+    """`components` keeps the norm to the components named: four distinct
+    nodes hold T = 1, the multiplier is left out."""
+    _, _nodes, mesh = _two_zone_mesh()
+    f = pyrucast.NodeField(mesh, [("T", 1.0), ("lambda", 100.0)])
+    assert f.norm(components=["T"]) == 2.0  # √4
+    assert f.norm(1, ["T"]) == 4.0
+    assert f.norm(0, ["T"]) == 1.0
+    assert f.norm(0) == 100.0
+    assert f.norm(components=["T", "lambda"]) == f.norm()
+    assert f.norm(components=["T"]) == math.sqrt(pyrucast.measure.xtx(f, ["T"]))
+    # A zone alone: n0, n1, n2.
+    assert f[0].norm(1, ["T"]) == 3.0
+    # A name the field does not carry is ignored.
+    assert f.norm(components=["nope"]) == 0.0
+    assert f.norm(components=["T", "nope"]) == 2.0

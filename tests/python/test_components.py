@@ -65,6 +65,26 @@ def test_filter_none_present_gives_an_empty_field():
     assert len(f.filter_components(["nope"])) == 0
 
 
+def test_filter_works_alike_on_an_element_field():
+    """The rules of a NodeField: the field's own order, extra names ignored, a
+    field carrying none of them gives an empty field, a zone an error."""
+    c = pyrucast.Coords(2)
+    a, b, d = (c.add_node(x) for x in ([0.0, 0.0], [1.0, 0.0], [0.0, 1.0]))
+    mesh = pyrucast.Mesh(c, "TRI3")
+    mesh.unit().add_cell([a, b, d])
+    fes = pyrucast.FiniteElementSpace(mesh)
+    ef = pyrucast.ElementField(fes, [("E", 1.0), ("nu", 2.0), ("rho", 3.0)])
+    g = ef.filter_components(["rho", "E", "T"])
+    assert isinstance(g, pyrucast.ElementField)
+    assert g.components() == ["E", "rho"]
+    assert g.max("rho") == 3.0
+    assert ef[["rho", "E"]].components() == ["E", "rho"]
+    assert len(ef.filter_components("nope")) == 0
+    assert len(ef["nope"]) == 0
+    with pytest.raises(RuntimeError):
+        ef[0].filter_components("nope")
+
+
 # ─── rename_component() ──────────────────────────────────────────────────────
 
 

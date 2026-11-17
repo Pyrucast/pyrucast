@@ -68,7 +68,7 @@ celle de droite seulement.
 | `min(c)`, `max(c)` | la plus petite ou la plus grande valeur de `c`, cherchée dans toutes les zones qui portent `c` |
 | `min()`, `max()` | la même chose sur toutes les valeurs, toutes composantes confondues : un nombre, pas une grandeur physique quand les unités diffèrent |
 | `sum(c)` | la somme des valeurs de `c`, sans poids, un nœud que plusieurs zones portent compté une fois |
-| `norm(p)` | la norme de toutes les valeurs, `(Σ \|v\|ᵖ)^(1/p)` : `p = 2` par défaut, `p = 0` pour la plus grande valeur absolue ; un nœud partagé compté une fois, `0` pour un champ vide |
+| `norm(p)`, `norm(p, [c, …])` | la norme des valeurs, `(Σ \|v\|ᵖ)^(1/p)` : `p = 2` par défaut, `p = 0` pour la plus grande valeur absolue ; toutes les composantes, ou celles nommées ; un nœud partagé compté une fois, `0` pour un champ vide ou qui ne porte aucune des composantes nommées |
 | `champ["c"]`, `filter_components([…])` | un champ réduit à ces composantes |
 | `rename_component(a, b)` | un champ où `a` s'appelle `b` |
 

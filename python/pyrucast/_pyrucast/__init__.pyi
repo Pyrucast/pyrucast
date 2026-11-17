@@ -479,10 +479,14 @@ class ElementField:
     index it (`field[i]`) to reach a `SubElementField`, compose zones
     with `|`.
     """
-    def __new__(cls, fespace: FiniteElementSpace, components: typing.Sequence[builtins.str]) -> ElementField:
+    def __new__(cls, fespace: FiniteElementSpace, components: typing.Sequence[builtins.str | tuple[builtins.str, builtins.float]]) -> ElementField:
         r"""
         `ElementField(fespace, components)` — one sub-field per subspace
-        of `fespace`, sharing the same `components` list. Zero-initialized.
+        of `fespace`, sharing the same `components` list, with uniform values.
+        
+        Each entry of `components` is a `(name, value)` pair, the component
+        holding `value` at every Gauss point, or a bare name, holding zero:
+        `[("T", 20.0), "p"]`.
         """
     @classmethod
     def with_components_per_subspace(cls, fespace: FiniteElementSpace, components_per_subspace: typing.Sequence[typing.Sequence[builtins.str]]) -> ElementField:
@@ -527,19 +531,23 @@ class ElementField:
         field), across the zones defining it. Errors if no zone defines the
         component.
         """
-    def norm(self, order: builtins.int = 2) -> builtins.float:
+    def norm(self, order: builtins.int = 2, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:
         r"""
-        The `order`-norm of the field's values, every component pooled.
+        The `order`-norm of the field's values.
         
         # Parameters
         
         - `order`: `2`, the default, gives the Euclidean norm `√(Σ v²)`; any
           `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`; `0` gives the largest `|v|`, the
           infinity norm.
+        - `components`: the components to measure, wherever a zone carries them,
+          the others ignored; `None` takes every component. A name the field does
+          not carry is ignored.
         
         # Returns
         
-        The norm, a `float`; `0.0` for a field without values.
+        The norm, a `float`; `0.0` for a field without values, or carrying none
+        of `components`.
         """
     def components(self) -> builtins.list[builtins.str]:
         r"""
@@ -547,7 +555,7 @@ class ElementField:
         """
     def filter_components(self, components: typing.Any) -> ElementField:
         r"""
-        Keep only the named components, in the order given.
+        Keep only the named components, in the order the field holds them.
         
         `components` is a single name or a list of names (e.g. the result of
         `model.primal_vars()`). Returns a **new** field of the caller's own kind,
@@ -3651,13 +3659,17 @@ class NodeField:
         r"""
         Divide `component` by `scalar` on every zone that defines it.
         """
-    def __new__(cls, support: typing.Any, components: typing.Sequence[builtins.str]) -> NodeField:
+    def __new__(cls, support: typing.Any, components: typing.Sequence[builtins.str | tuple[builtins.str, builtins.float]]) -> NodeField:
         r"""
-        `NodeField(support, components)` — zero-initialized field. With a
+        `NodeField(support, components)` — a field with uniform values. With a
         `Mesh` support: one `SubNodeField` per submesh, each on the
         distinct nodes of its zone. With a `SubMesh`: a single zone. A POI1
         zone is its own support, and is refused if it lists a node twice
         (`pyrucast.mesh.to_poi1` gives its distinct nodes).
+        
+        Each entry of `components` is a `(name, value)` pair, the component
+        holding `value` at every node, or a bare name, holding zero:
+        `[("T", 20.0), "u_x"]`.
         """
     @classmethod
     def with_components_per_submesh(cls, mesh: Mesh, components_per_submesh: typing.Sequence[typing.Sequence[builtins.str]]) -> NodeField:
@@ -3723,19 +3735,23 @@ class NodeField:
         that several zones carry counts once. Errors if no zone defines the
         component.
         """
-    def norm(self, order: builtins.int = 2) -> builtins.float:
+    def norm(self, order: builtins.int = 2, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:
         r"""
-        The `order`-norm of the field's values, every component pooled.
+        The `order`-norm of the field's values.
         
         # Parameters
         
         - `order`: `2`, the default, gives the Euclidean norm `√(Σ v²)`; any
           `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`; `0` gives the largest `|v|`, the
           infinity norm.
+        - `components`: the components to measure, wherever a zone carries them,
+          the others ignored; `None` takes every component. A name the field does
+          not carry is ignored.
         
         # Returns
         
-        The norm, a `float`; `0.0` for a field without values. A node that
+        The norm, a `float`; `0.0` for a field without values, or carrying none
+        of `components`. A node that
         several zones carry counts once.
         """
     def components(self) -> builtins.list[builtins.str]:
@@ -3744,7 +3760,7 @@ class NodeField:
         """
     def filter_components(self, components: typing.Any) -> NodeField:
         r"""
-        Keep only the named components, in the order given.
+        Keep only the named components, in the order the field holds them.
         
         `components` is a single name or a list of names (e.g. the result of
         `model.primal_vars()`). Returns a **new** field of the caller's own kind,
@@ -4403,19 +4419,22 @@ class SubElementField:
         the Gauss points for a field by elements. The resultant of a nodal force
         field, one component at a time. An empty support sums to `0.0`.
         """
-    def norm(self, order: builtins.int = 2) -> builtins.float:
+    def norm(self, order: builtins.int = 2, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:
         r"""
-        The `order`-norm of the field's values, every component pooled.
+        The `order`-norm of the field's values.
         
         # Parameters
         
         - `order`: `2`, the default, gives the Euclidean norm `√(Σ v²)`; any
           `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`; `0` gives the largest `|v|`, the
           infinity norm.
+        - `components`: the components to measure, the others ignored; `None`
+          takes every component. A name the field does not carry is ignored.
         
         # Returns
         
-        The norm, a `float`; `0.0` for a field without values.
+        The norm, a `float`; `0.0` for a field without values, or carrying none
+        of `components`.
         """
     def components(self) -> builtins.list[builtins.str]:
         r"""
@@ -4428,7 +4447,7 @@ class SubElementField:
         """
     def filter_components(self, components: typing.Any) -> SubElementField:
         r"""
-        Keep only the named components, in the order given.
+        Keep only the named components, in the order the field holds them.
         
         `components` is a single name or a list of names (e.g. the result of
         `model.primal_vars()`). Returns a **new** field of the caller's own kind,
@@ -5503,19 +5522,22 @@ class SubNodeField:
         the Gauss points for a field by elements. The resultant of a nodal force
         field, one component at a time. An empty support sums to `0.0`.
         """
-    def norm(self, order: builtins.int = 2) -> builtins.float:
+    def norm(self, order: builtins.int = 2, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:
         r"""
-        The `order`-norm of the field's values, every component pooled.
+        The `order`-norm of the field's values.
         
         # Parameters
         
         - `order`: `2`, the default, gives the Euclidean norm `√(Σ v²)`; any
           `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`; `0` gives the largest `|v|`, the
           infinity norm.
+        - `components`: the components to measure, the others ignored; `None`
+          takes every component. A name the field does not carry is ignored.
         
         # Returns
         
-        The norm, a `float`; `0.0` for a field without values.
+        The norm, a `float`; `0.0` for a field without values, or carrying none
+        of `components`.
         """
     def components(self) -> builtins.list[builtins.str]:
         r"""
@@ -5528,7 +5550,7 @@ class SubNodeField:
         """
     def filter_components(self, components: typing.Any) -> SubNodeField:
         r"""
-        Keep only the named components, in the order given.
+        Keep only the named components, in the order the field holds them.
         
         `components` is a single name or a list of names (e.g. the result of
         `model.primal_vars()`). Returns a **new** field of the caller's own kind,

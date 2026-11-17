@@ -29,8 +29,9 @@ champs (composantes, statistiques, arithmétique) sont décrites dans
 
 ## Créer et lire un champ
 
-`pyrucast.ElementField(fes, ["E", "nu"])` crée une zone par sous-espace de
-`fes`, avec ces composantes, toutes les valeurs à zéro.
+`pyrucast.ElementField(fes, [("E", 210e9), "nu"])` crée une zone par
+sous-espace de `fes`, avec ces composantes. Un couple `(nom, valeur)` donne à la
+composante cette valeur en tout point de Gauss, un nom seul la met à zéro.
 `ElementField.with_components_per_subspace(fes, [["E", "nu"], ["k"]])` donne
 une liste de composantes **par** sous-espace. Une liste vide, un nom en double
 ou un nombre de listes qui ne correspond pas aux sous-espaces sont refusés.
@@ -52,7 +53,7 @@ bornes ou une composante inconnue lèvent une erreur.
 | `support()` | le sous-espace de chaque zone, dans l'ordre, partagé |
 | `components()` | l'union des composantes des zones |
 | `min(c)`, `max(c)`, `sum(c)` | sur toutes les zones qui portent `c` |
-| `norm(p)` | la norme de toutes les valeurs aux points de Gauss, sans poids, `p = 2` par défaut, `p = 0` pour la plus grande valeur absolue |
+| `norm(p)`, `norm(p, [c, …])` | la norme des valeurs aux points de Gauss, sans poids, de toutes les composantes ou de celles nommées, `p = 2` par défaut, `p = 0` pour la plus grande valeur absolue |
 | `champ["c"]`, `filter_components([…])`, `rename_component(a, b)` | un champ réduit à ces composantes, ou une composante renommée |
 | `add_to_component(c, s)`, `mul_to_component(c, s)`… | une opération sur une composante, en place |
 | `consolidate()` | fond les zones posées sur un même sous-espace (voir [Combiner](#combiner-des-champs)) |

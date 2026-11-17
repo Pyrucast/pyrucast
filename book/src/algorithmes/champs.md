@@ -723,13 +723,17 @@ méthode, à côté de `min` / `max` :
 | `xtx(field)` | toutes les valeurs au carré (`Σ v²`, `XTX`) | un `float` |
 | `xtx(field, components=[…])` | seules ces composantes au carré | un `float` |
 | `field.norm(p)` | toutes les valeurs : `(Σ \|v\|ᵖ)^(1/p)`, `p = 2` par défaut, `p = 0` pour le plus grand `\|v\|` | un `float` |
+| `field.norm(p, components=[…])` | seules ces composantes | un `float` |
 
 Sur un champ aux nœuds, `sum`, `xtx` et `norm` comptent une fois un nœud que plusieurs
 zones portent : il n'y a qu'une valeur (voir [Champ](../field.md#les-règles-de-cohérence)).
 Elles regroupent la somme en parallèle : dépendantes du nombre de threads au
 dernier ULP (contrairement à `min` / `max`, exactes quel que soit l'ordre).
-`norm()` vaut `√xtx(field)` ; un champ sans valeur, par exemple un
-`filter_components` qui ne garde rien, a une norme nulle.
+`norm()` vaut `√xtx(field)`, et `norm(components=[…])` vaut
+`√xtx(field, components=[…])`. Un champ sans valeur, par exemple un
+`filter_components` qui ne garde rien, a une norme nulle ; de même, `norm`
+ignore une composante que le champ ne porte pas, et vaut `0` s'il n'en porte
+aucune, là où `xtx` lève une erreur.
 
 Appelées **sans argument**, `min` et `max` lisent le champ comme la liste plate
 de ses valeurs — toutes composantes confondues, et, au niveau agrégat, toutes

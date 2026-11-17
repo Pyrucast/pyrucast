@@ -18,9 +18,10 @@ cette page en donne ce qui est propre aux nœuds.
 
 ## Créer et lire un champ
 
-`pyrucast.NodeField(maillage, ["T"])` crée une zone par zone du maillage, avec
-ces composantes, toutes les valeurs à zéro ; sur une seule zone de maillage
-(`SubMesh`), le champ a une zone.
+`pyrucast.NodeField(maillage, [("T", 20.0), "ux"])` crée une zone par zone du
+maillage, avec ces composantes ; sur une seule zone de maillage (`SubMesh`), le
+champ a une zone. Un couple `(nom, valeur)` donne à la composante cette valeur
+en tout nœud, un nom seul la met à zéro.
 `NodeField.with_components_per_submesh(maillage, [["T", "ux"], ["T"]])` donne
 une liste de composantes **par** zone. Une liste vide, un nom en double, un
 nombre de listes qui ne correspond pas aux zones ou un maillage qui liste deux
@@ -53,7 +54,7 @@ composante.
 | `value(nœud, "c")`, `values(nœuds, "c")` | une valeur, ou une liste dans l'ordre des nœuds |
 | `node_count` | le nombre de nœuds distincts, toutes zones confondues |
 | `min(c)`, `max(c)`, `sum(c)` | sur toutes les zones qui portent `c` ; `sum` compte une fois un nœud partagé |
-| `norm(p)` | la norme de toutes les valeurs, `p = 2` par défaut, `p = 0` pour la plus grande valeur absolue ; un nœud partagé compté une fois |
+| `norm(p)`, `norm(p, [c, …])` | la norme des valeurs, de toutes les composantes ou de celles nommées, `p = 2` par défaut, `p = 0` pour la plus grande valeur absolue ; un nœud partagé compté une fois |
 | `champ["c"]`, `filter_components([…])`, `rename_component(a, b)` | un champ réduit à ces composantes, ou une composante renommée |
 | `add_to_component(c, s)`, `mul_to_component(c, s)`… | une opération sur une composante, en place |
 | `check()` | vérifie que les zones s'accordent sur les nœuds qu'elles partagent |

@@ -325,12 +325,13 @@ haut = pyrucast.Mesh(c, "TRI3")
 haut.unit().add_cell([a, d, e])
 carre = bas | haut
 
-# Une zone par zone de maillage, toutes les valeurs à zéro.
-T = pyrucast.NodeField(carre, ["T"])
+# Une zone par zone de maillage. Chaque composante part d'une valeur uniforme :
+# un couple (nom, valeur), ou un nom seul pour zéro.
+T = pyrucast.NodeField(carre, [("T", 15.0)])
 print(len(T), T.node_count)  # 2 4 — a et d sont rangés dans les deux zones
 
 # En place, dans toutes les zones qui portent T ; puis dans une zone seulement.
-T.add_to_component("T", 20.0)
+T.add_to_component("T", 5.0)
 T[1].set_value(e, "T", 25.0)  # e n'appartient qu'à la zone du haut
 
 # Lire par le champ : la première zone qui porte le nœud répond.
@@ -539,13 +540,13 @@ mesh.unit().add_cell([a, b, d])
 mesh.unit().add_cell([a, d, e])
 fes = pyrucast.FiniteElementSpace(mesh)
 
-# Une zone par sous-espace de fes, toutes les valeurs à zéro.
-mat = pyrucast.ElementField(fes, ["E", "nu"])
+# Une zone par sous-espace de fes. Chaque composante part d'une valeur
+# uniforme : un couple (nom, valeur), ou un nom seul pour zéro.
+mat = pyrucast.ElementField(fes, [("E", 210e9), "nu"])
 z = mat.unit()  # la zone, une vue : écrire dans z, c'est écrire dans mat
 print(z)  # SubElementField: 2 cell(s) × 3 gauss × 2 component(s) [E, nu]
 
 # Écrire : toute la zone, une maille entière, un point.
-z.set_uniform("E", 210e9)
 z.set_uniform("nu", 0.3)
 z.set_cell_uniform(1, "E", 70e9)  # la maille 1, à tous ses points de Gauss
 z[1, 2, "nu"] = 0.33  # la maille 1, son point de Gauss 2
@@ -566,10 +567,8 @@ assert mat.components() == ["E", "nu"]
 
 # ANCHOR: element_field_combiner
 # Deux champs posés sur le même espace se combinent point à point.
-k1 = pyrucast.ElementField(fes, ["k"])
-k2 = pyrucast.ElementField(fes, ["k"])
-k1.unit().set_uniform("k", 2.0)
-k2.unit().set_uniform("k", 0.5)
+k1 = pyrucast.ElementField(fes, [("k", 2.0)])
+k2 = pyrucast.ElementField(fes, [("k", 0.5)])
 somme = k1 + k2
 print(len(somme), somme.unit().value(0, 0, "k"))  # 1 2.5
 
