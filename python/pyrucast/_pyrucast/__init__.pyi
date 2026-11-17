@@ -130,6 +130,7 @@ __all__ = [
     "read_gmsh_str",
     "regularize",
     "restrict",
+    "restrict_fespace",
     "restrict_like",
     "revolve",
     "rotate",
@@ -1370,6 +1371,27 @@ class FiniteElementSpace:
         structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
+    def restrict(self, mesh: Mesh) -> FiniteElementSpace:
+        r"""
+        Restrict `fespace` to the cells of `mesh`, each subspace keeping its
+        interpolation and its quadrature.
+        
+        A cell is kept when `mesh` holds it too — same type, same nodes in the same
+        order, as `pyrucast.mesh.intersection`. It is the way to a field at the
+        Gauss points on part of a mesh:
+        `pyrucast.element_field.restrict(f, f.support().restrict(part))`.
+        
+        # Parameters
+        
+        - `fespace`: the space to cut down.
+        - `mesh`: the cells to keep.
+        
+        # Returns
+        
+        A `FiniteElementSpace` mirroring `fespace` zone by zone, possibly with
+        empty subspaces. A subspace whose zone is kept whole comes back as it is,
+        shared, so a field laid on it still combines with one laid on the result.
+        """
 
 @typing.final
 class InConfig:
@@ -9038,6 +9060,28 @@ def restrict(field: NodeField, mesh: Mesh) -> NodeField:
     # Raises
     
     `RuntimeError` if `mesh` and `field` are attached to different `Coords`.
+    """
+
+def restrict_fespace(fespace: FiniteElementSpace, mesh: Mesh) -> FiniteElementSpace:
+    r"""
+    Restrict `fespace` to the cells of `mesh`, each subspace keeping its
+    interpolation and its quadrature.
+    
+    A cell is kept when `mesh` holds it too — same type, same nodes in the same
+    order, as `pyrucast.mesh.intersection`. It is the way to a field at the
+    Gauss points on part of a mesh:
+    `pyrucast.element_field.restrict(f, f.support().restrict(part))`.
+    
+    # Parameters
+    
+    - `fespace`: the space to cut down.
+    - `mesh`: the cells to keep.
+    
+    # Returns
+    
+    A `FiniteElementSpace` mirroring `fespace` zone by zone, possibly with
+    empty subspaces. A subspace whose zone is kept whole comes back as it is,
+    shared, so a field laid on it still combines with one laid on the result.
     """
 
 def restrict_like(field: NodeField, target: NodeField) -> NodeField:

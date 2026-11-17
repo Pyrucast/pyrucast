@@ -305,6 +305,10 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::divergence, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        py::ops::finite_element_space::restrict,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(py::ops::measure::integral, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::measure::xty, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::measure::xtx, m)?)?;

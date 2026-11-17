@@ -242,6 +242,12 @@ par la sortie.
 | `behavior::initial_state(model: &Model, materials: &ElementField) -> ElementField` | `initial_state(model, materials) -> ElementField` (l'état de repos, `prev` du premier pas) |
 | `behavior::integrate(model, deformation, prev: &ElementField, materials, dt: Option<f64>) -> ElementField` | `integrate_behavior(model, deformation, materials, prev, dt=None) -> ElementField` (`COMP`) |
 
+### `ops::finite_element_space` — opérateurs produisant un espace éléments finis
+
+| Rust | Python |
+|---|---|
+| `restrict(fespace: &FiniteElementSpace, mesh: &Mesh) -> FiniteElementSpace` | `restrict(fespace, mesh) -> FiniteElementSpace` |
+
 ### `ops::evolution` — opérateurs produisant une évolution
 
 | Rust (`ops::evolution::…`) | Python (`pyrucast.evolution.…`) |

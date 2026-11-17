@@ -71,6 +71,7 @@ RENAMED = {
     # `element_field.mask` register there under distinct names.
     "mask_node": "mask",
     "mask_element": "mask",
+    "restrict_fespace": "restrict",
 }
 
 # Whole Python modules without a method, with the reason. The waiver holds by

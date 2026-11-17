@@ -503,3 +503,26 @@ def test_union_merges_subspaces():
     # Operands are left untouched (fresh aggregate, first-seen order).
     assert len(fes_a) == 1
     assert len(fes_b) == 1
+
+
+def test_restrict_keeps_the_definition_on_the_cells_of_a_mesh():
+    """Cut down to the left column of a 2×2 grid: two cells, the same
+    interpolation and quadrature; kept whole, the subspace itself (the union
+    keeps it once)."""
+    c = pyrucast.Coords(2)
+    n = [c.add_node([float(k % 3), float(k // 3)]) for k in range(9)]
+    grid = pyrucast.Mesh(c, "QUA4")
+    for i, j in [(0, 0), (1, 0), (0, 1), (1, 1)]:
+        k = 3 * j + i
+        grid.unit().add_cell([n[k], n[k + 1], n[k + 4], n[k + 3]])
+    left = pyrucast.mesh.poi1_from_nodes([n[k] for k in (0, 1, 3, 4, 6, 7)])
+    sel = pyrucast.mesh.elements_on(grid, left)
+    fes = pyrucast.FiniteElementSpace(grid, quadrature="REDUCED")
+
+    part = pyrucast.finite_element_space.restrict(fes, sel)
+    assert len(part) == 1
+    assert part[0].cell_count == 2
+    assert part[0].quadrature == fes[0].quadrature
+    assert part[0].interpolation == fes[0].interpolation
+    assert len(fes | fes.restrict(grid)) == 1
+    assert len(fes | part) == 2

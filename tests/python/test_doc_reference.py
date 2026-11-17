@@ -65,6 +65,21 @@ assert n[5].position() == [2.0, 1.5]
 assert n[0].position() == [0.0, 0.0]
 
 
+# ── finite_element_space ────────────────────────────────────────────────────
+
+_, mesh, fes, n = _plaque()
+gauche = pyrucast.mesh.elements_on(
+    mesh, pyrucast.mesh.poi1_from_nodes([n[0], n[1], n[3], n[4]])
+)
+# ANCHOR: finite_element_space-restrict
+# The space on the left cell alone: same interpolation, same quadrature.
+partie = pyrucast.finite_element_space.restrict(fes, gauche)  # or fes.restrict(gauche)
+print(partie[0].cell_count)  # 1
+# ANCHOR_END: finite_element_space-restrict
+assert partie[0].cell_count == 1
+assert partie[0].interpolation == fes[0].interpolation
+assert partie[0].quadrature == fes[0].quadrature
+
 # ── node_field ──────────────────────────────────────────────────────────────
 
 _, mesh, fes, n = _plaque()

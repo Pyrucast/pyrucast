@@ -90,6 +90,7 @@ dans la maille.
 |---|---|
 | `len(fes)`, `fes[i]`, `for sub in fes`, `unit()`, `\|` | l'interface des [agrégats](aggregate.md) |
 | `mesh()` | le maillage couvert : la zone de chaque sous-espace, dans l'ordre |
+| `restrict(maillage)` | l'espace réduit aux mailles de `maillage`, chaque sous-espace gardant ses choix (voir plus bas) |
 | `element(i, maille)`, `elements(i)` | la vue sur une maille du sous-espace `i`, ou sur toutes |
 | `dump()` | le contenu, points de Gauss compris |
 
@@ -132,6 +133,25 @@ Gauss](element-field.md#le-support--un-espace-éléments-finis)). On construit
 donc l'espace une fois et on le passe à tous les opérateurs. L'union `|`
 garde chaque sous-espace une seule fois et refuse deux espaces posés sur des
 `Coords` différents.
+
+## Restreindre un espace
+
+`finite_element_space.restrict(fes, maillage)`, ou `fes.restrict(maillage)`,
+réduit chaque sous-espace aux mailles de sa zone que `maillage` contient aussi,
+en gardant son interpolation et sa quadrature. Une maille est la même quand
+elle a le même type et les mêmes nœuds dans le même ordre, comme pour
+[`intersection`](algorithmes/maillage-topologie.md#intersection-et-différence--intersection-difference).
+Un sous-espace dont la zone est gardée en entier revient **tel quel** : c'est le
+même objet, et les champs posés dessus se combinent avec ceux posés sur le
+résultat. Une zone sans maille commune donne un sous-espace vide, à sa place.
+
+C'est le chemin vers un champ aux points de Gauss sur une partie du maillage :
+`element_field.restrict(f, f.support().restrict(partie))` (voir [Champ aux
+points de Gauss](element-field.md#le-support--un-espace-éléments-finis)).
+
+```python
+{{#include ../../tests/python/test_doc_reference.py:finite_element_space-restrict}}
+```
 
 ## Déplacer le maillage
 
