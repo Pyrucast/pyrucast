@@ -32,7 +32,7 @@ de zones.
 
 On compose les modèles avec `|`, qui rend un nouveau modèle : les sous-modèles
 des deux côtés, dans l'ordre, sans répéter un sous-modèle déjà présent.
-`Model()` est un modèle vide ; `add_sub` et `add_subs` ajoutent des
+`Model.empty()` est un modèle vide ; `add_sub` et `add_subs` ajoutent des
 sous-modèles en place. Tous les sous-modèles d'un modèle vivent dans un même
 `Coords` : en composer deux de `Coords` différents est refusé.
 
@@ -187,6 +187,7 @@ quelle physique il appartient :
 | `"radiation"` | `radiation`, en plus de `"thermal"` |
 | `"diffusion"` | `fick` |
 | `"constraint"` | `dirichlet`, `mpc`, `embedded`, `contact` |
+| `"contact"` | `contact`, en plus de `"constraint"` et `"mechanical"` |
 | `"other"` | aucune physique ; sert, en Rust, à classer un bloc de matrice monté à la main |
 
 Un `flux` et les échanges prennent la nature de leur cible : sur une
@@ -207,11 +208,12 @@ appuis, un problème qui se résout tel quel, et
 {{#include ../../tests/python/test_doc_conteneurs.py:model_natures}}
 ```
 
-Les natures disent ce qu'un sous-modèle fige, pas ce qu'il est : un contact et
-un Dirichlet sur les déplacements portent tous deux
-`["constraint", "mechanical"]`. `label()` nomme la physique (`"Dirichlet"`,
-`"Contact"`…) ; c'est par lui que le [pas à pas](pas-a-pas.md) reconnaît le
-contact.
+Les natures disent surtout ce qu'un sous-modèle fige : un Dirichlet sur les
+déplacements porte `["constraint", "mechanical"]`, un contact
+`["constraint", "mechanical", "contact"]`. Le contact reste ainsi parmi les
+contraintes, et `filter("contact")` le trouve seul : c'est ce que fait le
+[pas à pas](pas-a-pas.md) pour mettre à jour ses jeux. `label()` nomme la
+physique (`"Dirichlet"`, `"Contact"`…).
 
 Chaque bloc d'une matrice assemblée garde les natures du sous-modèle qui l'a
 produit : une matrice se sélectionne de la même façon (voir

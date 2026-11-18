@@ -1,6 +1,7 @@
 """The loop over time (Cast3M ``PASAPAS``)."""
 
-from .fields import infinity_norm, part
+import math
+
 from .heat import heat_step, heat_step_dupont, heat_step_linear
 from .mechanics import mechanical_step
 from .options import resolve_options
@@ -14,29 +15,6 @@ __all__ = ["step_by_step"]
 _HEAT = {"nonlinear": heat_step, "linear": heat_step_linear, "dupont": heat_step_dupont}
 
 
-def _reached(t, target):
-    return abs(t - target) <= 1e-12 * max(1.0, abs(target))
-
-
-def _coherent(previous, current, tolerance):
-    """Whether two passes gave the same temperature, to ``tolerance``
-    relative to its size."""
-    if previous is None:
-        return False
-    change = infinity_norm(part(current, ["T"]) - part(previous, ["T"]), ["T"])
-    return change <= tolerance * max(infinity_norm(current, ["T"]), 1e-300)
-
-
-def _heat_step(data, problem, state, instant, options):
-    """The heat problem of the step — in large displacements on the
-    configuration the mechanics reached at the start of the step, ``X + uₙ``,
-    laid here; the heat step computes on it, the reference staying active."""
-    scheme = _HEAT[options.heat_scheme]
-    if problem.configurations is not None:
-        problem.configurations.lay(part(state.solution, problem.displacement_names))
-    return scheme(data, problem, state, instant, options)
-
-
 def _one_step(data, problem, state, instant, options):
     """Heat then mechanics from ``state.time`` to ``instant``, repeated in
     passes until the temperature no longer changes when ``coherence`` is on.
@@ -47,7 +25,12 @@ def _one_step(data, problem, state, instant, options):
     previous = None
     for k in range(options.coupling_passes):
         if problem.heat is not None:
-            heat = _heat_step(data, problem, state, instant, options)
+            # In large displacements, on the configuration the mechanics reached
+            # at the start of the step, X + uₙ, laid here; the reference stays
+            # active.
+            if problem.configurations is not None:
+                problem.configurations.lay(state.solution[problem.displacement_names])
+            heat = _HEAT[options.heat_scheme](data, problem, state, instant, options)
             temperature = heat.temperature
             hook("after_heat")(data, state, heat)
         elif problem.prescribed_temperature_at(instant) is not None:
@@ -59,8 +42,12 @@ def _one_step(data, problem, state, instant, options):
             hook("after_mechanics")(data, state, mechanics)
         if options.coupling_passes == 1:
             break
-        if k > 0 and _coherent(previous, temperature, options.coherence_tolerance):
-            break
+        if previous is not None:
+            # Two passes agreeing on the temperature, relative to its size.
+            change = (temperature["T"] - previous["T"]).norm(0)
+            size = max(temperature.norm(0, ["T"]), 1e-300)
+            if change <= options.coherence_tolerance * size:
+                break
         if k == options.coupling_passes - 1:
             raise RuntimeError(
                 f"step_by_step: the temperature still changes after {k + 1} coupling passes "
@@ -132,7 +119,10 @@ def step_by_step(data):
     store_step(data, problem, state, options, initial=True)
 
     targets = [
-        t for t in options.times if t > state.time and not _reached(t, state.time)
+        t
+        for t in options.times
+        if t > state.time
+        and not math.isclose(t, state.time, rel_tol=1e-12, abs_tol=1e-12)
     ]
     k = 0
     dt = None
@@ -169,7 +159,7 @@ def step_by_step(data):
         _commit(problem, state, instant, heat, mechanics, temperature)
         store_step(data, problem, state, options)
         options.hook("after_step")(data, state)
-        if _reached(state.time, target):
+        if math.isclose(state.time, target, rel_tol=1e-12, abs_tol=1e-12):
             k += 1
             state.replays = 0
         else:

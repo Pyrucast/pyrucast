@@ -207,7 +207,7 @@ mod tests {
         )
         .unwrap();
         let got = strain(&solid, &sol, &unit_material(&fes)).unwrap();
-        let u = sol.filter_components(["u_x", "u_y"]).unwrap();
+        let u = sol.filter_components(["u_x", "u_y"]);
         let want = element_field::deformation(&u, &fes, StrainMeasure::Linear).unwrap();
         let (g, w) = (got.get(0).unwrap().read(), want.get(0).unwrap().read());
         assert_eq!(g.components(), w.components());
@@ -304,7 +304,7 @@ mod tests {
         let f_int = node_field::internal_forces(&coupled, &state, &sol, &materials).unwrap();
         let k = crate::ops::matrix::stiffness(&coupled, &materials).unwrap();
         let ku = k
-            .mul_field(&sol.filter_components(coupled.primal_vars()).unwrap())
+            .mul_field(&sol.filter_components(coupled.primal_vars()))
             .unwrap();
         for node in &n {
             for dual in ["f_x", "f_y", "q"] {

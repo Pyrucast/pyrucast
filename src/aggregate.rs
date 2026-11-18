@@ -199,6 +199,47 @@ pub trait Aggregate: Default {
         Ok(out)
     }
 
+    /// A fresh aggregate holding each sub once, at its first place: a sub listed
+    /// again — the same object ([`Handle::same_object`]) — is dropped. The subs
+    /// are shared, not copied, and `self` is left untouched: what the union
+    /// does across two aggregates, done within one. A mesh built one zone per
+    /// subspace lists twice a zone two physics share; deduplicated, a field
+    /// can be built on it.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # sm.add_cell(&[a.id(), b.id()]).unwrap();
+    /// let mut twice = Mesh::from_submesh(sm);
+    /// twice.add_sub(twice.get(0)?)?;
+    /// assert_eq!(twice.len(), 2);
+    /// let once = twice.deduplicate();
+    /// assert_eq!(once.len(), 1);
+    /// assert!(once.get(0)?.same_object(&twice.get(0)?));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    fn deduplicate(&self) -> Self
+    where
+        Self: Sized,
+    {
+        let mut out = Self::default();
+        for h in self.iter() {
+            // Taken from a valid aggregate, the sub already meets its checks.
+            if !out.contains_handle(h) {
+                out.push(h.clone());
+                out.post_push();
+            }
+        }
+        out
+    }
+
     /// Hook called at the end of [`Aggregate::merge`], once the union by
     /// handle is complete. Override to fuse/normalize sub-objects beyond
     /// handle identity (e.g. fields fusing two zones on the same support).
@@ -617,12 +658,12 @@ macro_rules! impl_aggregate_pymethods {
                         let _ = stringify!($components);
                         if let Ok(name) = key.extract::<String>() {
                             let inner =
-                                $crate::containers::field::Field::filter_components(&self.inner, name)?;
+                                $crate::containers::field::Field::filter_components(&self.inner, name);
                             return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
                         }
                         if let Ok(names) = key.extract::<Vec<String>>() {
                             let inner =
-                                $crate::containers::field::Field::filter_components(&self.inner, names)?;
+                                $crate::containers::field::Field::filter_components(&self.inner, names);
                             return Ok(pyo3::Py::new(py, $T { inner })?.into_any());
                         }
                     )?
@@ -677,6 +718,26 @@ macro_rules! impl_aggregate_pymethods {
                 fn add_subs(&mut self, other: pyo3::PyRef<'_, $T>) -> pyo3::PyResult<()> {
                     $crate::aggregate::Aggregate::add_subs(&mut self.inner, &other.inner)?;
                     Ok(())
+                }
+
+                /// A fresh aggregate holding each zone once, at its first place:
+                /// a zone listed again — the same object — is dropped. The zones
+                /// are shared, not copied, and this aggregate is left untouched.
+                /// A mesh built one zone per subspace (`fespace.mesh()`) lists
+                /// twice a zone two physics share; deduplicated, a field can be
+                /// built on it.
+                fn deduplicate(&self) -> Self {
+                    Self {
+                        inner: $crate::aggregate::Aggregate::deduplicate(&self.inner),
+                    }
+                }
+
+                /// An aggregate without any zone, which `|` or `add_sub` fill.
+                #[staticmethod]
+                fn empty() -> Self {
+                    Self {
+                        inner: $crate::aggregate::Aggregate::empty(),
+                    }
                 }
 
                 fn __repr__(&self) -> pyo3::PyResult<String> {

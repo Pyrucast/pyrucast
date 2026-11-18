@@ -68,6 +68,7 @@ celle de droite seulement.
 | `min(c)`, `max(c)` | la plus petite ou la plus grande valeur de `c`, cherchée dans toutes les zones qui portent `c` |
 | `min()`, `max()` | la même chose sur toutes les valeurs, toutes composantes confondues : un nombre, pas une grandeur physique quand les unités diffèrent |
 | `sum(c)` | la somme des valeurs de `c`, sans poids, un nœud que plusieurs zones portent compté une fois |
+| `norm(p)`, `norm(p, [c, …])` | la norme des valeurs, `(Σ \|v\|ᵖ)^(1/p)` : `p = 2` par défaut, `p = 0` pour la plus grande valeur absolue ; toutes les composantes, ou celles nommées ; un nœud partagé compté une fois, `0` pour un champ vide ou qui ne porte aucune des composantes nommées |
 | `champ["c"]`, `filter_components([…])` | un champ réduit à ces composantes |
 | `rename_component(a, b)` | un champ où `a` s'appelle `b` |
 
@@ -85,8 +86,8 @@ qui pèse chaque valeur par la taille des mailles : c'est
 `pyrucast.measure.integral`. Deux autres réductions s'appliquent aux deux
 familles, et comptent de même un nœud une fois : `pyrucast.measure.xtx(champ)`,
 la somme des carrés des valeurs, et `pyrucast.measure.xty(a, b)`, la somme des
-produits des valeurs que `a` et `b` portent sur les mêmes supports et sous les
-mêmes noms (voir [Opérateurs sur les champs](algorithmes/champs.md#réduction)).
+produits des valeurs que `a` et `b` portent sur les mêmes supports, sous les
+mêmes noms ou par paires de noms (voir [Opérateurs sur les champs](algorithmes/champs.md#réduction)).
 
 ## Calculer avec des champs
 
@@ -171,8 +172,12 @@ erreur, qui renvoie à `restrict_like`.
 
 Pour additionner deux régions, on les ramène d'abord sur les mêmes supports.
 `restrict(champ, maillage)` pose un champ aux nœuds sur les zones de
-`maillage`, et deux champs restreints au même maillage ont les mêmes supports ;
-`restrict_like(b, a)` pose `b` sur les supports de `a` (voir [Opérateurs sur
+`maillage`, avec toutes ses composantes, et deux champs restreints au même
+maillage ont les mêmes supports ; `restrict(b, a.support())` pose ainsi `b` sur
+les supports de `a`. `restrict_like(b, a)` reprend les supports **et les
+composantes** de `a`, zone par zone : les composantes que `a` ne porte pas
+disparaissent, celles que `b` n'a pas valent 0, et le résultat s'additionne
+toujours à `a` (voir [Opérateurs sur
 les champs](algorithmes/champs.md#restriction-fusion-consolidation)). Un nœud
 que le champ restreint ne portait pas y vaut 0.
 

@@ -157,6 +157,7 @@ pub fn physics_slice(physics: Physics) -> &'static [Physics] {
         Physics::Other => &[Physics::Other],
         Physics::Diffusion => &[Physics::Diffusion],
         Physics::Radiation => &[Physics::Radiation],
+        Physics::Contact => &[Physics::Contact],
     }
 }
 
@@ -183,7 +184,7 @@ pub fn physics_slice(physics: Physics) -> &'static [Physics] {
 /// ```
 pub fn constraint_physics(target: Option<Physics>) -> &'static [Physics] {
     match target {
-        None | Some(Physics::Constraint) => &[Physics::Constraint],
+        None | Some(Physics::Constraint | Physics::Contact) => &[Physics::Constraint],
         Some(Physics::Mechanical) => &[Physics::Constraint, Physics::Mechanical],
         Some(Physics::Thermal) => &[Physics::Constraint, Physics::Thermal],
         Some(Physics::Other) => &[Physics::Constraint, Physics::Other],

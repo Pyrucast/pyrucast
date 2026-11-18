@@ -68,8 +68,9 @@ class _NormalEquations:
 
 
 def _near(weights, one_at):
-    """Whether the weights are the unit vector ``one_at`` to 0.1: the
-    combination would only return a point already visited."""
+    """Whether the weights are within 0.1 of the unit vector ``one_at``,
+    weight by weight (``max |wₖ − δₖ| < 0.1``): the combination would only
+    return to the residual of that earlier iteration."""
     return all(
         abs(w - (1.0 if k == one_at else 0.0)) < 0.1 for k, w in enumerate(weights)
     )
@@ -175,18 +176,14 @@ class Accelerator:
                 and self._stability
                 and last_increment is not None
             ):
-                correction = self._guarded(residual, correction, last_increment)
+                reference = self._pairing(last_increment, residual) + _TINY
+                ratio = self._pairing(last_increment, residual - correction) / reference
+                limit = 1.0 if reference < 0.0 else 1e5
+                if ratio <= 0.0:
+                    correction = None  # retrograde: no acceleration
+                elif ratio > limit:
+                    correction = correction * (limit / ratio)
         self._f = [weighted, self._f[0], self._f[1]]
         self._d = [direction, self._d[0]]
         self._applied = correction
-        return correction
-
-    def _guarded(self, residual, correction, increment):
-        reference = self._pairing(increment, residual) + _TINY
-        ratio = self._pairing(increment, residual - correction) / reference
-        limit = 1.0 if reference < 0.0 else 1e5
-        if ratio <= 0.0:
-            return None  # retrograde: no acceleration
-        if ratio > limit:
-            return correction * (limit / ratio)
         return correction

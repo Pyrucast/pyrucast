@@ -64,8 +64,8 @@ use pyrucast_macros::py_op;
 ///
 /// # Raises
 ///
-/// `RuntimeError` if `matrix` has no assembled values, if the LU meets a singular
-/// matrix (boundary conditions forgotten, typically), if `"cholesky"` meets a
+/// `RuntimeError` if `matrix` has no assembled values, if the LU meets an
+/// exactly zero pivot (an unknown nothing holds at all), if `"cholesky"` meets a
 /// matrix that is not positive definite, if a relation is out of the scope of
 /// `"eliminate"`, or if the active-set loop has not converged after `max_iter`
 /// status changes. `ValueError` for an unknown `method`, `relations`,
@@ -76,6 +76,11 @@ use pyrucast_macros::py_op;
 /// `Ctrl+C` is honoured between the phases of the solve and at each status
 /// change; a factorization is a single library call and is not interrupted
 /// mid-way.
+///
+/// A matrix that is singular only up to rounding is not always reported: a
+/// structure left free to move as a rigid body, its boundary conditions
+/// forgotten, can come back as a finite but absurdly large solution. Check the
+/// boundary conditions when the magnitudes are implausible.
 #[py_op(method_on = PyMatrix)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]

@@ -1,6 +1,5 @@
 //! Python wrappers for [`crate::containers::model::SubModel`] and [`crate::containers::model::Model`].
 
-use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::model::{Model, SubModel};
 use crate::handle::Handle;
@@ -46,11 +45,12 @@ impl PySubModel {
     }
 
     /// The physics nature(s) of this sub-model as a list of tags among
-    /// `"mechanical"`, `"thermal"`, `"diffusion"`, `"radiation"` and
-    /// `"constraint"`. A flux or an exchange takes the nature of the model it
-    /// targets; a constraint carries `"constraint"` plus that nature, or alone
-    /// when its relation spans two physics; radiation carries `"thermal"` and
-    /// `"radiation"`.
+    /// `"mechanical"`, `"thermal"`, `"diffusion"`, `"radiation"`,
+    /// `"constraint"` and `"contact"`. A flux or an exchange takes the nature
+    /// of the model it targets; a constraint carries `"constraint"` plus that
+    /// nature, or alone when its relation spans two physics; radiation carries
+    /// `"thermal"` and `"radiation"`; a contact carries `"constraint"`,
+    /// `"mechanical"` and `"contact"`.
     fn physics(&self) -> Vec<String> {
         self.handle
             .read()
@@ -109,14 +109,6 @@ pub struct PyModel {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyModel {
-    /// `Model()` — an empty model; add physics with `|`.
-    #[new]
-    fn py_new() -> Self {
-        Self {
-            inner: Model::empty(),
-        }
-    }
-
     /// Names of the primal (primary) variables across the whole model.
     fn primal_vars(&self) -> Vec<String> {
         self.inner.primal_vars()
@@ -148,12 +140,12 @@ impl PyModel {
 
     /// `Model.filter(physics)` — a new `Model` holding only the sub-models **whose
     /// nature set contains** the given physics. `physics` is a tag: `"mechanical"`,
-    /// `"thermal"`, `"constraint"`, `"other"`, `"diffusion"` or `"radiation"`.
-    /// Sub-model order is preserved; the result may be empty.
+    /// `"thermal"`, `"constraint"`, `"other"`, `"diffusion"`, `"radiation"` or
+    /// `"contact"`. Sub-model order is preserved; the result may be empty.
     ///
     /// A coupled physics declares several natures and is therefore returned by
     /// each of its filters — a radiation boundary is both `"thermal"` and
-    /// `"radiation"`.
+    /// `"radiation"`, a contact both `"constraint"` and `"contact"`.
     fn filter(&self, physics: Physics) -> Self {
         Self {
             inner: self.inner.filter(physics),

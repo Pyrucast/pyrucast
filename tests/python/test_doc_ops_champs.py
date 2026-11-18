@@ -157,13 +157,13 @@ assert amplitude[0][n[0], "s"] == 1.0
 _, mesh, _, n = _plaque()
 support = pyrucast.mesh.poi1_from_nodes(n)
 forces = _champ_nodal(mesh, n, ["f_x", "f_y"], [[1.0, 2.0]] * 6, support)
-deplacements = _champ_nodal(mesh, n, ["f_x", "f_y"], [[0.5, 0.5]] * 6, support)
+deplacements = _champ_nodal(mesh, n, ["u_x", "u_y"], [[0.5, 0.5]] * 6, support)
 # ANCHOR: measure-xty
-# External strain energy: work of the nodal forces in the displacement field
-# (same components, same mesh).
-energie = pyrucast.measure.xty(forces, deplacements)
+# Work of the nodal forces along the displacement: each displacement component
+# multiplies its force.
+travail = pyrucast.measure.xty(deplacements, forces, [("u_x", "f_x"), ("u_y", "f_y")])
 # ANCHOR_END: measure-xty
-assert energie == 6 * (1.0 * 0.5 + 2.0 * 0.5)
+assert travail == 6 * (1.0 * 0.5 + 2.0 * 0.5)
 
 # ── psca ───────────────────────────────────────────────────
 
@@ -202,6 +202,11 @@ ry = forces.sum("f_y")
 fy_max = forces.max("f_y")
 # …or, without an argument, of the whole field, components pooled.
 partout = forces.min()
+# Norm of the residual, every value: Euclidean by default, the largest |v| with 0.
+r = residu.norm()
+r_max = residu.norm(0)
+# The same norm, restricted to the component f_y.
+r_y = residu.norm(components=["f_y"])
 # ANCHOR_END: sommes
 # ANCHOR: measure-xtx
 # Squared norm of the residual, for a convergence test.
@@ -214,6 +219,8 @@ assert r2 == 6 * 25.0
 assert r2_uy == 6 * 16.0
 assert fy_max == 2.0
 assert partout == 1.0
+assert r == math.sqrt(r2) and r_max == 4.0
+assert r_y == math.sqrt(r2_uy)
 
 # ── mesures de déformation ─────────────────────────────────
 

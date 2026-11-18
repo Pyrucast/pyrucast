@@ -222,7 +222,7 @@ fn main() -> Result<()> {
             unreachable!("evolution with nodal values")
         };
         // Norm of the step load (relative scale of the residual): xᵀx of the field.
-        let ext_norm = load_scaled.xtx().sqrt();
+        let ext_norm = load_scaled.norm(2, None);
         let tol = 1e-6 * ext_norm + 1e-12;
 
         // Modified Newton + Anderson: iterate until the residual (out-of-balance
@@ -249,7 +249,7 @@ fn main() -> Result<()> {
             // operators only: `restrict_like`, `-`, `restrict`, `xtx`).
             let f_ext = restrict_like(&load_scaled, &f_int)?;
             let residual = (&f_ext - &f_int)?;
-            let free_res = restrict(&residual, &free_mesh)?.xtx().sqrt();
+            let free_res = restrict(&residual, &free_mesh)?.norm(2, None);
             Ok((residual, free_res, out))
         };
 
@@ -404,12 +404,12 @@ fn anderson_step(
     let mut trace = 0.0;
     for i in 0..m {
         for j in i..m {
-            let v = dg_free[i].dot_field(&dg_free[j]);
+            let v = dg_free[i].dot_field(&dg_free[j], None);
             a[i][j] = v;
             a[j][i] = v;
         }
         trace += a[i][i];
-        b[i] = dg_free[i].dot_field(&g_free);
+        b[i] = dg_free[i].dot_field(&g_free, None);
     }
     if trace <= 0.0 {
         return Ok(None); // degenerate directions

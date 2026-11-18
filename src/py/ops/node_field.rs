@@ -44,7 +44,7 @@ pub fn positions(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResu
     })
 }
 
-/// Restrict `field` to the nodes of `mesh`.
+/// Restrict `field` to the nodes of `mesh`, with every component of `field`.
 ///
 /// Each zone of the result lies on the POI1 cloud of a submesh of `mesh` — its
 /// distinct nodes, built once and kept with the submesh. Two restrictions onto
@@ -55,8 +55,9 @@ pub fn positions(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResu
 ///
 /// Element operations on the region (`gradient`, `integral`, `deformation`,
 /// `interp_to_gauss`) take `mesh` as a separate argument and read the field by
-/// node. To land on the support of an existing field rather than a mesh, use
-/// `pyrucast.node_field.restrict_like`.
+/// node. To land on the supports of an existing field `a`, pass `a.support()`:
+/// the result keeps the components of `field`, where
+/// `pyrucast.node_field.restrict_like` takes those of `a`, zone by zone.
 ///
 /// # Parameters
 ///
@@ -67,7 +68,8 @@ pub fn positions(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResu
 ///
 /// A new `NodeField` with one zone per submesh of `mesh`, each carrying the
 /// union of the components of `field`. A node of `mesh` the field does not
-/// define gets `0.0`; the nodes outside `mesh` are dropped.
+/// define gets `0.0`; the nodes outside `mesh` are dropped. An empty field
+/// carries no component, and gives an empty field, as with `restrict_like`.
 ///
 /// # Raises
 ///
@@ -243,14 +245,22 @@ pub fn project_sub_element(
     })
 }
 
-/// Read `field` on the support and the components of `target`, zone by zone.
+/// Read `field` on the supports **and the components** of `target`.
 ///
-/// Unlike `pyrucast.node_field.restrict`, which lands on a support built from
-/// a mesh and carries every component of `field`, this reuses each zone of
-/// `target` as it is — same support, same components. The result combines with
-/// `target` directly by the arithmetic operators: typically, to fold an
-/// increment from `pyrucast.solver.solve`, which also carries the
-/// multipliers, into a current solution (`target + restrict_like(du, target)`).
+/// Zone by zone, it is `restrict(field, target.support())` cut down to the
+/// components of that zone of `target`: those `target` lacks are dropped,
+/// those `field` lacks are created at `0.0`. `pyrucast.node_field.restrict`
+/// alone lands on the same supports but keeps the components of `field`.
+///
+/// Taking the components of `target` too is what lets the result combine with
+/// `target` directly by the arithmetic operators, whatever its zones. A field
+/// from `pyrucast.solver.solve` has one zone per block, the zones meeting at
+/// shared nodes with a part of the components each: with the components of
+/// `field`, a component would land in a zone where `target` lacks it, pass
+/// through unchanged there while another zone sums it at the same node, and
+/// the operation would refuse the two values. The typical use folds an
+/// increment from `solve`, which also carries the multipliers, into a current
+/// solution (`target + restrict_like(du, target)`).
 ///
 /// # Parameters
 ///
@@ -262,7 +272,8 @@ pub fn project_sub_element(
 ///
 /// A new `NodeField` zone for zone like `target`. A `(node, component)` pair
 /// takes the value of `field` when it defines it, `0.0` otherwise; the nodes
-/// and components of `field` absent from `target` are dropped.
+/// and components of `field` absent from `target` are dropped. An empty field
+/// gives an empty field, as with `restrict`.
 ///
 /// # Raises
 ///

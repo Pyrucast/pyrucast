@@ -34,6 +34,31 @@ def _two_zone_mesh():
 # ─── Construction ────────────────────────────────────────────────────────────
 
 
+def test_a_component_given_a_value_holds_it_at_every_node():
+    """A `(name, value)` entry starts at `value`, a bare name at zero."""
+    _, nodes, mesh = _two_zone_mesh()
+    f = pyrucast.NodeField(mesh, [("T", 20.0), "u_x"])
+    assert f.components() == ["T", "u_x"]
+    assert f.values(nodes, "T") == [20.0] * 4
+    assert f.values(nodes, "u_x") == [0.0] * 4
+    # Every zone holds it: the two zones agree at the nodes they share.
+    f.check()
+    g = pyrucast.NodeField(mesh[0], [("T", -1.5)])
+    assert g.min("T") == g.max("T") == -1.5
+    with pytest.raises(TypeError):
+        pyrucast.NodeField(mesh, [("T", "hot")])
+
+
+def test_an_empty_field_takes_zones_with_the_union():
+    _, nodes, mesh = _two_zone_mesh()
+    empty = pyrucast.NodeField.empty()
+    assert len(empty) == 0
+    assert empty.components() == []
+    filled = empty | pyrucast.NodeField(mesh, [("T", 2.0)])
+    assert len(filled) == 2
+    assert filled.values(nodes, "T") == [2.0] * 4
+
+
 def test_from_mesh_zero_initialized():
     _c, _nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["T"])
@@ -650,6 +675,20 @@ def test_restrict_like_lands_on_target_support():
     assert s.value(nodes[1], "u_y") == 2.0
 
 
+def test_restrict_and_restrict_like_give_an_empty_field_for_an_empty_field():
+    """An empty field carries nothing: both restrictions give an empty field,
+    which the arithmetic operators pass over. An empty target or mesh gives
+    an empty field too."""
+    _c, _nodes, sm = _poi1_with(2)
+    target = pyrucast.NodeField(sm, [("u_x", 3.0)])
+    nothing = target["lambda"]
+    assert len(pyrucast.node_field.restrict_like(nothing, target)) == 0
+    assert len(pyrucast.node_field.restrict(nothing, sm)) == 0
+    assert len(pyrucast.node_field.restrict_like(target, nothing)) == 0
+    moved = target + pyrucast.node_field.restrict_like(nothing, target)
+    assert moved.max("u_x") == moved.min("u_x") == 3.0
+
+
 # ─── min / max ───────────────────────────────────────────────────────────────
 
 
@@ -976,6 +1015,31 @@ def test_a_node_two_zones_share_counts_once():
     assert pyrucast.measure.xty(u, u) == 4.0
 
 
+def test_xty_multiplies_the_components_paired():
+    """The work of a force along a displacement: u_x by f_x, u_y by f_y, on
+    the four nodes of two zones sharing two of them."""
+    _, _, both, _ = _square_in_two()
+    du = pyrucast.NodeField(both, [("u_x", 2.0), ("u_y", 3.0)])
+    f = pyrucast.NodeField(both, [("f_x", 10.0), ("f_y", -1.0)])
+    pairs = [("u_x", "f_x"), ("u_y", "f_y")]
+    assert pyrucast.measure.xty(du, f, pairs) == 4 * (20.0 - 3.0)
+    # By name nothing pairs; a component may enter several products.
+    assert pyrucast.measure.xty(du, f) == 0.0
+    assert pyrucast.measure.xty(du, f, [("u_x", "f_x"), ("u_x", "f_y")]) == 4 * 18.0
+    # A pair one side does not carry adds nothing.
+    assert pyrucast.measure.xty(du, f, [("u_x", "T")]) == 0.0
+    # A zone alone: three nodes.
+    assert pyrucast.measure.xty(du[0], f[0], pairs) == 3 * 17.0
+
+
+def test_xtx_ignores_a_component_the_field_does_not_carry():
+    _, _, both, _ = _square_in_two()
+    u = pyrucast.NodeField(both, [("T", 1.0)])
+    assert pyrucast.measure.xtx(u, ["T", "nope"]) == 4.0
+    assert pyrucast.measure.xtx(u, ["nope"]) == 0.0
+    assert pyrucast.measure.xtx(u[0], ["nope"]) == 0.0
+
+
 def test_regions_meeting_at_a_node_are_brought_onto_the_same_supports_first():
     left, right, both, n = _square_in_two()
     g = pyrucast.NodeField(left, ["T"])
@@ -1035,3 +1099,40 @@ def test_a_field_is_not_built_on_a_poi1_zone_listing_a_node_twice():
     assert not points[0].is_sealed
     distinct = pyrucast.mesh.to_poi1(points)
     assert pyrucast.node_field.positions(distinct).value(b, "X") == 1.0
+
+
+def test_norm_counts_a_node_two_zones_share_once():
+    """Two zones sharing nodes n1 and n2, holding the same value in both:
+    every order counts each node once, and the default is the Euclidean norm."""
+    _, (n0, n1, n2, n3), mesh = _two_zone_mesh()
+    f = pyrucast.NodeField(mesh, ["T"])
+    f[0][n0, "T"], f[0][n1, "T"], f[0][n2, "T"] = 3.0, -4.0, 12.0
+    f[1][n1, "T"], f[1][n3, "T"], f[1][n2, "T"] = -4.0, 0.0, 12.0
+    assert f.norm(1) == 19.0  # 3 + 4 + 12 + 0
+    assert f.norm() == 13.0  # √(9 + 16 + 144)
+    assert f.norm() == math.sqrt(pyrucast.measure.xtx(f))
+    assert f.norm(0) == 12.0
+    assert f.norm(3) == pytest.approx((27 + 64 + 1728) ** (1 / 3))
+    # A zone alone: n0, n1, n2.
+    assert f[0].norm(1) == 19.0
+    assert f[1].norm(1) == 16.0
+    # Nothing carried, nothing measured.
+    assert f.filter_components("nope").norm() == 0.0
+
+
+def test_norm_measures_the_components_named():
+    """`components` keeps the norm to the components named: four distinct
+    nodes hold T = 1, the multiplier is left out."""
+    _, _nodes, mesh = _two_zone_mesh()
+    f = pyrucast.NodeField(mesh, [("T", 1.0), ("lambda", 100.0)])
+    assert f.norm(components=["T"]) == 2.0  # √4
+    assert f.norm(1, ["T"]) == 4.0
+    assert f.norm(0, ["T"]) == 1.0
+    assert f.norm(0) == 100.0
+    assert f.norm(components=["T", "lambda"]) == f.norm()
+    assert f.norm(components=["T"]) == math.sqrt(pyrucast.measure.xtx(f, ["T"]))
+    # A zone alone: n0, n1, n2.
+    assert f[0].norm(1, ["T"]) == 3.0
+    # A name the field does not carry is ignored.
+    assert f.norm(components=["nope"]) == 0.0
+    assert f.norm(components=["T", "nope"]) == 2.0

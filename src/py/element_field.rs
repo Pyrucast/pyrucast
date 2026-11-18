@@ -123,6 +123,28 @@ impl PySubElementField {
         Ok(SubField::sum(&*self.handle.read(), component)?)
     }
 
+    /// The `order`-norm of the field's values.
+    ///
+    /// # Parameters
+    ///
+    /// - `order`: `2`, the default, gives the Euclidean norm `√(Σ v²)`; any
+    ///   `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`; `0` gives the largest `|v|`, the
+    ///   infinity norm.
+    /// - `components`: the components to measure, the others ignored; `None`
+    ///   takes every component. A name the field does not carry is ignored.
+    ///
+    /// # Returns
+    ///
+    /// The norm, a `float`; `0.0` for a field without values, or carrying none
+    /// of `components`.
+    #[pyo3(signature = (order = 2, components = None))]
+    fn norm(&self, order: u32, components: Option<Vec<String>>) -> f64 {
+        let names: Option<Vec<&str>> = components
+            .as_ref()
+            .map(|v| v.iter().map(String::as_str).collect());
+        SubField::norm(&*self.handle.read(), order, names.as_deref())
+    }
+
     /// Component names, in order.
     fn components(&self) -> Vec<String> {
         self.handle.read().components().to_vec()
@@ -141,12 +163,13 @@ impl PySubElementField {
         self.handle.read().component_index(name)
     }
 
-    /// Keep only the named components, in the order given.
+    /// Keep only the named components, in the order the field holds them.
     ///
     /// `components` is a single name or a list of names (e.g. the result of
     /// `model.primal_vars()`). Returns a **new** field of the caller's own kind,
-    /// sharing its support; the original is untouched. Errors if a requested name
-    /// is absent — filtering never invents a component.
+    /// sharing its support; the original is untouched. A name the zone does not
+    /// carry is ignored; errors if it carries none of them — a zone keeps at
+    /// least one component, and filtering never invents one.
     fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<Self> {
         let wanted = crate::py::ops::field::extract_names(components)?;
         let out = self.handle.read().select_components(wanted.as_slice())?;
@@ -212,10 +235,19 @@ pub struct PyElementField {
 #[pymethods]
 impl PyElementField {
     /// `ElementField(fespace, components)` — one sub-field per subspace
-    /// of `fespace`, sharing the same `components` list. Zero-initialized.
+    /// of `fespace`, sharing the same `components` list, with uniform values.
+    ///
+    /// Each entry of `components` is a `(name, value)` pair, the component
+    /// holding `value` at every Gauss point, or a bare name, holding zero:
+    /// `[("T", 20.0), "p"]`.
     #[new]
-    fn py_new(fespace: PyRef<PyFiniteElementSpace>, components: Vec<String>) -> PyResult<Self> {
-        let ef = ElementField::new(&fespace.inner, components)?;
+    fn py_new(
+        fespace: PyRef<PyFiniteElementSpace>,
+        components: Vec<crate::py::ops::field::InitialComponent>,
+    ) -> PyResult<Self> {
+        use crate::py::ops::field::InitialComponent;
+        let ef = ElementField::new(&fespace.inner, InitialComponent::names(&components))?;
+        InitialComponent::fill(&ef, &components);
         Ok(Self { inner: ef })
     }
 
@@ -318,23 +350,48 @@ impl PyElementField {
         Ok(Field::sum(&self.inner, component)?)
     }
 
+    /// The `order`-norm of the field's values.
+    ///
+    /// # Parameters
+    ///
+    /// - `order`: `2`, the default, gives the Euclidean norm `√(Σ v²)`; any
+    ///   `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`; `0` gives the largest `|v|`, the
+    ///   infinity norm.
+    /// - `components`: the components to measure, wherever a zone carries them,
+    ///   the others ignored; `None` takes every component. A name the field does
+    ///   not carry is ignored.
+    ///
+    /// # Returns
+    ///
+    /// The norm, a `float`; `0.0` for a field without values, or carrying none
+    /// of `components`.
+    #[pyo3(signature = (order = 2, components = None))]
+    fn norm(&self, order: u32, components: Option<Vec<String>>) -> f64 {
+        let names: Option<Vec<&str>> = components
+            .as_ref()
+            .map(|v| v.iter().map(String::as_str).collect());
+        crate::containers::field::Field::norm(&self.inner, order, names.as_deref())
+    }
+
     /// Union of the zones' component names, first-seen order.
     fn components(&self) -> Vec<String> {
         use crate::containers::field::Field;
         Field::components(&self.inner)
     }
 
-    /// Keep only the named components, in the order given.
+    /// Keep only the named components, in the order the field holds them.
     ///
     /// `components` is a single name or a list of names (e.g. the result of
     /// `model.primal_vars()`). Returns a **new** field of the caller's own kind,
-    /// sharing its support; the original is untouched. Errors if a requested name
-    /// is absent — filtering never invents a component.
+    /// sharing its support; the original is untouched. A name the field does not
+    /// carry is ignored: a zone carrying none of the names is dropped, and a field
+    /// carrying none of them gives an empty field — filtering never invents a
+    /// component.
     fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<Self> {
         use crate::containers::field::Field;
         let wanted = crate::py::ops::field::extract_names(components)?;
         Ok(Self {
-            inner: self.inner.filter_components(wanted.as_slice())?,
+            inner: self.inner.filter_components(wanted.as_slice()),
         })
     }
 

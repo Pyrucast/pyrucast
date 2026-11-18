@@ -1,5 +1,7 @@
 """Python tests for ElementField (Phase 2 step 6)."""
 
+import math
+
 import pyrucast
 import pytest
 
@@ -44,6 +46,25 @@ def _subfield(fes, components):
 
 
 # ─── Construction ───────────────────────────────────────────────────────────
+
+
+def test_a_component_given_a_value_holds_it_at_every_gauss_point():
+    """A `(name, value)` entry starts at `value`, a bare name at zero."""
+    _, _, fes = _tri3_subspace(n_cells=2)
+    ef = pyrucast.ElementField(fes, [("E", 210e9), "sigma_y"])
+    assert ef.components() == ["E", "sigma_y"]
+    assert ef.min("E") == ef.max("E") == 210e9
+    assert ef.min("sigma_y") == ef.max("sigma_y") == 0.0
+
+
+def test_an_empty_field_takes_zones_with_the_union():
+    _, _, fes = _tri3_subspace()
+    empty = pyrucast.ElementField.empty()
+    assert len(empty) == 0
+    assert empty.components() == []
+    filled = empty | pyrucast.ElementField(fes, [("E", 1.0)])
+    assert len(filled) == 1
+    assert filled.max("E") == 1.0
 
 
 def test_new_zero_initialized():
@@ -260,6 +281,19 @@ def test_min_max_per_component():
     # Without a component: the whole field, every component pooled.
     assert sub.min() == -5.0
     assert ef.max() == 2.0
+
+
+def test_norm_of_an_element_field():
+    """Every Gauss point counts: three per TRI3 cell, 2 in one cell, -5 in the other."""
+    _c, _mesh, fes = _tri3_subspace(n_cells=2)
+    ef = pyrucast.ElementField(fes, ["k"])
+    ef[0].set_cell_uniform(0, "k", 2.0)
+    ef[0].set_cell_uniform(1, "k", -5.0)
+    gauss = ef[0].gauss_count  # per cell
+    assert ef.norm(0) == 5.0
+    assert ef.norm(1) == pytest.approx(gauss * 7.0)
+    assert ef.norm() == pytest.approx(math.sqrt(gauss * 29.0))
+    assert ef[0].norm() == ef.norm()
     assert ef.components() == ["k"]
     try:
         ef.min("missing")
@@ -267,6 +301,18 @@ def test_min_max_per_component():
         pass
     else:
         raise AssertionError("expected RuntimeError for unknown component")
+
+
+def test_norm_of_an_element_field_on_the_components_named():
+    """Two TRI3 cells, every Gauss point holding k = 2 and E = 100."""
+    _c, _mesh, fes = _tri3_subspace(n_cells=2)
+    ef = pyrucast.ElementField(fes, [("k", 2.0), ("E", 100.0)])
+    points = 2 * ef[0].gauss_count
+    assert ef.norm(0, ["k"]) == 2.0
+    assert ef.norm(1, ["k"]) == pytest.approx(points * 2.0)
+    assert ef[0].norm(components=["k"]) == pytest.approx(math.sqrt(points * 4.0))
+    assert ef.norm(0) == 100.0
+    assert ef.norm(components=["nope"]) == 0.0
 
 
 # ─── Union `|` (composition, uniform with the other aggregates) ──────────────

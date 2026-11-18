@@ -6,7 +6,8 @@ model's own strain operator.
 """
 
 from .. import element_field, field, node_field
-from .fields import STRAIN_PREFIXES, part
+from .._pyrucast import ElementField
+from .fields import STRAIN_PREFIXES
 
 __all__ = [
     "AutomaticControl",
@@ -19,45 +20,21 @@ _BIG = 1e20
 _TINY = 1e-300
 
 
-def _largest_strain(problem, increment, materials):
-    """``max |ε|`` over the strain components the increment produces, in the
-    measure the laws read."""
-    strain = element_field.strain(problem.mechanics_domain, increment, materials)
-    names = [
-        n for zone in strain for n in zone.components() if n.startswith(STRAIN_PREFIXES)
-    ]
-    if not names:
-        return 0.0
-    magnitude = strain.abs()
-    return max(magnitude.max(n) for n in set(names))
-
-
 def automatic_control(problem, increment, elastic, fraction, materials):
     """The size of the step's displacement increment (Cast3M ``AUTOPILO``):
     the largest strain of ``Δu`` and of ``Δu − α Δu_el`` — the second
     measuring how far the step has left the elastic response, so that a
     yielding step counts its plastic part too. The caller scales ``Δu`` to
     bring this to the target."""
-    total = _largest_strain(problem, increment, materials)
+    domain = problem.mechanics_domain
+    strain = element_field.strain(domain, increment, materials)
+    # The strain components, in the measure the laws read.
+    names = [n for n in strain.components() if n.startswith(STRAIN_PREFIXES)]
+    total = strain.norm(0, names)
     if elastic is None:
         return total
-    departure = increment - elastic * fraction
-    return max(total, _largest_strain(problem, departure, materials))
-
-
-def _components(field):
-    return [n for zone in field for n in zone.components()]
-
-
-def _spread(scalar, like):
-    """The one-component ``scalar`` field copied into every component of
-    ``like`` — what a division component by component needs."""
-    (name,) = set(_components(scalar))
-    copies = None
-    for component in dict.fromkeys(_components(like)):
-        copy = scalar.rename_component(name, component)
-        copies = copy if copies is None else copies | copy
-    return element_field.consolidate(copies)
+    departure = element_field.strain(domain, increment - elastic * fraction, materials)
+    return max(total, departure.norm(0, names))
 
 
 def indirect_control(problem, solution, increment, pilot, target, materials):
@@ -80,7 +57,13 @@ def indirect_control(problem, solution, increment, pilot, target, materials):
     if norm.max() < 1e-20:
         direction = reached * 0.0 + 1.0
     else:
-        direction = reached / _spread(norm, reached)
+        # The norm copied into every component of ``reached``: a division
+        # component by component.
+        (name,) = norm.components()
+        spread = ElementField.empty()
+        for component in reached.components():
+            spread = spread | norm.rename_component(name, component)
+        direction = reached / element_field.consolidate(spread)
     a0 = field.psca(direction, done)
     a1 = field.psca(direction, unit)
     positive = element_field.mask(a1, gt=0.0)
@@ -121,8 +104,8 @@ class AutomaticControl:
     def after_solve(self, i, start, solution, materials):
         """``solution`` with its displacement increment rescaled."""
         names = self.problem.displacement_names
-        u = part(solution, names)
-        start_u = node_field.restrict_like(part(start, names), u)
+        u = solution[names]
+        start_u = node_field.restrict_like(start[names], u)
         moved = u - start_u
         if self.reductions < i // 20:
             self.reductions += 1
@@ -141,8 +124,7 @@ class AutomaticControl:
             scale = min(scale, 1.0 / self.fraction)
         self.scale = scale
         rescaled = start_u + moved * scale
-        multipliers = part(solution, self.problem.multiplier_names)
-        return rescaled if multipliers is None else rescaled | multipliers
+        return rescaled | solution[self.problem.multiplier_names]
 
     def pending(self):
         """No level change before the balance: ``α`` moves after it."""
@@ -154,8 +136,8 @@ class AutomaticControl:
         if before == 1.0 and self.scale == 1.0:
             return None
         names = self.problem.displacement_names
-        u = part(solution, names)
-        moved = u - node_field.restrict_like(part(start, names), u)
+        u = solution[names]
+        moved = u - node_field.restrict_like(start[names], u)
         along = self.work(moved, self.nominal)
         if abs(along) < 1e-300:
             return None
@@ -181,16 +163,15 @@ class IndirectControl:
 
     def after_solve(self, i, start, solution, materials):
         names = self.problem.displacement_names
-        u = part(solution, names)
-        start_u = node_field.restrict_like(part(start, names), u)
-        response = node_field.restrict_like(part(self.response, names), u)
+        u = solution[names]
+        start_u = node_field.restrict_like(start[names], u)
+        response = node_field.restrict_like(self.response[names], u)
         change = indirect_control(
             self.problem, start_u, u - start_u, response, self.target, materials
         )
         self.multiplier += change
         moved = u + response * change
-        multipliers = part(solution, self.problem.multiplier_names)
-        return moved if multipliers is None else moved | multipliers
+        return moved | solution[self.problem.multiplier_names]
 
     def pending(self):
         """The multiplier just moved: the loads follow before the balance."""

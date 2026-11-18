@@ -258,9 +258,20 @@ print(mesh)  # Mesh: 2 submesh(es) [#…, #…], 2 cell(s) total
 # another aggregate (concatenation, without deduplication).
 tri.add_subs(qua)
 print(len(tri))  # 2 sous-maillages
+# A zone listed twice, kept once, where it came first.
+tri.add_subs(qua)
+print(len(tri), len(tri.deduplicate()))  # 3 2
+
+# An aggregate without any zone, filled here by the union.
+tout = pyrucast.Mesh.empty()
+for zone_mesh in (tri, qua):
+    tout = tout | zone_mesh
+print(len(tout))  # 2 sous-maillages
 # ANCHOR_END: aggregat
+assert len(tout) == 2
 assert len(mesh) == 2
-assert len(tri) == 2
+assert len(tri) == 3
+assert len(tri.deduplicate()) == 2
 
 # ── first steps ────────────────────────────────────────────
 
@@ -321,12 +332,13 @@ haut = pyrucast.Mesh(c, "TRI3")
 haut.unit().add_cell([a, d, e])
 carre = bas | haut
 
-# Une zone par zone de maillage, toutes les valeurs à zéro.
-T = pyrucast.NodeField(carre, ["T"])
+# Une zone par zone de maillage. Chaque composante part d'une valeur uniforme :
+# un couple (nom, valeur), ou un nom seul pour zéro.
+T = pyrucast.NodeField(carre, [("T", 15.0)])
 print(len(T), T.node_count)  # 2 4 — a et d sont rangés dans les deux zones
 
 # En place, dans toutes les zones qui portent T ; puis dans une zone seulement.
-T.add_to_component("T", 20.0)
+T.add_to_component("T", 5.0)
 T[1].set_value(e, "T", 25.0)  # e n'appartient qu'à la zone du haut
 
 # Lire par le champ : la première zone qui porte le nœud répond.
@@ -351,6 +363,12 @@ T.check()  # les deux zones s'accordent de nouveau
 # Une liste de composantes par zone.
 mixte = pyrucast.NodeField.with_components_per_submesh(carre, [["T", "ux"], ["T"]])
 print(mixte.components())  # ['T', 'ux']
+
+# Un champ vide, que l'union complète : les zones d'un même support fusionnent.
+cumul = pyrucast.NodeField.empty()
+for nom in ("q_x", "q_y"):
+    cumul = cumul | pyrucast.NodeField(carre, [nom])
+print(len(cumul), cumul.components())  # 2 ['q_x', 'q_y']
 # ANCHOR_END: node_field_api
 assert T.values([a, b, d, e], "T") == [20.0, 20.0, 30.0, 25.0]
 assert T.sum("T") == 95.0
@@ -535,13 +553,13 @@ mesh.unit().add_cell([a, b, d])
 mesh.unit().add_cell([a, d, e])
 fes = pyrucast.FiniteElementSpace(mesh)
 
-# Une zone par sous-espace de fes, toutes les valeurs à zéro.
-mat = pyrucast.ElementField(fes, ["E", "nu"])
+# Une zone par sous-espace de fes. Chaque composante part d'une valeur
+# uniforme : un couple (nom, valeur), ou un nom seul pour zéro.
+mat = pyrucast.ElementField(fes, [("E", 210e9), "nu"])
 z = mat.unit()  # la zone, une vue : écrire dans z, c'est écrire dans mat
 print(z)  # SubElementField: 2 cell(s) × 3 gauss × 2 component(s) [E, nu]
 
 # Écrire : toute la zone, une maille entière, un point.
-z.set_uniform("E", 210e9)
 z.set_uniform("nu", 0.3)
 z.set_cell_uniform(1, "E", 70e9)  # la maille 1, à tous ses points de Gauss
 z[1, 2, "nu"] = 0.33  # la maille 1, son point de Gauss 2
@@ -556,16 +574,17 @@ print(mat.max("E"), mat.min("E"))  # 210000000000.0 70000000000.0
 # Une liste de composantes par sous-espace (fes n'en a qu'un).
 cond = pyrucast.ElementField.with_components_per_subspace(fes, [["k"]])
 print(cond.components())  # ['k']
+
+# Un champ vide, que l'union complète.
+print(len(pyrucast.ElementField.empty() | cond))  # 1
 # ANCHOR_END: element_field_api
 assert mat[0].value(1, 1, "E") == 70e9
 assert mat.components() == ["E", "nu"]
 
 # ANCHOR: element_field_combiner
 # Deux champs posés sur le même espace se combinent point à point.
-k1 = pyrucast.ElementField(fes, ["k"])
-k2 = pyrucast.ElementField(fes, ["k"])
-k1.unit().set_uniform("k", 2.0)
-k2.unit().set_uniform("k", 0.5)
+k1 = pyrucast.ElementField(fes, [("k", 2.0)])
+k2 = pyrucast.ElementField(fes, [("k", 0.5)])
 somme = k1 + k2
 print(len(somme), somme.unit().value(0, 0, "k"))  # 1 2.5
 

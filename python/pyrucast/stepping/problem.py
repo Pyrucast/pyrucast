@@ -10,9 +10,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from .. import element_field, node_field
-from .._pyrucast import ElementField, Evolution, FiniteElementSpace
+from .._pyrucast import ElementField, Evolution, FiniteElementSpace, Model, NodeField
 from .configuration import configurations
-from .fields import carried, domain_mesh, uniform
 
 __all__ = ["Problem", "describe_problem"]
 
@@ -27,31 +26,6 @@ def _of_time(spec):
     return lambda _t: spec
 
 
-def _part(model, nature):
-    """The sub-models of ``model`` of one nature, its domain (constraints
-    excluded) and its constraints — ``None`` for a physics the model lacks."""
-    part = model.filter(nature)
-    domain = part.exclude("constraint")
-    if len(domain) == 0:
-        return None, None, None
-    constraints = part.filter("constraint")
-    return part, domain, (constraints if len(constraints) > 0 else None)
-
-
-def _nodal_weights(domain, names):
-    """``(Σ cell measures around each node + ε)^-½`` on every component of
-    ``names`` — the weight that puts residuals at comparable scales before
-    they are combined (Cast3M ``ZJAC``)."""
-    fespace = domain.fespace()
-    ones = ElementField(fespace, list(names))
-    for zone in ones:
-        for name in names:
-            zone.set_uniform(name, 1.0)
-    centres = FiniteElementSpace(domain_mesh(fespace), quadrature="REDUCED")
-    volumes = node_field.sum_to_nodes(element_field.cell_integral(ones, centres))
-    return (volumes + 1e-300) ** -0.5
-
-
 # The strain measure a law reads, from the prefix of what it reads.
 _MEASURES = {"E": "green_lagrange", "H": "hencky"}
 
@@ -63,8 +37,8 @@ def _strain_measure(domain, fespace, displacement_names, materials):
     ``H_*``) — the loop only reads it. Refuses a domain mixing a measure of
     large transformations with anything else: beams and shells have no
     large-transformation formulation yet, and a bar reads Green–Lagrange."""
-    rest = uniform(domain_mesh(fespace), displacement_names, 0.0)
-    names = carried(element_field.strain(domain, rest, materials))
+    rest = NodeField(fespace.mesh().deduplicate(), displacement_names)
+    names = element_field.strain(domain, rest, materials).components()
     prefixes = {name.split("_")[0] for name in names}
     finite = prefixes & set(_MEASURES)
     if not finite:
@@ -76,54 +50,6 @@ def _strain_measure(domain, fespace, displacement_names, materials):
             "large-transformation formulation yet, and a bar reads green_lagrange"
         )
     return _MEASURES[finite.pop()]
-
-
-def _sub_models(model):
-    return [model[i : i + 1] for i in range(len(model))]
-
-
-def contacts(model):
-    """The contact sub-models of ``model``, together; ``None`` without any."""
-    found = None
-    for sub in _sub_models(model):
-        if sub[0].label() == "Contact":
-            found = sub if found is None else found | sub
-    return found
-
-
-def _frame_fespace(model):
-    """The FE space of the laws of ``model`` that read material axes (``V1X``
-    and the others), ``None`` when none does: where the gradient that turns
-    those axes with the part is computed. Every physics counts — a zone the
-    heat and the mechanics share carries the axes of both."""
-    oriented = [
-        sub
-        for sub in _sub_models(model)
-        if "V1X" in (sub[0].material_components() or [])
-    ]
-    if not oriented:
-        return None
-    union = oriented[0]
-    for sub in oriented[1:]:
-        union = union | sub
-    return union.fespace()
-
-
-def _follower_split(mechanics):
-    """The loads that follow the wall (``flux`` in its normal mode, density
-    ``phi_n``) and the rest of the mechanical model, ``(follower, others)``;
-    ``follower`` is ``None`` when there is none. The contacts stay out of
-    both: their gap follows their pairing, read on the model they are updated
-    in."""
-    follower, others = None, None
-    for sub in _sub_models(mechanics):
-        if sub[0].label() == "Contact":
-            continue
-        if (sub[0].material_components() or []) == ["phi_n"]:
-            follower = sub if follower is None else follower | sub
-        else:
-            others = sub if others is None else others | sub
-    return follower, others
 
 
 @dataclass(frozen=True)
@@ -140,13 +66,13 @@ class Problem:
     model: object
     mechanics: object | None
     mechanics_domain: object | None
-    mechanics_constraints: object | None
     heat: object | None
     heat_domain: object | None
     heat_constraints: object | None
     fespace: object | None
     displacement_names: tuple
     multiplier_names: tuple
+    heat_multiplier_names: tuple
     translation_names: tuple
     rotation_names: tuple
     force_names: tuple
@@ -200,8 +126,19 @@ def describe_problem(data, options):
     inside out (``volume_zones``).
     """
     model = data["model"]
-    mechanics, mechanics_domain, mechanics_constraints = _part(model, "mechanical")
-    heat, heat_domain, heat_constraints = _part(model, "thermal")
+    # Each physics with its constraints, its domain without them, and the
+    # constraints alone; a physics without a domain is absent.
+    mechanics = model.filter("mechanical")
+    mechanics_domain = mechanics.exclude("constraint")
+    if len(mechanics_domain) == 0:
+        mechanics = mechanics_domain = None
+    heat = model.filter("thermal")
+    heat_domain = heat.exclude("constraint")
+    heat_constraints = heat.filter("constraint")
+    if len(heat_domain) == 0:
+        heat = heat_domain = heat_constraints = None
+    elif len(heat_constraints) == 0:
+        heat_constraints = None
     if mechanics is None and heat is None:
         raise ValueError(
             "step_by_step: the model has neither a mechanical nor a thermal domain"
@@ -232,11 +169,19 @@ def describe_problem(data, options):
         translation_names = tuple(
             v for v in displacement_names if v not in rotation_names
         )
-        weights = (
-            _nodal_weights(mechanics_domain, force_names)
-            if options.acceleration
-            else None
-        )
+        weights = None
+        if options.acceleration:
+            # (Σ cell measures around each node + ε)^-½ on every force: the
+            # weight that puts residuals at comparable scales before they are
+            # combined (Cast3M ``ZJAC``).
+            ones = ElementField(fespace, [(name, 1.0) for name in force_names])
+            centres = FiniteElementSpace(
+                fespace.mesh().deduplicate(), quadrature="REDUCED"
+            )
+            volumes = node_field.sum_to_nodes(
+                element_field.cell_integral(ones, centres)
+            )
+            weights = (volumes + 1e-300) ** -0.5
         strain_measure = _strain_measure(
             mechanics_domain, fespace, displacement_names, first_materials
         )
@@ -260,13 +205,35 @@ def describe_problem(data, options):
     updates_contact = False
     volume_zones = ()
     if large:
-        follower_loads, step_loads = _follower_split(mechanics)
-        updates_contact = contacts(mechanics) is not None
+        # The loads that follow the wall (``flux`` in its normal mode, density
+        # ``phi_n``) apart from the rest of the mechanics. The contacts stay out
+        # of both: their gap follows their pairing, read on the model they are
+        # updated in.
+        follower_loads, step_loads = Model.empty(), Model.empty()
+        for sub in mechanics:
+            if sub.label() == "Contact":
+                continue
+            if (sub.material_components() or []) == ["phi_n"]:
+                follower_loads.add_sub(sub)
+            else:
+                step_loads.add_sub(sub)
+        follower_loads = follower_loads if len(follower_loads) > 0 else None
+        step_loads = step_loads if len(step_loads) > 0 else None
+        updates_contact = len(mechanics.filter("contact")) > 0
         volume_zones = tuple(
             i for i in range(len(fespace)) if fespace[i].ref_dim == fespace[i].space_dim
         )
         if heat is not None:
-            frame_fespace = _frame_fespace(model)
+            # The FE space of the laws that read material axes (``V1X`` and the
+            # others), where the gradient turning them with the part is
+            # computed. Every physics counts — a zone the heat and the
+            # mechanics share carries the axes of both.
+            oriented = Model.empty()
+            for sub in model:
+                if "V1X" in (sub.material_components() or []):
+                    oriented.add_sub(sub)
+            if len(oriented) > 0:
+                frame_fespace = oriented.fespace()
 
     laws = data.get("material_laws")
     # One output component per curve, named by its ordinate type.
@@ -278,13 +245,15 @@ def describe_problem(data, options):
         model=model,
         mechanics=mechanics,
         mechanics_domain=mechanics_domain,
-        mechanics_constraints=mechanics_constraints,
         heat=heat,
         heat_domain=heat_domain,
         heat_constraints=heat_constraints,
         fespace=fespace,
         displacement_names=displacement_names,
         multiplier_names=multiplier_names,
+        heat_multiplier_names=(
+            tuple(v for v in heat.primal_vars() if v != "T") if heat is not None else ()
+        ),
         translation_names=translation_names,
         rotation_names=rotation_names,
         force_names=force_names,
@@ -295,7 +264,7 @@ def describe_problem(data, options):
         prescribed_temperature_at=_of_time(data.get("temperature")),
         laws=laws,
         law_outputs=law_outputs,
-        transient_heat=heat is not None and "cp" in carried(first_materials),
+        transient_heat=heat is not None and "cp" in first_materials.components(),
         radiating=heat is not None and len(model.filter("radiation")) > 0,
         weights=weights,
         indirect_domain=(

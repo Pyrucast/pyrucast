@@ -123,6 +123,26 @@ def test_add_subs_concatenates_every_zone_in_place():
         raise AssertionError("expected RuntimeError adding zones on another Coords")
 
 
+def test_deduplicate_keeps_each_zone_once_at_its_first_place():
+    """A zone listed twice is kept once, where it came first; the others stay,
+    in order, and the source is untouched. A field cannot be built on a zone
+    listed twice, and can once deduplicated."""
+    c = pyrucast.Coords(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    d = c.add_node([2.0, 0.0])
+    twice = pyrucast.mesh.line(a, b, 2)
+    twice.add_subs(pyrucast.mesh.line(b, d, 5) | twice)
+    assert twice.cell_counts() == [2, 5, 2]
+
+    once = twice.deduplicate()
+    assert once.cell_counts() == [2, 5]
+    assert twice.cell_counts() == [2, 5, 2]
+    with pytest.raises(RuntimeError):
+        pyrucast.NodeField(twice, ["T"])
+    assert len(pyrucast.NodeField(once, ["T"])) == 2
+
+
 def test_sub_union_aggregate_mirrors_aggregate_union_sub():
     """`sub | agg` (Mesh.__ror__) is accepted like `agg | sub`, sub first."""
     c = pyrucast.Coords(2)
@@ -587,7 +607,7 @@ def test_repr_str_submesh_and_mesh():
     sm = pyrucast.Mesh(c, "SEG2")[0]
     assert "SubMesh" in repr(sm)
     assert "SEG2" in str(sm)
-    mesh = pyrucast.Mesh(c)
+    mesh = pyrucast.Mesh.empty()
     assert "Mesh" in repr(mesh)
     assert "submesh" in str(mesh)
 

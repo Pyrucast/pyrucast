@@ -184,3 +184,34 @@ def _uniform(mesh, value):
     for zone in field:
         zone.add_to_component("T", value)
     return field
+
+
+def test_a_chained_relation_is_solved_by_the_lu_with_multipliers():
+    """A rod held at ``T(0) = 0`` and bound by ``T(L) − T(0) = 1``: that
+    relation's master is the clamp's slave, a chain the elimination does not
+    express. The first solve falls back on the LU with multipliers, and the
+    steady profile is the linear one, ``T = x / L``."""
+    _, fes, nodes = _rod()
+    conduction = pc.model.heat_conduction(fes)
+    clamp = pc.model.dirichlet(pc.mesh.poi1_from_nodes([nodes[0]]), conduction, "T")
+    first, last = (pc.mesh.poi1_from_nodes([n]) for n in (nodes[0], nodes[-1]))
+    link = pc.model.mpc([(last, "T", 1.0), (first, "T", -1.0)], conduction)
+    model = conduction | clamp | link
+    rhs = clamp.constraint_rhs([(nodes[0], 0.0)]) | link.constraint_rhs(
+        [(nodes[-1], 1.0)]
+    )
+    k = pc.matrix.stiffness(model, pc.element_field.material_field(model, [("k", 1.0)]))
+    # The fixture is what it claims: out of the elimination's scope.
+    with pytest.raises(RuntimeError, match="chaining"):
+        pc.solver.solve(k, rhs, relations="eliminate", cache=False)
+
+    data = {
+        "model": model,
+        "times": [0.0, 1.0],
+        "materials": pc.element_field.material_field(model, [("k", 1.0)]),
+        "loads": rhs,
+    }
+    pc.stepping.step_by_step(data)
+    temperature = data["results"][-1]["temperature"]
+    for i, node in enumerate(nodes):
+        assert temperature.value(node, "T") == pytest.approx(i / (len(nodes) - 1))

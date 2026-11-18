@@ -479,10 +479,14 @@ class ElementField:
     index it (`field[i]`) to reach a `SubElementField`, compose zones
     with `|`.
     """
-    def __new__(cls, fespace: FiniteElementSpace, components: typing.Sequence[builtins.str]) -> ElementField:
+    def __new__(cls, fespace: FiniteElementSpace, components: typing.Sequence[builtins.str | tuple[builtins.str, builtins.float]]) -> ElementField:
         r"""
         `ElementField(fespace, components)` — one sub-field per subspace
-        of `fespace`, sharing the same `components` list. Zero-initialized.
+        of `fespace`, sharing the same `components` list, with uniform values.
+        
+        Each entry of `components` is a `(name, value)` pair, the component
+        holding `value` at every Gauss point, or a bare name, holding zero:
+        `[("T", 20.0), "p"]`.
         """
     @classmethod
     def with_components_per_subspace(cls, fespace: FiniteElementSpace, components_per_subspace: typing.Sequence[typing.Sequence[builtins.str]]) -> ElementField:
@@ -527,18 +531,38 @@ class ElementField:
         field), across the zones defining it. Errors if no zone defines the
         component.
         """
+    def norm(self, order: builtins.int = 2, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:
+        r"""
+        The `order`-norm of the field's values.
+        
+        # Parameters
+        
+        - `order`: `2`, the default, gives the Euclidean norm `√(Σ v²)`; any
+          `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`; `0` gives the largest `|v|`, the
+          infinity norm.
+        - `components`: the components to measure, wherever a zone carries them,
+          the others ignored; `None` takes every component. A name the field does
+          not carry is ignored.
+        
+        # Returns
+        
+        The norm, a `float`; `0.0` for a field without values, or carrying none
+        of `components`.
+        """
     def components(self) -> builtins.list[builtins.str]:
         r"""
         Union of the zones' component names, first-seen order.
         """
     def filter_components(self, components: typing.Any) -> ElementField:
         r"""
-        Keep only the named components, in the order given.
+        Keep only the named components, in the order the field holds them.
         
         `components` is a single name or a list of names (e.g. the result of
         `model.primal_vars()`). Returns a **new** field of the caller's own kind,
-        sharing its support; the original is untouched. Errors if a requested name
-        is absent — filtering never invents a component.
+        sharing its support; the original is untouched. A name the field does not
+        carry is ignored: a zone carrying none of the names is dropped, and a field
+        carrying none of them gives an empty field — filtering never invents a
+        component.
         """
     def rename_component(self, old: builtins.str, new: builtins.str) -> ElementField:
         r"""
@@ -623,6 +647,20 @@ class ElementField:
         deep-copied). Plain concatenation: no deduplication, unlike
         the functional `|`, which leaves both operands untouched
         and returns a fresh, deduplicated aggregate.
+        """
+    def deduplicate(self) -> ElementField:
+        r"""
+        A fresh aggregate holding each zone once, at its first place:
+        a zone listed again — the same object — is dropped. The zones
+        are shared, not copied, and this aggregate is left untouched.
+        A mesh built one zone per subspace (`fespace.mesh()`) lists
+        twice a zone two physics share; deduplicated, a field can be
+        built on it.
+        """
+    @staticmethod
+    def empty() -> ElementField:
+        r"""
+        An aggregate without any zone, which `|` or `add_sub` fill.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -1191,6 +1229,20 @@ class Evolution:
         the functional `|`, which leaves both operands untouched
         and returns a fresh, deduplicated aggregate.
         """
+    def deduplicate(self) -> Evolution:
+        r"""
+        A fresh aggregate holding each zone once, at its first place:
+        a zone listed again — the same object — is dropped. The zones
+        are shared, not copied, and this aggregate is left untouched.
+        A mesh built one zone per subspace (`fespace.mesh()`) lists
+        twice a zone two physics share; deduplicated, a field can be
+        built on it.
+        """
+    @staticmethod
+    def empty() -> Evolution:
+        r"""
+        An aggregate without any zone, which `|` or `add_sub` fill.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -1293,6 +1345,20 @@ class FiniteElementSpace:
         the functional `|`, which leaves both operands untouched
         and returns a fresh, deduplicated aggregate.
         """
+    def deduplicate(self) -> FiniteElementSpace:
+        r"""
+        A fresh aggregate holding each zone once, at its first place:
+        a zone listed again — the same object — is dropped. The zones
+        are shared, not copied, and this aggregate is left untouched.
+        A mesh built one zone per subspace (`fespace.mesh()`) lists
+        twice a zone two physics share; deduplicated, a field can be
+        built on it.
+        """
+    @staticmethod
+    def empty() -> FiniteElementSpace:
+        r"""
+        An aggregate without any zone, which `|` or `add_sub` fill.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -1394,7 +1460,7 @@ class Matrix:
         r"""
         `Matrix.filter(physics)` — a new `Matrix` holding only the blocks **whose
         nature set contains** the given physics (`"mechanical"`, `"thermal"`,
-        `"constraint"`, `"other"`, `"diffusion"`, `"radiation"`). The result is
+        `"constraint"`, `"other"`, `"diffusion"`, `"radiation"`, `"contact"`). The result is
         without values: call `assemble()` before solving.
         """
     def exclude(self, physics: builtins.str) -> Matrix:
@@ -1525,6 +1591,20 @@ class Matrix:
         the functional `|`, which leaves both operands untouched
         and returns a fresh, deduplicated aggregate.
         """
+    def deduplicate(self) -> Matrix:
+        r"""
+        A fresh aggregate holding each zone once, at its first place:
+        a zone listed again — the same object — is dropped. The zones
+        are shared, not copied, and this aggregate is left untouched.
+        A mesh built one zone per subspace (`fespace.mesh()`) lists
+        twice a zone two physics share; deduplicated, a field can be
+        built on it.
+        """
+    @staticmethod
+    def empty() -> Matrix:
+        r"""
+        An aggregate without any zone, which `|` or `add_sub` fill.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -1614,8 +1694,8 @@ class Matrix:
         
         # Raises
         
-        `RuntimeError` if `matrix` has no assembled values, if the LU meets a singular
-        matrix (boundary conditions forgotten, typically), if `"cholesky"` meets a
+        `RuntimeError` if `matrix` has no assembled values, if the LU meets an
+        exactly zero pivot (an unknown nothing holds at all), if `"cholesky"` meets a
         matrix that is not positive definite, if a relation is out of the scope of
         `"eliminate"`, or if the active-set loop has not converged after `max_iter`
         status changes. `ValueError` for an unknown `method`, `relations`,
@@ -1626,6 +1706,11 @@ class Matrix:
         `Ctrl+C` is honoured between the phases of the solve and at each status
         change; a factorization is a single library call and is not interrupted
         mid-way.
+        
+        A matrix that is singular only up to rounding is not always reported: a
+        structure left free to move as a rigid body, its boundary conditions
+        forgotten, can come back as a finite but absurdly large solution. Check the
+        boundary conditions when the magnitudes are implausible.
         """
 
 @typing.final
@@ -1642,10 +1727,11 @@ class Mesh:
         r"""
         Total number of cells across all submeshes.
         """
-    def __new__(cls, coords: Coords, element_type: typing.Optional[builtins.str] = None) -> Mesh:
+    def __new__(cls, coords: Coords, element_type: builtins.str) -> Mesh:
         r"""
-        `Mesh(coords)` — empty mesh.
-        `Mesh(coords, element_type)` — mesh with one pre-created submesh.
+        `Mesh(coords, element_type)` — a mesh of one empty zone of that type,
+        whose cells `add_cell` lays. `Mesh.empty()` gives a mesh without any
+        zone.
         """
     def element_types(self) -> builtins.list[builtins.str]:
         r"""
@@ -1752,6 +1838,20 @@ class Mesh:
         deep-copied). Plain concatenation: no deduplication, unlike
         the functional `|`, which leaves both operands untouched
         and returns a fresh, deduplicated aggregate.
+        """
+    def deduplicate(self) -> Mesh:
+        r"""
+        A fresh aggregate holding each zone once, at its first place:
+        a zone listed again — the same object — is dropped. The zones
+        are shared, not copied, and this aggregate is left untouched.
+        A mesh built one zone per subspace (`fespace.mesh()`) lists
+        twice a zone two physics share; deduplicated, a field can be
+        built on it.
+        """
+    @staticmethod
+    def empty() -> Mesh:
+        r"""
+        An aggregate without any zone, which `|` or `add_sub` fill.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -2956,10 +3056,6 @@ class Model:
     (`model.heat_conduction(fes)`, `model.dirichlet(...)`) and compose them
     with `|`; assemble with `stiffness` / `mass`.
     """
-    def __new__(cls) -> Model:
-        r"""
-        `Model()` — an empty model; add physics with `|`.
-        """
     def primal_vars(self) -> builtins.list[builtins.str]:
         r"""
         Names of the primal (primary) variables across the whole model.
@@ -2987,12 +3083,12 @@ class Model:
         r"""
         `Model.filter(physics)` — a new `Model` holding only the sub-models **whose
         nature set contains** the given physics. `physics` is a tag: `"mechanical"`,
-        `"thermal"`, `"constraint"`, `"other"`, `"diffusion"` or `"radiation"`.
-        Sub-model order is preserved; the result may be empty.
+        `"thermal"`, `"constraint"`, `"other"`, `"diffusion"`, `"radiation"` or
+        `"contact"`. Sub-model order is preserved; the result may be empty.
         
         A coupled physics declares several natures and is therefore returned by
         each of its filters — a radiation boundary is both `"thermal"` and
-        `"radiation"`.
+        `"radiation"`, a contact both `"constraint"` and `"contact"`.
         """
     def exclude(self, physics: builtins.str) -> Model:
         r"""
@@ -3081,6 +3177,20 @@ class Model:
         deep-copied). Plain concatenation: no deduplication, unlike
         the functional `|`, which leaves both operands untouched
         and returns a fresh, deduplicated aggregate.
+        """
+    def deduplicate(self) -> Model:
+        r"""
+        A fresh aggregate holding each zone once, at its first place:
+        a zone listed again — the same object — is dropped. The zones
+        are shared, not copied, and this aggregate is left untouched.
+        A mesh built one zone per subspace (`fespace.mesh()`) lists
+        twice a zone two physics share; deduplicated, a field can be
+        built on it.
+        """
+    @staticmethod
+    def empty() -> Model:
+        r"""
+        An aggregate without any zone, which `|` or `add_sub` fill.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -3576,13 +3686,17 @@ class NodeField:
         r"""
         Divide `component` by `scalar` on every zone that defines it.
         """
-    def __new__(cls, support: typing.Any, components: typing.Sequence[builtins.str]) -> NodeField:
+    def __new__(cls, support: typing.Any, components: typing.Sequence[builtins.str | tuple[builtins.str, builtins.float]]) -> NodeField:
         r"""
-        `NodeField(support, components)` — zero-initialized field. With a
+        `NodeField(support, components)` — a field with uniform values. With a
         `Mesh` support: one `SubNodeField` per submesh, each on the
         distinct nodes of its zone. With a `SubMesh`: a single zone. A POI1
         zone is its own support, and is refused if it lists a node twice
         (`pyrucast.mesh.to_poi1` gives its distinct nodes).
+        
+        Each entry of `components` is a `(name, value)` pair, the component
+        holding `value` at every node, or a bare name, holding zero:
+        `[("T", 20.0), "u_x"]`.
         """
     @classmethod
     def with_components_per_submesh(cls, mesh: Mesh, components_per_submesh: typing.Sequence[typing.Sequence[builtins.str]]) -> NodeField:
@@ -3648,18 +3762,39 @@ class NodeField:
         that several zones carry counts once. Errors if no zone defines the
         component.
         """
+    def norm(self, order: builtins.int = 2, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:
+        r"""
+        The `order`-norm of the field's values.
+        
+        # Parameters
+        
+        - `order`: `2`, the default, gives the Euclidean norm `√(Σ v²)`; any
+          `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`; `0` gives the largest `|v|`, the
+          infinity norm.
+        - `components`: the components to measure, wherever a zone carries them,
+          the others ignored; `None` takes every component. A name the field does
+          not carry is ignored.
+        
+        # Returns
+        
+        The norm, a `float`; `0.0` for a field without values, or carrying none
+        of `components`. A node that
+        several zones carry counts once.
+        """
     def components(self) -> builtins.list[builtins.str]:
         r"""
         Union of the zones' component names, first-seen order.
         """
     def filter_components(self, components: typing.Any) -> NodeField:
         r"""
-        Keep only the named components, in the order given.
+        Keep only the named components, in the order the field holds them.
         
         `components` is a single name or a list of names (e.g. the result of
         `model.primal_vars()`). Returns a **new** field of the caller's own kind,
-        sharing its support; the original is untouched. Errors if a requested name
-        is absent — filtering never invents a component.
+        sharing its support; the original is untouched. A name the field does not
+        carry is ignored: a zone carrying none of the names is dropped, and a field
+        carrying none of them gives an empty field — filtering never invents a
+        component.
         """
     def rename_component(self, old: builtins.str, new: builtins.str) -> NodeField:
         r"""
@@ -3744,6 +3879,20 @@ class NodeField:
         deep-copied). Plain concatenation: no deduplication, unlike
         the functional `|`, which leaves both operands untouched
         and returns a fresh, deduplicated aggregate.
+        """
+    def deduplicate(self) -> NodeField:
+        r"""
+        A fresh aggregate holding each zone once, at its first place:
+        a zone listed again — the same object — is dropped. The zones
+        are shared, not copied, and this aggregate is left untouched.
+        A mesh built one zone per subspace (`fespace.mesh()`) lists
+        twice a zone two physics share; deduplicated, a field can be
+        built on it.
+        """
+    @staticmethod
+    def empty() -> NodeField:
+        r"""
+        An aggregate without any zone, which `|` or `add_sub` fill.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -4114,7 +4263,7 @@ class NodeField:
         """
     def restrict(self, mesh: Mesh) -> NodeField:
         r"""
-        Restrict `field` to the nodes of `mesh`.
+        Restrict `field` to the nodes of `mesh`, with every component of `field`.
         
         Each zone of the result lies on the POI1 cloud of a submesh of `mesh` — its
         distinct nodes, built once and kept with the submesh. Two restrictions onto
@@ -4125,8 +4274,9 @@ class NodeField:
         
         Element operations on the region (`gradient`, `integral`, `deformation`,
         `interp_to_gauss`) take `mesh` as a separate argument and read the field by
-        node. To land on the support of an existing field rather than a mesh, use
-        `pyrucast.node_field.restrict_like`.
+        node. To land on the supports of an existing field `a`, pass `a.support()`:
+        the result keeps the components of `field`, where
+        `pyrucast.node_field.restrict_like` takes those of `a`, zone by zone.
         
         # Parameters
         
@@ -4137,7 +4287,8 @@ class NodeField:
         
         A new `NodeField` with one zone per submesh of `mesh`, each carrying the
         union of the components of `field`. A node of `mesh` the field does not
-        define gets `0.0`; the nodes outside `mesh` are dropped.
+        define gets `0.0`; the nodes outside `mesh` are dropped. An empty field
+        carries no component, and gives an empty field, as with `restrict_like`.
         
         # Raises
         
@@ -4157,14 +4308,22 @@ class NodeField:
         """
     def restrict_like(self, target: NodeField) -> NodeField:
         r"""
-        Read `field` on the support and the components of `target`, zone by zone.
+        Read `field` on the supports **and the components** of `target`.
         
-        Unlike `pyrucast.node_field.restrict`, which lands on a support built from
-        a mesh and carries every component of `field`, this reuses each zone of
-        `target` as it is — same support, same components. The result combines with
-        `target` directly by the arithmetic operators: typically, to fold an
-        increment from `pyrucast.solver.solve`, which also carries the
-        multipliers, into a current solution (`target + restrict_like(du, target)`).
+        Zone by zone, it is `restrict(field, target.support())` cut down to the
+        components of that zone of `target`: those `target` lacks are dropped,
+        those `field` lacks are created at `0.0`. `pyrucast.node_field.restrict`
+        alone lands on the same supports but keeps the components of `field`.
+        
+        Taking the components of `target` too is what lets the result combine with
+        `target` directly by the arithmetic operators, whatever its zones. A field
+        from `pyrucast.solver.solve` has one zone per block, the zones meeting at
+        shared nodes with a part of the components each: with the components of
+        `field`, a component would land in a zone where `target` lacks it, pass
+        through unchanged there while another zone sums it at the same node, and
+        the operation would refuse the two values. The typical use folds an
+        increment from `solve`, which also carries the multipliers, into a current
+        solution (`target + restrict_like(du, target)`).
         
         # Parameters
         
@@ -4176,7 +4335,8 @@ class NodeField:
         
         A new `NodeField` zone for zone like `target`. A `(node, component)` pair
         takes the value of `field` when it defines it, `0.0` otherwise; the nodes
-        and components of `field` absent from `target` are dropped.
+        and components of `field` absent from `target` are dropped. An empty field
+        gives an empty field, as with `restrict`.
         
         # Raises
         
@@ -4302,6 +4462,23 @@ class SubElementField:
         the Gauss points for a field by elements. The resultant of a nodal force
         field, one component at a time. An empty support sums to `0.0`.
         """
+    def norm(self, order: builtins.int = 2, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:
+        r"""
+        The `order`-norm of the field's values.
+        
+        # Parameters
+        
+        - `order`: `2`, the default, gives the Euclidean norm `√(Σ v²)`; any
+          `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`; `0` gives the largest `|v|`, the
+          infinity norm.
+        - `components`: the components to measure, the others ignored; `None`
+          takes every component. A name the field does not carry is ignored.
+        
+        # Returns
+        
+        The norm, a `float`; `0.0` for a field without values, or carrying none
+        of `components`.
+        """
     def components(self) -> builtins.list[builtins.str]:
         r"""
         Component names, in order.
@@ -4313,12 +4490,13 @@ class SubElementField:
         """
     def filter_components(self, components: typing.Any) -> SubElementField:
         r"""
-        Keep only the named components, in the order given.
+        Keep only the named components, in the order the field holds them.
         
         `components` is a single name or a list of names (e.g. the result of
         `model.primal_vars()`). Returns a **new** field of the caller's own kind,
-        sharing its support; the original is untouched. Errors if a requested name
-        is absent — filtering never invents a component.
+        sharing its support; the original is untouched. A name the zone does not
+        carry is ignored; errors if it carries none of them — a zone keeps at
+        least one component, and filtering never invents one.
         """
     def rename_component(self, old: builtins.str, new: builtins.str) -> SubElementField:
         r"""
@@ -5016,7 +5194,7 @@ class SubMatrix:
         r"""
         The physics nature(s) of the sub-model that produced this block, as a list
         of tags (`"mechanical"`, `"thermal"`, `"diffusion"`, `"radiation"`,
-        `"constraint"`, `"other"`). **Empty** for a block built outside assembly
+        `"constraint"`, `"contact"`, `"other"`). **Empty** for a block built outside assembly
         (the "rien" case), or several tags for a coupled physics. Set by the
         assembler; used by `Matrix.filter`.
         """
@@ -5228,11 +5406,12 @@ class SubModel:
     def physics(self) -> builtins.list[builtins.str]:
         r"""
         The physics nature(s) of this sub-model as a list of tags among
-        `"mechanical"`, `"thermal"`, `"diffusion"`, `"radiation"` and
-        `"constraint"`. A flux or an exchange takes the nature of the model it
-        targets; a constraint carries `"constraint"` plus that nature, or alone
-        when its relation spans two physics; radiation carries `"thermal"` and
-        `"radiation"`.
+        `"mechanical"`, `"thermal"`, `"diffusion"`, `"radiation"`,
+        `"constraint"` and `"contact"`. A flux or an exchange takes the nature
+        of the model it targets; a constraint carries `"constraint"` plus that
+        nature, or alone when its relation spans two physics; radiation carries
+        `"thermal"` and `"radiation"`; a contact carries `"constraint"`,
+        `"mechanical"` and `"contact"`.
         """
     def label(self) -> builtins.str:
         r"""
@@ -5387,6 +5566,23 @@ class SubNodeField:
         the Gauss points for a field by elements. The resultant of a nodal force
         field, one component at a time. An empty support sums to `0.0`.
         """
+    def norm(self, order: builtins.int = 2, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:
+        r"""
+        The `order`-norm of the field's values.
+        
+        # Parameters
+        
+        - `order`: `2`, the default, gives the Euclidean norm `√(Σ v²)`; any
+          `p ≥ 1` gives `(Σ |v|ᵖ)^(1/p)`; `0` gives the largest `|v|`, the
+          infinity norm.
+        - `components`: the components to measure, the others ignored; `None`
+          takes every component. A name the field does not carry is ignored.
+        
+        # Returns
+        
+        The norm, a `float`; `0.0` for a field without values, or carrying none
+        of `components`.
+        """
     def components(self) -> builtins.list[builtins.str]:
         r"""
         Component names, in order.
@@ -5398,12 +5594,13 @@ class SubNodeField:
         """
     def filter_components(self, components: typing.Any) -> SubNodeField:
         r"""
-        Keep only the named components, in the order given.
+        Keep only the named components, in the order the field holds them.
         
         `components` is a single name or a list of names (e.g. the result of
         `model.primal_vars()`). Returns a **new** field of the caller's own kind,
-        sharing its support; the original is untouched. Errors if a requested name
-        is absent — filtering never invents a component.
+        sharing its support; the original is untouched. A name the zone does not
+        carry is ignored; errors if it carries none of them — a zone keeps at
+        least one component, and filtering never invents one.
         """
     def rename_component(self, old: builtins.str, new: builtins.str) -> SubNodeField:
         r"""
@@ -8727,7 +8924,7 @@ def regularize(mesh: Mesh, sweeps: builtins.int = 20, angular: builtins.bool = T
 
 def restrict(field: NodeField, mesh: Mesh) -> NodeField:
     r"""
-    Restrict `field` to the nodes of `mesh`.
+    Restrict `field` to the nodes of `mesh`, with every component of `field`.
     
     Each zone of the result lies on the POI1 cloud of a submesh of `mesh` — its
     distinct nodes, built once and kept with the submesh. Two restrictions onto
@@ -8738,8 +8935,9 @@ def restrict(field: NodeField, mesh: Mesh) -> NodeField:
     
     Element operations on the region (`gradient`, `integral`, `deformation`,
     `interp_to_gauss`) take `mesh` as a separate argument and read the field by
-    node. To land on the support of an existing field rather than a mesh, use
-    `pyrucast.node_field.restrict_like`.
+    node. To land on the supports of an existing field `a`, pass `a.support()`:
+    the result keeps the components of `field`, where
+    `pyrucast.node_field.restrict_like` takes those of `a`, zone by zone.
     
     # Parameters
     
@@ -8750,7 +8948,8 @@ def restrict(field: NodeField, mesh: Mesh) -> NodeField:
     
     A new `NodeField` with one zone per submesh of `mesh`, each carrying the
     union of the components of `field`. A node of `mesh` the field does not
-    define gets `0.0`; the nodes outside `mesh` are dropped.
+    define gets `0.0`; the nodes outside `mesh` are dropped. An empty field
+    carries no component, and gives an empty field, as with `restrict_like`.
     
     # Raises
     
@@ -8759,14 +8958,22 @@ def restrict(field: NodeField, mesh: Mesh) -> NodeField:
 
 def restrict_like(field: NodeField, target: NodeField) -> NodeField:
     r"""
-    Read `field` on the support and the components of `target`, zone by zone.
+    Read `field` on the supports **and the components** of `target`.
     
-    Unlike `pyrucast.node_field.restrict`, which lands on a support built from
-    a mesh and carries every component of `field`, this reuses each zone of
-    `target` as it is — same support, same components. The result combines with
-    `target` directly by the arithmetic operators: typically, to fold an
-    increment from `pyrucast.solver.solve`, which also carries the
-    multipliers, into a current solution (`target + restrict_like(du, target)`).
+    Zone by zone, it is `restrict(field, target.support())` cut down to the
+    components of that zone of `target`: those `target` lacks are dropped,
+    those `field` lacks are created at `0.0`. `pyrucast.node_field.restrict`
+    alone lands on the same supports but keeps the components of `field`.
+    
+    Taking the components of `target` too is what lets the result combine with
+    `target` directly by the arithmetic operators, whatever its zones. A field
+    from `pyrucast.solver.solve` has one zone per block, the zones meeting at
+    shared nodes with a part of the components each: with the components of
+    `field`, a component would land in a zone where `target` lacks it, pass
+    through unchanged there while another zone sums it at the same node, and
+    the operation would refuse the two values. The typical use folds an
+    increment from `solve`, which also carries the multipliers, into a current
+    solution (`target + restrict_like(du, target)`).
     
     # Parameters
     
@@ -8778,7 +8985,8 @@ def restrict_like(field: NodeField, target: NodeField) -> NodeField:
     
     A new `NodeField` zone for zone like `target`. A `(node, component)` pair
     takes the value of `field` when it defines it, `0.0` otherwise; the nodes
-    and components of `field` absent from `target` are dropped.
+    and components of `field` absent from `target` are dropped. An empty field
+    gives an empty field, as with `restrict`.
     
     # Raises
     
@@ -9138,8 +9346,8 @@ def solve(matrix: Matrix, rhs: NodeField, method: builtins.str = 'lu', relations
     
     # Raises
     
-    `RuntimeError` if `matrix` has no assembled values, if the LU meets a singular
-    matrix (boundary conditions forgotten, typically), if `"cholesky"` meets a
+    `RuntimeError` if `matrix` has no assembled values, if the LU meets an
+    exactly zero pivot (an unknown nothing holds at all), if `"cholesky"` meets a
     matrix that is not positive definite, if a relation is out of the scope of
     `"eliminate"`, or if the active-set loop has not converged after `max_iter`
     status changes. `ValueError` for an unknown `method`, `relations`,
@@ -9150,6 +9358,11 @@ def solve(matrix: Matrix, rhs: NodeField, method: builtins.str = 'lu', relations
     `Ctrl+C` is honoured between the phases of the solve and at each status
     change; a factorization is a single library call and is not interrupted
     mid-way.
+    
+    A matrix that is singular only up to rounding is not always reported: a
+    structure left free to move as a rigid body, its boundary conditions
+    forgotten, can come back as a finite but absurdly large solution. Check the
+    boundary conditions when the magnitudes are implausible.
     """
 
 def spill_stats() -> dict:
@@ -9954,16 +10167,16 @@ def xtx(x: typing.Any, components: typing.Optional[typing.Sequence[builtins.str]
     
     - `x`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
     - `components`: the components to sum, the others ignored; `None` takes
-      every component. A component absent from a zone is ignored there.
+      every component. A name the field does not carry is ignored.
     
     # Returns
     
-    The squared norm, a `float`.
+    The squared norm, a `float`; `0.0` for a field carrying none of
+    `components`.
     
     # Raises
     
-    - `TypeError` if `x` is none of the four field types.
-    - `RuntimeError` if no zone of `x` carries any of `components`.
+    `TypeError` if `x` is none of the four field types.
     
     # Notes
     
@@ -9971,21 +10184,25 @@ def xtx(x: typing.Any, components: typing.Optional[typing.Sequence[builtins.str]
     the number of threads.
     """
 
-def xty(x: typing.Any, y: typing.Any) -> builtins.float:
+def xty(x: typing.Any, y: typing.Any, pairs: typing.Optional[typing.Sequence[tuple[builtins.str, builtins.str]]] = None) -> builtins.float:
     r"""
     Global scalar product `Σ xᵢ·yᵢ` of two whole fields, a single number.
     
     The inner product of fields used for energies (`F·u`) and residual norms.
     The sum runs over the supports both fields carry and, on each, over the
-    components both carry, aligned by name (their order may differ); a node
-    that several zones carry counts once. A support or a component on one side
-    only has no counterpart and adds nothing.
+    products `pairs` names; a node that several zones carry counts once. A
+    support on one side only has no counterpart and adds nothing.
     
     # Parameters
     
     - `x`: a `NodeField`, `SubNodeField`, `ElementField` or `SubElementField`.
     - `y`: a field of the same type as `x`; two sub-fields must sit on the same
       support.
+    - `pairs`: the products to sum, `(a, b)` multiplying component `a` of `x` by
+      component `b` of `y` — a displacement by its force,
+      `[("u_x", "f_x"), ("u_y", "f_y")]`. A component may appear in several
+      pairs; a pair one side does not carry adds nothing. `None` multiplies
+      each component by its namesake, whatever the order of the components.
     
     # Returns
     

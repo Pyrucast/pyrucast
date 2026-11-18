@@ -35,8 +35,8 @@ actif le temps d'un calcul par `in_config` : voir
 
 | Python | Effet |
 |---|---|
-| [`node_field.restrict(field, mesh)`](../reference/node_field.md#node_field-restrict) | restreint un `NodeField` aux nœuds de `mesh`, sur un support que partagent toutes les restrictions au même `mesh`. |
-| [`node_field.restrict_like(field, target)`](../reference/node_field.md#node_field-restrict_like) | relit `field` sur le support **et** les composantes de `target`, pour le combiner directement avec lui. |
+| [`node_field.restrict(field, mesh)`](../reference/node_field.md#node_field-restrict) | restreint un `NodeField` aux nœuds de `mesh`, avec toutes ses composantes, sur un support que partagent toutes les restrictions au même `mesh`. |
+| [`node_field.restrict_like(field, target)`](../reference/node_field.md#node_field-restrict_like) | relit `field` sur le support **et** les composantes de `target`, zone par zone : `restrict(field, target.support())`, réduit aux composantes de `target`, celles que `field` n'a pas valant 0. Le résultat se combine directement avec `target`. |
 | [`node_field.merge(a, b)`](../reference/node_field.md#node_field-merge) | union de deux `NodeField`, consolidée — c'est le nom de `a \| b`. |
 | [`node_field.consolidate(field)`](../reference/node_field.md#node_field-consolidate) | fusionne les zones de **même support** en vérifiant la cohérence des valeurs partagées. |
 | [`element_field.consolidate(field)`](../reference/element_field.md#element_field-consolidate) | fusionne les zones d'une même `FiniteElementSpace` (union des composantes) — le pendant de `\|`, qui les laisse côte à côte. |
@@ -195,7 +195,10 @@ acceptent les quatre saveurs (`NodeField`, `SubNodeField`, `ElementField`,
 `components` peut être un **sur-ensemble** des composantes du champ (les noms
 absents sont ignorés) : passer `model.primal_vars()` à un résultat de `solve`
 pour en retirer les inconnues duales (multiplicateurs de Lagrange) est l'usage
-visé. Erreur si aucune zone ne porte l'une des composantes demandées.
+visé. Un champ qui ne porte aucune des composantes demandées donne un champ
+**vide** : ce qu'il en porte, c'est rien. Sur un sous-champ, en revanche,
+`filter_components` lève une erreur si aucune n'y est : une zone garde au moins
+une composante.
 
 `rename_component` laisse **inchangée** (handle partagé) toute zone ne portant
 pas `old`. Erreur si aucune zone ne porte `old`, ou si une zone concernée a déjà
@@ -655,7 +658,7 @@ réduit** et donc par le **type du résultat** :
 
 Les deux exigent la **même saveur** d'opérandes (`NodeField`, `SubNodeField`,
 `ElementField`, `SubElementField`), alignent les composantes **par nom** (l'ordre
-peut différer) et associent les valeurs comme l'arithmétique de
+peut différer ; `xty` accepte aussi des paires de noms, voir plus bas) et associent les valeurs comme l'arithmétique de
 [Champ](../field.md#entre-deux-champs) : la somme ne porte que sur les
 `(support, composante)` **partagés** par les deux champs ; un support ou une
 composante d'un seul côté n'a pas de vis-à-vis et **ne contribue pas**. Un nœud
@@ -675,7 +678,24 @@ x \cdot y = \sum_i \sum_c x_{i,c}\\, y_{i,c},
 \\]
 
 la somme parcourant **toutes** les valeurs, un nœud que plusieurs zones portent
-compté une fois. L'addition flottante n'étant pas associative, le total dépend
+compté une fois.
+
+Quand les noms diffèrent d'un champ à l'autre, `pairs` dit quelles composantes
+multiplier : `xty(du, f, [("u_x", "f_x"), ("u_y", "f_y")])` est le travail de la
+force `f` le long du déplacement `du`,
+
+\\[
+x \cdot y = \sum_i \sum_{(a, b)} x_{i,a}\\, y_{i,b}.
+\\]
+
+Une composante peut entrer dans plusieurs paires ; une paire qu'un des deux
+champs ne porte pas n'ajoute rien.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_champs.py:measure-xty}}
+```
+
+L'addition flottante n'étant pas associative, le total dépend
 du nombre de threads jusqu'au dernier ULP — comme le solveur, ce n'est pas
 reproductible bit à bit.
 
@@ -706,7 +726,7 @@ forme ; un `ElementField` y est déjà. Comme `xty`, la somme flottante dépend 
 nombre de threads jusqu'au dernier ULP. En interne, la réduction parallèle sur
 les cellules passe par le driver `kernel::reduce_cells`.
 
-### Somme et `xtx`
+### Somme, `xtx` et norme
 
 Pour une **résultante de forces déjà nodales** (sortie de `internal_forces`,
 réactions…), la résultante est une simple **somme par nœud** — exposée comme
@@ -719,11 +739,18 @@ méthode, à côté de `min` / `max` :
 | `field.sum(comp)` | une composante (`Σ` nœuds/points) | un `float` |
 | `xtx(field)` | toutes les valeurs au carré (`Σ v²`, `XTX`) | un `float` |
 | `xtx(field, components=[…])` | seules ces composantes au carré | un `float` |
+| `field.norm(p)` | toutes les valeurs : `(Σ \|v\|ᵖ)^(1/p)`, `p = 2` par défaut, `p = 0` pour le plus grand `\|v\|` | un `float` |
+| `field.norm(p, components=[…])` | seules ces composantes | un `float` |
 
-Sur un champ aux nœuds, `sum` et `xtx` comptent une fois un nœud que plusieurs
+Sur un champ aux nœuds, `sum`, `xtx` et `norm` comptent une fois un nœud que plusieurs
 zones portent : il n'y a qu'une valeur (voir [Champ](../field.md#les-règles-de-cohérence)).
 Elles regroupent la somme en parallèle : dépendantes du nombre de threads au
 dernier ULP (contrairement à `min` / `max`, exactes quel que soit l'ordre).
+`norm()` vaut `√xtx(field)`, et `norm(components=[…])` vaut
+`√xtx(field, components=[…])`. Un champ sans valeur, par exemple un
+`filter_components` qui ne garde rien, a une norme nulle ; de même, `norm` et
+`xtx` ignorent une composante que le champ ne porte pas, et valent `0` s'il
+n'en porte aucune.
 
 Appelées **sans argument**, `min` et `max` lisent le champ comme la liste plate
 de ses valeurs — toutes composantes confondues, et, au niveau agrégat, toutes

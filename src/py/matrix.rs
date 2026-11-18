@@ -158,7 +158,7 @@ impl PySubMatrix {
 
     /// The physics nature(s) of the sub-model that produced this block, as a list
     /// of tags (`"mechanical"`, `"thermal"`, `"diffusion"`, `"radiation"`,
-    /// `"constraint"`, `"other"`). **Empty** for a block built outside assembly
+    /// `"constraint"`, `"contact"`, `"other"`). **Empty** for a block built outside assembly
     /// (the "rien" case), or several tags for a coupled physics. Set by the
     /// assembler; used by `Matrix.filter`.
     fn physics(&self) -> Vec<String> {
@@ -289,7 +289,7 @@ impl PyMatrix {
 
     /// `Matrix.filter(physics)` — a new `Matrix` holding only the blocks **whose
     /// nature set contains** the given physics (`"mechanical"`, `"thermal"`,
-    /// `"constraint"`, `"other"`, `"diffusion"`, `"radiation"`). The result is
+    /// `"constraint"`, `"other"`, `"diffusion"`, `"radiation"`, `"contact"`). The result is
     /// without values: call `assemble()` before solving.
     fn filter(&self, physics: Physics) -> Self {
         Self {
@@ -451,7 +451,7 @@ impl PyMatrix {
 impl PyMatrix {
     /// `matrix * x` — either a matrix-vector product against a `NodeField` (`x`
     /// read at the matrix's column DOFs, result a fresh `NodeField` over its row
-    /// DOFs) or, for a `float`, a scalar scale: a fresh `Matrix` whose blocks
+    /// DOFs; an empty field for a matrix without any block) or, for a `float`, a scalar scale: a fresh `Matrix` whose blocks
     /// carry the scaled `factor` (lazy — no value is rewritten). The scaled
     /// result is assembled if the matrix was.
     fn __mul__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {

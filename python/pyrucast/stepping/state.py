@@ -8,7 +8,7 @@ next step's predictor needs — gathered in one mutable ``State``.
 from dataclasses import dataclass, field
 
 from .. import element_field
-from .fields import domain_mesh, uniform
+from .._pyrucast import NodeField
 from .materials import materials_at
 
 __all__ = ["State", "initial_state"]
@@ -41,6 +41,13 @@ class State:
     # materials it was built from and, in dynamics, the time step.
     operator: object | None = None
     operator_key: tuple = (None, None)
+    # How each physics solves: the relations eliminated and the rest factorized
+    # by Cholesky, until a solve refuses it; the LU with multipliers from then
+    # on (`fields.solve`).
+    mechanics_method: str = "cholesky"
+    mechanics_relations: str = "eliminate"
+    heat_method: str = "cholesky"
+    heat_relations: str = "eliminate"
     mass: object | None = None
     mass_materials: object | None = None
     # What the next step's predictor reads (Cast3M FNONL, INCREMENT, ZDEP1, RESIDU).
@@ -80,8 +87,9 @@ def initial_state(data, problem, options):
     if problem.heat is not None:
         temperature = initial.get("temperature")
         if temperature is None:
-            temperature = uniform(
-                domain_mesh(problem.heat_domain.fespace()), ["T"], options.t_ref
+            temperature = NodeField(
+                problem.heat_domain.fespace().mesh().deduplicate(),
+                [("T", options.t_ref)],
             )
     else:
         temperature = problem.prescribed_temperature_at(t0)
@@ -94,10 +102,10 @@ def initial_state(data, problem, options):
         )
 
     if problem.mechanics is not None:
-        mesh = domain_mesh(problem.fespace)
+        mesh = problem.fespace.mesh().deduplicate()
         names = problem.displacement_names
         at_rest = lambda key: (
-            initial[key] if initial.get(key) is not None else uniform(mesh, names, 0.0)
+            initial[key] if initial.get(key) is not None else NodeField(mesh, names)
         )
         state.solution = at_rest("displacement")
         state.behaviour = initial.get("behaviour")
@@ -108,4 +116,9 @@ def initial_state(data, problem, options):
         if options.dynamics:
             state.velocity = at_rest("velocity")
             state.acceleration = at_rest("acceleration")
+        # With contact, the active-set loop factorizes by LU whatever is asked:
+        # eliminating the other relations would only cost.
+        if len(problem.mechanics.filter("contact")) > 0:
+            state.mechanics_method = "lu"
+            state.mechanics_relations = "lagrange"
     return state

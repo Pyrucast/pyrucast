@@ -514,7 +514,7 @@ pub struct CouplingLayout {
 /// # use pyrucast::models::Physics;
 /// // A sub-model's nature travels with every assembled block: it is what
 /// // `Model::filter` and `Matrix::filter` read.
-/// assert_eq!(Physics::ALL.len(), 6);
+/// assert_eq!(Physics::ALL.len(), 7);
 /// // Diffusion and thermal are **distinct** despite their common Laplacian:
 /// // a coupled problem must be able to select one without the other.
 /// assert_ne!(Physics::Diffusion, Physics::Thermal);
@@ -541,6 +541,11 @@ pub enum Physics {
     /// a thermal assembly, while `filter("radiation")` isolates the non-linear
     /// boundary term on its own.
     Radiation,
+    /// Unilateral contact between bodies. Carried **in addition to**
+    /// [`Constraint`](Self::Constraint) and [`Mechanical`](Self::Mechanical)
+    /// by a contact sub-model — so it stays part of the constraints, while
+    /// `filter("contact")` isolates the contacts on their own.
+    Contact,
 }
 
 impl Physics {
@@ -550,7 +555,7 @@ impl Physics {
     /// ```
     /// # use pyrucast::models::Physics;
     /// # use pyrucast::named::Named;
-    /// // Exact inverse of `from_name`, for the six natures.
+    /// // Exact inverse of `from_name`, for the seven natures.
     /// assert!(Physics::ALL.iter().all(|p| Physics::from_name(p.name()) == Some(*p)));
     /// ```
     pub fn name(self) -> &'static str {
@@ -561,6 +566,7 @@ impl Physics {
             Self::Other => "other",
             Self::Diffusion => "diffusion",
             Self::Radiation => "radiation",
+            Self::Contact => "contact",
         }
     }
 
@@ -574,13 +580,14 @@ impl Physics {
     /// // nature cannot be added without the messages following.
     /// assert!(Physics::ALL.contains(&Physics::Radiation));
     /// ```
-    pub const ALL: [Physics; 6] = [
+    pub const ALL: [Physics; 7] = [
         Self::Mechanical,
         Self::Thermal,
         Self::Constraint,
         Self::Other,
         Self::Diffusion,
         Self::Radiation,
+        Self::Contact,
     ];
 }
 

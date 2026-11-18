@@ -21,6 +21,52 @@ pub(crate) fn extract_names(arg: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     ))
 }
 
+/// One entry of a field constructor's `components`: a `(name, value)` pair,
+/// the component holding `value` everywhere, or a bare name, holding zero.
+#[derive(FromPyObject)]
+pub(crate) enum InitialComponent {
+    Valued(String, f64),
+    Named(String),
+}
+
+#[cfg(feature = "stub-gen")]
+impl pyo3_stub_gen::PyStubType for InitialComponent {
+    fn type_output() -> pyo3_stub_gen::TypeInfo {
+        String::type_output() | <(String, f64)>::type_output()
+    }
+}
+
+impl InitialComponent {
+    /// The names of `components`, in order.
+    pub(crate) fn names(components: &[Self]) -> Vec<String> {
+        components
+            .iter()
+            .map(|c| match c {
+                Self::Valued(name, _) | Self::Named(name) => name.clone(),
+            })
+            .collect()
+    }
+
+    /// Give each `(name, value)` entry of `components` its value on every zone
+    /// of `field`, just built on them — a bare name keeps the zero it was
+    /// built with.
+    pub(crate) fn fill<F: crate::containers::field::Field>(field: &F, components: &[Self])
+    where
+        F::Sub: crate::containers::field::SubField,
+    {
+        use crate::containers::field::SubField;
+        for c in components {
+            if let Self::Valued(name, value) = c {
+                for zone in field.iter() {
+                    zone.write()
+                        .set_uniform(name, *value)
+                        .expect("every zone was built with every name");
+                }
+            }
+        }
+    }
+}
+
 /// Scalar product of two fields node by node, `pᵢ = Σ_c xᵢ,c·yᵢ,c`.
 ///
 /// The reduction runs over the components alone: the support is kept, one

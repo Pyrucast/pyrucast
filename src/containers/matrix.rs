@@ -5126,8 +5126,10 @@ impl Matrix {
     /// [`crate::ops::solver::solve`], which reads a *dual* right-hand side at the
     /// rows and produces a *primal* solution at the columns. Both use
     /// [`NodeField::gather`] / [`NodeField::from_dof_values`] to bridge the
-    /// abstract field and the flat DOF vector. Requires an assembled matrix;
-    /// the `*` operator (`&matrix * &field`) is sugar for this method.
+    /// abstract field and the flat DOF vector. Requires an assembled matrix,
+    /// unless it has no block at all: an empty matrix gives an empty field,
+    /// zero everywhere. The `*` operator (`&matrix * &field`) is sugar for
+    /// this method.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -5167,9 +5169,14 @@ impl Matrix {
     /// let y = k.mul_field(&x)?;
     /// // This block's rows sum to 1, hence K · 1 = 1.
     /// assert_eq!(y.get(0)?.read().value(a.id(), "q")?, 1.0);
+    /// // A matrix without any block: nothing, zero everywhere.
+    /// assert!(Matrix::empty().mul_field(&x)?.is_empty());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn mul_field(&self, x_field: &NodeField) -> Result<NodeField> {
+        if self.is_empty() {
+            return Ok(NodeField::default());
+        }
         let x = x_field.gather(&self.col_dofs()?)?;
         let y = self.mul_values(&x)?;
         self.field_from_row_values(&y)

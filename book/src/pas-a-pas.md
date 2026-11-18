@@ -108,7 +108,10 @@ résolution, matériaux du début ; `dupont` résout le schéma à trois niveaux
 = \Bigl(\tfrac{C}{\Delta t} + (2\lambda-\tfrac12)K\Bigr) T_n - \lambda K T_{n-1} + F ,
 \\]
 
-linéarisé à la température extrapolée au milieu du pas.
+linéarisé à la température extrapolée au milieu du pas. Chaque système est
+résolu comme au pas mécanique (Algo 3) : températures imposées éliminées et
+Cholesky, ou, si la résolution le refuse, la LU avec multiplicateurs jusqu'à la
+fin du calcul.
 
 ### Algo 3 — le pas mécanique (`mechanical_step`)
 
@@ -123,6 +126,19 @@ réaction est `−Cᵀλ` :
 = \begin{bmatrix} F_{ext} - F_{int}(u) \\\\ g - C u \end{bmatrix},
 \qquad r = F_{ext} - F_{int}(u) - C^\mathsf{T}\lambda .
 \\]
+
+Chaque résolution élimine les relations et factorise le système qui reste par
+Cholesky, plus vite et avec moins de mémoire que la LU du système ci-dessus
+(voir [Résolution](algorithmes/solveur.md#calculs-plus-gros-que-la-ram)). Si la
+résolution le refuse, le système ci-dessus est résolu tel quel, par la LU, et
+l'est jusqu'à la fin du calcul. Elle le refuse dans deux cas :
+
+- une relation enchaînée à une autre, que l'élimination ne sait pas écrire ;
+- une raideur qui n'est plus définie positive, au-delà d'un flambement.
+
+Avec du contact, la mécanique est résolue ainsi dès le départ : la boucle de
+l'ensemble actif factorise en LU de toute façon. La solution est la même dans
+tous les cas, multiplicateurs compris.
 
 ```text
 pour chaque sous-pas (max_substeps au plus)

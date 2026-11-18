@@ -132,9 +132,10 @@ attend `f_x`, `f_y`, `f_z` : `rename_component` les renomme.
 Les deux chargements touchent les mêmes nœuds, ceux de la moitié basse de
 l'alésage. Comme à la page [Régime stationnaire](thermique.md), leurs
 contributions doivent s'y **additionner**, ce que `|` ne fait pas.
-`restrict_like` ramène la force surfacique sur le support de la dilatation,
-tous les nœuds de la pièce ; les deux champs ont alors le même support, et `+`
-les somme nœud par nœud.
+`restrict_like` ramène la force surfacique sur le support **et les
+composantes** de la dilatation : tous les nœuds de la pièce, et `f_x`, `f_y`,
+`f_z`, où `f_x` et `f_y`, que la force surfacique n'a pas, valent 0. Les deux
+champs ont alors le même support, et `+` les somme nœud par nœud.
 
 ## Résolution
 

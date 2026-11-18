@@ -56,7 +56,7 @@ use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
-use crate::models::transfer::{constrained_physics, constraint_physics};
+use crate::models::transfer::constrained_physics;
 use crate::models::{
     Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation, RelationSense,
     SubModelKind, IMPOSED, MULTIPLIER,
@@ -143,9 +143,6 @@ pub struct Contact {
     pairings: Vec<Pairing>,
     /// Displacement components in ambient order (one per space dimension).
     components: Vec<Component>,
-    /// Nature of the physics it constrains, read from the target at
-    /// construction.
-    target_physics: Option<Physics>,
 }
 
 impl Contact {
@@ -200,6 +197,8 @@ impl Contact {
     ///     vec!["u_x".into(), "u_y".into()])?;
     /// assert_eq!(c.relations()?.len(), 1);
     /// assert_eq!(c.gaps().len(), 1);
+    /// // A constraint on the mechanics, which `filter(Physics::Contact)` finds.
+    /// assert_eq!(c.physics(), &[Physics::Constraint, Physics::Mechanical, Physics::Contact]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(
@@ -208,7 +207,6 @@ impl Contact {
         target: &crate::containers::model::Model,
         variables: Vec<String>,
     ) -> Result<Self> {
-        let target_physics = constrained_physics(target, variables.iter().map(String::as_str));
         // The target's own names: each variable must be one of its primals,
         // and the dual row its reaction lands in is read from it.
         let mut components: Vec<(String, String)> = Vec::with_capacity(variables.len());
@@ -221,6 +219,16 @@ impl Contact {
                 ))
             })?;
             components.push((v.clone(), dual));
+        }
+        // The normal is that of a body: what moves along it is a displacement.
+        if constrained_physics(target, variables.iter().map(String::as_str))
+            != Some(Physics::Mechanical)
+        {
+            return Err(PyrucastError::Message(format!(
+                "Contact: {variables:?} are not the displacements of a mechanical model — \
+                 the exchange between two parts of a conduction or a diffusion is an \
+                 interface_transfer"
+            )));
         }
 
         // Slave and master must live in the same Coords (node ids are relative).
@@ -283,7 +291,6 @@ impl Contact {
             support_mesh,
             pairings,
             components,
-            target_physics,
         })
     }
 
@@ -342,7 +349,6 @@ impl Contact {
             support_mesh,
             pairings,
             components: self.components.clone(),
-            target_physics: self.target_physics,
         }
     }
 
@@ -531,8 +537,9 @@ impl SubModelKind for Contact {
         true
     }
 
+    /// A constraint on the mechanics, and a contact.
     fn physics(&self) -> &'static [Physics] {
-        constraint_physics(self.target_physics)
+        &[Physics::Constraint, Physics::Mechanical, Physics::Contact]
     }
 
     fn label(&self) -> &'static str {

@@ -88,10 +88,6 @@ HOOKS = (
 )
 
 
-def _ignore(*_args, **_kwargs):
-    return None
-
-
 @dataclass(frozen=True)
 class Options:
     """Every setting of the computation, resolved (see ``resolve_options``)."""
@@ -130,7 +126,7 @@ class Options:
 
     def hook(self, name):
         """The user procedure called ``name``, or one that does nothing."""
-        return self.hooks.get(name, _ignore)
+        return self.hooks.get(name, lambda *_args, **_kwargs: None)
 
 
 def resolve_options(data):
