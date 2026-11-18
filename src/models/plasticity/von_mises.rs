@@ -72,13 +72,13 @@ const H: usize = 3;
 /// // Without hardening (`hardening = 0`), the projection brings q back
 /// // **exactly** onto σ_y, and the plastic strain is purely deviatoric.
 /// let trial = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-/// let pas = plasticity::von_mises::return_map(&trial, &repos, &mat, 0.0)?;
+/// let pas = plasticity::von_mises::return_map(&trial, &repos, &mat, 0.0);
 /// assert!((tensor::von_mises_stress(&pas.sigma) - 250.0).abs() < 1e-6);
 /// assert!(tensor::i1(&pas.eps_p).abs() < 1e-12); // écoulement isochore
 ///
 /// // With isotropic hardening, the threshold rises by H·p: the stress
 /// // retained is **larger**.
-/// let dur = plasticity::von_mises::return_map(&trial, &repos, &mat, 20_000.0)?;
+/// let dur = plasticity::von_mises::return_map(&trial, &repos, &mat, 20_000.0);
 /// assert!(tensor::von_mises_stress(&dur.sigma) > 250.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -87,13 +87,13 @@ pub fn return_map(
     prev: &PrevState,
     mat: &MatParams,
     hardening: f64,
-) -> Result<PlasticStep> {
+) -> PlasticStep {
     let sigma_y0 = mat.get(SIGMA_Y);
     let q = von_mises_stress(trial);
     let yield_now = sigma_y0 + hardening * prev.p;
     let f = q - yield_now;
     if f <= 0.0 || q == 0.0 {
-        return Ok(PlasticStep::elastic(trial, prev)); // elastic
+        return PlasticStep::elastic(trial, prev); // elastic
     }
     // Consistency: q − 3μΔp = σ_y + H(p + Δp).
     let dp = f / (3.0 * mat.mu + hardening);
@@ -111,7 +111,7 @@ pub fn return_map(
         sigma[i] = if i < 3 { s_new + mean } else { s_new };
         eps_p[i] += factor * s_trial[i];
     }
-    Ok(PlasticStep::new(sigma, eps_p, prev.p + dp, &[]))
+    PlasticStep::new(sigma, eps_p, prev.p + dp, &[])
 }
 
 /// The consistent tangent `D_alg = ∂σ(B)/∂ε(B)` of the radial return, evaluated
@@ -230,7 +230,7 @@ impl ReturnMapLawKind for Perfect {
         mat: &MatParams,
         _dt: f64,
     ) -> Result<PlasticStep> {
-        return_map(trial, prev, mat, 0.0)
+        Ok(return_map(trial, prev, mat, 0.0))
     }
 
     fn tangent_source(&self) -> crate::models::TangentSource {
@@ -262,7 +262,7 @@ impl ReturnMapLawKind for Isotropic {
         mat: &MatParams,
         _dt: f64,
     ) -> Result<PlasticStep> {
-        return_map(trial, prev, mat, mat.get(H))
+        Ok(return_map(trial, prev, mat, mat.get(H)))
     }
 
     fn tangent_source(&self) -> crate::models::TangentSource {

@@ -108,17 +108,16 @@ pub const MATERIAL: &[&str] = &["E", "nu", "f_t", "f_c", "A_t", "A_c"];
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
 /// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
-/// // Deux endommagements distincts : la traction en active un, la
-/// // compression the other — that is what **restores the stiffness** when a
-/// // fissure se referme.
-/// let traction = damage::damage_tc::update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0; 4], &mat)?;
+/// // Two distinct damages: tension drives one, compression the other — that
+/// // is what **restores the stiffness** when a crack closes again.
+/// let traction = damage::damage_tc::update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0; 4], &mat);
 /// let compression =
-///     damage::damage_tc::update(&[-1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0; 4], &mat)?;
+///     damage::damage_tc::update(&[-1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0; 4], &mat);
 /// assert_eq!(traction.internal().len(), 4); // r⁺, r⁻, d⁺, d⁻
-/// assert!(traction.internal()[2] > compression.internal()[2]); // d⁺ : la traction seule
+/// assert!(traction.internal()[2] > compression.internal()[2]); // d⁺: tension only
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> Result<DamageUpdate> {
+pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> DamageUpdate {
     let e = mat.get(E);
     let nu = mat.get(NU);
     let (f_t, f_c) = (mat.get(F_T), mat.get(F_C));
@@ -213,11 +212,11 @@ pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> Result<DamageUpdat
 
     // The reported scalar is the worse of the two — a summary for
     // visualisation, not the state, which is the four below.
-    Ok(DamageUpdate::new(
+    DamageUpdate::new(
         sigma,
         d_plus.max(d_minus),
         &[r_plus, r_minus, d_plus, d_minus],
-    ))
+    )
 }
 
 /// Damage-TC — separate tension and compression damages.
@@ -244,7 +243,7 @@ impl DirectUpdateLawKind for DamageTc {
         mat: &MatRead,
         _space_dim: usize,
     ) -> Result<DamageUpdate> {
-        update(eps, prev, mat)
+        Ok(update(eps, prev, mat))
     }
 }
 

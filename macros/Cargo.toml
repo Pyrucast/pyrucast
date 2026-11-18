@@ -12,6 +12,9 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[lints]
+workspace = true
+
 [lib]
 # Une crate `proc-macro` ne peut **rien** exporter d'autre que des macros, et
 # une crate ordinaire ne peut pas en contenir : c'est ce qui impose une seconde

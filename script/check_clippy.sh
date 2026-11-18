@@ -10,7 +10,8 @@
 # rattrapés.
 #
 # Ce bloc n'appartient pas à `check_all` : il coûte trop cher pour la boucle
-# quotidienne. Il est appelé aux deux moments où l'on pose une version —
+# quotidienne, qui ne garde que la première passe (`check_rust.sh`). Il est
+# appelé aux deux moments où l'on pose une version —
 # `set_new_version.sh` en local, et le job `verify` de `release.yml` en CI.
 step "cargo clippy (défaut) -D warnings" \
     cargo clippy --workspace --all-targets -- -D warnings

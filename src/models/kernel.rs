@@ -172,7 +172,7 @@ impl RefData {
         // a property of the *zone*, so it is proved here, once, and named: a wider
         // element would otherwise overflow a stack slice deep inside a kernel,
         // where the panic says nothing about which mesh caused it.
-        let n_nodes = fe.nodes_per_cell()?;
+        let n_nodes = fe.nodes_per_cell();
         let space_dim = fe.space_dim();
         if n_nodes * space_dim > MAX_CELL_DOFS {
             return Err(PyrucastError::Message(format!(
@@ -185,13 +185,13 @@ impl RefData {
             n_nodes,
             n_gauss,
             space_dim,
-            ref_dim: fe.ref_dim()?,
+            ref_dim: fe.ref_dim(),
             axisymmetric: fe.is_axisymmetric(),
             gauss_xi,
             n_ref,
             dn_ref,
             weights,
-            shape_count: fe.shape_count()?,
+            shape_count: fe.shape_count(),
             field_n_ref,
             field_d2n_ref,
             model_embedded: fe.interpolation().is_model_embedded(),

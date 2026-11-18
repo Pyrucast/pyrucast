@@ -130,7 +130,7 @@ pub(crate) fn subspace_beam_deformation(
     let model = BeamModel::from_space_dim(space_dim)
         .map_err(|e| PyrucastError::Message(format!("beam_deformation: {e}")))?;
     let (dofs, out_comps) = (model.primal(), model.strains());
-    let n_nodes = s.nodes_per_cell()?;
+    let n_nodes = s.nodes_per_cell();
     let n_g = s.gauss_count();
     if n_nodes != 2 {
         return Err(PyrucastError::Message(format!(

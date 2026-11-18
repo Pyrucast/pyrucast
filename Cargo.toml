@@ -24,6 +24,12 @@ authors = ["Gauthier F"]
 license = "MPL-2.0"
 repository = "https://github.com/Pyrucast/pyrucast"
 
+# Lints ajoutés à ceux que clippy applique déjà, pour les deux paquets.
+# `unnecessary_wraps` refuse un `Result` qui ne peut jamais être une erreur, et
+# une `Option` toujours `Some`. `clippy.toml` l'étend à l'API publique.
+[workspace.lints.clippy]
+unnecessary_wraps = "warn"
+
 [package]
 name = "pyrucast"
 version.workspace = true
@@ -55,6 +61,9 @@ exclude = [
     # doublon n'apporterait rien à un consommateur de `pyrucast`.
     "/macros/",
 ]
+
+[lints]
+workspace = true
 
 [lib]
 name = "pyrucast"

@@ -57,7 +57,7 @@ const B_C: usize = 6;
 /// // Mazars's parameters, read once per cell: the threshold `eps_d0` and the
 /// // two branches, tension and compression. They are not exposed field by
 /// // field — `update` is what uses them.
-/// let u = damage::mazars::update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0], &mat)?;
+/// let u = damage::mazars::update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0], &mat);
 /// assert!(u.damage > 0.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -195,9 +195,9 @@ pub const MATERIAL: &[&str] = &["E", "nu", "eps_d0", "A_t", "B_t", "A_c", "B_c"]
 /// // `kappa` is the law's memory: it **does not decrease**. Unloading after
 /// // damaging repairs nothing.
 /// let grand = [1e-3, 0.0, 0.0, 0.0, 0.0, 0.0];
-/// let charge = damage::mazars::update(&grand, &[0.0], &mat)?;
+/// let charge = damage::mazars::update(&grand, &[0.0], &mat);
 /// let petit = [1e-5, 0.0, 0.0, 0.0, 0.0, 0.0];
-/// let decharge = damage::mazars::update(&petit, &charge.vars, &mat)?;
+/// let decharge = damage::mazars::update(&petit, &charge.vars, &mat);
 /// assert_eq!(decharge.internal()[0], charge.internal()[0]);
 /// // `damage` is recomputed from κ, hence equality up to rounding.
 /// assert!((decharge.damage - charge.damage).abs() < 1e-12);
@@ -206,7 +206,7 @@ pub const MATERIAL: &[&str] = &["E", "nu", "eps_d0", "A_t", "B_t", "A_c", "B_c"]
 /// assert!(decharge.sigma[0] < charge.sigma[0]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> Result<DamageUpdate> {
+pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> DamageUpdate {
     let p = MazarsParams {
         e: mat.get(E),
         nu: mat.get(NU),
@@ -218,7 +218,7 @@ pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> Result<DamageUpdat
     };
     let kappa_old = prev.first().copied().unwrap_or(0.0);
     let (sigma, damage, kappa) = mazars_update(eps, kappa_old, &p);
-    Ok(DamageUpdate::new(sigma, damage, &[kappa]))
+    DamageUpdate::new(sigma, damage, &[kappa])
 }
 
 /// Mazars isotropic damage — the classical concrete law.
@@ -240,7 +240,7 @@ impl DirectUpdateLawKind for Mazars {
         mat: &MatRead,
         _space_dim: usize,
     ) -> Result<DamageUpdate> {
-        update(eps, prev, mat)
+        Ok(update(eps, prev, mat))
     }
 }
 

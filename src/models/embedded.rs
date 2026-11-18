@@ -247,7 +247,7 @@ impl Embedded {
         }
 
         // The immersed support: one POI1 cell per unique immersed node.
-        let immersed_ids = unique_nodes(immersed)?;
+        let immersed_ids = unique_nodes(immersed);
         if immersed_ids.is_empty() {
             return Err(PyrucastError::Message(
                 "Embedded: immersed mesh carries no node".into(),
@@ -516,7 +516,7 @@ impl Constraint for Embedded {
 }
 
 /// Unique node ids of a mesh, in order of first appearance across submeshes.
-fn unique_nodes(mesh: &Mesh) -> Result<Vec<NodeId>> {
+fn unique_nodes(mesh: &Mesh) -> Vec<NodeId> {
     let mut seen: HashSet<NodeId> = HashSet::new();
     let mut out: Vec<NodeId> = Vec::new();
     for sm in mesh {
@@ -526,7 +526,7 @@ fn unique_nodes(mesh: &Mesh) -> Result<Vec<NodeId>> {
             }
         }
     }
-    Ok(out)
+    out
 }
 
 #[cfg(test)]

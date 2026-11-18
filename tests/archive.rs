@@ -477,7 +477,7 @@ fn a_unilateral_matrix_keeps_its_sense() -> Result<()> {
 /// in the type system enforces it. So the writer must refuse a cycle by naming
 /// it, rather than recurse until the stack gives out.
 #[test]
-fn a_cycle_is_refused_by_name() -> Result<()> {
+fn a_cycle_is_refused_by_name() {
     use pyrucast::archive::Archivable;
     use serde::{Deserialize, Serialize};
 
@@ -498,5 +498,4 @@ fn a_cycle_is_refused_by_name() -> Result<()> {
         .to_string();
     assert!(e.contains("cycle"), "should say what is wrong: {e}");
     assert!(e.contains("Knot"), "should name the object: {e}");
-    Ok(())
 }

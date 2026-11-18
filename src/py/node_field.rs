@@ -771,11 +771,11 @@ impl PySubNodeField {
     }
 
     /// `-field` — every value negated, in a new sub-field.
-    fn __neg__(&self) -> PyResult<Self> {
+    fn __neg__(&self) -> Self {
         let out = crate::containers::field::SubField::map_all(&*self.handle.read(), |v| -v);
-        Ok(Self {
+        Self {
             handle: crate::handle::Handle::new(out),
-        })
+        }
     }
 }
 

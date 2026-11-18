@@ -334,7 +334,8 @@ impl Domain for Radiation {
             let emis = row[lay.material[0] as usize];
             let t_inf = row[lay.material[1] as usize];
             4.0 * sigma * emis * t_inf.powi(3)
-        })
+        });
+        Ok(())
     }
 }
 
@@ -449,7 +450,7 @@ impl Behavior for Radiation {
 /// `∫_Γ coeff(g) · N_i N_j dΓ` over one boundary cell — the surface mass matrix
 /// weighted by a per-Gauss coefficient. Both radiative operators are this
 /// integral; only the coefficient differs, so they share it.
-fn surface_mass(geom: &CellGeom, ke: &mut [f64], coeff: impl Fn(usize) -> f64) -> Result<()> {
+fn surface_mass(geom: &CellGeom, ke: &mut [f64], coeff: impl Fn(usize) -> f64) {
     let n_nodes = geom.n_nodes;
     for g in 0..geom.n_gauss {
         let shape = geom.n_at_g(g);
@@ -460,7 +461,6 @@ fn surface_mass(geom: &CellGeom, ke: &mut [f64], coeff: impl Fn(usize) -> f64) -
             }
         }
     }
-    Ok(())
 }
 
 crate::physics_operator! {

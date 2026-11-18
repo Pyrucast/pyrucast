@@ -431,8 +431,8 @@ impl PyEvolution {
     }
 
     /// The ordinate's physical type (scalar evolutions), or `None`.
-    fn ordinate_type(&self) -> PyResult<Option<String>> {
-        Ok(self.inner.ordinate_type()?)
+    fn ordinate_type(&self) -> Option<String> {
+        self.inner.ordinate_type()
     }
 
     /// Interpolate at `x`.

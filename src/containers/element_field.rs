@@ -1132,9 +1132,17 @@ impl ElementFieldView {
         let n_out = reads.first().map_or(0, Vec::len);
 
         // 1. The zones that may give: same definition, and at least one of the
-        //    requested components — with the (column read, column written)
-        //    pairs each gives, and its submesh.
-        let mut sources: Vec<(usize, Vec<(usize, usize)>, Handle<SubMesh>)> = Vec::new();
+        //    requested components. Each comes with its (column read, column
+        //    written) pairs and the way it finds a cell of `target`: by its rank
+        //    on the same submesh (`None`), or through the table of its submesh
+        //    (`Some(k)`) — one table per distinct submesh.
+        struct Source {
+            zone: usize,
+            columns: Vec<(usize, usize)>,
+            table: Option<usize>,
+        }
+        let mut sources = Vec::new();
+        let mut meshes: Vec<Handle<SubMesh>> = Vec::new();
         for (z, zone) in self.zones.iter().enumerate() {
             let columns: Vec<(usize, usize)> = reads[z]
                 .iter()
@@ -1151,35 +1159,31 @@ impl ElementFieldView {
                 (s.element_type(), s.interpolation(), s.quadrature()) == definition
                     && s.coords().same_object(&coords)
             };
-            if same {
-                let submesh = support.read().submesh();
-                sources.push((z, columns, submesh));
+            if !same {
+                continue;
             }
+            let submesh = support.read().submesh();
+            let table = if submesh.same_object(&target_mesh) {
+                None
+            } else {
+                let known = meshes.iter().position(|m| m.same_object(&submesh));
+                Some(known.unwrap_or_else(|| {
+                    meshes.push(submesh);
+                    meshes.len() - 1
+                }))
+            };
+            sources.push(Source {
+                zone: z,
+                columns,
+                table,
+            });
         }
         if sources.is_empty() || n_out == 0 || n_gauss == 0 {
             return;
         }
 
-        // 2. How each source finds a cell of `target`: by its rank on the same
-        //    submesh (`None`), or through the table of its submesh — one table
-        //    per distinct submesh, read in place under its guard.
+        // 2. The tables, read in place under the guards of their submeshes.
         let npc = definition.0.nodes_per_cell();
-        let mut meshes: Vec<Handle<SubMesh>> = Vec::new();
-        let locate: Vec<Option<usize>> = sources
-            .iter()
-            .map(|(_, _, m)| {
-                if m.same_object(&target_mesh) {
-                    return None;
-                }
-                Some(match meshes.iter().position(|x| x.same_object(m)) {
-                    Some(k) => k,
-                    None => {
-                        meshes.push(m.clone());
-                        meshes.len() - 1
-                    }
-                })
-            })
-            .collect();
         let guards: Vec<ReadGuard<SubMesh>> = meshes.iter().map(|m| m.read()).collect();
         // From the last cell to the first: a cell listed twice finds its first.
         let tables: Vec<HashMap<&[NodeId], u32>> = guards
@@ -1204,19 +1208,19 @@ impl ElementFieldView {
             .enumerate()
             .for_each(|(t, dst)| {
                 let cell = &connectivity[t * npc..(t + 1) * npc];
-                for ((z, columns, _), at) in sources.iter().zip(&locate).rev() {
-                    let s = match at {
+                for source in sources.iter().rev() {
+                    let s = match source.table {
                         None => t,
-                        Some(k) => match tables[*k].get(cell) {
+                        Some(k) => match tables[k].get(cell) {
                             Some(&s) => s as usize,
                             None => continue,
                         },
                     };
-                    let zone = &self.zones[*z];
+                    let zone = &self.zones[source.zone];
                     let stride = zone.component_count();
                     let src = &zone.values()[s * n_gauss * stride..(s + 1) * n_gauss * stride];
                     for g in 0..n_gauss {
-                        for &(ci, c) in columns {
+                        for &(ci, c) in &source.columns {
                             dst[g * n_out + c] = src[g * stride + ci];
                         }
                     }

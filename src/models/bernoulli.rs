@@ -347,7 +347,8 @@ impl Domain for Bernoulli {
             // [E, I] + facultatives [A, rho]
             BeamModel::Planar1d => {
                 let a = optional(row, lay, 0, "A")?;
-                planar_mass(geom, rho * a, rho * m(1), m(0) * m(1), ke)
+                planar_mass(geom, rho * a, rho * m(1), m(0) * m(1), ke);
+                Ok(())
             }
             // [E, A, I]
             BeamModel::Frame2d => crate::models::frame::element_mass(
@@ -359,18 +360,21 @@ impl Domain for Bernoulli {
                 ke,
             ),
             // [E, A, I_y, I_z, J, G]
-            BeamModel::Frame3d => crate::models::frame3d::element_mass(
-                geom,
-                rho,
-                m(1),
-                m(2),
-                m(3),
-                m(0),
-                None,
-                None,
-                None,
-                ke,
-            ),
+            BeamModel::Frame3d => {
+                crate::models::frame3d::element_mass(
+                    geom,
+                    rho,
+                    m(1),
+                    m(2),
+                    m(3),
+                    m(0),
+                    None,
+                    None,
+                    None,
+                    ke,
+                );
+                Ok(())
+            }
         }
     }
 
@@ -393,7 +397,10 @@ impl Domain for Bernoulli {
                 let n = state.row(geom.cell, 0)[lay.state[0] as usize];
                 match self.model {
                     BeamModel::Frame2d => crate::models::frame::element_geometric(geom, n, ke),
-                    _ => crate::models::frame3d::element_geometric(geom, n, ke),
+                    _ => {
+                        crate::models::frame3d::element_geometric(geom, n, ke);
+                        Ok(())
+                    }
                 }
             }
         }
@@ -417,18 +424,18 @@ impl Domain for Bernoulli {
         match self.model {
             // [E, I]
             BeamModel::Planar1d => {
-                let local = bending_4x4(geom, e * m(1))?;
+                let local = bending_4x4(geom, e * m(1));
                 copy(&local, ke, 4);
             }
             // [E, A, I]
             BeamModel::Frame2d => {
-                let local = plane_frame(geom, e * m(1), e * m(2), l)?;
+                let local = plane_frame(geom, e * m(1), e * m(2), l);
                 let t = rotation_2d(dir[0], dir[1]);
                 congruent(&local, &t, ke, 6);
             }
             // [E, A, I_y, I_z, J, G]
             BeamModel::Frame3d => {
-                let local = space_frame(geom, e * m(1), e * m(2), e * m(3), m(5) * m(4), l)?;
+                let local = space_frame(geom, e * m(1), e * m(2), e * m(3), m(5) * m(4), l);
                 let t = rotation_3d(&dir);
                 congruent(&local, &t, ke, 12);
             }
@@ -512,7 +519,7 @@ impl Behavior for Bernoulli {
 /// it leaves one source of truth, and it makes the declared interpolation
 /// **load-bearing**. A basis that was wrong would now produce a wrong stiffness
 /// and fail the beam tests, where before it could have been anything at all.
-fn bending_4x4(geom: &CellGeom, ei: f64) -> Result<[[f64; 4]; 4]> {
+fn bending_4x4(geom: &CellGeom, ei: f64) -> [[f64; 4]; 4] {
     let mut k = [[0.0_f64; 4]; 4];
     let mut b_buf = [0.0_f64; MAX_CELL_DOFS];
     for g in 0..geom.n_gauss {
@@ -525,39 +532,32 @@ fn bending_4x4(geom: &CellGeom, ei: f64) -> Result<[[f64; 4]; 4]> {
             }
         }
     }
-    Ok(k)
+    k
 }
 
 /// Plane frame, local DOFs `[u'_A, w'_A, θ_A, u'_B, w'_B, θ_B]`.
-fn plane_frame(geom: &CellGeom, ea: f64, ei: f64, l: f64) -> Result<[[f64; 6]; 6]> {
+fn plane_frame(geom: &CellGeom, ea: f64, ei: f64, l: f64) -> [[f64; 6]; 6] {
     let mut k = [[0.0_f64; 6]; 6];
     let ka = ea / l;
     k[0][0] = ka;
     k[3][3] = ka;
     k[0][3] = -ka;
     k[3][0] = -ka;
-    let b = bending_4x4(geom, ei)?;
+    let b = bending_4x4(geom, ei);
     let idx = [1usize, 2, 4, 5];
     for (a, &ia) in idx.iter().enumerate() {
         for (c, &ic) in idx.iter().enumerate() {
             k[ia][ic] += b[a][c];
         }
     }
-    Ok(k)
+    k
 }
 
 /// Space frame, local DOFs `[u, v, w, θ_x, θ_y, θ_z]` per node.
 ///
 /// The two bending planes are the Timoshenko closed form with `Φ = 0` — which is
 /// exactly what dropping the shear compliance means.
-fn space_frame(
-    geom: &CellGeom,
-    ea: f64,
-    ei_y: f64,
-    ei_z: f64,
-    gj: f64,
-    l: f64,
-) -> Result<[[f64; 12]; 12]> {
+fn space_frame(geom: &CellGeom, ea: f64, ei_y: f64, ei_z: f64, gj: f64, l: f64) -> [[f64; 12]; 12] {
     let mut k = [[0.0_f64; 12]; 12];
     // Axial, on u_A (0) and u_B (6).
     let ka = ea / l;
@@ -573,7 +573,7 @@ fn space_frame(
     k[9][3] = -kt;
 
     // Bending in the x-y plane (deflection v, rotation θ_z), stiffness EI_z.
-    let b_xy = bending_4x4(geom, ei_z)?;
+    let b_xy = bending_4x4(geom, ei_z);
     let idx_xy = [1usize, 5, 7, 11];
     for (a, &ia) in idx_xy.iter().enumerate() {
         for (c, &ic) in idx_xy.iter().enumerate() {
@@ -583,7 +583,7 @@ fn space_frame(
     // Bending in the x-z plane (deflection w, rotation θ_y), stiffness EI_y. The
     // sign of the rotation is opposite there — a positive θ_y bends towards −z —
     // so the coupling terms flip.
-    let b_xz = bending_4x4(geom, ei_y)?;
+    let b_xz = bending_4x4(geom, ei_y);
     let idx_xz = [2usize, 4, 8, 10];
     let sign = [1.0, -1.0, 1.0, -1.0];
     for (a, &ia) in idx_xz.iter().enumerate() {
@@ -591,7 +591,7 @@ fn space_frame(
             k[ia][ic] += sign[a] * sign[c] * b_xz[a][c];
         }
     }
-    Ok(k)
+    k
 }
 
 /// The 2-D rotation `T` (6×6) mapping global DOFs to local, per node
@@ -707,7 +707,7 @@ fn optional(row: &[f64], lay: &ElementLayout, slot: usize, name: &str) -> Result
     }
 }
 
-fn planar_mass(geom: &CellGeom, rho_a: f64, rho_i: f64, ei: f64, ke: &mut [f64]) -> Result<()> {
+fn planar_mass(geom: &CellGeom, rho_a: f64, rho_i: f64, ei: f64, ke: &mut [f64]) {
     let (xa, xb) = (geom.node_coord(0), geom.node_coord(1));
     let l = (xb[0] - xa[0]).abs();
     let m = crate::models::beam::mass_4x4(rho_a, rho_i, ei, None, l);
@@ -716,7 +716,6 @@ fn planar_mass(geom: &CellGeom, rho_a: f64, rho_i: f64, ei: f64, ke: &mut [f64])
             ke[r * 4 + c] += v;
         }
     }
-    Ok(())
 }
 
 crate::physics_operator! {

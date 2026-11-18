@@ -200,14 +200,14 @@ pub(super) fn solve(
         .iter()
         .map(|s| (s.multiplier_node, IMPOSED.to_string()))
         .collect();
-    let gs = rhs.gather(&g_dofs)?;
+    let gs = rhs.gather(&g_dofs);
     let mut u0 = DVector::<f64>::zeros(n_phys);
     for (s, &g) in cond.slaves.iter().zip(&gs) {
         u0[s.phys_idx] = g / s.a_s;
     }
 
     // ── Step 3 — reduce the right-hand side: f̂ = Tᵀ (f − K·u₀) ─────────
-    let f_phys = DVector::from_vec(rhs.gather_keys(&cond.phys_row_keys, &cond.vars)?);
+    let f_phys = DVector::from_vec(rhs.gather_keys(&cond.phys_row_keys, &cond.vars));
     let rhs_full = &f_phys - &cond.k_phys * &u0;
     let rhs_hat = &cond.tt * &rhs_full;
     cancel.check()?;
@@ -223,7 +223,7 @@ pub(super) fn solve(
                 .iter()
                 .map(|&m| (m, IMPOSED.to_string()))
                 .collect();
-            let g = rhs.gather(&g_dofs)?;
+            let g = rhs.gather(&g_dofs);
             let mut b_full: Vec<f64> = rhs_hat.iter().copied().collect();
             for (row, g_i) in kept.rows.iter().zip(&g) {
                 b_full.push(g_i - row.iter().map(|&(p, a)| a * u0[p]).sum::<f64>());

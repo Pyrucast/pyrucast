@@ -298,7 +298,7 @@ impl Shell {
             let s = fespace.read();
             let sm = s.submesh();
             let element = sm.read().element_type();
-            (sm, s.space_dim(), s.ref_dim()?, element)
+            (sm, s.space_dim(), s.ref_dim(), element)
         };
         if space_dim != 3 || ref_dim != 2 {
             return Err(PyrucastError::Message(format!(

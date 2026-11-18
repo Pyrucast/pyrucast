@@ -388,7 +388,8 @@ pub(crate) fn target_pairs(
 ///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
 ///     &mat, None,
 ///     |geoms, m, _s, ke| {
-///         transfer::exchange_matrix(&geoms[0], &geoms[0], m, &lay.material, 1.0, ke)
+///         transfer::exchange_matrix(&geoms[0], &geoms[0], m, &lay.material, 1.0, ke);
+///         Ok(())
 ///     },
 /// )?;
 /// // The entries sum to h × the segment's length.
@@ -403,7 +404,7 @@ pub fn exchange_matrix(
     coefficients: &[u32],
     sign: f64,
     ke: &mut [f64],
-) -> Result<()> {
+) {
     // One coefficient `h_<primal>` per transferred pair, resolved once for the
     // zone. Taken as a slice rather than read off the whole material layout: a
     // boundary transfer also declares its ambient there, and the exchange is
@@ -429,7 +430,6 @@ pub fn exchange_matrix(
             }
         }
     }
-    Ok(())
 }
 
 /// `f_i = ∫ N_i · flux dΓ` — the internal nodal fluxes of an exchange law,
@@ -474,18 +474,13 @@ pub fn exchange_matrix(
 /// let lay = flux.resolve_components(&["flux_T"], "flux")?;
 /// // A unit density on a segment of length 1 splits in two.
 /// pyrucast::models::kernel::reduce_cells(&zone, |geom| {
-///     transfer::internal_force(geom, &flux, &lay, &mut fe.lock().unwrap())?;
+///     transfer::internal_force(geom, &flux, &lay, &mut fe.lock().unwrap());
 ///     Ok(0.0)
 /// })?;
 /// assert!((fe.lock().unwrap().iter().sum::<f64>() - 1.0).abs() < 1e-12);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn internal_force(
-    geom: &CellGeom,
-    stress: &SubElementField,
-    lay: &[u32],
-    fe: &mut [f64],
-) -> Result<()> {
+pub fn internal_force(geom: &CellGeom, stress: &SubElementField, lay: &[u32], fe: &mut [f64]) {
     let n_vars = lay.len();
     let stride = stress.component_count();
     let values = stress.values();
@@ -500,5 +495,4 @@ pub fn internal_force(
             }
         }
     }
-    Ok(())
 }

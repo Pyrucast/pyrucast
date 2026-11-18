@@ -230,7 +230,7 @@ la recompilation.
 | `cargo fmt --check` | le Rust est formaté | — | 1 s | ✓ | ✓ | | | | | ✓ | ✓ |
 | `ruff format --check .` | le Python est formaté | — | 1 s | ✓ | ✓ | | | | | ✓ | ✓ |
 | `ruff check .` | le Python passe les règles par défaut de ruff 0.16.4 (exceptions dans `pyproject.toml`, une par motif) | — | <1 s | ✓ | ✓ | | | | | ✓ | ✓ |
-| `cargo check --all-targets` | le build **Rust pur** compile encore | — | <1 s | ✓ | | ✓ | | | | ✓ | ✓ |
+| `cargo clippy --all-targets` (`-D warnings`) | le build **Rust pur** compile encore, sans avertissement clippy — dont un `Result` qui ne peut pas échouer (`unnecessary_wraps`, déclaré dans `Cargo.toml`) | — | <1 s | ✓ | | ✓ | | | | ✓ | ✓ |
 | `cargo test --features viz` | 1036 tests + 893 doctests | `#[cfg(test)]` dans 123 fichiers de `src/`, 42 fichiers `tests/*.rs`, commentaires `///` et `//!` | 154 s | ✓ | | ✓ | | | | ✓ | ✓ |
 | `cargo build --features viz-interactive` | la fenêtre winit compile | aucun test — 960 lignes que rien n'exerce sans écran | 14 s | ✓ | | ✓ | | | | ✓ | ✓ |
 | `maturin develop --release --features extension-module,viz` | l'extension Python s'installe, compilée en release comme la roue | — | 4 s | | | | ✓ | | | ✓ | ✓ |

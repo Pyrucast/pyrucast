@@ -269,6 +269,8 @@ impl DofOrdering {
     /// }
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
+    // Not a constructor: the inverse of `to_index`, named as its pair.
+    #[allow(clippy::wrong_self_convention)]
     pub fn from_index(self, idx: usize, n_nodes: usize, n_vars: usize) -> (usize, usize) {
         match self {
             DofOrdering::VarsThenNodes => (idx % n_nodes, idx / n_nodes),
@@ -3392,7 +3394,7 @@ impl Matrix {
         }
         let vars = std::sync::Arc::new(self.field_names());
         let (row_keys, col_keys) = self.dof_orders(&vars)?;
-        let triplets = self.build_global_triplets(&vars, &row_keys, &col_keys)?;
+        let triplets = self.build_global_triplets(&vars, &row_keys, &col_keys);
         let (row_offsets, col_indices, values) =
             csr_from_triplets_parallel(row_keys.len(), col_keys.len(), triplets);
         let csr = AssembledCsr {
@@ -3561,7 +3563,7 @@ impl Matrix {
     /// [`permutation`](crate::coords::Coords::permutation) (stable
     /// sort by the node's permutation index, so the per-node variable order is
     /// preserved); otherwise **first-seen**: the blocks alone decide it.
-    fn collect_dof_keys(&self, row: bool, vars: &[String]) -> Result<Vec<DofKey>> {
+    fn collect_dof_keys(&self, row: bool, vars: &[String]) -> Vec<DofKey> {
         let slot_of: HashMap<String, u32> = vars
             .iter()
             .cloned()
@@ -3608,7 +3610,7 @@ impl Matrix {
                 out.par_sort_by_key(|&k| perm[dof_node(k).0 as usize]);
             }
         }
-        Ok(out)
+        out
     }
 
     /// The two global DOF orders, row and column.
@@ -3624,8 +3626,8 @@ impl Matrix {
             self.collect_conjugate_dof_keys(vars)
         } else {
             Ok((
-                self.collect_dof_keys(true, vars)?,
-                self.collect_dof_keys(false, vars)?,
+                self.collect_dof_keys(true, vars),
+                self.collect_dof_keys(false, vars),
             ))
         }
     }
@@ -3790,7 +3792,7 @@ impl Matrix {
         vars: &[String],
         row_keys: &[DofKey],
         col_keys: &[DofKey],
-    ) -> Result<Vec<(usize, usize, f64)>> {
+    ) -> Vec<(usize, usize, f64)> {
         let slot_of: HashMap<String, u32> = vars
             .iter()
             .cloned()
@@ -3828,7 +3830,7 @@ impl Matrix {
                 out.extend(block);
             }
         }
-        Ok(out)
+        out
     }
 
     // ── Inspection (always available) ───────────────────────────────────
@@ -5177,7 +5179,7 @@ impl Matrix {
         if self.is_empty() {
             return Ok(NodeField::default());
         }
-        let x = x_field.gather(&self.col_dofs()?)?;
+        let x = x_field.gather(&self.col_dofs()?);
         let y = self.mul_values(&x)?;
         self.field_from_row_values(&y)
     }
@@ -5580,7 +5582,7 @@ impl crate::dump::Dump for Matrix {
             } else {
                 let vars = self.field_names();
                 let (row_keys, col_keys) = self.dof_orders(&vars)?;
-                let triplets = self.build_global_triplets(&vars, &row_keys, &col_keys)?;
+                let triplets = self.build_global_triplets(&vars, &row_keys, &col_keys);
                 let row_dofs = Self::name_dofs(&row_keys, &vars);
                 let col_dofs = Self::name_dofs(&col_keys, &vars);
                 let nc = col_dofs.len();

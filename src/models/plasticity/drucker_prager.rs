@@ -284,7 +284,7 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
     // Apex return: the flank solution would push the equivalent stress negative,
     // which is meaningless. The whole deviator is shed and the stress collapses
     // onto the tip.
-    apex_return(trial, prev, mat, &p)
+    Ok(apex_return(trial, prev, mat, &p))
 }
 
 /// The plastic multiplier, from the consistency condition.
@@ -356,12 +356,7 @@ fn solve_multiplier(p: &Params, q_tr: f64, i1_tr: f64, p_prev: f64, mu: f64, bul
 ///
 /// The surface is read at the plastic strain the shed deviator implies, so a
 /// hardening material's tip sits where its hardening has taken it.
-fn apex_return(
-    trial: &[f64; 6],
-    prev: &PrevState,
-    mat: &MatParams,
-    p: &Params,
-) -> Result<PlasticStep> {
+fn apex_return(trial: &[f64; 6], prev: &PrevState, mat: &MatParams, p: &Params) -> PlasticStep {
     // The equivalent plastic strain shed in this step, in the same measure the
     // flank return uses (the multiplier of the deviatoric flow).
     let dp = von_mises_stress(trial) / (3.0 * mat.mu * p.delta);
@@ -383,7 +378,7 @@ fn apex_return(
             eps_p[i] += vol_drop;
         }
     }
-    Ok(PlasticStep::new(sigma, eps_p, prev.p + dp, &[]))
+    PlasticStep::new(sigma, eps_p, prev.p + dp, &[])
 }
 
 // ─── On the tangent ─────────────────────────────────────────────────────────

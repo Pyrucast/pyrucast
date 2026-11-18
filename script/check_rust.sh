@@ -20,14 +20,20 @@
 # et un `build` suffit à garantir qu'elle compile encore. Il coûte 6 s quand les
 # deux jeux sont en cache, 30 s au premier basculement.
 #
-# Le `check` par défaut, enfin : la bibliothèque se veut du **Rust pur** sans
-# feature, et sans lui plus rien ne compilerait cette configuration-là.
+# Le `clippy` par défaut, enfin : la bibliothèque se veut du **Rust pur** sans
+# feature, et sans lui plus rien ne compilerait cette configuration-là. C'est un
+# `clippy` et non un `check` : il compile la même chose, pour 1 s de plus
+# mesurée, et refuse en prime ce que les lints du workspace refusent — un
+# `Result` qui ne peut pas échouer, par exemple (`Cargo.toml`, `clippy.toml`).
+# Les trois autres jeux de features ne passent sous clippy qu'à la release
+# (`check_clippy.sh`).
 #
 # `--workspace` : le dépôt tient deux paquets depuis que `macros/` existe, et
 # cargo, dans un workspace à paquet racine, ne construit que la racine par
 # défaut. Sans ce drapeau la crate de macros ne serait ni compilée ni testée
 # ici — elle passerait sous tous les garde-fous.
-step "cargo check (features par défaut)"       cargo check --workspace --all-targets
+step "cargo clippy (features par défaut) -D warnings" \
+    cargo clippy --workspace --all-targets -- -D warnings
 step "cargo test --features viz"               cargo test --workspace --features viz
 step "cargo build --features viz-interactive"  cargo build --features viz-interactive
 # L'allocateur `spill` est global au processus : ses tests pilotent `solve_peak`

@@ -10,7 +10,8 @@
 # intacts les `if` imbriques de `src/viz/`, que la quatrieme passe a rattrapes.
 #
 # Ce bloc n'appartient pas a `check_all` : il coute trop cher pour la boucle
-# quotidienne. Il est appele aux deux moments ou l'on pose une version -
+# quotidienne, qui ne garde que la premiere passe (`check_rust.ps1`). Il est
+# appele aux deux moments ou l'on pose une version -
 # `set_new_version.sh` en local, et le job `verify` de `release.yml` en CI.
 Step "cargo clippy (defaut) -D warnings" `
     { cargo clippy --workspace --all-targets -- -D warnings }

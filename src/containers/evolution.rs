@@ -1464,14 +1464,13 @@ impl Evolution {
     /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
     /// let mut e = Evolution::from_scalars(vec![(20.0, 210e3), (300.0, 180e3)], OutOfRange::Clamp)?;
     /// e.set_ordinate_type(Some("young".into()))?;
-    /// assert_eq!(e.ordinate_type()?, Some("young".into()));
+    /// assert_eq!(e.ordinate_type(), Some("young".into()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn ordinate_type(&self) -> Result<Option<String>> {
-        match self.subs.first() {
-            Some(h) => Ok(h.read().ordinate_type().map(str::to_string)),
-            None => Ok(None),
-        }
+    pub fn ordinate_type(&self) -> Option<String> {
+        self.subs
+            .first()
+            .and_then(|h| h.read().ordinate_type().map(str::to_string))
     }
 
     /// Set (or clear, with an empty list) the abscissa types on **every**
@@ -1928,7 +1927,7 @@ impl Evolution {
             ValueKind::Scalar => {
                 let y = match y_label {
                     Some(s) => s.to_string(),
-                    None => self.ordinate_type()?.unwrap_or_else(|| "value".into()),
+                    None => self.ordinate_type().unwrap_or_else(|| "value".into()),
                 };
                 crate::viz::render_curve(
                     self.scalar_series_set()?,
@@ -2685,6 +2684,6 @@ mod tests {
         e.set_abscissa_types(vec!["time".into()]).unwrap();
         e.set_ordinate_type(Some("force".into())).unwrap();
         assert_eq!(e.abscissa_types(), ["time"]);
-        assert_eq!(e.ordinate_type().unwrap().as_deref(), Some("force"));
+        assert_eq!(e.ordinate_type().as_deref(), Some("force"));
     }
 }

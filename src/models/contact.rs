@@ -250,7 +250,7 @@ impl Contact {
         }
 
         // The slave support: one POI1 cell per unique slave node.
-        let slave_ids = unique_nodes(slave)?;
+        let slave_ids = unique_nodes(slave);
         if slave_ids.is_empty() {
             return Err(PyrucastError::Message(
                 "Contact: slave mesh carries no node".into(),
@@ -708,7 +708,7 @@ fn same_zones(mesh: &Mesh) -> Result<Mesh> {
 }
 
 /// Unique node ids of a mesh, in order of first appearance across submeshes.
-fn unique_nodes(mesh: &Mesh) -> Result<Vec<NodeId>> {
+fn unique_nodes(mesh: &Mesh) -> Vec<NodeId> {
     let mut seen: HashSet<NodeId> = HashSet::new();
     let mut out: Vec<NodeId> = Vec::new();
     for sm in mesh {
@@ -718,7 +718,7 @@ fn unique_nodes(mesh: &Mesh) -> Result<Vec<NodeId>> {
             }
         }
     }
-    Ok(out)
+    out
 }
 
 #[cfg(test)]

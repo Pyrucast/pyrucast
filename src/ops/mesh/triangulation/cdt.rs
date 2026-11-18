@@ -335,7 +335,7 @@ impl Cdt {
             self.insert_constraint(a, c)?;
             return self.insert_constraint(c, b);
         }
-        if self.split_overlapping_collinear_edge(a, b)? {
+        if self.split_overlapping_collinear_edge(a, b) {
             return self.insert_constraint(a, b);
         }
 
@@ -434,13 +434,13 @@ impl Cdt {
     /// This unblocks constraint enforcement along a collinear boundary,
     /// where Delaunay of the collinear points may connect `a` directly to
     /// a vertex beyond `b`.
-    fn split_overlapping_collinear_edge(&mut self, a: usize, b: usize) -> Result<bool> {
+    fn split_overlapping_collinear_edge(&mut self, a: usize, b: usize) -> bool {
         let pa = self.points[a];
         let pb = self.points[b];
         let ab = pb - pa;
         let len2 = ab.norm_squared();
         if len2 == 0.0 {
-            return Ok(false);
+            return false;
         }
 
         // Find an alive triangle with an edge (a, c) collinear with (a, b)
@@ -470,7 +470,7 @@ impl Cdt {
             }
         }
         let Some(c) = target_c else {
-            return Ok(false);
+            return false;
         };
 
         // Retire both triangles on edge (a, c) and split each at `b`. `b`
@@ -484,7 +484,7 @@ impl Cdt {
             .map(|(i, _)| i)
             .collect();
         if incident.is_empty() {
-            return Ok(false);
+            return false;
         }
         for t_idx in incident {
             let t = self.triangles[t_idx];
@@ -513,7 +513,7 @@ impl Cdt {
             });
         }
         self.rebuild_neighbours();
-        Ok(true)
+        true
     }
 
     /// The input vertex nearest `a` that lies strictly on the open
