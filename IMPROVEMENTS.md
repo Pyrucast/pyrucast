@@ -228,25 +228,9 @@ well, or keep it documented (`book/src/evolution.md` says so).
 Same rules as the reviewed pages: checked against the code, Python first then
 "Côté Rust", current state only.
 
-- `operateurs/comportement.md`: heading `internal_forces(model, state)`; the
-  signature is `internal_forces(model, state, solution, materials)`.
 - `sauvegarde.md`: a reloaded field is read through
-  `o[...].coords().acquire(id)`; drop `gc()` and "la copie qu'un champ garde
-  de la connectivité", which no longer exists.
+  `o[...].coords().acquire(id)`.
 - `compilation.md`: the features list lacks `spill`.
-
-## Introduction diagram
-
-`book/src/objets.md` draws the dependency diagram as a `<pre>` block with bold
-names; `book/src/introduction.md` still has the plain `text` block of the same
-diagram. Apply the same style there once its rendering on the site suits.
-
-## "ne compose jamais" in the Aggregate page
-
-`book/src/aggregate.md` says `+` "ne compose jamais". Between two fields on
-different supports, `+` brings the zones of both sides into the result, a zone
-present on one side only passing as is: it does gather zones. Reword: `|` is
-the union of objects; `+` computes, and on fields it pairs zones by support.
 
 ## The online book describes master, not the installed version
 

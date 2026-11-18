@@ -118,7 +118,7 @@ variables internes (`VAR0` → `VAR1`), voir
 [Plasticité parfaite](../mecanique/plasticite.md) (retour radial von Mises) et
 [Endommagement de Mazars](../mecanique/mazars.md).
 
-## `internal_forces(model, state)` → `NodeField`
+## `internal_forces(model, state, solution, materials)` → `NodeField`
 
 {{#pyalgo node_field.internal_forces}}
 
@@ -156,7 +156,7 @@ déclare aucun et n'apparaît pas dans le résultat.
 {{#include ../../../tests/python/test_doc_ops_physiques.py:node_field-internal_forces}}
 ```
 
-## `external_forces(model)` → `NodeField`
+## `external_forces(model, materials)` → `NodeField`
 
 {{#pyalgo node_field.external_forces}}
 

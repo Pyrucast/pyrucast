@@ -38,13 +38,11 @@ Il n'y a rien à énumérer, et rien à oublier.
 
 La règle est simple : **ce qui se recalcule ne s'écrit pas**.
 
-Sortent donc du fichier tous les caches et toutes les mémoïsations — la matrice assemblée, la factorisation du solveur, le coloriage des mailles, les tables d'index paresseuses, la copie qu'un champ garde de la connectivité de son support. Tout cela se rebâtit à la première demande, exactement comme sur un graphe construit à la main :
+Sortent donc du fichier tous les caches et toutes les mémoïsations — la matrice assemblée, la factorisation du solveur, le coloriage des mailles, les tables d'index paresseuses. Tout cela se rebâtit à la première demande, exactement comme sur un graphe construit à la main :
 
 ```python
 {{#include ../../tests/python/test_doc_sauvegarde.py:reassemblage}}
 ```
-
-Ce n'est pas une économie de place accessoire : la copie qu'un champ nodal garde de sa connectivité pèse autant que le maillage lui-même, et un fichier qui la porterait la porterait une fois par champ.
 
 ### Les compteurs de références
 
