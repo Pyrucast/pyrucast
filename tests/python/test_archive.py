@@ -21,8 +21,8 @@ def line(n=3):
     return c, m, nodes
 
 
-def cloud(c, nodes):
-    """The POI1 cloud of `nodes` — the support a nodal field lives on."""
+def poi1(c, nodes):
+    """The POI1 zone of `nodes` — the support a nodal field lives on."""
     poi = pyrucast.Mesh(c, "POI1")
     for n in nodes:
         poi.unit().add_cell([n])
@@ -40,7 +40,7 @@ def test_le_partage_survit(tmp_path):
     really is a single object, not two copies at the same nodes.
     """
     c, m, nodes = line()
-    poi = cloud(c, nodes)
+    poi = poi1(c, nodes)
     t = pyrucast.NodeField(poi, ["T"])
     f = pyrucast.NodeField(poi, ["f"])
     assert len(t | f) == 1, "the template itself must share the support"

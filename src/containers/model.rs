@@ -2742,10 +2742,9 @@ mod tests {
         assert_eq!(coords.read().refcount(mult_id), 1);
 
         // Drop the sub-model: the last holder of the multiplier submesh is
-        // gone ⇒ the node is released and collectable.
+        // gone ⇒ the node is released.
         drop(sub);
         assert_eq!(coords.read().refcount(mult_id), 0);
-        assert_eq!(coords.write().gc(), 1);
     }
 
     #[test]

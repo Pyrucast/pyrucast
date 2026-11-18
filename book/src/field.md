@@ -16,8 +16,8 @@ seule fois, dans deux traits (voir [Côté Rust](#côté-rust)).
 
 Un champ est un [agrégat](aggregate.md) de **zones**. Chaque zone :
 
-- est posée sur un **support** : un nuage de nœuds (une zone de maillage `POI1`)
-  pour un champ aux nœuds, un sous-espace d'[espace éléments finis](fe-space.md)
+- est posée sur un **support** : une zone de maillage `POI1` pour un champ aux
+  nœuds, un sous-espace d'[espace éléments finis](fe-space.md)
   pour un champ aux points de Gauss. `zone.support()` le rend, et
   `champ.support()` rend celui de chaque zone, dans l'ordre ;
 - porte des **composantes nommées** (`"T"`, `"u_x"`, `"E"`, `"sigma_xx"`…) :
@@ -237,14 +237,14 @@ composantes, ses valeurs et une référence à son support. Ce qui ne se calcule
 qu'une fois vit sur les supports, et c'est ce qui rend les opérations
 ci-dessus possibles ou rapides :
 
-- **le nuage de nœuds d'une zone de maillage.** `NodeField(maillage, …)`,
+- **le compagnon POI1 d'une zone de maillage.** `NodeField(maillage, …)`,
   `restrict` et les opérateurs qui produisent un champ aux nœuds posent leurs
-  zones sur le nuage des nœuds de chaque zone de maillage. Ce nuage est calculé
-  une fois, puis rendu tel quel à chaque demande, tant que la zone de maillage
+  zones sur le compagnon POI1 de chaque zone de maillage : la zone POI1 de ses
+  nœuds, celle que rend `to_poi1`. Ce compagnon est calculé une fois, puis rendu tel quel à chaque demande, tant que la zone de maillage
   ne change pas. Deux champs construits sur le même maillage reçoivent donc le
   même support et se combinent nœud à nœud : c'est ce qui fait marcher `a - b`
   et `restrict(…, carre)` dans les exemples ci-dessus ;
-- **la table qui donne la ligne d'un nœud** dans ce nuage, construite à la
+- **la table qui donne la ligne d'un nœud** dans ce support, construite à la
   première lecture d'un nœud : `value(nœud, c)`, `set_value` et les opérateurs
   trouvent la ligne d'un nœud sans parcourir la liste ;
 - **les tables de l'espace éléments finis** (points et poids de Gauss,

@@ -209,7 +209,7 @@ def test_submesh_tri3_invalid_arity():
         raise AssertionError("expected RuntimeError for invalid arity")
 
 
-def test_submesh_protects_nodes_from_gc():
+def test_submesh_counts_its_nodes():
     c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
@@ -222,22 +222,20 @@ def test_submesh_protects_nodes_from_gc():
     for i in ids:
         assert c.refcount(i) == 2
 
-    # Drop the Python Nodes; the SubMesh keeps the nodes alive.
+    # Drop the Python Nodes; the SubMesh keeps counting the nodes.
     del a
     del b
     del cc
     pygc.collect()
     for i in ids:
         assert c.refcount(i) == 1
-        assert c.is_alive(i)
-    assert c.gc() == 0
 
-    # Drop the SubMesh ⇒ refcount drops to 0 ⇒ gc collects.
+    # Drop the SubMesh ⇒ refcount drops to 0; the nodes stay.
     del sm
     pygc.collect()
-    assert c.gc() == 3
     for i in ids:
-        assert not c.is_alive(i)
+        assert c.refcount(i) == 0
+    assert c.node_count == 3
 
 
 def test_unknown_element_type():
@@ -987,22 +985,21 @@ def test_set_face_color_works_on_a_sealed_mesh():
     assert mesh[0].face_color == (10, 20, 30)
 
 
-def test_from_live_nodes_holds_exactly_the_live_nodes():
-    # Three nodes, one released and collected: liveness is read from `Coords`
-    # itself, then the POI1 mesh must carry the two survivors and nothing else.
+def test_from_live_nodes_holds_every_node():
+    # Three nodes, one no longer referenced: nothing removes a node, so the
+    # POI1 mesh carries all three, each once.
     c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     b = c.add_node([1.0, 0.0])
     t = c.add_node([2.0, 0.0])
-    dead = t.id
+    released = t.id
     del t
     pygc.collect()
-    assert c.gc() == 1
-    assert not c.is_alive(dead)
+    assert c.refcount(released) == 0
 
     mesh = pyrucast.mesh.from_live_nodes(c)
     ids = sorted(n.id for i in range(mesh.cell_count) for n in mesh.cell(0, i))
-    assert ids == sorted([a.id, b.id])
+    assert ids == sorted([a.id, b.id, released])
 
 
 def _grid_and_left_column():

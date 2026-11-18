@@ -1455,8 +1455,8 @@ mod tests {
             let (model, materials) = chain_heat_with_dirichlet(4);
             if permuted {
                 let coords = model.multiplier_mesh().unwrap().coords().unwrap();
-                let capacity = coords.read().capacity();
-                let reversed: Vec<u32> = (0..capacity as u32).rev().collect();
+                let n_nodes = coords.read().node_count();
+                let reversed: Vec<u32> = (0..n_nodes as u32).rev().collect();
                 coords.write().set_permutation(reversed).unwrap();
             }
             sum_over_different_dofs(&model, &materials);

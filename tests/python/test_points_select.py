@@ -13,7 +13,7 @@ import pyrucast
 import pytest
 
 
-def _cloud(dim, points):
+def _poi1(dim, points):
     """A POI1 mesh of a single submesh, one node per coordinate."""
     c = pyrucast.Coords(dim)
     m = pyrucast.Mesh(c, "POI1")
@@ -33,7 +33,7 @@ def _coords_of(sel, sub=0):
 
 def test_sphere_in_and_on_2d():
     # A cross of 5 points about the origin, at distance 0 and 1.
-    _, m = _cloud(2, [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [2.0, 0.0]])
+    _, m = _poi1(2, [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [2.0, 0.0]])
 
     inside = pyrucast.mesh.points_in_sphere(m, [0.0, 0.0], 1.0)
     assert _coords_of(inside) == [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -47,7 +47,7 @@ def test_sphere_in_and_on_2d():
 
 
 def test_plane_on_and_below():
-    _, m = _cloud(3, [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    _, m = _poi1(3, [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
 
     # La face z = 0 : la normale n'a pas besoin d'être unitaire.
     face = pyrucast.mesh.points_on_plane(m, [0.0, 0.0, 0.0], [0.0, 0.0, 3.0])
@@ -66,7 +66,7 @@ def test_plane_on_and_below():
 
 
 def test_line_is_infinite_where_the_cylinder_is_capped():
-    _, m = _cloud(2, [[0.0, 0.0], [1.0, 1.0], [3.0, 3.0], [1.0, 0.0]])
+    _, m = _poi1(2, [[0.0, 0.0], [1.0, 1.0], [3.0, 3.0], [1.0, 0.0]])
 
     # The line passes through the diagonal's three points, even beyond b.
     on_line = pyrucast.mesh.points_on_line(m, [0.0, 0.0], [1.0, 1.0])
@@ -78,7 +78,7 @@ def test_line_is_infinite_where_the_cylinder_is_capped():
 
 
 def test_cylinder_surface_excludes_the_end_discs():
-    _, m = _cloud(
+    _, m = _poi1(
         3,
         [
             [1.0, 0.0, 1.0],  # on the tube
@@ -101,7 +101,7 @@ def test_cylinder_surface_excludes_the_end_discs():
 
 def test_cone_defaults_to_an_apex_and_degenerates_to_a_cylinder():
     # Radius 2 at z = 0, apex at z = 2: local radius 1 at mid-height.
-    _, m = _cloud(3, [[1.0, 0.0, 1.0], [0.4, 0.0, 1.0], [1.6, 0.0, 1.0]])
+    _, m = _poi1(3, [[1.0, 0.0, 1.0], [0.4, 0.0, 1.0], [1.6, 0.0, 1.0]])
     base, top = [0.0, 0.0, 0.0], [0.0, 0.0, 2.0]
 
     # top_radius is 0 by default: the true cone, `top` being its apex.
@@ -120,7 +120,7 @@ def test_cone_defaults_to_an_apex_and_degenerates_to_a_cylinder():
 
 
 def test_torus_tube_around_its_directrix():
-    _, m = _cloud(
+    _, m = _poi1(
         3,
         [
             [2.5, 0.0, 0.0],  # on the tube, outer equator
@@ -139,7 +139,7 @@ def test_torus_tube_around_its_directrix():
 
 
 def test_torus_needs_a_3d_mesh():
-    _, m = _cloud(2, [[0.0, 0.0]])
+    _, m = _poi1(2, [[0.0, 0.0]])
     with pytest.raises(RuntimeError):
         pyrucast.mesh.points_in_torus(m, [0.0, 0.0], [0.0, 1.0], 2.0, 0.5)
 
@@ -164,12 +164,12 @@ def test_result_mirrors_the_submeshes_including_empty_zones():
     # The second zone selects nothing but stays present and empty.
     assert sel.cell_counts() == [2, 0]
 
-    # `consolidate_mesh` is the way back to a single cloud.
+    # `consolidate_mesh` is the way back to a single POI1 zone.
     assert pyrucast.mesh.consolidate(sel).cell_counts() == [2]
 
 
 def test_tolerance_defaults_to_the_model_scale():
-    _, m = _cloud(2, [[0.0, 0.0], [1.0, 0.01]])
+    _, m = _poi1(2, [[0.0, 0.0], [1.0, 0.01]])
 
     # Default precision (1e-6 × diagonal): the second node is out of band.
     assert (
@@ -198,14 +198,14 @@ def test_selection_feeds_elements_on():
 def test_nearest_node_is_the_single_node_query():
     """The family's "single node" counterpart: a method of the mesh, which
     returns a `Node` and not a POI1 mesh."""
-    _, m = _cloud(2, [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]])
+    _, m = _poi1(2, [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]])
     node = m.nearest_node([0.9, 0.9])
     assert isinstance(node, pyrucast.Node)
     assert node.position() == [1.0, 1.0]
 
 
 def test_invalid_arguments_raise():
-    _, m = _cloud(2, [[0.0, 0.0]])
+    _, m = _poi1(2, [[0.0, 0.0]])
 
     with pytest.raises(RuntimeError):  # mauvaise dimension
         pyrucast.mesh.points_in_sphere(m, [0.0, 0.0, 0.0], 1.0)

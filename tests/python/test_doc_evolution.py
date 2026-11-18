@@ -209,16 +209,15 @@ assert abs(materiau.value(noeuds[1], "sigma_y") - 304.0) < 1e-9
 
 # ANCHOR: composer
 zone_a = pyrucast.SubEvolution([(0.0, 1.0), (1.0, 2.0)], out_of_range="clamp")
-zone_b = pyrucast.SubEvolution([(0.0, 3.0), (1.0, 4.0)])
+zone_b = pyrucast.SubEvolution([(0.0, 3.0), (1.0, 4.0)], out_of_range="extrapolate")
 deux = zone_a | zone_b
 print(deux.interpolate(0.5))  # [1.5, 3.5] : un flottant par courbe
-print(deux.out_of_range)  # error : l'agrégat applique la sienne à ses courbes
+print(deux.interpolate(2.0))  # [2.0, 5.0] : chaque courbe suit sa politique
 print(deux.interpolate(2.0, out_of_range="clamp"))  # [2.0, 4.0]
 # ANCHOR_END: composer
 
 assert deux.interpolate(0.5) == [1.5, 3.5]
-assert deux.out_of_range == "error"
-assert deux[0].out_of_range == "clamp"
+assert deux.interpolate(2.0) == [2.0, 5.0]
 assert deux.interpolate(2.0, out_of_range="clamp") == [2.0, 4.0]
 
 # ── Le long d'une ligne ─────────────────────────────────────────────────────

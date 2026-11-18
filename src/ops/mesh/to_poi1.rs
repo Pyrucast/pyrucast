@@ -26,7 +26,7 @@ use crate::error::Result;
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // The cloud of a mesh's **distinct** nodes: two cells that
+/// // A mesh's **distinct** nodes, one POI1 cell each: two cells that
 /// // share a node count it once only.
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
 /// assert_eq!(mesh::to_poi1(&l)?.cell_count(), 3);

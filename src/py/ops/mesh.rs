@@ -21,7 +21,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyrucast_macros::py_op;
 
-/// A POI1 mesh holding every live node of `coords`.
+/// A POI1 mesh holding every node of `coords`, referenced or not.
 ///
 /// # Parameters
 ///
@@ -1920,9 +1920,8 @@ pub fn element_type_from_gmsh(code: u32) -> PyResult<&'static str> {
 pub fn gauss_to_external(
     element_type: ElementType,
     ref_nodes: Vec<f64>,
-    order: &str,
+    order: NodeOrder,
 ) -> PyResult<(Vec<f64>, Vec<f64>)> {
-    let order = crate::py::arrays::parse_order(order)?;
     Ok(crate::ops::mesh::gauss_map::gauss_to_external(
         element_type,
         order,
@@ -1955,9 +1954,8 @@ pub fn match_gauss(
     ref_nodes: Vec<f64>,
     xi: Vec<f64>,
     weights: Vec<f64>,
-    order: &str,
+    order: NodeOrder,
 ) -> PyResult<Vec<usize>> {
-    let order = crate::py::arrays::parse_order(order)?;
     Ok(crate::ops::mesh::gauss_map::match_gauss(
         element_type,
         order,
@@ -2012,7 +2010,7 @@ pub fn match_gauss(
 /// - `RuntimeError` for a cell referencing a node tag that is not given.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (coords, node_tags, node_coords, blocks, *, node_fields = Vec::new(), cell_fields = Vec::new(), order = "pyrucast"))]
+#[pyo3(signature = (coords, node_tags, node_coords, blocks, *, node_fields = Vec::new(), cell_fields = Vec::new(), order = NodeOrder::Pyrucast))]
 #[allow(clippy::too_many_arguments)]
 pub fn from_arrays<'py>(
     py: Python<'py>,
@@ -2022,9 +2020,8 @@ pub fn from_arrays<'py>(
     blocks: &Bound<'py, PyAny>,
     node_fields: Vec<Py<PyAny>>,
     cell_fields: Vec<Py<PyAny>>,
-    order: &str,
+    order: NodeOrder,
 ) -> PyResult<(Bound<'py, PyDict>, Vec<PyNodeField>, Vec<PyElementField>)> {
-    let order = crate::py::arrays::parse_order(order)?;
     // The tag type follows the node table: medcoupling hands `int64`, gmsh
     // `uint64`. Every other tag array is borrowed as the same type (copied
     // only if its dtype differs).

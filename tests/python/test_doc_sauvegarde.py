@@ -29,7 +29,7 @@ os.chdir(_TMP.name)
 
 
 def _support_et_champs():
-    """A POI1 cloud and two fields laid on it, on the **same** support."""
+    """A POI1 zone over three nodes: the one support the excerpts share."""
     c = pyrucast.Coords(2)
     noeuds = [c.add_node([float(i), 0.0]) for i in range(3)]
     support = pyrucast.mesh.poi1_from_nodes(noeuds)
@@ -120,6 +120,59 @@ u = pyrucast.solver.solve(k, o["chargement"])  # refactorise
 
 assert u.node_count > 0
 
+# ANCHOR: matrice_relue
+pyrucast.save("k.pyr", {"k": k, "chargement": o["chargement"]})
+o = pyrucast.load("k.pyr")
+o["k"].assemble()  # ses valeurs n'étaient pas dans le fichier
+u = pyrucast.solver.solve(o["k"], o["chargement"])
+# ANCHOR_END: matrice_relue
+
+assert u.node_count > 0
+_sans_valeurs = pyrucast.load("k.pyr")
+try:
+    pyrucast.solver.solve(_sans_valeurs["k"], _sans_valeurs["chargement"])
+    raise AssertionError("a reloaded matrix comes back without its values")
+except RuntimeError as erreur:
+    assert "no assembled values" in str(erreur)
+
+
+# ── A reloaded field is read with the reloaded nodes ────────────────────────
+
+# ANCHOR: noeud_relu
+c = pyrucast.Coords(2)
+a, b = c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0])
+ligne = pyrucast.Mesh(c, "SEG2")
+ligne.unit().add_cell([a, b])
+t = pyrucast.NodeField(pyrucast.mesh.to_poi1(ligne), ["T"])
+t[0].set_value(b, "T", 20.0)
+pyrucast.save("ligne.pyr", {"ligne": ligne, "T": t})
+
+relu = pyrucast.load("ligne.pyr")
+b_relu = relu["ligne"].coords().acquire(b.id)  # le même nœud, dans le Coords relu
+print(relu["T"].value(b_relu, "T"))  # 20.0
+# ANCHOR_END: noeud_relu
+
+assert relu["T"].value(b_relu, "T") == 20.0
+try:
+    relu["T"].value(b, "T")
+    raise AssertionError("a node of the writing script is refused")
+except RuntimeError as erreur:
+    assert "belongs to another Coords" in str(erreur)
+
+
+# ── The POI1 companion of a mesh is not saved ───────────────────────────────
+
+# ANCHOR: compagnon
+f = pyrucast.NodeField(pyrucast.mesh.to_poi1(relu["ligne"]), ["f"])
+print(len(relu["T"] | f))  # 2 : deux supports, aux mêmes nœuds
+t_ramene = pyrucast.node_field.restrict(relu["T"], relu["ligne"])
+print(len(t_ramene | f))  # 1 : un seul support
+# ANCHOR_END: compagnon
+
+assert len(relu["T"] | f) == 2
+assert len(t_ramene | f) == 1
+assert t_ramene.value(b_relu, "T") == 20.0
+
 
 # ── The node counters do not cross over ─────────────────────────────────────
 
@@ -129,8 +182,10 @@ pyrucast.save("coords_seules.pyr", {"c": _c3})
 
 # ANCHOR: refcount
 c2 = pyrucast.load("coords_seules.pyr")["c"]
-c2.gc()  # collects everything: nothing in the file held those nodes
+print(c2.refcount(0))  # 0: nothing in the file uses this node
 # ANCHOR_END: refcount
+
+assert c2.refcount(0) == 0
 
 
 # End of the excerpts: the current directory is given back.

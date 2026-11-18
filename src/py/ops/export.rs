@@ -123,19 +123,18 @@ pub fn export_vtk(
 /// - `RuntimeError` if the groups do not all lie on one `Coords`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (groups, *, node_fields = Vec::new(), element_fields = Vec::new(), gauss = false, order = "pyrucast", first_tag = 1))]
+#[pyo3(signature = (groups, *, node_fields = Vec::new(), element_fields = Vec::new(), gauss = false, order = crate::ops::mesh::NodeOrder::Pyrucast, first_tag = 1))]
 pub fn to_arrays<'py>(
     py: Python<'py>,
     groups: &Bound<'py, PyDict>,
     node_fields: Vec<Py<PyNodeField>>,
     element_fields: Vec<Py<PyElementField>>,
     gauss: bool,
-    order: &str,
+    order: crate::ops::mesh::NodeOrder,
     first_tag: i64,
 ) -> PyResult<Bound<'py, PyDict>> {
     use crate::ops::export::arrays::{to_arrays, ElementLayout};
-    use crate::py::arrays::{parse_order, PyArray};
-    let order = parse_order(order)?;
+    use crate::py::arrays::PyArray;
     let named: Vec<(String, PyRef<'py, PyMesh>)> = groups
         .iter()
         .map(|(k, v)| Ok((k.extract::<String>()?, v.extract::<PyRef<'py, PyMesh>>()?)))

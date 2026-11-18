@@ -185,7 +185,7 @@ impl SubNodeField {
     /// ([`SubMesh::to_poi1`] memoizes per connectivity state), so a field built
     /// afterwards lands on a **new** support and no longer pairs with this one.
     /// Nothing is invalidated — the older fields are simply defined on the
-    /// earlier node cloud, and [`restrict`](fn@crate::ops::node_field::restrict)
+    /// earlier companion, and [`restrict`](fn@crate::ops::node_field::restrict)
     /// onto the new mesh brings them across.
     ///
     /// ```
@@ -306,7 +306,7 @@ impl SubNodeField {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// let f = SubNodeField::from_support(&maillage.get(0)?, vec!["T".into()])?;
-    /// // Always a POI1: it is the node cloud that carries the values.
+    /// // Always a POI1: the support is the zone's POI1 companion.
     /// assert_eq!(f.support().read().element_type(), ElementType::POI1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1838,7 +1838,7 @@ mod tests {
     }
 
     #[test]
-    fn protects_nodes_from_gc_after_node_and_submesh_drop() {
+    fn holds_its_nodes_after_node_and_submesh_drop() {
         let coords = Handle::new(Coords::new(1).unwrap());
         let n = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let nid = n.id();
@@ -1850,14 +1850,12 @@ mod tests {
         let field = SubNodeField::from_poi1(&sm_handle, vec!["T".into()]).unwrap();
         // Drop the Node and the user's SubMesh handle; the field still
         // holds a clone of the SubMesh handle, which keeps the SubMesh
-        // alive, which keeps the nodes alive.
+        // alive, which keeps counting the node.
         drop(n);
         drop(sm_handle);
-        assert_eq!(coords.write().gc(), 0);
-        assert!(coords.read().is_alive(nid));
+        assert_eq!(coords.read().refcount(nid), 1);
         drop(field);
-        assert_eq!(coords.write().gc(), 1);
-        assert!(!coords.read().is_alive(nid));
+        assert_eq!(coords.read().refcount(nid), 0);
     }
 
     #[test]
@@ -2366,7 +2364,7 @@ mod tests {
         assert_eq!(apres.node_count(), 4);
         assert!((&avant + &apres).is_err());
 
-        // …but the old one is not invalidated: it lives on the old cloud.
+        // …but the old one is not invalidated: it lives on the old companion.
         assert_eq!(avant.node_count(), 3);
         assert_eq!(avant.value(n[0].id(), "T").unwrap(), 20.0);
         assert!(avant.value(n[3].id(), "T").is_err());

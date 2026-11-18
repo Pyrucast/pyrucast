@@ -11,7 +11,7 @@ use crate::error::Result;
 /// attach to).
 ///
 /// The companion of [`from_live_nodes`](super::from_live_nodes()), which takes
-/// every live node of a `Coords` instead of a chosen list, and of
+/// every node of a `Coords` instead of a chosen list, and of
 /// [`to_poi1`](super::to_poi1()), which takes an existing mesh.
 ///
 /// ```
@@ -24,8 +24,8 @@ use crate::error::Result;
 /// let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
 /// let b = Node::create_in(coords, &[1.0, 0.0]).unwrap();
 ///
-/// let cloud = poi1_from_nodes(&[a, b]).unwrap();
-/// assert_eq!(cloud.cell_counts().unwrap(), vec![2]);
+/// let poi1 = poi1_from_nodes(&[a, b]).unwrap();
+/// assert_eq!(poi1.cell_counts().unwrap(), vec![2]);
 /// ```
 pub fn poi1_from_nodes(nodes: &[Node]) -> Result<Mesh> {
     Ok(Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?))

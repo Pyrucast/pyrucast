@@ -8,7 +8,6 @@ factor
 field_names
 geometric_matrix
 get_by_node
-is_alive
 mass_matrix
 node_values
 set_by_node

@@ -302,7 +302,7 @@ pub fn to_arrays(
     }
 
     // ── Nodes, first seen first, through a table indexed by id ──────────────
-    let mut row = vec![u32::MAX; c.capacity()];
+    let mut row = vec![u32::MAX; c.node_count()];
     let mut ids: Vec<NodeId> = Vec::new();
     // ── Cells: export index, family (sorted group list) per cell ────────────
     // Families are interned: `family_of[f]` lists the groups of family `f`,

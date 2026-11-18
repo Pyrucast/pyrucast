@@ -9,7 +9,6 @@ def test_create_coords():
     c = pyrucast.Coords(dim=2)
     assert c.dim == 2
     assert c.node_count == 0
-    assert c.capacity == 0
     assert c.active == 0
     assert c.names() == ["default"]
 
@@ -23,32 +22,29 @@ def test_add_node_returns_node():
     assert c.refcount(n.id) == 1
 
 
-def test_gc_protects_referenced_nodes():
+def test_an_unreferenced_node_stays():
     c = pyrucast.Coords(1)
     n = c.add_node([42.0])
     nid = n.id
-    # While Python holds `n`, refcount >= 1 → gc collects nothing.
-    assert c.gc() == 0
-    assert c.is_alive(nid)
+    assert c.refcount(nid) == 1
     # del + collect forces the Drop of the Rust-side Node.
     del n
     pygc.collect()
     assert c.refcount(nid) == 0
-    assert c.gc() == 1
-    assert not c.is_alive(nid)
+    # Nothing removes it: it is still there, and can be held again.
+    assert c.node_count == 1
+    assert c.acquire(nid).position() == [42.0]
 
 
-def test_ids_are_stable_after_gc():
+def test_ids_are_handed_out_in_order():
     c = pyrucast.Coords(1)
     n = c.add_node([0.0])
     first_id = n.id
     del n
     pygc.collect()
-    c.gc()
     m = c.add_node([1.0])
-    assert m.id != first_id
-    assert m.id == 1
-    assert c.capacity == 2
+    assert (first_id, m.id) == (0, 1)
+    assert c.node_count == 2
 
 
 def test_set_position_via_node():

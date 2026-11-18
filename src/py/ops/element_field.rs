@@ -621,16 +621,14 @@ pub fn beam_deformation(
 ///
 /// # Raises
 ///
-/// `RuntimeError` for an unknown `formulation`.
+/// `ValueError` for an unknown `formulation`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn shell_deformation(
     field: PyRef<PyNodeField>,
     fespace: PyRef<PyFiniteElementSpace>,
-    formulation: &str,
+    formulation: crate::models::shell::ShellFormulation,
 ) -> PyResult<PyElementField> {
-    let formulation =
-        <crate::models::shell::ShellFormulation as crate::named::Named>::parse(formulation)?;
     let ef =
         crate::ops::element_field::shell_deformation(&field.inner, &fespace.inner, formulation)?;
     Ok(PyElementField { inner: ef })

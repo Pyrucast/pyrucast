@@ -23,10 +23,11 @@
 //!
 //! # Out-of-range policy
 //!
-//! Each evolution carries an [`OutOfRange`] policy (default
+//! Each [`SubEvolution`] carries an [`OutOfRange`] policy (default
 //! [`OutOfRange::Error`]) that decides what happens when the requested
-//! abscissa falls outside the tabulated range. The interpolation call may
-//! **override** it for a single query.
+//! abscissa falls outside its tabulated range. An [`Evolution`] holds no
+//! policy of its own: each of its curves applies its own. The interpolation
+//! call may **override** it for a single query.
 //!
 //! # Example
 //!
@@ -752,7 +753,6 @@ impl SubEvolution {
     ) -> Result<()> {
         let evo = Evolution {
             subs: vec![Handle::new(self.clone())],
-            out_of_range: self.out_of_range,
         };
         evo.plot(
             view, save, mesh, component, scale, smooth, frame, x_label, y_label, title,
@@ -1217,17 +1217,29 @@ impl crate::dump::Dump for SubEvolution {
 /// kind. Interpolating the aggregate interpolates every curve and regroups
 /// the results (see [`Evolution::interpolate`]).
 ///
-/// The aggregate carries its own [`OutOfRange`] policy, applied to every
-/// curve at interpolation time. Note that the structural union (`a | b`) and
-/// slicing reset the policy to the default [`OutOfRange::Error`].
+/// The aggregate holds no [`OutOfRange`] policy: out of range, each curve
+/// applies its own, whatever the union (`a | b`) or slice it sits in.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
+/// # use pyrucast::handle::Handle;
 /// let e = Evolution::from_scalars(vec![(0.0, 20.0), (1.0, 120.0)], OutOfRange::Clamp)?;
 /// assert_eq!(e.len(), 1); // one curve per zone; here a single one
 /// match e.interpolate(0.5, None)? {
 ///     Interpolated::Scalars(v) => assert_eq!(v, vec![70.0]),
+///     _ => unreachable!(),
+/// }
+/// // Two curves joined: out of range, each one follows its own policy.
+/// let clamped = SubEvolution::new(
+///     vec![(0.0, SubValue::Scalar(1.0)), (1.0, SubValue::Scalar(2.0))], OutOfRange::Clamp)?;
+/// let extended = SubEvolution::new(
+///     vec![(0.0, SubValue::Scalar(3.0)), (1.0, SubValue::Scalar(4.0))], OutOfRange::Extrapolate)?;
+/// let mut both = Evolution::default();
+/// both.add_sub(Handle::new(clamped))?;
+/// both.add_sub(Handle::new(extended))?;
+/// match both.interpolate(2.0, None)? {
+///     Interpolated::Scalars(v) => assert_eq!(v, vec![2.0, 5.0]),
 ///     _ => unreachable!(),
 /// }
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1235,7 +1247,6 @@ impl crate::dump::Dump for SubEvolution {
 #[derive(Serialize, Deserialize, Default)]
 pub struct Evolution {
     subs: Vec<Handle<SubEvolution>>,
-    out_of_range: OutOfRange,
 }
 
 crate::impl_aggregate!(
@@ -1290,37 +1301,10 @@ pub enum Interpolated {
 }
 
 impl Evolution {
-    /// The aggregate's stored out-of-range policy.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::Node;
-    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
-    /// # use pyrucast::containers::field::SubField;
-    /// # use pyrucast::containers::node_field::NodeField;
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
-    /// # let mut froid = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
-    /// # froid.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
-    /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
-    /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
-    /// let e = Evolution::from_node_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
-    /// assert_eq!(e.out_of_range(), OutOfRange::Clamp);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn out_of_range(&self) -> OutOfRange {
-        self.out_of_range
-    }
-
     /// Interpolate every sub-evolution at `x` and regroup the results.
     ///
-    /// `policy` overrides the aggregate's [`OutOfRange`] for this query when
-    /// `Some`; the effective policy is applied to every curve.
+    /// Out of range, each curve applies its own [`OutOfRange`]; `policy`,
+    /// when `Some`, overrides them all for this query.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -1372,7 +1356,6 @@ impl Evolution {
                 "Evolution: cannot interpolate an empty evolution".into(),
             ));
         }
-        let policy = Some(policy.unwrap_or(self.out_of_range));
         match self.subs[0].read().kind() {
             ValueKind::Scalar => {
                 let mut out = Vec::with_capacity(self.subs.len());
@@ -1605,7 +1588,6 @@ impl Evolution {
         policy: Option<OutOfRange>,
     ) -> Result<NodeField> {
         let curves = self.scalar_curves()?;
-        let policy = Some(policy.unwrap_or(self.out_of_range));
         field.map_subs(move |s| map_through(&curves, s, policy))
     }
 
@@ -1656,7 +1638,6 @@ impl Evolution {
         policy: Option<OutOfRange>,
     ) -> Result<ElementField> {
         let curves = self.scalar_curves()?;
-        let policy = Some(policy.unwrap_or(self.out_of_range));
         field.map_subs(move |s| map_through(&curves, s, policy))
     }
 
@@ -1989,7 +1970,8 @@ impl Evolution {
 
     /// Build a single-curve scalar `Evolution` from `(abscissa, scalar)`
     /// samples — the classic X→Y curve (one sub-evolution), or a table when the
-    /// abscissas are tuples (see [`SubEvolution::new`]).
+    /// abscissas are tuples (see [`SubEvolution::new`]). The curve takes
+    /// `out_of_range` as its policy.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -2023,14 +2005,14 @@ impl Evolution {
         let sub = SubEvolution::new(pairs, out_of_range)?;
         Ok(Evolution {
             subs: vec![Handle::new(sub)],
-            out_of_range,
         })
     }
 
     /// Build an `Evolution` from whole node fields tabulated at each abscissa
     /// (time-major). The fields are **transposed** into one curve per zone:
     /// zones are identified by their support (matched across steps), so every
-    /// step must carry the same set of supports as the first.
+    /// step must carry the same set of supports as the first. Every curve
+    /// takes `out_of_range` as its policy.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -2073,7 +2055,6 @@ impl Evolution {
         }
         let mut evolution = Evolution {
             subs: Vec::with_capacity(first.len()),
-            out_of_range,
         };
         for z in 0..first.len() {
             let support = first.get(z)?.read().support();
@@ -2138,7 +2119,6 @@ impl Evolution {
         }
         let mut evolution = Evolution {
             subs: Vec::with_capacity(first.len()),
-            out_of_range,
         };
         for z in 0..first.len() {
             let support = first.get(z)?.read().support();

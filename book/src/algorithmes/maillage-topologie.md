@@ -291,7 +291,7 @@ Toutes ces fonctions renvoient un **maillage POI1 calqué sur l'entrée** : un
 sous-maillage par sous-maillage de `mesh`, dans le même ordre, **éventuellement
 vide**. La sélection conserve donc le zonage de sa source — on sait de *quelle*
 zone vient chaque nœud, et on peut travailler zone par zone en indexant le
-résultat. `mesh.consolidate(sel)` retombe sur un nuage unique quand ce découpage ne
+résultat. `mesh.consolidate(sel)` retombe sur une zone POI1 unique quand ce découpage ne
 sert pas.
 
 Les nœuds sont **dédoublonnés dans l'ordre de première apparition** dans la
@@ -457,7 +457,7 @@ D'où deux refus, vérifiés **sur tout le maillage avant la moindre écriture**
   dire précisément l'invariant sur lequel repose l'appel sur place. Baissez
   `tol`, ou passez par la variante copiante ;
 - un sous-maillage **scellé** est une erreur : un espace d'éléments finis, une
-  matrice — ou un champ, si c'est un nuage POI1 qui lui sert de support — l'a
+  matrice — ou un champ, si c'est une zone POI1 qui lui sert de support — l'a
   capturé et lit sa numérotation de nœuds. Soudez avant de les construire (ou
   repartez d'un `duplicate()`).
 

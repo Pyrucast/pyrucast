@@ -2207,7 +2207,7 @@ pub struct RowPoints {
 impl RowPoints {
     /// The points of a POI1 support, whose cell `i` holds the node of row `i`.
     pub(crate) fn of_poi1(support: ReadGuard<SubMesh>) -> Self {
-        let bound = support.coords().read().capacity();
+        let bound = support.coords().read().node_count();
         RowPoints { support, bound }
     }
 
@@ -2251,7 +2251,7 @@ impl RowPoints {
     /// let support = mesh::poi1_from_nodes(&[a.clone()])?;
     /// let t = SubNodeField::from_poi1(&support.get(0)?, vec!["T".into()])?;
     /// // The zone holds one node, the `Coords` two: the bound counts both.
-    /// assert_eq!(t.row_points().unwrap().bound(), coords.read().capacity());
+    /// assert_eq!(t.row_points().unwrap().bound(), coords.read().node_count());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn bound(&self) -> usize {

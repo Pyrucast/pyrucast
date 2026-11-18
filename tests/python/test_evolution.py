@@ -128,8 +128,26 @@ def test_out_of_range_names_the_policy_it_applies(policy, beyond):
     se = pyrucast.SubEvolution(steps, out_of_range=policy)
     e = pyrucast.Evolution(steps, out_of_range=policy)
     assert se.out_of_range == policy
-    assert e.out_of_range == policy
+    assert e[0].out_of_range == policy
     assert se.interpolate(2.0) == beyond
+    assert e.interpolate(2.0) == [beyond]
+
+
+def test_each_curve_of_an_evolution_applies_its_own_policy():
+    # Past the last abscissa (2 over [0, 1]): the clamped curve 1 → 2 holds 2,
+    # the extrapolated curve 3 → 4 goes on to 5, the default one raises. The
+    # union, then a slice, keep each curve's behaviour.
+    clamped = pyrucast.SubEvolution([(0.0, 1.0), (1.0, 2.0)], out_of_range="clamp")
+    extended = pyrucast.SubEvolution(
+        [(0.0, 3.0), (1.0, 4.0)], out_of_range="extrapolate"
+    )
+    strict = pyrucast.SubEvolution([(0.0, 5.0), (1.0, 6.0)])
+    both = clamped | extended
+    assert both.interpolate(2.0) == [2.0, 5.0]
+    assert (both | strict)[:2].interpolate(2.0) == [2.0, 5.0]
+    with pytest.raises(RuntimeError, match="outside the tabulated range"):
+        (both | strict).interpolate(2.0)
+    assert not hasattr(both, "out_of_range")
 
 
 def test_out_of_range_defaults_to_error():

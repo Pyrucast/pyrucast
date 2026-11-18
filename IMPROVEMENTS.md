@@ -180,21 +180,6 @@ holds every array twice for a moment.
   (allocator compatibility).
 - Measure the peak memory and the time on a large mesh before and after.
 
-## An unknown shell formulation raises two different exceptions
-
-`model.shell(fespace, "foo")` raises `ValueError`, while
-`element_field.shell_deformation(field, fespace, "foo")` raises
-`RuntimeError` for the same unknown name. Observed by running on 2026-11-15.
-
-- Cause: `model.shell` receives a `ShellFormulation`, converted by pyo3 like
-  every named enum, which raises `ValueError`. `shell_deformation`
-  (`src/py/ops/element_field.rs`) takes a `&str` and calls
-  `Named::parse` itself, whose `PyrucastError::Message` becomes a
-  `RuntimeError`.
-- Fix: take `formulation: ShellFormulation` in the binding, as `model.shell`
-  does, then update `# Raises` in its docstring. Look for other bindings
-  that take a `&str` and parse it themselves.
-
 ## `NodeField::with` and `with_components_per_submesh`
 
 Rust `NodeField::with(mesh, components_per_submesh)`
@@ -210,19 +195,6 @@ and calls it per value in its row loop; the pointer prevents inlining and
 vectorisation. The loop is memory-bound today (first item), so measure before
 changing it — e.g. a generic `F: Fn(f64, f64) -> f64` monomorphised per
 operator, from the Python slots down to `merge_zones`.
-
-## Node garbage collector
-
-`Coords::gc()` (`src/coords.rs`) marks the nodes whose refcount fell to 0 as
-dead. It frees no memory, ids are never reused, and pyrucast never calls it.
-Python exposes it with `is_alive()` and `node_count()`, which only matter with
-it (without gc, `node_count()` equals `capacity()`). The per-node refcount has
-no other consumer than `gc`, `refcount(id)` and the `dump` column.
-
-Decide: remove it from the API, or keep it undocumented. Mentions left either
-way: `book/src/sauvegarde.md` (a reloaded `Coords` alone "qu'un `gc()`
-collectera"), `book/src/aspect-informatique.md` ("`coords.gc()` collecte…"),
-and the Rust docs of `src/coords.rs` and `src/atoms/node.rs`.
 
 ## Improve the multi-variable interpolation of evolutions
 
@@ -242,16 +214,6 @@ order. Lead: an interpolation of the scattered samples that does not depend on
 the order of the variables (a simplex-based one, for instance), weighed
 against what it changes on a full grid and its cost at every Gauss point.
 
-## The out-of-range policy has two owners
-
-Each `SubEvolution` carries a policy, and so does the `Evolution` holding it.
-`Evolution::interpolate_at`, `interpolate_node_field` and
-`interpolate_element_field` apply the **aggregate's** policy to every curve,
-so a curve's own policy only counts when that curve is interpolated alone.
-`|` and slicing give the aggregate `"error"`, whatever its curves carry:
-`SubEvolution(..., out_of_range="clamp") | other` then raises out of range.
-Decide which object owns the policy, and what `|` and slicing do with it.
-
 ## `Evolution(steps)` ignores a zone a later step adds
 
 `Evolution::from_node_fields` / `from_element_fields`
@@ -261,30 +223,29 @@ one of them is refused; a later step carrying an extra zone, on a support the
 first step does not have, sees it dropped without a word. Decide: refuse it as
 well, or keep it documented (`book/src/evolution.md` says so).
 
+## A reloaded mesh loses the POI1 companion its fields share
+
+A submesh caches the POI1 companion `to_poi1` returns (`poi1_companion`,
+`src/containers/mesh.rs`), so the fields built on one mesh share a support.
+The cache is not archived: on a reloaded mesh, `to_poi1` builds a fresh
+companion, distinct from the support of the fields reloaded with it. Measured
+on 2026-11-18: a SEG2 line and a field on its companion, saved and reloaded, then
+`NodeField(to_poi1(mesh2), ["f"])`: `field2 | f` has two zones on the same
+nodes, `+` pairs nothing. `restrict(field2, mesh2)` brings it back
+(`book/src/sauvegarde.md` says so).
+
+Lead: at reload, hand a reloaded POI1 back to the submesh whose companion it was —
+which the file would have to record, since a POI1 does not know the mesh it
+was drawn from. `book/src/memory-model.md` ("Aucun n'est écrit dans une
+sauvegarde : après relecture, chacun se recalcule…", "un cache ne se voit
+qu'au temps de calcul") does not hold for this cache.
+
 ## Book pages not reviewed yet
 
 Same rules as the reviewed pages: checked against the code, Python first then
 "Côté Rust", current state only.
 
-- `operateurs/comportement.md`: heading `internal_forces(model, state)`; the
-  signature is `internal_forces(model, state, solution, materials)`.
-- `sauvegarde.md`: a reloaded field is read through
-  `o[...].coords().acquire(id)`; drop `gc()` and "la copie qu'un champ garde
-  de la connectivité", which no longer exists.
 - `compilation.md`: the features list lacks `spill`.
-
-## Introduction diagram
-
-`book/src/objets.md` draws the dependency diagram as a `<pre>` block with bold
-names; `book/src/introduction.md` still has the plain `text` block of the same
-diagram. Apply the same style there once its rendering on the site suits.
-
-## "ne compose jamais" in the Aggregate page
-
-`book/src/aggregate.md` says `+` "ne compose jamais". Between two fields on
-different supports, `+` brings the zones of both sides into the result, a zone
-present on one side only passing as is: it does gather zones. Reword: `|` is
-the union of objects; `+` computes, and on fields it pairs zones by support.
 
 ## The online book describes master, not the installed version
 

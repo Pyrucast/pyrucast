@@ -298,7 +298,8 @@ crate::impl_dump_pymethod!(handle PySubEvolution, handle);
 /// step is `(abscissa, value)` and `value` is a whole `NodeField`,
 /// `ElementField` or float (whole fields are transposed into one curve per
 /// zone); or low-level by composing `SubEvolution`s with `|`. Index it
-/// (`evolution[i]`) to reach a `SubEvolution`.
+/// (`evolution[i]`) to reach a `SubEvolution`. The out-of-range policy belongs
+/// to each curve (`evolution[i].out_of_range`); the evolution has none.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Evolution")]
 pub struct PyEvolution {
@@ -349,8 +350,9 @@ impl PyEvolution {
     }
 
     /// `Evolution(steps, out_of_range="error")` — build from whole values
-    /// (`out_of_range` defaults to `"error"`)
-    /// tabulated at each abscissa. `steps` is a list of `(abscissa, value)`
+    /// tabulated at each abscissa; `out_of_range` (default `"error"`) is
+    /// the policy of every curve built, the evolution keeping none of its
+    /// own. `steps` is a list of `(abscissa, value)`
     /// where `value` is a float, a `NodeField` or an `ElementField`; the kind
     /// is taken from the first step. Whole fields are transposed into one
     /// curve per zone. The abscissa is a float, or a tuple of floats for a
@@ -417,12 +419,6 @@ impl PyEvolution {
         Ok(Self { inner })
     }
 
-    /// The stored out-of-range policy name.
-    #[getter]
-    fn out_of_range(&self) -> String {
-        self.inner.out_of_range().name().to_string()
-    }
-
     /// The abscissa types of the first curve: a name for a curve, a tuple of
     /// names for a table, or `None`. Each curve keeps its own — `E(T)` beside
     /// `sigma_y(T, phi)` — see `SubEvolution.abscissa_type`.
@@ -447,7 +443,8 @@ impl PyEvolution {
     ///   support — material laws `E(T)`, `sigma_y(T, phi)` evaluated at the
     ///   state in one call.
     ///
-    /// `out_of_range` overrides the stored policy for this query.
+    /// Out of range, each curve applies its own `out_of_range` policy; the
+    /// `out_of_range` argument, when given, overrides them all for this query.
     #[pyo3(signature = (x, out_of_range=None))]
     fn interpolate(
         &self,

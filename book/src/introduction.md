@@ -19,23 +19,21 @@ Chaque structure ne dépend que des structures qui la précèdent. La plupart
 viennent par **paire** zone / agrégat (`SubMesh`/`Mesh`…) — c'est le motif
 [Agrégat](aggregate.md), avec sa composition par union `|`.
 
-```text
-Coords ── Node                          (NodeId u32 stable ; Node = accesseur RAII)
+<pre>
+<b>Coords</b> ── <b>Node</b>                            <i>le magasin de nœuds, et l'un d'eux, repéré par un NodeId stable</i>
    │
-   └── Mesh  (agrège des SubMesh, + ElementType)   géométrie
-          ├── NodeField  (agrège des SubNodeField, support POI1)   valeurs par nœud × composante
-          └── FiniteElementSpace  (agrège des SubFiniteElementSpace)
-                 │                  (+ Interpolation, QuadratureRule)
-                 ├── ElementField  (agrège des SubElementField)   valeurs aux Gauss
-                 └── Model  (agrège des SubModel : physiques + contraintes)
-                        └── ops::matrix ──► Matrix   (matrice creuse, DOFs nommés)
+   └── <b>Mesh</b>                               <i>agrège des SubMesh, + ElementType : la géométrie</i>
+          ├── <b>NodeField</b>                   <i>agrège des SubNodeField, support POI1 : valeurs par nœud × composante</i>
+          └── <b>FiniteElementSpace</b>          <i>agrège des SubFiniteElementSpace, + Interpolation, QuadratureRule</i>
+                 ├── <b>ElementField</b>         <i>agrège des SubElementField : valeurs aux points de Gauss</i>
+                 └── <b>Model</b>                <i>agrège des SubModel : physiques et contraintes</i>
+                        └── <b>Matrix</b>        <i>matrice creuse, DOFs nommés, construite par ops::matrix</i>
 
-Evolution  (agrège des SubEvolution)    scalaire, NodeField ou ElementField
-                                        tabulé vs une variable
+<b>Evolution</b>                                 <i>agrège des SubEvolution : scalaire, NodeField ou ElementField tabulé selon une variable</i>
 
-Model + ElementField (matériau) ──► stiffness ──► Matrix
-Matrix + NodeField (second membre) ──► solve ──► NodeField (solution)
-```
+<b>Model</b> + <b>ElementField</b> (matériau) ──► stiffness ──► <b>Matrix</b>
+<b>Matrix</b> + <b>NodeField</b> (second membre) ──► solve ──► <b>NodeField</b> (solution)
+</pre>
 
 Deux **traits transverses** factorisent le comportement commun :
 [`Aggregate`](aggregate.md) (accès `len`/`[i]`, union — `|` en Python, `union`

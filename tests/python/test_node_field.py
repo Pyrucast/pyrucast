@@ -201,7 +201,7 @@ def test_value_first_zone_wins_and_check():
     f.check()
 
 
-def test_field_protects_nodes_from_gc():
+def test_field_counts_its_nodes_once_its_support_is_dropped():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     nid = a.id
@@ -217,15 +217,13 @@ def test_field_protects_nodes_from_gc():
     del sm
     pygc.collect()
     # The field still holds a clone of the SubMesh handle, so the
-    # SubMesh stays alive and keeps the node alive (refcount = 1).
+    # SubMesh stays alive and keeps counting the node (refcount = 1).
     assert c.refcount(nid) == 1
-    assert c.is_alive(nid)
-    assert c.gc() == 0
 
     del field
     pygc.collect()
-    assert c.gc() == 1
-    assert not c.is_alive(nid)
+    assert c.refcount(nid) == 0
+    assert c.node_count == 1  # the node itself stays
 
 
 def test_values_batch_list_submesh_and_mesh():

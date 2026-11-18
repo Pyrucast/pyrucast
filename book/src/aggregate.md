@@ -92,10 +92,17 @@ Les nœuds s'unissent aussi (cf. [Nœud](node.md)) :
 | `node \| node` | un `Mesh` POI1 d'une zone, sur les deux nœuds |
 | `mesh \| node` | ajoute un point à un `Mesh` POI1 d'une seule zone, sinon une erreur |
 
-> **`|` compose, `+` calcule.** L'union s'écrit **toujours** `|`. L'opérateur
-> `+` (et `-`, `*`, `/`) est l'**arithmétique** — des champs (`champ + 2.0`,
-> `champ + champ`) et des matrices (`k + m`) — et ne compose jamais : un
-> `Mesh + Mesh` lève un `TypeError`.
+> **`|` réunit, `+` calcule.** L'union s'écrit **toujours** `|` : elle réunit
+> les zones des deux opérandes sans calculer aucune valeur, et une zone qui est
+> le même objet des deux côtés n'y entre qu'une fois — `k | k` vaut `k`.
+> L'opérateur `+` (et `-`, `*`, `/`) est l'**arithmétique** des champs
+> (`champ + 2.0`, `champ + champ`) et des matrices (`k + m`) : il calcule.
+> Entre deux champs, il apparie les zones par support et additionne celles qui
+> se font face ; une zone présente d'un seul côté passe telle quelle dans le
+> résultat, qui porte donc les zones des deux champs. Entre deux matrices, il
+> additionne les valeurs sur l'ensemble de leurs inconnues : `k + k` vaut
+> `2k`. Un maillage n'a pas d'arithmétique : `Mesh + Mesh` lève un
+> `TypeError`.
 
 ### Exemple
 

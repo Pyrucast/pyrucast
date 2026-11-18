@@ -104,7 +104,7 @@ python -c "import pyrucast; c = pyrucast.Coords(2); n = c.add_node([0.0, 0.0]); 
 Sortie attendue :
 
 ```text
-Coords: dim=2, configs=1 (active="default"), nodes=1 (0 collected), permutation: identity
+Coords: dim=2, configs=1 (active="default"), nodes=1, permutation: identity
 <Node #0>
 ```
 

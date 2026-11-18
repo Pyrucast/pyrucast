@@ -113,7 +113,7 @@ ses sous-maillages doit porter une zone du champ.
 {{#include ../../../tests/python/test_doc_ops_champs.py:projection_gauss}}
 ```
 
-Les valeurs relevées sur un nuage de points se tracent ensuite le long de la
+Les valeurs relevées aux nœuds d'une zone POI1 se tracent ensuite le long de la
 ligne qu'ils forment : voir [Le long d'une ligne](../evolution.md#le-long-dune-ligne).
 
 ## Bande de valeurs (`ge` / `gt` / `le` / `lt`)

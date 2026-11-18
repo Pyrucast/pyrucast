@@ -99,7 +99,7 @@ pub struct SubMesh {
     /// can never go stale.
     #[serde(skip)]
     node_index: OnceLock<HashMap<NodeId, usize>>,
-    /// Lazily-built **canonical POI1 companion**: the node cloud of this
+    /// Lazily-built **canonical POI1 companion**: the POI1 zone of this
     /// submesh's distinct nodes, materialised once and shared. Every consumer
     /// that projects this submesh to its nodes ([`SubMesh::to_poi1`]) gets the
     /// *same* handle, so their node fields pair under
@@ -110,7 +110,7 @@ pub struct SubMesh {
     /// demand). Dropped by every connectivity mutation (see
     /// `invalidate_caches`): the companion answers for **one** state of this
     /// submesh, and the fields already sitting on it keep it alive on their
-    /// own — they stay valid, on that earlier node cloud.
+    /// own — they stay valid, on that earlier companion.
     #[serde(skip)]
     poi1_companion: OnceLock<Handle<SubMesh>>,
 }
@@ -329,7 +329,7 @@ impl SubMesh {
     ///
     /// Dropping the companion handle does **not** invalidate the node fields
     /// built on it: they hold it themselves, so it stays alive, sealed, with
-    /// its node refcounts. They are simply defined on the node cloud of the
+    /// its node refcounts. They are simply defined on the companion of the
     /// submesh as it was; the next [`SubMesh::to_poi1`] materialises a fresh
     /// companion for the new state, and
     /// [`restrict`](fn@crate::ops::node_field::restrict) carries a field from
@@ -416,9 +416,9 @@ impl SubMesh {
     }
 
     /// Add a cell. The length of `nodes` must equal
-    /// `element_type.nodes_per_cell()`, and each node must be alive in the
+    /// `element_type.nodes_per_cell()`, and each node must belong to the
     /// `Coords`; each node is increfed. On increment failure
-    /// (invalid / collected id), the increfs already performed for this
+    /// (unknown id), the increfs already performed for this
     /// cell are rolled back.
     ///
     /// ```
@@ -515,9 +515,9 @@ impl SubMesh {
         {
             let c = self.coords.read();
             for &n in nodes {
-                if !c.is_alive(n) {
+                if !c.contains(n) {
                     return Err(PyrucastError::Message(format!(
-                        "add_cell_taking: node {} is not alive",
+                        "add_cell_taking: unknown node {}",
                         n
                     )));
                 }
@@ -653,12 +653,12 @@ impl SubMesh {
         let mut rewritten = 0;
         {
             let mut c = self.coords.write();
-            // Nothing is written until every image is known to be live.
+            // Nothing is written until every image is known to exist.
             for &old in &self.connectivity {
                 let new = image(old);
-                if new != old && !c.is_alive(new) {
+                if new != old && !c.contains(new) {
                     return Err(PyrucastError::Message(format!(
-                        "remap_nodes: node {} is not found or collected",
+                        "remap_nodes: unknown node {}",
                         new.0
                     )));
                 }
@@ -787,10 +787,10 @@ impl SubMesh {
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// // A point cloud: one POI1 cell per node, in the given order. The
+    /// // A POI1 zone: one cell per node, in the given order. The
     /// // canonical form is the `ops::mesh::poi1_from_nodes` operator.
-    /// let nuage = SubMesh::poi1_from_nodes(&n)?;
-    /// assert_eq!(nuage.cell_count(), 3);
+    /// let poi1 = SubMesh::poi1_from_nodes(&n)?;
+    /// assert_eq!(poi1.cell_count(), 3);
     /// assert!(SubMesh::poi1_from_nodes(&[]).is_err()); // no frame to attach to
     /// // Every node must come from the same `Coords`.
     /// let ailleurs = Node::create_in(Handle::new(Coords::new(2)?), &[5.0, 5.0])?;
@@ -842,7 +842,7 @@ impl SubMesh {
         SubMesh::from_connectivity(coords, ElementType::POI1, nodes.to_vec())
     }
 
-    /// Canonical POI1 node cloud of this submesh — its nodes **de-duplicated in
+    /// Canonical POI1 companion of this submesh — its nodes **de-duplicated in
     /// order of first appearance** (one POI1 cell per unique node), as a sealed
     /// [`SubMesh`] handle.
     ///
@@ -1151,11 +1151,11 @@ impl Mesh {
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// // The left operand must be a **one-zone POI1 cloud**: this is a union
+    /// // The left operand must be a **one-zone POI1 mesh**: this is a union
     /// // of points, not the addition of a point to an arbitrary mesh.
-    /// let nuage = pyrucast::ops::mesh::poi1_from_nodes(&[n[0].clone()]).unwrap();
-    /// let deux_points = nuage.union_node(&n[1]).unwrap();
-    /// assert_eq!(deux_points.cell_count(), 2);
+    /// let poi1 = pyrucast::ops::mesh::poi1_from_nodes(&[n[0].clone()]).unwrap();
+    /// let two_points = poi1.union_node(&n[1]).unwrap();
+    /// assert_eq!(two_points.cell_count(), 2);
     /// ```
     pub fn union_node(&self, node: &Node) -> Result<Mesh> {
         let sub = self.unit()?;
@@ -1896,22 +1896,16 @@ mod tests {
     }
 
     #[test]
-    fn submesh_add_cell_collected_node_rollback() {
+    fn submesh_add_cell_unknown_node_rollback() {
         let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-        let dead_id = coords.write().add_node(&[2.0]).unwrap();
-        // dead_id starts at refcount=1; decrement then collect.
-        {
-            let mut c = coords.write();
-            c.decref(dead_id).unwrap();
-            assert_eq!(c.gc(), 1);
-        }
+        let ghost = NodeId(2); // no node carries this id
 
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-        // a (live), b (live), dead_id (collected) → add_cell fails after
-        // increfing a and b. The rollback must undo those increfs.
-        let err = sm.add_cell(&[a.id(), b.id(), dead_id]).unwrap_err();
+        // a, b, then an unknown id → add_cell fails after increfing a and b.
+        // The rollback must undo those increfs.
+        let err = sm.add_cell(&[a.id(), b.id(), ghost]).unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
         {
             let cf = coords.read();
@@ -1922,21 +1916,16 @@ mod tests {
     }
 
     #[test]
-    fn from_connectivity_refuses_a_dead_node_without_increfing_anything() {
+    fn from_connectivity_refuses_an_unknown_node_without_increfing_anything() {
         let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-        let dead_id = coords.write().add_node(&[2.0]).unwrap();
-        {
-            let mut c = coords.write();
-            c.decref(dead_id).unwrap();
-            assert_eq!(c.gc(), 1);
-        }
+        let ghost = NodeId(2); // no node carries this id
 
         let err = SubMesh::from_connectivity(
             coords.clone(),
             ElementType::TRI3,
-            vec![a.id(), b.id(), dead_id],
+            vec![a.id(), b.id(), ghost],
         )
         .unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
@@ -2178,7 +2167,7 @@ mod tests {
         let before = h.read().to_poi1().unwrap();
         assert_eq!(before.read().cell_count(), 3);
 
-        // One more cell ⇒ a different node cloud, so a different companion.
+        // One more cell ⇒ other distinct nodes, so a different companion.
         h.write().add_cell(&[b.id(), d.id(), c.id()]).unwrap();
         let after = h.read().to_poi1().unwrap();
         assert!(
