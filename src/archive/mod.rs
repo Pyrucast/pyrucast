@@ -25,9 +25,11 @@
 //!
 //! The rule is **recomputable ⇒ not written**. Every cache and every memoised
 //! table stays out: the assembled CSR, the solver's factorization, the cell
-//! colouring, the lazy index maps, a field's copy of its support's
-//! connectivity. What comes back rebuilds them on demand, exactly as a
-//! freshly-built graph would.
+//! colouring, the lazy index maps, a submesh's cached POI1 cloud. What comes
+//! back rebuilds the caches on demand, exactly as a freshly-built graph would;
+//! a reloaded matrix is assembled again (`Matrix::assemble`) before it solves,
+//! and a field built on a reloaded mesh lands on a fresh cloud, not on the
+//! support of the fields reloaded with it.
 //!
 //! Reference counts are not written either. Object lifetimes are counted by the
 //! `Arc` inside each [`Handle`], which counts itself as
@@ -674,7 +676,7 @@ impl ArchiveRoot for str {
 
 #[derive(Serialize, Deserialize)]
 struct Body {
-    /// Informative only: never tested, only shown when something goes wrong.
+    /// Informative only: written for whoever inspects the file, never read back.
     crate_version: String,
     /// `(identifier, tag, bytes)`, in dependency order.
     records: Vec<(u32, String, Vec<u8>)>,

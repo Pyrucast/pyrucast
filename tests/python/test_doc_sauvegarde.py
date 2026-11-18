@@ -120,6 +120,59 @@ u = pyrucast.solver.solve(k, o["chargement"])  # refactorise
 
 assert u.node_count > 0
 
+# ANCHOR: matrice_relue
+pyrucast.save("k.pyr", {"k": k, "chargement": o["chargement"]})
+o = pyrucast.load("k.pyr")
+o["k"].assemble()  # ses valeurs n'étaient pas dans le fichier
+u = pyrucast.solver.solve(o["k"], o["chargement"])
+# ANCHOR_END: matrice_relue
+
+assert u.node_count > 0
+_sans_valeurs = pyrucast.load("k.pyr")
+try:
+    pyrucast.solver.solve(_sans_valeurs["k"], _sans_valeurs["chargement"])
+    raise AssertionError("a reloaded matrix comes back without its values")
+except RuntimeError as erreur:
+    assert "no assembled values" in str(erreur)
+
+
+# ── A reloaded field is read with the reloaded nodes ────────────────────────
+
+# ANCHOR: noeud_relu
+c = pyrucast.Coords(2)
+a, b = c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0])
+ligne = pyrucast.Mesh(c, "SEG2")
+ligne.unit().add_cell([a, b])
+t = pyrucast.NodeField(pyrucast.mesh.to_poi1(ligne), ["T"])
+t[0].set_value(b, "T", 20.0)
+pyrucast.save("ligne.pyr", {"ligne": ligne, "T": t})
+
+relu = pyrucast.load("ligne.pyr")
+b_relu = relu["ligne"].coords().acquire(b.id)  # le même nœud, dans le Coords relu
+print(relu["T"].value(b_relu, "T"))  # 20.0
+# ANCHOR_END: noeud_relu
+
+assert relu["T"].value(b_relu, "T") == 20.0
+try:
+    relu["T"].value(b, "T")
+    raise AssertionError("a node of the writing script is refused")
+except RuntimeError as erreur:
+    assert "belongs to another Coords" in str(erreur)
+
+
+# ── The node cloud of a mesh is not saved ───────────────────────────────────
+
+# ANCHOR: nuage
+f = pyrucast.NodeField(pyrucast.mesh.to_poi1(relu["ligne"]), ["f"])
+print(len(relu["T"] | f))  # 2 : deux supports, aux mêmes nœuds
+t_ramene = pyrucast.node_field.restrict(relu["T"], relu["ligne"])
+print(len(t_ramene | f))  # 1 : un seul support
+# ANCHOR_END: nuage
+
+assert len(relu["T"] | f) == 2
+assert len(t_ramene | f) == 1
+assert t_ramene.value(b_relu, "T") == 20.0
+
 
 # ── The node counters do not cross over ─────────────────────────────────────
 

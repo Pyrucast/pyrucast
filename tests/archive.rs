@@ -202,8 +202,8 @@ fn a_node_the_caller_holds_is_not_archived() -> Result<()> {
 
 // ─── The rule: recomputable ⇒ not written ───────────────────────────────────
 
-/// A nodal field weighs its values, not its values plus a copy of its support's
-/// connectivity — and comes back with that copy rebuilt.
+/// A nodal field weighs its values and its POI1 support, nothing more: saving the
+/// mesh beside it adds the mesh's own connectivity, not a second node list.
 #[test]
 fn what_is_recomputable_is_not_written() -> Result<()> {
     let n = 2000;
