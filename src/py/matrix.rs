@@ -246,28 +246,19 @@ impl PyMatrix {
     /// Fill entries via the block view (`block[0].add_entry(...)`) and
     /// compose several blocks with `|`, then `assemble()`.
     #[classmethod]
-    #[pyo3(signature = (row_support, col_support, dual_vars, primal_vars, ordering="nodes_then_vars", symmetry=Symmetry::None))]
+    #[pyo3(signature = (row_support, col_support, dual_vars, primal_vars, ordering=DofOrdering::NodesThenVars, symmetry=Symmetry::None))]
     fn block(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
         row_support: &Bound<'_, PyAny>,
         col_support: &Bound<'_, PyAny>,
         dual_vars: Vec<String>,
         primal_vars: Vec<String>,
-        ordering: &str,
+        ordering: DofOrdering,
         symmetry: Symmetry,
     ) -> PyResult<Self> {
-        let ord = match ordering {
-            "nodes_then_vars" => DofOrdering::NodesThenVars,
-            "vars_then_nodes" => DofOrdering::VarsThenNodes,
-            other => {
-                return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                    "unknown ordering '{other}'; expected 'nodes_then_vars' or 'vars_then_nodes'"
-                )))
-            }
-        };
         let row = submesh_handle(row_support)?;
         let col = submesh_handle(col_support)?;
-        let sub = SubMatrix::new(row, col, dual_vars, primal_vars, ord, symmetry)?;
+        let sub = SubMatrix::new(row, col, dual_vars, primal_vars, ordering, symmetry)?;
         let mut m = Matrix::empty();
         m.add_sub(Handle::new(sub))?;
         Ok(Self { inner: m })

@@ -105,6 +105,24 @@ impl NodeOrder {
     }
 }
 
+impl crate::named::Named for NodeOrder {
+    const LABEL: &'static str = "node order";
+    const VALUES: &'static [Self] = &[Self::Pyrucast, Self::Gmsh, Self::Med];
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Pyrucast => "pyrucast",
+            Self::Gmsh => "gmsh",
+            Self::Med => "med",
+        }
+    }
+
+    // pyrucast numbers its cells as VTK does.
+    fn aliases() -> &'static [(&'static str, Self)] {
+        &[("vtk", Self::Pyrucast)]
+    }
+}
+
 // ─── Tags ────────────────────────────────────────────────────────────────────
 
 /// An integer usable as a node or cell tag: gmsh hands `u64`, medcoupling

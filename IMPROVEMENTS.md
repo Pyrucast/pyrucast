@@ -180,21 +180,6 @@ holds every array twice for a moment.
   (allocator compatibility).
 - Measure the peak memory and the time on a large mesh before and after.
 
-## An unknown shell formulation raises two different exceptions
-
-`model.shell(fespace, "foo")` raises `ValueError`, while
-`element_field.shell_deformation(field, fespace, "foo")` raises
-`RuntimeError` for the same unknown name. Observed by running on 2026-11-15.
-
-- Cause: `model.shell` receives a `ShellFormulation`, converted by pyo3 like
-  every named enum, which raises `ValueError`. `shell_deformation`
-  (`src/py/ops/element_field.rs`) takes a `&str` and calls
-  `Named::parse` itself, whose `PyrucastError::Message` becomes a
-  `RuntimeError`.
-- Fix: take `formulation: ShellFormulation` in the binding, as `model.shell`
-  does, then update `# Raises` in its docstring. Look for other bindings
-  that take a `&str` and parse it themselves.
-
 ## `NodeField::with` and `with_components_per_submesh`
 
 Rust `NodeField::with(mesh, components_per_submesh)`

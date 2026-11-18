@@ -184,6 +184,18 @@ pub enum DofOrdering {
     NodesThenVars,
 }
 
+impl crate::named::Named for DofOrdering {
+    const LABEL: &'static str = "ordering";
+    const VALUES: &'static [Self] = &[DofOrdering::NodesThenVars, DofOrdering::VarsThenNodes];
+
+    fn name(self) -> &'static str {
+        match self {
+            DofOrdering::NodesThenVars => "nodes_then_vars",
+            DofOrdering::VarsThenNodes => "vars_then_nodes",
+        }
+    }
+}
+
 impl DofOrdering {
     /// `(node_local, var_idx)` → flat matrix index.
     ///

@@ -9461,7 +9461,7 @@ def shell_deformation(field: NodeField, fespace: FiniteElementSpace, formulation
     
     # Raises
     
-    `RuntimeError` for an unknown `formulation`.
+    `ValueError` for an unknown `formulation`.
     """
 
 def sin(field: typing.Any) -> typing.Any:

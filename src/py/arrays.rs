@@ -247,16 +247,3 @@ impl PyArray {
         Ok(())
     }
 }
-
-/// A node order named in Python: `"pyrucast"` (or `"vtk"`), `"gmsh"`, `"med"`.
-pub fn parse_order(order: &str) -> PyResult<crate::ops::mesh::NodeOrder> {
-    use crate::ops::mesh::NodeOrder;
-    match order.trim().to_ascii_lowercase().as_str() {
-        "pyrucast" | "vtk" => Ok(NodeOrder::Pyrucast),
-        "gmsh" => Ok(NodeOrder::Gmsh),
-        "med" => Ok(NodeOrder::Med),
-        other => Err(pyo3::exceptions::PyValueError::new_err(format!(
-            "unknown node order '{other}' (expected 'pyrucast', 'gmsh' or 'med')"
-        ))),
-    }
-}

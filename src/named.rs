@@ -219,6 +219,8 @@ named_enum!(
     crate::models::symmetry::MaterialSymmetry,
     crate::containers::evolution::OutOfRange,
     crate::containers::matrix::Symmetry,
+    crate::containers::matrix::DofOrdering,
+    crate::ops::mesh::arrays::NodeOrder,
     crate::ops::solver::SolveMethod,
     crate::ops::solver::Verbosity,
     crate::ops::solver::RelationMethod,
