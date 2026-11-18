@@ -28,7 +28,7 @@ def _plaque():
 
 
 def _champ_nodal(mesh, noeuds, composantes, valeurs, support=None):
-    """A `NodeField` on the POI1 cloud of the given nodes.
+    """A `NodeField` on the POI1 zone of the given nodes.
 
     `support` is handed over as is from one field to the next: two calls to
     `poi1_from_nodes` build two **distinct** supports, and the reductions that

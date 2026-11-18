@@ -31,7 +31,7 @@ def _plaque():
 
 
 def _nodal(nodes, components, value, support=None):
-    """A `NodeField` on the POI1 cloud of `nodes`, `value(node)` per component."""
+    """A `NodeField` on the POI1 zone of `nodes`, `value(node)` per component."""
     support = support or pyrucast.mesh.poi1_from_nodes(nodes)
     f = pyrucast.NodeField(support, components)
     for node in nodes:

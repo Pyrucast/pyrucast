@@ -38,7 +38,7 @@ use std::collections::HashSet;
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // The cells leaning on a node cloud. In **strict** mode, *all* the cell's
+/// // The cells leaning on the nodes of a POI1 zone. In **strict** mode, *all* the cell's
 /// // nodes must be there.
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
 /// let bout = mesh::poi1_from_nodes(&[l.node(0, 0, 0)?])?;

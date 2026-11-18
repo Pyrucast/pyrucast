@@ -22,7 +22,7 @@ use crate::handle::Handle;
 /// input mesh's [`Coords`](crate::coords::Coords), a whole zone at a time
 /// ([`Coords::add_nodes`](crate::coords::Coords::add_nodes)); each output POI1
 /// submesh then ends up holding the **sole** reference to the nodes it mints —
-/// the initial unit is given back once the cloud owns them — so they live
+/// the initial unit is given back once the POI1 submesh owns them — so they live
 /// exactly as long as the returned mesh. An empty input
 /// submesh yields an empty POI1 submesh (the count is preserved); `mesh`
 /// itself is left untouched.
@@ -56,7 +56,7 @@ pub fn barycenter(mesh: &Mesh) -> Result<Mesh> {
         let coords = sm_handle.read().coords();
 
         // Compute every centroid under the read locks — the connectivity
-        // borrowed in place, never copied out — then mint the whole cloud under
+        // borrowed in place, never copied out — then mint every new node under
         // a write lock. Two critical sections for a zone, whatever its cell
         // count, and the guards are gone before the write.
         let centroids: Vec<f64> = {
@@ -82,10 +82,10 @@ pub fn barycenter(mesh: &Mesh) -> Result<Mesh> {
         };
 
         let new_ids = coords.write().add_nodes(&centroids)?;
-        let cloud: Vec<NodeId> = new_ids.clone().map(NodeId).collect();
-        // The id list *is* the cloud's connectivity: handed over, not copied.
-        let out_sm = SubMesh::from_connectivity(coords.clone(), ElementType::POI1, cloud)?;
-        // The cloud owns its nodes now; hand back the unit `add_nodes` gave.
+        let ids: Vec<NodeId> = new_ids.clone().map(NodeId).collect();
+        // The id list *is* the POI1 connectivity: handed over, not copied.
+        let out_sm = SubMesh::from_connectivity(coords.clone(), ElementType::POI1, ids)?;
+        // The POI1 submesh owns its nodes now; hand back the unit `add_nodes` gave.
         let owned: Vec<NodeId> = new_ids.map(NodeId).collect();
         coords.write().decref_all(&owned)?;
         result.add_sub(Handle::new(out_sm))?;

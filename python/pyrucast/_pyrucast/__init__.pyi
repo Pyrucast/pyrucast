@@ -4367,7 +4367,7 @@ class NodeField:
         r"""
         Restrict `field` to the nodes of `mesh`, keeping the components found there.
         
-        Each zone of the result lies on the POI1 cloud of a submesh of `mesh` — its
+        Each zone of the result lies on the POI1 companion of a submesh of `mesh` — its
         distinct nodes, built once and kept with the submesh. Two restrictions onto
         the **same** `mesh` share that support, so they combine directly:
         `restrict(a, mesh) - restrict(b, mesh)` is the node-by-node difference.
@@ -9187,7 +9187,7 @@ def restrict_node(field: NodeField, mesh: Mesh) -> NodeField:
     r"""
     Restrict `field` to the nodes of `mesh`, keeping the components found there.
     
-    Each zone of the result lies on the POI1 cloud of a submesh of `mesh` — its
+    Each zone of the result lies on the POI1 companion of a submesh of `mesh` — its
     distinct nodes, built once and kept with the submesh. Two restrictions onto
     the **same** `mesh` share that support, so they combine directly:
     `restrict(a, mesh) - restrict(b, mesh)` is the node-by-node difference.

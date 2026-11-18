@@ -642,7 +642,7 @@ gauche = pyrucast.mesh.points_on_plane(plaque, [0.0, 0.0], [1.0, 0.0])
 conge = pyrucast.mesh.points_in_sphere(plaque, [1.0, 1.0], 0.2)
 
 # The selection serves directly as the imposed support of a Dirichlet — the
-# POI1 cloud is what `model.dirichlet` expects (cf. Constraints / Dirichlet).
+# POI1 zone is what `model.dirichlet` expects (cf. Constraints / Dirichlet).
 mecanique = pyrucast.model.elasticity(
     pyrucast.FiniteElementSpace(plaque), "plane_stress"
 )

@@ -10,7 +10,7 @@ use crate::handle::Handle;
 ///
 /// Returns a new [`NodeField`] with at most one zone per submesh of `mesh`,
 /// each submesh once: one listed twice gives one zone. Each zone is supported
-/// on the submesh's **canonical POI1 node cloud** — its distinct nodes, via
+/// on the submesh's **POI1 companion** — its distinct nodes, via
 /// [`SubMesh::to_poi1`](crate::containers::mesh::SubMesh::to_poi1), which is
 /// materialised once and cached. Two restrictions onto the **same** `mesh`
 /// therefore land on the **same support slot** and combine directly by the
@@ -510,7 +510,7 @@ mod tests {
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
 
-        // A genuine element mesh (TRI3), not a POI1 cloud.
+        // A genuine element mesh (TRI3), not a POI1 zone.
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let mesh = Mesh::from_submesh(sm);

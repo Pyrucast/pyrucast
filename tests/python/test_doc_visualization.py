@@ -36,7 +36,7 @@ def _triangle():
 
 
 def _champ_nodal(noeuds, composantes, valeur=1.0, support=None):
-    """Two calls without `support` build two **distinct** clouds: an `Evolution`
+    """Two calls without `support` build two **distinct** supports: an `Evolution`
     of fields, by contrast, requires the same support at every step."""
     support = support or pyrucast.mesh.poi1_from_nodes(noeuds)
     f = pyrucast.NodeField(support, composantes)

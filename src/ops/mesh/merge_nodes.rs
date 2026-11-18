@@ -77,18 +77,18 @@ use crate::parallel::*;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
 /// // Two lines end to end but with **distinct** nodes: the merge stitches them
-/// // back, and the cloud goes from four nodes to three.
+/// // back, and the distinct nodes go from four to three.
 /// let a = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[1.0, 0.0, 0.0]), 1, ElementType::SEG2)?;
 /// let b = mesh::line(&p(&[1.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 1, ElementType::SEG2)?;
-/// let deux = a.union(&b)?;
+/// let both = a.union(&b)?;
 /// // `to_poi1` deduplicates **per zone**: over two zones it still counts
-/// // quatre nœuds. Consolider d'abord donne le vrai nuage.
-/// assert_eq!(mesh::to_poi1(&mesh::consolidate(&deux)?)?.cell_count(), 4);
-/// let cousu = mesh::merge_nodes(&deux, 1e-6, false)?;
-/// assert_eq!(mesh::to_poi1(&mesh::consolidate(&cousu)?)?.cell_count(), 3);
+/// // four nodes. Consolidating first gives the true count.
+/// assert_eq!(mesh::to_poi1(&mesh::consolidate(&both)?)?.cell_count(), 4);
+/// let stitched = mesh::merge_nodes(&both, 1e-6, false)?;
+/// assert_eq!(mesh::to_poi1(&mesh::consolidate(&stitched)?)?.cell_count(), 3);
 /// // The structure is untouched: same zones, same cells, in the same order —
 /// // only **which node** a cell refers to has changed.
-/// assert_eq!(cousu.cell_count(), deux.cell_count());
+/// assert_eq!(stitched.cell_count(), both.cell_count());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn merge_nodes(mesh: &Mesh, tol: f64, in_place: bool) -> Result<Mesh> {
@@ -190,7 +190,7 @@ fn weld_in_place(mesh: &Mesh, representative: &[u32]) -> Result<Mesh> {
         if s.is_sealed() {
             return Err(PyrucastError::Message(format!(
                 "merge_nodes(in_place): submesh {si} is sealed — a finite-element \
-                 space, a matrix, or a node field supported on this POI1 cloud \
+                 space, a matrix, or a node field supported on this POI1 zone \
                  already reads its nodes; weld before building them, or weld by \
                  copy (in_place = false)"
             )));
