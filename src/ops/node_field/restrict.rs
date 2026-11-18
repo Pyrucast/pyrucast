@@ -2,7 +2,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::field::{Field, SubField};
 use crate::containers::mesh::Mesh;
 use crate::containers::node_field::{NodeField, NodeFieldView, SubNodeField};
-use crate::error::{PyrucastError, Result};
+use crate::error::Result;
 use crate::handle::Handle;
 
 /// Fill `sub` (already on its target support) with the values of `source`,
@@ -47,10 +47,8 @@ fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) {
 /// those of `a`, zone by zone.
 ///
 /// An empty field carries no component: it gives an empty field, as with
-/// [`restrict_like`].
-///
-/// Errors if `mesh` is attached to a different `Coords` than
-/// `field`.
+/// [`restrict_like`]. A `mesh` on another `Coords` shares no node with
+/// `field`: its zones are all `0.0`.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -93,19 +91,17 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
     if field.is_empty() {
         return Ok(NodeField::default());
     }
-    // An empty mesh has no `Coords` to compare.
-    if !mesh.is_empty() && !mesh.coords()?.same_object(&field.coords()?) {
-        return Err(PyrucastError::Message(
-            "restrict: mesh is not attached to the same Coords".into(),
-        ));
-    }
-
+    let coords = field.coords()?;
     let components = Field::components(field);
     let view = field.view();
     let mut out = NodeField::default();
     for sm in &mesh.deduplicate() {
         let mut sub = SubNodeField::from_support(sm, components.clone())?;
-        fill_from(&mut sub, &view);
+        // A node id names a node only in its own `Coords`: on another one,
+        // `field` shares no node with the zone, which stays at 0.
+        if sub.coords().same_object(&coords) {
+            fill_from(&mut sub, &view);
+        }
         out.add_sub(Handle::new(sub))?;
     }
     Ok(out)
@@ -132,9 +128,8 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
 /// `restrict_like` keeps exactly the latter, on the running field's own support.
 ///
 /// An empty `field` gives an empty field, as with [`restrict`]; so does an
-/// empty `target`.
-///
-/// Errors if `target` is attached to a different `Coords` than `field`.
+/// empty `target`. A `target` on another `Coords` shares no node with `field`:
+/// its zones are all `0.0`.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -189,13 +184,7 @@ pub fn restrict_like(field: &NodeField, target: &NodeField) -> Result<NodeField>
     if field.is_empty() {
         return Ok(NodeField::default());
     }
-    // An empty target has no `Coords` to compare.
-    if !target.is_empty() && !target.coords()?.same_object(&field.coords()?) {
-        return Err(PyrucastError::Message(
-            "restrict_like: target is not attached to the same Coords".into(),
-        ));
-    }
-
+    let coords = field.coords()?;
     let view = field.view();
     let mut out = NodeField::default();
     for h in target.iter() {
@@ -204,7 +193,10 @@ pub fn restrict_like(field: &NodeField, target: &NodeField) -> Result<NodeField>
         // supports are shared as-is), so the output pairs with `target` under
         // `same_support` — the precondition of the field operators.
         let mut sub = SubNodeField::from_support(&zone.support(), zone.components().to_vec())?;
-        fill_from(&mut sub, &view);
+        // Another `Coords`: no node in common, the zone stays at 0.
+        if sub.coords().same_object(&coords) {
+            fill_from(&mut sub, &view);
+        }
         out.add_sub(Handle::new(sub))?;
     }
     Ok(out)
@@ -391,22 +383,34 @@ mod tests {
         assert_eq!(sum.value(n1.id(), "u_y").unwrap(), 2.0);
     }
 
+    /// Node ids are numbered per `Coords`, so the first node of each `Coords`
+    /// has the same id: comparing them would read 7 where nothing is shared.
     #[test]
-    fn restrict_like_incompatible_cfg_errors() {
+    fn restrict_like_onto_another_coords_gives_zero() {
         let (_c1, _n1, f) = poi1_field(1, vec!["T".into()]);
-        let (_c2, _n2, target) = poi1_field(1, vec!["T".into()]); // different Coords
-        assert!(restrict_like(&f, &target).is_err());
+        f.get(0).unwrap().write().set(0, 0, 7.0).unwrap();
+        let (_c2, n2, target) = poi1_field(1, vec!["T".into()]);
+        let r = restrict_like(&f, &target).unwrap();
+        assert!(r
+            .get(0)
+            .unwrap()
+            .read()
+            .same_support(&target.get(0).unwrap().read()));
+        assert_eq!(r.value(n2[0].id(), "T").unwrap(), 0.0);
     }
 
     #[test]
-    fn restrict_incompatible_cfg_errors() {
-        let (_cfg1, _nodes1, f) = poi1_field(1, vec!["T".into()]);
-        // A mesh attached to a *different* Coords.
+    fn restrict_onto_another_coords_gives_zero() {
+        let (_cfg1, nodes1, f) = poi1_field(1, vec!["T".into()]);
+        f.get(0).unwrap().write().set(0, 0, 7.0).unwrap();
         let cfg2 = Handle::new(Coords::new(1).unwrap());
         let n2 = Node::create_in(cfg2.clone(), &[0.0]).unwrap();
+        assert_eq!(n2.id(), nodes1[0].id(), "the same id, in two Coords");
         let mut m2 = Mesh::from_submesh(SubMesh::new(cfg2.clone(), ElementType::POI1));
         m2.add_cell(&[n2.id()]).unwrap();
-        assert!(restrict(&f, &m2).is_err());
+        let r = restrict(&f, &m2).unwrap();
+        assert_eq!(r.node_count(), 1);
+        assert_eq!(r.value(n2.id(), "T").unwrap(), 0.0);
     }
 
     /// Two restrictions onto the **same element mesh** land on its cached POI1

@@ -62,7 +62,7 @@ pub fn positions(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResu
 /// # Parameters
 ///
 /// - `field`: the field to restrict.
-/// - `mesh`: the region, on the same `Coords` as `field`.
+/// - `mesh`: the region.
 ///
 /// # Returns
 ///
@@ -71,10 +71,8 @@ pub fn positions(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResu
 /// components of `field`. A node of `mesh` the field does not
 /// define gets `0.0`; the nodes outside `mesh` are dropped. An empty field
 /// carries no component, and gives an empty field, as with `restrict_like`.
-///
-/// # Raises
-///
-/// `RuntimeError` if `mesh` and `field` are attached to different `Coords`.
+/// A `mesh` on another `Coords` shares no node with `field`: its zones are all
+/// `0.0`.
 #[py_op(method_on = PyNodeField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -268,18 +266,15 @@ pub fn project_sub_element(
 ///
 /// - `field`: the field to read.
 /// - `target`: the field whose zones, supports and components the result
-///   takes, on the same `Coords` as `field`.
+///   takes.
 ///
 /// # Returns
 ///
 /// A new `NodeField` zone for zone like `target`. A `(node, component)` pair
 /// takes the value of `field` when it defines it, `0.0` otherwise; the nodes
 /// and components of `field` absent from `target` are dropped. An empty field
-/// gives an empty field, as with `restrict`.
-///
-/// # Raises
-///
-/// `RuntimeError` if `target` and `field` are attached to different `Coords`.
+/// gives an empty field, as with `restrict`. A `target` on another `Coords`
+/// shares no node with `field`: its zones are all `0.0`.
 #[py_op(method_on = PyNodeField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
