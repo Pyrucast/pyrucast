@@ -29,7 +29,7 @@ os.chdir(_TMP.name)
 
 
 def _support_et_champs():
-    """A POI1 cloud and two fields laid on it, on the **same** support."""
+    """A POI1 zone over three nodes: the one support the excerpts share."""
     c = pyrucast.Coords(2)
     noeuds = [c.add_node([float(i), 0.0]) for i in range(3)]
     support = pyrucast.mesh.poi1_from_nodes(noeuds)
@@ -160,14 +160,14 @@ except RuntimeError as erreur:
     assert "belongs to another Coords" in str(erreur)
 
 
-# ── The node cloud of a mesh is not saved ───────────────────────────────────
+# ── The POI1 companion of a mesh is not saved ───────────────────────────────
 
-# ANCHOR: nuage
+# ANCHOR: compagnon
 f = pyrucast.NodeField(pyrucast.mesh.to_poi1(relu["ligne"]), ["f"])
 print(len(relu["T"] | f))  # 2 : deux supports, aux mêmes nœuds
 t_ramene = pyrucast.node_field.restrict(relu["T"], relu["ligne"])
 print(len(t_ramene | f))  # 1 : un seul support
-# ANCHOR_END: nuage
+# ANCHOR_END: compagnon
 
 assert len(relu["T"] | f) == 2
 assert len(t_ramene | f) == 1

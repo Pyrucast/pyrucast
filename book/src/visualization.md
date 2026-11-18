@@ -145,7 +145,7 @@ Le sous-découpage est purement graphique et interne à chaque élément : les s
 ### Tracé d'un champ seul
 
 - `element_field.plot(...)` fonctionne sans maillage : chaque zone retrouve son sous-maillage via son sous-espace EF (partagé, pas copié).
-- `node_field.plot(...)` trace un **nuage de points colorés** : son support POI1 ne porte pas de connectivité, aucune surface ne peut être inférée — pour des surfaces, passer par `mesh.plot(field=...)` avec le maillage d'origine.
+- `node_field.plot(...)` trace **un point coloré par nœud** : son support POI1 ne porte pas de connectivité, aucune surface ne peut être inférée — pour des surfaces, passer par `mesh.plot(field=...)` avec le maillage d'origine.
 
 ### Échelles de couleur (`cmap`)
 
@@ -189,7 +189,7 @@ La caméra (rotation à la souris, molette, axes affichés via `A`) continue de 
 L'objet [`Evolution` / `SubEvolution`](evolution.md) expose `plot(...)`, qui s'adapte au type de valeur tabulée :
 
 - **évolution de scalaires** → une **courbe X-Y** : l'abscisse est la variable, l'ordonnée la valeur. Un agrégat à plusieurs zones trace **une ligne par zone** avec légende ; chaque échantillon tabulé est marqué d'un point. Les libellés se règlent par `x_label` / `y_label` / `title`. Les arguments de champ (`mesh`, `component`, `cmap`, …) sont sans effet ici.
-- **évolution de champs** → le champ est rendu **comme par `mesh.plot(field=...)`**, pour **une valeur tabulée** à la fois. La géométrie suit la même règle que le tracé d'un champ seul : champ par éléments → reconstruit son maillage via le support EF ; champ aux nœuds → **nuage de points** par défaut, ou surface si on passe `mesh=<maillage>`.
+- **évolution de champs** → le champ est rendu **comme par `mesh.plot(field=...)`**, pour **une valeur tabulée** à la fois. La géométrie suit la même règle que le tracé d'un champ seul : champ par éléments → reconstruit son maillage via le support EF ; champ aux nœuds → **un point par nœud** par défaut, ou surface si on passe `mesh=<maillage>`.
 
 ```python
 {{#include ../../tests/python/test_doc_visualization.py:evolution}}
@@ -281,7 +281,7 @@ Seul ce qui est **visible** est émis, l'algorithme du peintre faisant le reste 
 
 - une **face** balaie un anneau de matière. Seules les arêtes de **bord** de la section engendrent une surface latérale : une arête partagée par deux cellules reste enfouie dans la matière. C'est le pendant exact de la suppression des facettes intérieures des maillages volumiques ;
 - le **contour d'élément** du rendu interpolé suit la même règle, si bien que le quadrillage du maillage reste tracé sur la surface balayée ;
-- **segments et points** sont répétés à chaque station angulaire, et les cercles décrits par leurs extrémités sont ajoutés : c'est le fil de fer (resp. le nuage de nœuds) du maillage balayé ;
+- **segments et points** sont répétés à chaque station angulaire, et les cercles décrits par leurs extrémités sont ajoutés : c'est le fil de fer (resp. les nœuds) du maillage balayé ;
 - une arête posée **sur l'axe** (`r = 0`) ne balaie rien ; une arête qui le touche par une extrémité balaie un cône (triangles au lieu de quadrangles).
 
 ### Bascule dans la fenêtre interactive

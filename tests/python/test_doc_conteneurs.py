@@ -211,10 +211,10 @@ n3, n4 = c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0])
 tri = pyrucast.Mesh(c, "TRI3")
 tri.unit().add_cell([a, b, n3])
 
-# Le nuage de nœuds d'une zone se calcule une fois : chaque appel rend
+# Le compagnon POI1 d'une zone se calcule une fois : chaque appel rend
 # ensuite la même zone POI1.
-nuage = pyrucast.mesh.to_poi1(tri)
-print(len(nuage | pyrucast.mesh.to_poi1(tri)))  # 1 — une seule zone
+compagnon = pyrucast.mesh.to_poi1(tri)
+print(len(compagnon | pyrucast.mesh.to_poi1(tri)))  # 1 — une seule zone
 
 # Deux champs posés sur tri partagent donc leur support : ils se combinent
 # nœud à nœud.
@@ -224,14 +224,14 @@ f[0].set_value(a, "T", 1.0)
 g[0].set_value(a, "T", 0.25)
 print((f - g).value(a, "T"))  # 0.75
 
-# Ajouter une maille oublie le cache : le nuage suivant est une autre zone.
+# Ajouter une maille oublie le cache : le compagnon suivant est une autre zone.
 tri.unit().add_cell([b, n4, n3])
-print(len(nuage | pyrucast.mesh.to_poi1(tri)))  # 2
-print(f.node_count)  # 3 — f reste sur le nuage d'avant
+print(len(compagnon | pyrucast.mesh.to_poi1(tri)))  # 2
+print(f.node_count)  # 3 — f reste sur l'ancien compagnon
 r = pyrucast.node_field.restrict(f, tri)  # le porte sur le nouveau
 print(r.node_count)  # 4
 # ANCHOR_END: caches
-assert len(nuage | pyrucast.mesh.to_poi1(tri)) == 2
+assert len(compagnon | pyrucast.mesh.to_poi1(tri)) == 2
 assert (f - g).value(a, "T") == 0.75
 assert r.node_count == 4 and r.value(a, "T") == 1.0
 
@@ -377,13 +377,13 @@ assert [z.components() for z in mixte] == [["T", "ux"], ["T"]]
 # ── node field support ─────────────────────────────────────
 
 # ANCHOR: node_field_support
-# Posé sur une zone TRI3, le champ prend son nuage de nœuds : une zone POI1,
-# scellée. La zone TRI3 elle-même reste modifiable.
+# Posé sur une zone TRI3, le champ prend pour support son compagnon POI1,
+# scellé. La zone TRI3 elle-même reste modifiable.
 s = T.support()
 print(s[0].element_type, s[0].cell_count)  # POI1 3
 print(s[0].is_sealed, carre[0].is_sealed)  # True False
 
-# Ce nuage est celui que rend to_poi1, le même objet : l'union ne garde
+# Ce support est le compagnon que rend to_poi1, le même objet : l'union ne garde
 # que deux zones, pas quatre.
 print(len(s | pyrucast.mesh.to_poi1(carre)))  # 2
 

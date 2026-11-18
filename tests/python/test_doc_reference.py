@@ -486,16 +486,16 @@ assert flancs.cell_count == 2
 c3 = pyrucast.Coords(3)
 tore = [c3.add_node([math.cos(t), math.sin(t), 0.0]) for t in (0.0, 1.0, 2.0)]
 tore.append(c3.add_node([0.0, 0.0, 0.0]))
-nuage = pyrucast.mesh.poi1_from_nodes(tore)
+points = pyrucast.mesh.poi1_from_nodes(tore)
 # ANCHOR: mesh-points_in_torus
 # A torus of major radius 1 around z: it holds the three points on its circle,
 # not the centre.
-dedans = pyrucast.mesh.points_in_torus(nuage, [0, 0, 0], [0, 0, 1], 1.0, 0.2)
+dedans = pyrucast.mesh.points_in_torus(points, [0, 0, 0], [0, 0, 1], 1.0, 0.2)
 # ANCHOR_END: mesh-points_in_torus
 assert dedans.cell_count == 3
 # ANCHOR: mesh-points_on_torus
 # With a minor radius of 1, the centre lies on the tube's surface.
-surface = pyrucast.mesh.points_on_torus(nuage, [0, 0, 0], [0, 0, 1], 1.0, 1.0)
+surface = pyrucast.mesh.points_on_torus(points, [0, 0, 0], [0, 0, 1], 1.0, 1.0)
 # ANCHOR_END: mesh-points_on_torus
 assert surface.cell_count == 1
 

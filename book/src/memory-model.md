@@ -37,7 +37,7 @@ sans la partager, on la copie avec `mesh.duplicate()` ou
 ```
 
 Après le `del`, plus rien ne tient les zones SEG2 : elles sont libérées
-aussitôt et rendent leurs nœuds. Le champ `T` tient son support, le nuage des nœuds
+aussitôt et rendent leurs nœuds. Le champ `T` tient son support, le compagnon POI1
 de `gauche`, qui reste.
 
 `coords.refcount(id)` compte ce qui utilise un nœud : les `Node` tenus et chaque
@@ -56,7 +56,7 @@ premier appel le construit, les suivants s'en servent.
 
 | Gardé par | Cache | Utilité |
 |---|---|---|
-| une zone de maillage | son nuage de nœuds (une zone POI1) | les champs posés sur un même maillage reçoivent le même support et se combinent nœud à nœud — [Maillage](mesh.md#ce-quune-zone-garde-en-cache) |
+| une zone de maillage | son compagnon POI1 (la zone POI1 de ses nœuds) | les champs posés sur un même maillage reçoivent le même support et se combinent nœud à nœud — [Maillage](mesh.md#ce-quune-zone-garde-en-cache) |
 | une zone de maillage | la table « nœud → ligne » | lire ou écrire la valeur d'un nœud sans le chercher — [Maillage](mesh.md#ce-quune-zone-garde-en-cache) |
 | un sous-espace éléments finis | la coloration des mailles | assembler et accumuler aux nœuds en parallèle, sans conflit d'écriture — [Espace éléments finis](fe-space.md#ce-qui-est-mis-en-cache) |
 | un modèle | le motif de chaque genre de matrice | réassembler (une itération de Newton) sans reconstruire la structure de la matrice — [Modèle](model.md#ce-qui-est-mis-en-cache) |

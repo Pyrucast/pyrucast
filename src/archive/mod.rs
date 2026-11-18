@@ -25,11 +25,11 @@
 //!
 //! The rule is **recomputable ⇒ not written**. Every cache and every memoised
 //! table stays out: the assembled CSR, the solver's factorization, the cell
-//! colouring, the lazy index maps, a submesh's cached POI1 cloud. What comes
+//! colouring, the lazy index maps, a submesh's POI1 companion. What comes
 //! back rebuilds the caches on demand, exactly as a freshly-built graph would;
 //! a reloaded matrix is assembled again (`Matrix::assemble`) before it solves,
-//! and a field built on a reloaded mesh lands on a fresh cloud, not on the
-//! support of the fields reloaded with it.
+//! and a field built on a reloaded mesh lands on a fresh POI1 companion, not on
+//! the support of the fields reloaded with it.
 //!
 //! Reference counts are not written either. Object lifetimes are counted by the
 //! `Arc` inside each [`Handle`], which counts itself as

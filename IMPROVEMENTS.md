@@ -223,18 +223,18 @@ one of them is refused; a later step carrying an extra zone, on a support the
 first step does not have, sees it dropped without a word. Decide: refuse it as
 well, or keep it documented (`book/src/evolution.md` says so).
 
-## A reloaded mesh loses the node cloud its fields share
+## A reloaded mesh loses the POI1 companion its fields share
 
-A submesh caches the POI1 cloud `to_poi1` returns (`poi1_companion`,
+A submesh caches the POI1 companion `to_poi1` returns (`poi1_companion`,
 `src/containers/mesh.rs`), so the fields built on one mesh share a support.
-The cache is not archived: on a reloaded mesh, `to_poi1` builds a fresh cloud,
-distinct from the support of the fields reloaded with it. Measured on
-2026-11-18: a SEG2 line and a field on its cloud, saved and reloaded, then
+The cache is not archived: on a reloaded mesh, `to_poi1` builds a fresh
+companion, distinct from the support of the fields reloaded with it. Measured
+on 2026-11-18: a SEG2 line and a field on its companion, saved and reloaded, then
 `NodeField(to_poi1(mesh2), ["f"])`: `field2 | f` has two zones on the same
 nodes, `+` pairs nothing. `restrict(field2, mesh2)` brings it back
 (`book/src/sauvegarde.md` says so).
 
-Lead: at reload, hand a reloaded POI1 back to the submesh whose cloud it was —
+Lead: at reload, hand a reloaded POI1 back to the submesh whose companion it was —
 which the file would have to record, since a POI1 does not know the mesh it
 was drawn from. `book/src/memory-model.md` ("Aucun n'est écrit dans une
 sauvegarde : après relecture, chacun se recalcule…", "un cache ne se voit

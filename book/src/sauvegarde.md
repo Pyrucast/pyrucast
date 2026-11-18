@@ -46,7 +46,7 @@ Les nœuds relus appartiennent donc au `Coords` relu. Un `Node` du script qui a 
 
 La règle est simple : **ce qui se recalcule ne s'écrit pas**.
 
-Sortent donc du fichier les caches — la factorisation du solveur, le coloriage des mailles, les tables d'index, le nuage de points qu'une zone de maillage garde pour ses champs — et les valeurs assemblées d'une matrice. Les caches se rebâtissent à la première demande, comme sur un graphe construit à la main. Deux d'entre eux demandent un geste après relecture.
+Sortent donc du fichier les caches — la factorisation du solveur, le coloriage des mailles, les tables d'index, le compagnon POI1 qu'une zone de maillage garde pour ses champs — et les valeurs assemblées d'une matrice. Les caches se rebâtissent à la première demande, comme sur un graphe construit à la main. Deux d'entre eux demandent un geste après relecture.
 
 ### Une matrice relue se réassemble
 
@@ -62,12 +62,12 @@ Une matrice sauvée telle quelle repasse par `assemble()` avant de servir ; sans
 {{#include ../../tests/python/test_doc_sauvegarde.py:matrice_relue}}
 ```
 
-### Le nuage de points d'un maillage
+### Le compagnon POI1 d'une zone de maillage
 
-Une zone de maillage garde le nuage de points (une zone POI1) que `mesh.to_poi1` rend, si bien que les champs posés sur un même maillage reçoivent le même support. Ce nuage n'est pas écrit : sur le maillage relu, `to_poi1` en fabrique un nouveau, distinct du support des champs relus avec lui. Les opérations entre champs ne les apparient alors pas : `|` en garde deux zones, aux mêmes nœuds. `restrict(champ, maillage)` ramène un champ relu sur le nuage du maillage relu :
+Une zone de maillage garde en cache son compagnon POI1, la zone POI1 de ses nœuds que `mesh.to_poi1` rend : les champs posés sur un même maillage reçoivent ainsi le même support. Ce compagnon n'est pas écrit : sur le maillage relu, `to_poi1` en fabrique un nouveau, distinct du support des champs relus avec lui. Les opérations entre champs ne les apparient alors pas : `|` en garde deux zones, aux mêmes nœuds. `restrict(champ, maillage)` porte un champ relu sur le compagnon du maillage relu :
 
 ```python
-{{#include ../../tests/python/test_doc_sauvegarde.py:nuage}}
+{{#include ../../tests/python/test_doc_sauvegarde.py:compagnon}}
 ```
 
 ### Les compteurs de références

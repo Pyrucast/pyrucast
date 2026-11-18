@@ -348,16 +348,16 @@ temperature = _champ_nodal(
 # cells. A node outside the plate gets 0: a patch projects onto a larger mesh.
 autre = pyrucast.Coords(2)
 cibles = [autre.add_node(p) for p in ([0.5, 0.5], [1.5, 0.25], [3.0, 0.5])]
-nuage = pyrucast.mesh.poi1_from_nodes(cibles)
-portee = pyrucast.node_field.project(temperature, mesh, nuage)  # tol=1e-6
-# The same, as a method: temperature.project(mesh, nuage)
+points = pyrucast.mesh.poi1_from_nodes(cibles)
+portee = pyrucast.node_field.project(temperature, mesh, points)  # tol=1e-6
+# The same, as a method: temperature.project(mesh, points)
 # ANCHOR_END: node_field-project
 # Bilinear in each cell: the middle of the first is the mean of its corners,
 # (10 + 50 + 70 + 30) / 4; in the second, 70 + ¼ (85 − 70) at y = ¼.
 assert abs(portee.value(cibles[0], "T") - 40.0) < 1e-12
 assert abs(portee.value(cibles[1], "T") - 73.75) < 1e-12
 assert portee.value(cibles[2], "T") == 0.0
-assert temperature.project(mesh, nuage).value(cibles[1], "T") == portee.value(
+assert temperature.project(mesh, points).value(cibles[1], "T") == portee.value(
     cibles[1], "T"
 )
 

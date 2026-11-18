@@ -131,11 +131,11 @@ réécrit la connectivité en place, refuse une zone scellée.
 
 Le champ aux nœuds mérite un mot. Posé sur une zone POI1, il prend cette zone
 pour support et la scelle. Posé sur une autre zone, il n'en indexe pas les
-mailles : il se pose sur son **nuage de nœuds**, une zone POI1 tirée d'elle
-(voir [ci-dessous](#ce-quune-zone-garde-en-cache)), et c'est ce nuage-là qui
-est scellé. La zone de départ reste modifiable ; si on la modifie, les champs
-déjà posés restent valides sur le nuage d'avant, et les suivants se posent sur
-un nouveau nuage.
+mailles : il se pose sur son **compagnon POI1**, la zone POI1 de ses nœuds que
+`to_poi1` rend (voir [ci-dessous](#ce-quune-zone-garde-en-cache)), et c'est ce
+compagnon qui est scellé. La zone de départ reste modifiable ; si on la
+modifie, les champs déjà posés restent valides sur l'ancien compagnon, et les
+suivants se posent sur un nouveau.
 
 Pour repartir d'une zone scellée, on en prend une **copie** :
 `mesh.duplicate()` rend un maillage neuf, non scellé, de même connectivité,
@@ -153,10 +153,10 @@ positions.
 Une zone garde deux résultats tirés de sa connectivité. Chacun se calcule à la
 première demande, puis resert tel quel.
 
-**Son nuage de nœuds.** `pyrucast.mesh.to_poi1(mesh)` rend, pour chaque zone,
-la zone POI1 de ses nœuds distincts, dans leur ordre de première apparition.
-Ce nuage est calculé une fois par zone, puis **le même** est rendu à chaque
-appel. Tout ce qui pose un champ aux nœuds sur un maillage passe par lui :
+**Son compagnon POI1.** `pyrucast.mesh.to_poi1(mesh)` rend, pour chaque zone,
+la zone POI1 de ses nœuds distincts, dans leur ordre de première apparition :
+son compagnon POI1. Il est calculé une fois par zone, puis **le même** est
+rendu à chaque appel. Tout ce qui pose un champ aux nœuds sur un maillage passe par lui :
 `NodeField(mesh, …)`, les supports des matrices d'un modèle — donc le résultat
 de `solve(K, f)` et le produit `K * x` —, `pyrucast.node_field.restrict(champ,
 mesh)`, les sorties de `divergence` et de `sum_to_nodes`.
@@ -180,14 +180,14 @@ pratique, c'est sur les zones POI1 support qu'elle se construit.
 Les deux caches sont **oubliés dès que la connectivité change** (`add_cell`,
 `merge_nodes(…, in_place=True)`), et recalculés à la demande suivante : ils
 répondent toujours pour l'état courant de la zone. Un champ déjà posé garde son
-nuage, et `restrict` le porte sur le nouveau :
+support, et `restrict` le porte sur le nouveau compagnon :
 
 ```python
 {{#include ../../tests/python/test_doc_conteneurs.py:caches}}
 ```
 
 Les caches ne sont pas écrits par [`pyrucast.save`](sauvegarde.md) : après une
-relecture, le nuage se recalcule, et un champ relu ne partage donc plus son
+relecture, le compagnon POI1 se recalcule, et un champ relu ne partage donc plus son
 support avec les champs qu'on pose ensuite sur le maillage relu.
 `restrict(champ, mesh)` l'y ramène.
 

@@ -6,8 +6,8 @@ points de Gauss](element-field.md) donne une valeur à chaque point
 d'intégration de chaque maille, celui-ci en donne une à chaque nœud, que les
 mailles voisines partagent. C'est un [agrégat](aggregate.md) de **zones** :
 
-- une **zone** (`SubNodeField`) range les valeurs des nœuds d'un **nuage de
-  nœuds**, une zone de maillage POI1 ;
+- une **zone** (`SubNodeField`) range les valeurs des nœuds de son
+  **support**, une zone de maillage POI1 ;
 - un **champ** (`NodeField`) est une liste de zones, qui n'ont pas forcément
   les mêmes composantes : un champ multiphysique porte `T` sur tout le domaine
   et `ux`, `uy` sur la partie solide seulement.
@@ -33,7 +33,7 @@ qui porte ce nœud et cette composante, et lève une erreur si aucune ne les
 porte. `champ.values(nœuds, "T")` lit plusieurs nœuds d'un coup et rend leurs
 valeurs dans le même ordre ; `nœuds` est une liste de `Node`, ou une zone ou un
 maillage dont la connectivité est lue dans l'ordre (pour une zone POI1, ses
-points). Un nœud d'un autre `Coords` est refusé.
+nœuds). Un nœud d'un autre `Coords` est refusé.
 
 On écrit **dans une zone** : `champ[i]` ou `champ.unit()` la rendent, et ce
 sont des vues (écrire dans la zone, c'est écrire dans le champ). Dans une
@@ -64,7 +64,7 @@ composante.
 
 | `SubNodeField` (zone) | |
 |---|---|
-| `support()` | son nuage de nœuds, partagé |
+| `support()` | son support, une zone POI1 partagée |
 | `node_count`, `component_count` | ses deux dimensions |
 | `value(nœud, "c")`, `zone[nœud, "c"]` | une valeur, par nœud et nom de composante |
 | `set_value(nœud, "c", v)`, `zone[nœud, "c"] = v` | écrire une valeur |
@@ -74,7 +74,7 @@ composante.
 | `set_uniform("c", v)` | la composante `c` à `v` en tout nœud |
 | `components()`, `component_index("c")` | les composantes, le rang de l'une |
 
-## Le support : un nuage de nœuds
+## Le support : une zone POI1
 
 Chaque zone est posée sur une zone de maillage **POI1** : une liste de nœuds,
 un par maille. La ligne `i` de la zone est le `i`-ème nœud de ce support ; le
@@ -83,17 +83,17 @@ champ ne range que ses valeurs et lit ses nœuds dans le support.
 - **Sur une zone POI1**, le champ prend cette zone pour support, telle quelle.
   Il la refuse si elle liste deux fois un même nœud, puisqu'il range une ligne
   par nœud ; `pyrucast.mesh.to_poi1` en donne les nœuds distincts.
-- **Sur une zone d'un autre type** (TRI3, HEX8…), il prend son **nuage de
-  nœuds** : la zone POI1 de ses nœuds distincts, dans leur ordre de première
+- **Sur une zone d'un autre type** (TRI3, HEX8…), il prend son **compagnon
+  POI1** : la zone POI1 de ses nœuds distincts, dans leur ordre de première
   apparition, celle que rend `pyrucast.mesh.to_poi1`. La zone de maillage le
   calcule une fois et le garde en [cache](#ce-qui-est-mis-en-cache) : deux
   champs construits sur le même maillage reçoivent le même support.
 
 Le support est [scellé](mesh.md#scellement), puisque le champ range ses lignes
-dans l'ordre de ses nœuds. La zone TRI3 d'où vient le nuage, elle, reste
-modifiable. Si on lui ajoute une maille, elle oublie son nuage : les champs
+dans l'ordre de ses nœuds. La zone TRI3 d'où vient le compagnon, elle, reste
+modifiable. Si on lui ajoute une maille, elle oublie son compagnon : les champs
 déjà posés restent valides sur l'ancien, et un champ construit ensuite se pose
-sur un nouveau nuage. Les deux ne se combinent plus nœud à nœud ;
+sur un nouveau compagnon. Les deux ne se combinent plus nœud à nœud ;
 `pyrucast.node_field.restrict(champ, maillage)` porte l'ancien sur le nouveau
 (voir [Maillage](mesh.md#ce-quune-zone-garde-en-cache)).
 
@@ -124,8 +124,11 @@ ont en commun. Le champ s'appuie sur elle :
 - `add_to_component` et les autres opérations par composante modifient toutes
   les zones à la fois, et gardent donc la règle.
 
-L'union et les opérations entre deux champs la vérifient quand c'est
-nécessaire. Écrire dans une zone, en revanche, ne touche pas les autres :
+L'union la vérifie (voir [Combiner](#combiner-des-champs)), et une opération
+entre deux champs vérifie son résultat quand une composante y est calculée
+dans une zone et recopiée dans une autre (voir
+[Champ](field.md#entre-deux-champs)). Écrire dans une zone, en revanche, ne
+touche pas les autres :
 `T[0][d, "T"] = 30.0` laisse l'ancienne valeur de `d` dans la zone du haut.
 `champ.check()` compare alors les valeurs exactement et lève une erreur au
 premier désaccord.
@@ -193,7 +196,7 @@ valeurs, les noms de ses composantes et son support. Il s'appuie sur deux
 caches des zones de maillage (détaillés dans
 [Maillage](mesh.md#ce-quune-zone-garde-en-cache)) :
 
-- **le nuage de nœuds**, gardé par la zone de maillage d'origine, calculé à la
+- **le compagnon POI1**, gardé par la zone de maillage d'origine, calculé à la
   première demande puis rendu tel quel. C'est lui qui donne le même support à
   `NodeField(maillage, …)`, à `restrict(…, maillage)`, à la solution de `solve`
   et aux sorties de `divergence` et de `sum_to_nodes` sur ce maillage : ils se
@@ -205,25 +208,42 @@ caches des zones de maillage (détaillés dans
   les champs posés sur ce support : trouver la ligne d'un nœud ne parcourt plus
   la liste.
 
-Le support étant scellé, son index ne change plus. Le nuage, lui, est oublié
-dès que la zone de maillage d'origine change.
+Le support étant scellé, son index ne change plus. Le compagnon POI1, lui, est
+oublié dès que la zone de maillage d'origine change.
 
 ## Visualisation
 
-`champ.plot(component="T")` trace un **nuage de points colorés** : le support
+`champ.plot(component="T")` trace **un point coloré par nœud** : le support
 POI1 n'a pas de mailles, aucune surface ne s'en déduit. Pour colorer les
 mailles, on passe le champ au maillage : `maillage.plot(field=champ,
 component="T")`. Voir [Visualisation](visualization.md).
 
 ## Sauvegarde
 
-[`pyrucast.save`](sauvegarde.md) écrit le champ avec son support et son
-`Coords`. Des champs sauvegardés dans un même fichier partagent leur support à
-la relecture et se combinent nœud à nœud. Le nuage mis en cache n'est pas
-écrit : un champ construit sur le maillage relu se pose sur un nouveau nuage,
-et `restrict(champ, maillage)` y ramène un champ relu. Les nœuds relus
-appartiennent au `Coords` relu : `value` refuse un `Node` du script qui a écrit
-le fichier, et on lit avec le nœud relu, `o["maillage"].coords().acquire(id)`.
+[`pyrucast.save`](sauvegarde.md) écrit le champ avec ce dont il a besoin : son
+support et le `Coords` de ses nœuds. Deux champs posés sur un même support et
+sauvés dans un même fichier sont relus sur un même support : ils se combinent
+nœud à nœud, comme avant.
+
+`load` fabrique des objets neufs, et leurs nœuds appartiennent au `Coords`
+relu. Un `Node` du script qui a écrit le fichier y est refusé : on lit le champ
+relu avec le nœud relu de même identifiant, que `coords().acquire(id)` rend.
+
+```python
+{{#include ../../tests/python/test_doc_sauvegarde.py:noeud_relu}}
+```
+
+Le compagnon POI1 d'une zone de maillage n'est pas écrit : c'est un cache. Le
+champ relu retrouve son support, mais la zone de maillage relue ne sait plus
+qu'il était son compagnon, et `to_poi1` lui en fabrique un nouveau. Un champ
+construit sur le maillage relu se pose sur ce nouveau compagnon et ne se
+combine pas nœud à nœud avec le champ relu : `|` les garde en deux zones, aux
+mêmes nœuds. `restrict(champ, maillage)` porte le champ relu sur le nouveau
+compagnon :
+
+```python
+{{#include ../../tests/python/test_doc_sauvegarde.py:compagnon}}
+```
 
 ## Côté Rust
 
