@@ -1640,6 +1640,12 @@ impl NodeFieldView {
     /// no component name is compared here — only the `NodeId` of each node is
     /// looked up, which is the one thing that genuinely varies per cell.
     ///
+    /// Each `(node, component)` reads the first zone that holds both, as
+    /// [`value_opt`](Self::value_opt) does. The zones are walked from last to
+    /// first, each writing over what the later ones wrote. Stopping at the first
+    /// zone holding the node would lose a component that only a later zone
+    /// carries there: the multiplier of a solve, beside the displacement.
+    ///
     /// A `(node, component)` no zone defines reads as **zero**, the house
     /// convention for nodal fields, shared with
     /// [`NodeField::gather`](NodeField::gather) and
@@ -1649,7 +1655,8 @@ impl NodeFieldView {
         let n = reads.first().map_or(0, |r| r.len());
         out.fill(0.0);
         for (k, &nid) in nodes.iter().enumerate() {
-            for ((zone, support), idx) in self.inner.zones.iter().zip(&self.supports).zip(reads) {
+            let zones = self.inner.zones.iter().zip(&self.supports).zip(reads);
+            for ((zone, support), idx) in zones.rev() {
                 let Some(&ni) = support.node_index().get(&nid) else {
                     continue;
                 };
@@ -1659,7 +1666,6 @@ impl NodeFieldView {
                         out[k * n + c] = zone.values[ni * stride + ci as usize];
                     }
                 }
-                break; // first zone defining the node wins, as `value_opt` does
             }
         }
     }

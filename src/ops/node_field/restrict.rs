@@ -280,6 +280,46 @@ mod tests {
         assert_eq!(r.value(nb.id(), "T").unwrap(), 0.0);
     }
 
+    /// Two zones meeting at node `b` with different components, as a solve's
+    /// displacement and multiplier do: each component comes from the first zone
+    /// that has it at `b`, the answer `value` gives.
+    #[test]
+    fn restrict_reads_each_component_from_the_first_zone_having_it() {
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let poi1 = |nodes: &[&Node]| {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            for nd in nodes {
+                sm.add_cell(&[nd.id()]).unwrap();
+            }
+            Handle::new(sm)
+        };
+        let mut u = SubNodeField::from_poi1(&poi1(&[&a, &b]), vec!["u_x".into()]).unwrap();
+        u.set_value(a.id(), "u_x", 0.3).unwrap();
+        u.set_value(b.id(), "u_x", 0.4).unwrap();
+        let only_b = poi1(&[&b]);
+        let mut lam =
+            SubNodeField::from_poi1(&only_b, vec!["lambda".into(), "u_x".into()]).unwrap();
+        lam.set_value(b.id(), "lambda", 5.0).unwrap();
+        lam.set_value(b.id(), "u_x", 9.0).unwrap(); // behind the first zone's 0.4
+        let mut field = NodeField::from_sub(u);
+        field.add_sub(Handle::new(lam)).unwrap();
+
+        let mut m = Mesh::empty();
+        m.add_sub(only_b).unwrap();
+        let r = restrict(&field, &m).unwrap();
+        for component in ["lambda", "u_x"] {
+            assert_eq!(
+                r.value(b.id(), component).unwrap(),
+                field.value(b.id(), component).unwrap(),
+                "{component}"
+            );
+        }
+        assert_eq!(r.value(b.id(), "lambda").unwrap(), 5.0);
+        assert_eq!(r.value(b.id(), "u_x").unwrap(), 0.4);
+    }
+
     #[test]
     fn restrict_onto_a_submesh_listed_twice_gives_one_zone() {
         let (coords, nodes, f) = poi1_field(2, vec!["T".into()]);
