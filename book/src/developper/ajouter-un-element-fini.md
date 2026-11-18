@@ -76,12 +76,15 @@ dans `SUMMARY.md`, une ligne dans le catalogue
 d'[`elements/index.md`](../elements/index.md), et une ligne dans la table de
 correspondance gmsh d'[`algorithmes/maillage-echanges.md`](../algorithmes/maillage-echanges.md#types-déléments-reconnus).
 
-Les deux figures de la fiche (élément de référence, quadrature) se génèrent :
-déclarer l'élément dans `ELEMENTS` de `script/elements_figures.py` (sa règle de
-quadrature, et ses faces s'il est 3-D), puis lancer
-`python script/elements_figures.py`. Les nœuds sont lus dans la table de la
-fiche. `tests/python/test_doc_elements_figures.py` échoue si un SVG est périmé
-ou si la règle dessinée diffère de celle de `pyrucast`.
+Les deux figures de la fiche (élément de référence, quadrature) sont dessinées
+par `script/elements_figures.py` : y déclarer l'élément dans `ELEMENTS` (sa
+règle de quadrature, et ses faces s'il est 3-D). Les nœuds sont lus dans la
+table de la fiche. Les SVG ne sont pas commités : `check_doc`, `build.sh` et la
+publication du book lancent le script avant `mdbook build`, et le dossier
+`book/src/elements/img/`, ignoré par git, est vidé puis réécrit à chaque fois.
+Avant un `mdbook serve`, lancer soi-même `python script/elements_figures.py`.
+`tests/python/test_doc_elements_figures.py` échoue si la règle dessinée diffère
+de celle de `pyrucast`.
 
 ## Ce que le trait demande, et pourquoi
 

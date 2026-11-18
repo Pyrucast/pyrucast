@@ -17,6 +17,8 @@ ipython_config.py
 
 ### MdBook ###
 book/book
+# Drawn by script/elements_figures.py before every `mdbook build`.
+book/src/elements/img/
 
 
 ### Python ###

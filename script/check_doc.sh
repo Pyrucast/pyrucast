@@ -12,6 +12,9 @@
 
 step "cargo doc --no-deps --lib (sans warning)" \
     env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib
+# Les figures des fiches d'éléments ne sont pas commitées : le script, en
+# Python pur, les dessine avant chaque rendu.
+step "figures des éléments"                     python script/elements_figures.py
 step "mdbook build"                             mdbook build book
 # Neuf garde-fous de texte : includes qui résolvent, aucune page qui possède de
 # code, prose sans symbole disparu, cliquet de couverture des doctests Rust,

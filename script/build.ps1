@@ -71,6 +71,7 @@ Run "pytest (Python test suite)"                    { python -m pytest }
 # -- 4. Documentation --------------------------------------------------------
 Run "cargo doc (Rust API reference)"                { cargo doc --no-deps --lib }
 Run "Regenerating the Python stub (pyrucast.pyi)"   { cargo run --quiet --bin stub_gen --features stub-gen }
+Run "Element figures (not committed)"               { python script\elements_figures.py }
 Run "mdbook build (theory book)"                    { mdbook build book }
 
 Step "Python API doc (pydoc HTML)"

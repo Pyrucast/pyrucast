@@ -70,6 +70,7 @@ step "pytest (Python test suite)"                    ; python -m pytest
 # ── 4. Documentation ────────────────────────────────────────────────────────
 step "cargo doc (Rust API reference)"                ; cargo doc --no-deps --lib
 step "Regenerating the Python stub (.pyi)"           ; cargo run --quiet --bin stub_gen --features stub-gen
+step "Element figures (not committed)"               ; python script/elements_figures.py
 step "mdbook build (theory book)"                    ; mdbook build book
 
 step "Python API doc (pydoc HTML)"

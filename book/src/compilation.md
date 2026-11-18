@@ -72,6 +72,7 @@ cargo test --doc           # doctests explicitement
 maturin develop            # construit et installe le module Python dans le venv
 python -m pytest           # tests Python
 cargo doc --no-deps --lib  # référence API Rust (rustdoc) — voir ci-dessous
+python script/elements_figures.py  # figures des fiches d'éléments, non commitées
 mdbook build book          # génère cette documentation HTML
 ```
 
@@ -209,9 +210,12 @@ en bout, appelés par `check_examples`), `set_new_version.sh` (passe de version 
 déclaration de version du projet —, commit + tag : il ne pousse rien),
 `publish_macros.sh` (vérifie et publie `pyrucast-macros` sur crates.io, le seul
 paquet que la CI ne publie pas),
-`scaling.sh` (mesure de montée en charge du parallélisme) et
+`scaling.sh` (mesure de montée en charge du parallélisme),
 `generate-tutoriel-figures.sh` (régénère les SVG du tutoriel, qui sont des
-artefacts commités).
+artefacts commités : ils demandent pyrucast compilé avec `viz`) et
+`elements_figures.py` (dessine les SVG des fiches d'éléments, en Python pur ;
+ils ne sont pas commités, et `check_doc`, `build` et la publication du book le
+lancent avant `mdbook build`).
 
 ### `script/check_*.sh` — vérifications, en bloc ou à la carte
 
@@ -237,6 +241,7 @@ la recompilation.
 | `python -m pytest` | l'API Python, unité par unité | 98 fichiers `tests/python/test_*.py`, dont 27 `test_doc_*.py` qui sont aussi les sources des exemples du book | 86 s | | | | ✓ | | | ✓ | ✓ |
 | `script/run_examples.sh` | des chaînes de calcul **de bout en bout** | 30 `examples/*.py`, 3 `examples/*.rs`, 6 `tutoriel/*.py` | 80 s | | | | | ✓ | | ✓ | ✓ |
 | `cargo doc --no-deps --lib` (`-D warnings`) | la rustdoc n'a aucun lien cassé | — | 1 s | | | | | | ✓ | ✓ | ✓ |
+| `python script/elements_figures.py` | les figures des fiches d'éléments se dessinent, dans `book/src/elements/img/` vidé puis réécrit | — | <1 s | | | | | | ✓ | ✓ | ✓ |
 | `mdbook build book` | le book se rend | `book/src/**` | 1 s | | | | | | ✓ | ✓ | ✓ |
 | `python script/doc_lint.py` | les **neuf garde-fous** du book et des exemples | `book/src/**.md`, le book construit, la rustdoc, le module Python installé | 28 s | | | | | | ✓ | ✓ | ✓ |
 | `cargo clippy` × 4 jeux de features | aucun avertissement, `-D warnings` | — | 105 s | | | | | | | | ✓ |
@@ -398,7 +403,8 @@ sous <https://pyrucast.github.io/pyrucast/rust/>.
 
 La publication est automatisée par un workflow **GitHub Actions**
 (`.github/workflows/pages.yml`) : à chaque push sur `master` qui touche au
-book ou aux sources Rust, le workflow build le book (`mdbook build book`) **et**
+book ou aux sources Rust, le workflow dessine les figures des fiches d'éléments
+(`python script/elements_figures.py`), build le book (`mdbook build book`) **et**
 la doc Rust (`cargo doc --no-deps --lib`), assemble un site combiné — le book à
 la racine, la rustdoc sous `rust/` — et le déploie directement sur GitHub Pages
 via `actions/deploy-pages` (pas de branche `pages`, pas de token à gérer : le

@@ -18,6 +18,7 @@ on:
       - 'python/**'
       - 'tests/python/**'
       - 'script/book_pyapi.py'
+      - 'script/elements_figures.py'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/pages.yml'
@@ -64,6 +65,11 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
+
+      # Les figures des fiches d'éléments ne sont pas commitées : le script,
+      # en Python pur, les dessine ici, avant le rendu.
+      - name: Dessiner les figures des éléments
+        run: python script/elements_figures.py
 
       - name: Builder le book
         run: mdbook build book

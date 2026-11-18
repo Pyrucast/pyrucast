@@ -9,11 +9,14 @@ Writes, for each element of `ELEMENTS`, three SVG files into
 - `<name>-quadrature.svg` : the `"GAUSS"` rule next to the `"REDUCED"` rule;
 - `<name>-thumb.svg`      : a small picture for the catalogue of `elements/index.md`.
 
-Like the tutorial figures, the SVGs are **committed artefacts**: `mdbook build`
-never regenerates them. After touching this script or a node table, run
+The SVGs are **not committed**. Git ignores `book/src/elements/img/`, and the
+folder belongs to this script: each run empties it and writes every figure
+again, so a figure no element draws any more cannot linger in the book.
+`script/check_doc.sh`, `script/build.sh` and the book's publication
+(`.github/workflows/pages.yml`) run it before `mdbook build`; before a bare
+`mdbook serve`, or after touching this script or a node table, run
 
-    python script/elements_figures.py            # rewrite the SVGs
-    python script/elements_figures.py --check    # fail if they are stale
+    python script/elements_figures.py
 
 **Single source of truth.** The node coordinates are read from the table of the
 element's own page (`book/src/elements/<name>.md`, section « Élément de
@@ -30,6 +33,7 @@ from __future__ import annotations
 
 import math
 import re
+import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -833,23 +837,17 @@ def render_all() -> dict[str, str]:
 
 
 def main(argv: list[str]) -> int:
+    if argv:
+        print("usage: python script/elements_figures.py", file=sys.stderr)
+        return 2
+    # Everything is drawn before the folder is touched: a drawing that fails,
+    # or draws nothing, leaves the previous figures in place.
     files = render_all()
-    if "--check" in argv:
-        stale = [
-            n
-            for n, s in files.items()
-            if not (OUT / n).exists() or (OUT / n).read_text(encoding="utf-8") != s
-        ]
-        if stale:
-            print(
-                "stale figures (run `python script/elements_figures.py`):",
-                *stale,
-                sep="\n  ",
-            )
-            return 1
-        print(f"OK : {len(files)} element figures up to date.")
-        return 0
-    OUT.mkdir(parents=True, exist_ok=True)
+    if not files:
+        print("no figure drawn: the folder is left as it is", file=sys.stderr)
+        return 1
+    shutil.rmtree(OUT, ignore_errors=True)
+    OUT.mkdir(parents=True)
     for name, svg in files.items():
         (OUT / name).write_text(svg, encoding="utf-8")
     print(f"{len(files)} figures written to {OUT.relative_to(ROOT)}")
