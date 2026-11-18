@@ -1,4 +1,4 @@
-"""The configurations of a computation in large displacements (Cast3M ``FORM``).
+"""The configurations of a computation in large displacements.
 
 The body is computed on the **reference** configuration: its strain measure,
 its law, its state and its internal forces, and its heat capacity. What acts

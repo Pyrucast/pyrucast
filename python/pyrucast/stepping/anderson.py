@@ -1,10 +1,10 @@
-"""Anderson acceleration of a fixed-point iteration, memory 3 (Cast3M ``ACT3``).
+"""Anderson acceleration of a fixed-point iteration, memory 3.
 
 The iteration ``x ← x + K⁻¹ r(x)`` with a constant ``K`` is a fixed point.
 Every other iteration, the residual is corrected by the combination of the
 last residuals that would have cancelled best: Anderson's method on the
-residuals, as Cast3M's ``ACT3`` does it — the same normal equations, solved by
-the same elimination, with the same fallbacks.
+residuals — the normal equations of the last directions, solved by
+elimination, with fewer directions when a pivot vanishes.
 
 The algebra is three scalars and a few scalar products: it stays in Python.
 The fields are only ever combined through pyrucast's operators.
@@ -14,15 +14,16 @@ from .. import measure, node_field
 
 __all__ = ["Accelerator", "anderson_correction"]
 
-# Below this, a pivot or a squared norm is taken as zero (Cast3M XSZPRE, XPETIT).
+# Below this, a pivot or a squared norm is taken as zero.
 _ROUNDING = 1e-15
 _TINY = 1e-300
 
 
 class _NormalEquations:
-    """ACT3's three normal equations of ``min ‖F0 + Σ xⱼ (Fⱼ − F0)‖``, each
+    """The three normal equations of ``min ‖F0 + Σ xⱼ (Fⱼ − F0)‖``, each
     scaled by its diagonal, and its three ways of solving them: with three
-    directions, two, or one — each falling back to the next where ACT3 does."""
+    directions, two, or one — each falling back to the next when one of its
+    pivots vanishes."""
 
     def __init__(self, f11, f22, f33, f12, f13, f23, f01, f02, f03):
         self.a1, self.b1, self.c1, self.j1 = 1.0, f12 / f11, f13 / f11, -f01 / f11
@@ -77,14 +78,14 @@ def _near(weights, one_at):
 
 
 def anderson_correction(directions, residuals):
-    """The correction to subtract from the residual (Cast3M ``ACT3``).
+    """The correction to subtract from the residual.
 
     ``residuals`` are the last four weighted residuals ``(F3, F2, F1, F0)``,
     oldest first; ``directions`` the matching ``(D2, D1, D0)``. The weights
     ``x`` minimise ``‖F0 + Σ xⱼ (Fⱼ − F0)‖``; the correction is
     ``(x1+x2+x3) D0 + (x2+x3) D1 + x3 D2``. ``None`` when nothing is gained.
 
-    As ACT3 does: an oscillating sequence (``‖F1−F0‖`` well above
+    The fallbacks: an oscillating sequence (``‖F1−F0‖`` well above
     ``‖F2−F0‖`` while comparable to ``‖F3−F0‖``) takes the mid-point of the
     flip-flop; a singular system keeps two directions, then one; weights that
     would land back on a point already visited are refused, one direction at
@@ -131,7 +132,7 @@ def anderson_correction(directions, residuals):
 
 
 class Accelerator:
-    """The memory Cast3M's ``UNPAS`` keeps around ``ACT3``.
+    """The memory a mechanical step keeps around ``anderson_correction``.
 
     Called once per iteration with the out-of-balance forces (constraint
     rows excluded): it records ``F = r·w`` (``w`` the nodal weights) and

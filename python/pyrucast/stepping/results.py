@@ -1,4 +1,4 @@
-"""The record of a step (Cast3M ``PAS_RESU``)."""
+"""The record of a step."""
 
 import math
 

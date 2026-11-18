@@ -1,4 +1,4 @@
-"""The settings of a step-by-step computation, decided once (Cast3M ``PAS_DEFA``).
+"""The settings of a step-by-step computation, decided once.
 
 ``resolve_options`` reads the input dictionary **once**: defaults, the
 incompatibilities between settings, the features this package does not offer
@@ -13,14 +13,14 @@ __all__ = ["HOOKS", "Options", "resolve_options"]
 # Keys of features deliberately outside this package, with the reason given to
 # whoever asks for one. A key present in ``data`` is refused, never ignored.
 _UNSUPPORTED = {
-    "non_local": "non-local regularisation (Cast3M NON_LOCAL) is not available",
-    "asymptotic": "the asymptotic numerical method (Cast3M MAN) is not available",
-    "fefp": "multiplicative plasticity F = FeFp (Cast3M FEFP_FORMULATION) is not available",
-    "substepping": "Gauss-point substepping (Cast3M SUBSTEPPING) is not available",
+    "non_local": "non-local regularisation is not available",
+    "asymptotic": "the asymptotic numerical method is not available",
+    "fefp": "multiplicative plasticity F = FeFp is not available",
+    "substepping": "Gauss-point substepping is not available",
     "friction": "friction is not available; contact is frictionless",
     "cavity_radiation": "cavity radiation (view factors) is not available; radiation is to infinity",
     "phase_change": "phase change is not available",
-    "evolving_model": "a model changing during the computation (Cast3M MODE/MATE) is not available",
+    "evolving_model": "a model changing during the computation is not available",
     "consolidation": "consolidation and THM couplings are not available",
     "advection": "advection is not available",
     "automatic_augmentation": "automatic stiffness augmentation is not available; "
@@ -58,22 +58,21 @@ _DEFAULTS = {
     "automatic_replays": 250,
     "t_ref": 0.0,
     "trace": False,
-    # Large displacements: the geometric stiffness in the operator (Cast3M
-    # K_SIGMA), on unless said otherwise; refused in small displacements.
+    # Large displacements: the geometric stiffness in the operator, on unless
+    # said otherwise; refused in small displacements.
     "geometric_stiffness": None,
 }
 
 _HEAT_SCHEMES = ("nonlinear", "linear", "dupont")
 
 
-# The user procedures the loop calls (Cast3M REEV_MEC, REEV_THE, PERSO1,
-# CHARMECA, CHARTHER, PARATHER), by the name ``data["hooks"]`` gives them.
+# The user procedures the loop calls, by the name ``data["hooks"]`` gives them.
 # Every hook receives ``(data, state)``, ``state`` being the start of the step;
 # ``after_heat`` and ``after_mechanics`` also receive the step's outcome (what
 # it reached, not yet committed); the two load hooks receive the time and
 # return a ``NodeField`` added to the loads, or ``None``; the material hook
 # returns the materials to use, or ``None`` to keep them. ``automatic_measure``
-# (Cast3M AUTOPILO) replaces the size of a step under automatic control: it
+# replaces the size of a step under automatic control: it
 # also receives the displacement increment and its elastic part ``α Δu_el``,
 # and returns a number — signed, a negative size turning the increment round,
 # which is how a quantity chosen to grow drives the path past a limit point.
@@ -130,11 +129,10 @@ class Options:
 
 
 def resolve_options(data):
-    """The settings of ``data``, defaults filled in and conflicts settled
-    (Cast3M ``PAS_DEFA``).
+    """The settings of ``data``, defaults filled in and conflicts settled.
 
     Refuses — with the reason — a feature this package does not offer, an
-    unknown heat scheme, and the combinations Cast3M itself forbids: coupled
+    unknown heat scheme, and the combinations it does not allow: coupled
     coherence passes with adaptive steps or automatic control. Returns an
     immutable ``Options``.
     """

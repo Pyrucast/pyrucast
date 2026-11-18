@@ -1,4 +1,4 @@
-"""Load control by a strain measure (Cast3M ``AUTOPILO``, ``PILOINDI``).
+"""Load control by a strain measure.
 
 Two ways for the solver, rather than the user, to choose how much load a step
 applies. Both measure the step by the **strain** it produces, read on the
@@ -21,9 +21,9 @@ _TINY = 1e-300
 
 
 def automatic_control(problem, increment, elastic, fraction, materials):
-    """The size of the step's displacement increment (Cast3M ``AUTOPILO``):
-    the largest strain of ``Δu`` and of ``Δu − α Δu_el`` — the second
-    measuring how far the step has left the elastic response, so that a
+    """The size of the step's displacement increment: the largest strain of
+    ``Δu`` and of ``Δu − α Δu_el`` — the second measuring how far the step has
+    left the elastic response, so that a
     yielding step counts its plastic part too. The caller scales ``Δu`` to
     bring this to the target."""
     domain = problem.mechanics_domain
@@ -39,7 +39,7 @@ def automatic_control(problem, increment, elastic, fraction, materials):
 
 def indirect_control(problem, solution, increment, pilot, target, materials):
     """The load multiplier change ``Δη`` that makes the step advance the strain
-    by ``target`` along its own direction (Cast3M ``PILOINDI``).
+    by ``target`` along its own direction.
 
     At each Gauss point of the piloting region, ``n`` is the direction of the
     strain reached ``ε(uₙ)`` — unit, or every component 1 when nothing is
@@ -73,7 +73,7 @@ def indirect_control(problem, solution, increment, pilot, target, materials):
 
 
 class AutomaticControl:
-    """The automatic control of one substep (Cast3M ``AUTOMATIQUE``).
+    """The automatic control of one substep.
 
     The load applied is the fraction ``α`` of the step's increment. After each
     solve the displacement increment is scaled so that its size is ``target``
@@ -148,7 +148,7 @@ class AutomaticControl:
 
 
 class IndirectControl:
-    """The indirect control of one substep (Cast3M ``CHAR_PILO``).
+    """The indirect control of one substep.
 
     The loads are ``F + η F_p``: after each solve the multiplier moves by
     ``indirect_control``'s ``Δη`` and the displacement by ``Δη δu_II``,

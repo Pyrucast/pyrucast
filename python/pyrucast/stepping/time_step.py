@@ -1,4 +1,4 @@
-"""The time step chosen from the last one's difficulty (Cast3M ``PAS_AJUSTE``)."""
+"""The time step chosen from the last one's difficulty."""
 
 __all__ = ["adjust_time_step"]
 

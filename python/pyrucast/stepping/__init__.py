@@ -1,23 +1,20 @@
-"""Step-by-step computation — the mirror of Cast3M's ``PASAPAS`` and of the
-procedures it calls, one function each.
+"""Step-by-step computation — a loop over time and the procedures it calls,
+one function each:
 
-==================  ===============================================
-Cast3M              pyrucast.stepping
-==================  ===============================================
-PASAPAS             ``step_by_step``
-PAS_DEFA            ``resolve_options``
-PAS_MODL            ``describe_problem``
-PAS_INIT            ``initial_state``
-PAS_ETAT, PAS_MATE  ``materials_at``
-PAS_RESU            ``store_step``
-PAS_AJUSTE          ``adjust_time_step``
-TRANSNON            ``heat_step``
-TRANSLIN            ``heat.heat_step_linear``
-DUPONT2             ``heat.heat_step_dupont``
-UNPAS               ``mechanical_step``
-ACT3                ``anderson.anderson_correction``
-AUTOPILO, PILOINDI  ``control.automatic_control`` (or the hook ``automatic_measure``), ``control.indirect_control``
-==================  ===============================================
+- ``step_by_step``: the loop over time;
+- ``resolve_options``: the settings, decided once;
+- ``describe_problem``: what is being solved, read once from the input;
+- ``initial_state``: the state at the first instant;
+- ``materials_at``: the materials at a given instant and state;
+- ``store_step``: the record of a step;
+- ``adjust_time_step``: the time step chosen from the last one's difficulty;
+- ``heat_step``, ``heat.heat_step_linear``, ``heat.heat_step_dupont``: the
+  heat step, iterated θ-scheme, single linearised solve, or Dupont's
+  three-level scheme;
+- ``mechanical_step``: one mechanical step;
+- ``anderson.anderson_correction``: Anderson acceleration of the iterations;
+- ``control.automatic_control`` (or the hook ``automatic_measure``) and
+  ``control.indirect_control``: load control by a strain measure.
 
 The parts of ``mechanical_step`` live in ``pyrucast.stepping.mechanics``:
 ``iteration_operator``, ``reference_forces``, ``nonlinear_predictor``,
@@ -28,7 +25,7 @@ are computed in Python.
 Large displacements follow from the laws: when they read a large-transformation
 strain measure (``strain_measure``), the body stays on the reference
 configuration and what acts on its current shape is evaluated on a current
-configuration, ``pyrucast.stepping.configuration`` (Cast3M ``FORM``).
+configuration, ``pyrucast.stepping.configuration``.
 """
 
 from . import anderson, control, heat, mechanics

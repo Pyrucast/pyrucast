@@ -1,4 +1,4 @@
-"""What is being solved, read once from the input (Cast3M ``PAS_MODL``).
+"""What is being solved, read once from the input.
 
 The model is split by physics, each part with its own supports; the loads, the
 materials and a prescribed temperature become functions of time; the names
@@ -173,7 +173,7 @@ def describe_problem(data, options):
         if options.acceleration:
             # (Σ cell measures around each node + ε)^-½ on every force: the
             # weight that puts residuals at comparable scales before they are
-            # combined (Cast3M ``ZJAC``).
+            # combined.
             ones = ElementField(fespace, [(name, 1.0) for name in force_names])
             centres = FiniteElementSpace(
                 fespace.mesh().deduplicate(), quadrature="REDUCED"
