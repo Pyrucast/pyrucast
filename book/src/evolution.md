@@ -29,7 +29,7 @@ refusés. Entre deux échantillons `x₀ ≤ x ≤ x₁`, la valeur est
 ## Hors plage
 
 Une abscisse en dehors de la plage tabulée suit la **politique hors plage** de
-l'évolution :
+la courbe :
 
 | Politique | Hors plage |
 |---|---|
@@ -38,7 +38,7 @@ l'évolution :
 | `"extrapolate"` | prolonge le premier ou le dernier segment |
 
 La politique se donne à la construction (`out_of_range="clamp"`), se lit par
-`out_of_range`, et s'impose pour un seul appel :
+`courbe.out_of_range`, et s'impose pour un seul appel :
 `interpolate(x, out_of_range="clamp")`.
 
 ```python
@@ -187,9 +187,12 @@ propriétés constantes ; il n'y a pas d'opérateur matériau à part.
 portent le même genre de valeur : des nombres, ou des champs aux nœuds, ou des
 champs aux points de Gauss. `evolution[i]` rend la courbe `i`.
 
-Une `Evolution` interpolée applique **sa** politique hors plage à toutes ses
-courbes. Celle que rendent `|` et une tranche `evolution[i:j]` est `"error"` ;
-chaque courbe garde la sienne, qui sert quand on l'interpole seule.
+La politique hors plage appartient à chaque courbe : une `Evolution` n'en a
+pas. Interpolée, chacune de ses courbes applique la sienne, et `|` comme une
+tranche `evolution[i:j]` n'y changent rien. Un `out_of_range` donné à
+l'appel s'impose à toutes les courbes, pour cet appel seulement.
+`Evolution(étapes, out_of_range="clamp")` donne cette politique à chacune des
+courbes qu'elle construit.
 
 ```python
 {{#include ../../tests/python/test_doc_evolution.py:composer}}
@@ -222,8 +225,8 @@ l'`ordinate_type`. Une table ne se dessine pas en courbe.
 
 ## Sauvegarde
 
-Une évolution se [sauvegarde](sauvegarde.md) comme tout objet, avec sa
-politique hors plage et ses types. Les champs qu'elle tabule gardent leur
+Une évolution se [sauvegarde](sauvegarde.md) comme tout objet ; chaque courbe
+garde sa politique hors plage et ses types. Les champs qu'elle tabule gardent leur
 support, partagé avec les autres objets du même fichier.
 
 ## Côté Rust
@@ -243,8 +246,9 @@ support, partagé avec les autres objets du même fichier.
 `SubEvolution::new` prend des échantillons dont l'abscisse implémente
 `Abscissa` : un `f64`, un `[f64; N]` ou un `Vec<f64>`.
 
-`Evolution` est l'agrégat de `Handle<SubEvolution>`, plus sa politique hors
-plage. `check_push` refuse une courbe dont les valeurs ne sont pas du même
+`Evolution` est l'agrégat de `Handle<SubEvolution>`, sans autre membre : la
+politique hors plage est celle de chaque courbe, qu'un `Some(policy)` passé à
+`interpolate_at` remplace le temps d'un appel. `check_push` refuse une courbe dont les valeurs ne sont pas du même
 genre que celles des autres. `Evolution::interpolate_at` rend un
 `Interpolated` : `Scalars(Vec<f64>)`, `Node(NodeField)` ou
 `Element(ElementField)`. `from_scalars`, `from_node_fields` et

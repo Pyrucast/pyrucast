@@ -1174,13 +1174,9 @@ class Evolution:
     step is `(abscissa, value)` and `value` is a whole `NodeField`,
     `ElementField` or float (whole fields are transposed into one curve per
     zone); or low-level by composing `SubEvolution`s with `|`. Index it
-    (`evolution[i]`) to reach a `SubEvolution`.
+    (`evolution[i]`) to reach a `SubEvolution`. The out-of-range policy belongs
+    to each curve (`evolution[i].out_of_range`); the evolution has none.
     """
-    @property
-    def out_of_range(self) -> builtins.str:
-        r"""
-        The stored out-of-range policy name.
-        """
     def shared_abscissas(self) -> builtins.list[builtins.float]:
         r"""
         The abscissas every zone shares — the times of a series. Raises if
@@ -1194,8 +1190,9 @@ class Evolution:
     def __new__(cls, steps: typing.Sequence[tuple[typing.Any, typing.Any]], out_of_range: typing.Optional[builtins.str] = None, abscissa_type: typing.Optional[typing.Any] = None, ordinate_type: typing.Optional[builtins.str] = None) -> Evolution:
         r"""
         `Evolution(steps, out_of_range="error")` — build from whole values
-        (`out_of_range` defaults to `"error"`)
-        tabulated at each abscissa. `steps` is a list of `(abscissa, value)`
+        tabulated at each abscissa; `out_of_range` (default `"error"`) is
+        the policy of every curve built, the evolution keeping none of its
+        own. `steps` is a list of `(abscissa, value)`
         where `value` is a float, a `NodeField` or an `ElementField`; the kind
         is taken from the first step. Whole fields are transposed into one
         curve per zone. The abscissa is a float, or a tuple of floats for a
@@ -1226,7 +1223,8 @@ class Evolution:
           support — material laws `E(T)`, `sigma_y(T, phi)` evaluated at the
           state in one call.
         
-        `out_of_range` overrides the stored policy for this query.
+        Out of range, each curve applies its own `out_of_range` policy; the
+        `out_of_range` argument, when given, overrides them all for this query.
         """
     def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, mesh: typing.Optional[Mesh] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, frame: typing.Optional[builtins.int] = None, revolve: builtins.bool = False, revolve_angle: builtins.float = 360.0, x_label: typing.Optional[builtins.str] = None, y_label: typing.Optional[builtins.str] = None, title: typing.Optional[builtins.str] = None) -> None:
         r"""

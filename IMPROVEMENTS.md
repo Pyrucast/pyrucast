@@ -242,16 +242,6 @@ order. Lead: an interpolation of the scattered samples that does not depend on
 the order of the variables (a simplex-based one, for instance), weighed
 against what it changes on a full grid and its cost at every Gauss point.
 
-## The out-of-range policy has two owners
-
-Each `SubEvolution` carries a policy, and so does the `Evolution` holding it.
-`Evolution::interpolate_at`, `interpolate_node_field` and
-`interpolate_element_field` apply the **aggregate's** policy to every curve,
-so a curve's own policy only counts when that curve is interpolated alone.
-`|` and slicing give the aggregate `"error"`, whatever its curves carry:
-`SubEvolution(..., out_of_range="clamp") | other` then raises out of range.
-Decide which object owns the policy, and what `|` and slicing do with it.
-
 ## `Evolution(steps)` ignores a zone a later step adds
 
 `Evolution::from_node_fields` / `from_element_fields`
