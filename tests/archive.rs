@@ -144,7 +144,7 @@ fn one_coords_for_the_whole_file() -> Result<()> {
 #[test]
 fn node_counts_are_those_of_a_fresh_build() -> Result<()> {
     let (coords, mesh, ids) = line_with_ids(2)?;
-    // The fixture has already dropped its `Node` atoms, so what protects these
+    // The fixture has already dropped its `Node` atoms, so what counts these
     // nodes now is the submesh alone — which is precisely what the file holds.
 
     let path = tmp("counts.pyr");
@@ -161,13 +161,13 @@ fn node_counts_are_those_of_a_fresh_build() -> Result<()> {
             "node {id:?} must come back counted exactly as it is counted live"
         );
     }
-    // Nothing the submesh holds is collectable.
-    assert_eq!(c2.write().gc(), 0);
+    // Every node the submesh holds is counted.
+    assert!(ids.iter().all(|&id| c2.read().refcount(id) > 0));
     Ok(())
 }
 
 /// A `Node` the caller holds is **not** archived: it is an atom of their stack.
-/// The reloaded graph is therefore protected by one reference less — the
+/// The reloaded graph is therefore counted one reference less — the
 /// documented consequence of recounting from zero.
 #[test]
 fn a_node_the_caller_holds_is_not_archived() -> Result<()> {
@@ -190,12 +190,13 @@ fn a_node_the_caller_holds_is_not_archived() -> Result<()> {
     assert_eq!(c2.read().refcount(a.id()), 1);
 
     // And a bare Coords, saved with nothing that uses it, comes back with its
-    // nodes at zero — a `gc()` will collect them, exactly as documented.
+    // nodes at zero, exactly as documented — and with both nodes still there.
     let alone = tmp("bare_coords.pyr");
     archive::save(&alone, &[("c", &coords as &dyn ArchiveRoot)])?;
     let bare = archive::load(&alone)?.coords("c")?;
-    assert_eq!(bare.read().refcount(a.id()), 0);
-    assert_eq!(bare.write().gc(), 2, "both nodes are collectable");
+    let bare = bare.read();
+    assert_eq!((bare.refcount(a.id()), bare.refcount(b.id())), (0, 0));
+    assert_eq!(bare.node_count(), 2);
     Ok(())
 }
 

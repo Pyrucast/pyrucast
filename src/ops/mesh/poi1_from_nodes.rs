@@ -11,7 +11,7 @@ use crate::error::Result;
 /// attach to).
 ///
 /// The companion of [`from_live_nodes`](super::from_live_nodes()), which takes
-/// every live node of a `Coords` instead of a chosen list, and of
+/// every node of a `Coords` instead of a chosen list, and of
 /// [`to_poi1`](super::to_poi1()), which takes an existing mesh.
 ///
 /// ```

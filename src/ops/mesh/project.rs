@@ -157,10 +157,10 @@ mod tests {
         assert!(project_on_sphere(&through_origin, &[0.0, 5.0], 0.0).is_err());
         assert!(project_on_sphere(&through_origin, &[0.0, 5.0], f64::NAN).is_err());
         assert!(project_on_sphere(&through_origin, &[0.0, 5.0, 0.0], 1.0).is_err());
-        let before = coords.read().capacity();
+        let before = coords.read().node_count();
         assert!(project_on_sphere(&through_origin, &[0.0, 0.0], 1.0).is_err());
         assert_eq!(
-            coords.read().capacity(),
+            coords.read().node_count(),
             before,
             "a refused projection creates no node"
         );

@@ -6,7 +6,7 @@ use crate::handle::Handle;
 use crate::py::node::PyNode;
 use pyo3::prelude::*;
 
-/// The registry of live nodes and their coordinates, in a fixed spatial
+/// The registry of nodes and their coordinates, in a fixed spatial
 /// dimension.
 ///
 /// Create one with `Coords(dim)`, then add nodes with
@@ -59,25 +59,11 @@ impl PyCoords {
         self.handle.read().is_axisymmetric()
     }
 
-    /// Number of live nodes.
+    /// Number of nodes ever created: no node is removed, so it is also one
+    /// past the largest id.
     #[getter]
     fn node_count(&self) -> usize {
         self.handle.read().node_count()
-    }
-
-    /// Number of allocated node slots (live plus not-yet-collected).
-    #[getter]
-    fn capacity(&self) -> usize {
-        self.handle.read().capacity()
-    }
-
-    /// Whether node `id` is still live (not garbage-collected).
-    ///
-    /// Takes a **raw id**, not a `Node`, on purpose: a `Node` holds a
-    /// refcount, so it could never be observed dead. This is the API for
-    /// inspecting nodes you may no longer hold (post-GC checks).
-    fn is_alive(&self, id: u32) -> bool {
-        self.handle.read().is_alive(NodeId(id))
     }
 
     /// Add a node at `coords` and return it as a `Node` (refcount = 1).
@@ -92,17 +78,13 @@ impl PyCoords {
         Ok(PyNode::from_raw(self.handle.clone(), NodeId(id)))
     }
 
-    /// Reference count of node `id` (how many holders keep it alive).
+    /// Reference count of node `id`: how many holders — `Node`s, cells — use
+    /// it; 0 for an unknown id.
     ///
-    /// Takes a **raw id** (see [`Self::is_alive`]): observing a refcount of
+    /// Takes a **raw id**, not a `Node`, on purpose: observing a refcount of
     /// 0 is impossible while holding the `Node` that would carry it.
     fn refcount(&self, id: u32) -> u32 {
         self.handle.read().refcount(NodeId(id))
-    }
-
-    /// Run the garbage collector; return the number of collected nodes.
-    fn gc(&self) -> usize {
-        self.handle.write().gc()
     }
 
     // Per-node coordinate access lives on `Node` (`node.position()` /

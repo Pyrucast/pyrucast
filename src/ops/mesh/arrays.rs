@@ -948,9 +948,11 @@ mod tests {
         let groups = import(c.clone(), &tags, &xyz, &[tri(&[1, 2, 3, 2, 4, 3], &both)]).unwrap();
         let id = groups[0].1.get(0).unwrap().read().connectivity()[1];
         assert_eq!(c.read().refcount(id), 4);
-        // Dropping the meshes hands every unit back.
+        // Dropping the meshes hands every unit back, on all four nodes.
         drop(groups);
-        assert_eq!(c.write().gc(), 4);
+        let c = c.read();
+        assert_eq!(c.node_count(), 4);
+        assert!(c.iter_live().all(|n| c.refcount(n) == 0));
     }
 
     #[test]

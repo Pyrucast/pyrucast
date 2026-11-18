@@ -113,7 +113,7 @@ c.add_node([1.0, 0.0])
 c.add_node([0.5, 1.0])
 
 # One entry per node created, no value twice.
-print(c.capacity)  # 3
+print(c.node_count)  # 3
 c.set_permutation([2, 0, 1])
 print(c.permutation())  # [2, 0, 1]
 

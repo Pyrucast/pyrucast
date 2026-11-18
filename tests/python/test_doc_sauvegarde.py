@@ -129,8 +129,10 @@ pyrucast.save("coords_seules.pyr", {"c": _c3})
 
 # ANCHOR: refcount
 c2 = pyrucast.load("coords_seules.pyr")["c"]
-c2.gc()  # collects everything: nothing in the file held those nodes
+print(c2.refcount(0))  # 0: nothing in the file uses this node
 # ANCHOR_END: refcount
+
+assert c2.refcount(0) == 0
 
 
 # End of the excerpts: the current directory is given back.

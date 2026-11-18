@@ -43,10 +43,10 @@ En Python, rien à libérer à la main : un objet pyrucast vit tant qu'une
 variable ou un autre objet le référence — un maillage garde ses nœuds, un champ
 garde son support.
 
-Les nœuds ont en plus leur propre compteur, dans les `Coords` : un nœud reste
-vivant tant qu'un maillage ou un champ l'utilise, même quand plus aucune
-variable ne le désigne. `coords.gc()` collecte ceux qui ne servent plus. Voir
-[Coordonnées](coords.md) et [Nœud](node.md).
+Les nœuds ont en plus leur propre compteur, dans les `Coords` : il compte les
+maillages, les champs et les variables qui utilisent chaque nœud. Un nœud n'est
+jamais retiré : même quand plus rien ne l'utilise, il reste dans ses `Coords`.
+Voir [Coordonnées](coords.md) et [Nœud](node.md).
 
 > **Côté Rust**, chaque objet vit derrière un `Handle<T>` — une référence
 > comptée munie de son propre verrou — et la `Coords` porte un compteur par

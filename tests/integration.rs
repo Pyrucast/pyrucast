@@ -80,31 +80,26 @@ fn coords_cycle_via_handle() -> Result<()> {
     {
         let c = h.read();
         assert_eq!(c.node_count(), 2);
-        assert!(c.is_alive(a));
-        assert!(c.is_alive(b));
+        assert_eq!((c.refcount(a), c.refcount(b)), (1, 1));
     }
 
-    // Initial refcount = 1 ⇒ gc collects nothing.
-    assert_eq!(h.write().gc(), 0);
-
-    // decrefs + gc collects both.
+    // Both units given back: the counts reach 0, the nodes stay.
     {
         let mut c = h.write();
         c.decref(a).unwrap();
         c.decref(b).unwrap();
-        assert_eq!(c.gc(), 2);
     }
 
     {
         let c = h.read();
-        assert!(!c.is_alive(a));
-        assert!(!c.is_alive(b));
+        assert_eq!((c.refcount(a), c.refcount(b)), (0, 0));
+        assert_eq!(c.node_count(), 2);
     }
     Ok(())
 }
 
 #[test]
-fn node_protects_from_gc() -> Result<()> {
+fn node_holds_a_unit_of_its_count() -> Result<()> {
     let h = Handle::new(Coords::new(2)?);
     let n = Node::create_in(h.clone(), &[3.0, 4.0])?;
     let id = n.id();
@@ -115,16 +110,15 @@ fn node_protects_from_gc() -> Result<()> {
     assert_eq!(h.read().refcount(id), 2);
     drop(n);
     assert_eq!(h.read().refcount(id), 1);
-    assert_eq!(h.write().gc(), 0);
     drop(m);
-    assert_eq!(h.write().gc(), 1);
+    assert_eq!(h.read().refcount(id), 0);
     Ok(())
 }
 
 // ─── Mesh / SubMesh integration tests (Phase 2 step 2) ──────────────────────
 
 #[test]
-fn submesh_protects_nodes_via_refcount() -> Result<()> {
+fn submesh_counts_its_nodes() -> Result<()> {
     let coords = Handle::new(Coords::new(2)?);
     let a = Node::create_in(coords.clone(), &[0.0, 0.0])?;
     let b = Node::create_in(coords.clone(), &[1.0, 0.0])?;
@@ -155,12 +149,15 @@ fn submesh_protects_nodes_via_refcount() -> Result<()> {
         assert_eq!(c.refcount(idb), 1);
         assert_eq!(c.refcount(idc), 1);
     }
-    // gc must still collect nothing.
-    assert_eq!(coords.write().gc(), 0);
-
-    // Drop the SubMesh ⇒ all nodes drop to 0 ⇒ gc collects.
+    // Drop the SubMesh ⇒ all nodes drop to 0.
     drop(sm_handle);
-    assert_eq!(coords.write().gc(), 3);
+    {
+        let c = coords.read();
+        assert_eq!(
+            (c.refcount(ida), c.refcount(idb), c.refcount(idc)),
+            (0, 0, 0)
+        );
+    }
     Ok(())
 }
 

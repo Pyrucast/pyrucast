@@ -2,12 +2,11 @@
 //!
 //! `Node` is the **user-facing interface** to a node: it holds a handle to
 //! its `Coords` and a node id, and automatically maintains the
-//! **internal** node refcount (`Clone` increments, `Drop` decrements). As
-//! long as at least one `Node` exists, the node is protected from the
-//! `Coords`'s garbage collector.
+//! **internal** node refcount (`Clone` increments, `Drop` decrements): each
+//! `Node` counts one unit for as long as it exists.
 //!
 //! Internal code can still manipulate [`crate::atoms::NodeId`]
-//! values directly, but then loses the automatic GC protection: it must
+//! values directly, but then loses the automatic count: it must
 //! call [`Coords::incref`](crate::coords::Coords::incref) /
 //! [`Coords::decref`](crate::coords::Coords::decref)
 //! by hand.
@@ -23,14 +22,14 @@
 //! let n = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();
 //! assert_eq!(n.position().unwrap(), vec![1.0, 2.0]);
 //!
-//! // The GC does not touch a node that a live Node still references.
-//! assert_eq!(coords.write().gc(), 0);
-//!
+//! // A live Node holds one unit of its node's count.
 //! let id = n.id();
+//! assert_eq!(coords.read().refcount(id), 1);
 //! drop(n);
-//! // Now the refcount is 0; gc collects.
-//! assert_eq!(coords.write().gc(), 1);
-//! assert!(!coords.read().is_alive(id));
+//! // Dropped, it gives the unit back; the node stays in the Coords.
+//! assert_eq!(coords.read().refcount(id), 0);
+//! assert_eq!(coords.read().position(id)?, &[1.0, 2.0]);
+//! # Ok::<(), pyrucast::PyrucastError>(())
 //! ```
 
 use crate::coords::Coords;
@@ -77,10 +76,11 @@ impl crate::dump::Dump for NodeId {
 /// let coords = Handle::new(Coords::new(2).unwrap());
 /// let n = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();
 ///
-/// // A `Node` is a **ticket**: as long as it lives, the node survives the gc.
-/// assert_eq!(coords.write().gc(), 0);
+/// // A `Node` is a **ticket**: as long as it lives, it counts one unit.
+/// let id = n.id();
+/// assert_eq!(coords.read().refcount(id), 1);
 /// drop(n);
-/// assert_eq!(coords.write().gc(), 1);
+/// assert_eq!(coords.read().refcount(id), 0);
 /// ```
 pub struct Node {
     handle: Handle<Coords>,
@@ -285,15 +285,14 @@ mod tests {
     use crate::handle::Handle;
 
     #[test]
-    fn node_protects_from_gc() {
+    fn a_node_holds_one_unit_until_dropped() {
         let coords = Handle::new(Coords::new(2).unwrap());
         let n = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let id = n.id();
-        assert_eq!(coords.write().gc(), 0);
-        assert!(coords.read().is_alive(id));
+        assert_eq!(coords.read().refcount(id), 1);
         drop(n);
-        assert_eq!(coords.write().gc(), 1);
-        assert!(!coords.read().is_alive(id));
+        assert_eq!(coords.read().refcount(id), 0);
+        assert_eq!(coords.read().node_count(), 1);
     }
 
     #[test]

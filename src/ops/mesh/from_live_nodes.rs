@@ -3,7 +3,7 @@ use crate::coords::Coords;
 use crate::error::Result;
 use crate::handle::Handle;
 
-/// Create a POI1 mesh containing all live nodes of `coords`.
+/// Create a POI1 mesh containing every node of `coords`, referenced or not.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -14,8 +14,8 @@ use crate::handle::Handle;
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // Every **live** node of a frame, as a POI1 — the
-/// // way out when geometry has been built without a mesh.
+/// // Every node of a frame, as a POI1 — the way out when geometry has
+/// // been built without a mesh.
 /// let _a = p(&[0.0, 0.0, 0.0]);
 /// let _b = p(&[1.0, 0.0, 0.0]);
 /// assert_eq!(mesh::from_live_nodes(coords.clone())?.cell_count(), 2);

@@ -16,10 +16,9 @@ use crate::parallel::*;
 /// collapses a whole region rather than a seam. Each cluster is represented by
 /// the node with the **smallest [`NodeId`]**, and that representative **keeps
 /// its own coordinates** (no averaging — a deliberate choice, like the rest of
-/// the pipeline, to avoid silently moving geometry). Welded-away nodes are
-/// left in the shared [`Coords`]; once
-/// nothing references them they become collectable by
-/// [`Coords::gc`](crate::coords::Coords::gc). Errors if `tol` is negative or
+/// the pipeline, to avoid silently moving geometry). Welded-away nodes stay
+/// in the shared [`Coords`], referenced by nothing once every mesh using them
+/// is gone. Errors if `tol` is negative or
 /// if `mesh` has no submeshes (no Coords to attach to).
 ///
 /// # `in_place`
@@ -250,11 +249,11 @@ fn build_representatives(
     coords_handle: &crate::handle::Handle<Coords>,
     tol: f64,
 ) -> Result<(Vec<u32>, usize)> {
-    let capacity = coords_handle.read().capacity();
+    let n_nodes = coords_handle.read().node_count();
 
     // Referenced ids, ascending, through a dense bitmap: no hash set, and the
     // ascending order comes out of the scan rather than out of a sort.
-    let mut referenced = vec![false; capacity];
+    let mut referenced = vec![false; n_nodes];
     for sm_handle in mesh {
         for &n in sm_handle.read().connectivity() {
             match referenced.get_mut(n.0 as usize) {
@@ -270,13 +269,13 @@ fn build_representatives(
             }
         }
     }
-    let ids: Vec<NodeId> = (0..capacity as u32)
+    let ids: Vec<NodeId> = (0..n_nodes as u32)
         .filter(|&i| referenced[i as usize])
         .map(NodeId)
         .collect();
 
     // Every node stands for itself until an edge says otherwise.
-    let mut parent: Vec<u32> = (0..capacity as u32).collect();
+    let mut parent: Vec<u32> = (0..n_nodes as u32).collect();
     if ids.is_empty() {
         return Ok((parent, 0));
     }

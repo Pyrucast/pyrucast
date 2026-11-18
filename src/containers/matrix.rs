@@ -6730,8 +6730,8 @@ mod tests {
         k.add_sub(Handle::new(b)).unwrap();
 
         // Transposition of the identity ⇒ nb sorts before na.
-        let cap = coords.read().capacity();
-        let mut perm: Vec<u32> = (0..cap as u32).collect();
+        let n_nodes = coords.read().node_count();
+        let mut perm: Vec<u32> = (0..n_nodes as u32).collect();
         perm.swap(na.0 as usize, nb.0 as usize);
         coords.write().set_permutation(perm).unwrap();
 

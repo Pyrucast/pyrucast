@@ -1,4 +1,4 @@
-//! Coords — node coordinates with garbage collection.
+//! Coords — node coordinates with a stable identity.
 //!
 //! A [`Coords`] holds **one or more configurations** (sets of coordinates)
 //! for the same set of nodes, in a fixed dimension.
@@ -6,16 +6,14 @@
 //! # Node identity
 //!
 //! Every created node receives a **stable** internal identifier
-//! ([`NodeId`]), unique for the lifetime of the `Coords`: **no id
-//! is ever reused**, even after garbage collection. Other objects (meshes,
-//! fields) can therefore reference a node by id without worrying about
-//! stability.
+//! ([`NodeId`]), unique for the lifetime of the `Coords`: ids are handed out
+//! in order and **never reused**. Other objects (meshes, fields) can therefore
+//! reference a node by id without worrying about stability.
 //!
-//! # Deletion policy: no direct removal
+//! # Deletion policy: none
 //!
-//! There is **no** `remove_node` method. A referenced node is protected.
-//! Only the garbage collector [`Coords::gc`] reclaims nodes whose
-//! **internal** refcount has reached 0.
+//! There is **no** way to remove a node: once created, it stays as long as
+//! its `Coords`, even when nothing references it any more.
 //!
 //! # Two-level refcount model
 //!
@@ -55,12 +53,12 @@
 //!
 //! let h = Handle::new(Coords::new(2).unwrap());
 //! let a: NodeId = h.write().add_node(&[0.0, 0.0]).unwrap();
-//! // add_node initializes refcount = 1: without decref, the node is protected.
-//! assert_eq!(h.write().gc(), 0);
-//! // After decref, refcount drops to 0 and gc collects it.
+//! // add_node initializes refcount = 1, the caller's unit.
+//! assert_eq!(h.read().refcount(a), 1);
+//! // Given back, the count drops to 0; the node stays.
 //! let mut c = h.write();
 //! c.decref(a).unwrap();
-//! assert_eq!(c.gc(), 1);
+//! assert_eq!((c.refcount(a), c.node_count()), (0, 1));
 //! ```
 
 use crate::atoms::NodeId;
@@ -133,24 +131,21 @@ impl fmt::Display for CoordinateFrame {
     }
 }
 
-/// Node coordinates with stable identity, multiple configurations,
-/// optional solver permutation, and a garbage collector for unreferenced
-/// nodes.
+/// Node coordinates with stable identity, multiple configurations and an
+/// optional solver permutation.
 ///
 /// ```
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// // Positions with a **stable identity**: a node keeps its `NodeId` whatever
-/// // happens to the arrays. Several configurations are added to that, a
-/// // permutation for the solver, and a garbage collector.
+/// // happens to the arrays. Several configurations are added to that, and a
+/// // permutation for the solver.
 /// let c = Handle::new(Coords::new(2)?);
 /// let id = c.write().add_node(&[1.0, 2.0])?;
 /// assert_eq!(c.read().position(id)?, vec![1.0, 2.0]);
 /// assert_eq!(c.read().node_count(), 1);
-/// // Le compteur de références protège le nœud tant qu'on le tient.
-/// assert_eq!(c.write().gc(), 0);
-/// c.write().decref(id)?;
-/// assert_eq!(c.write().gc(), 1);
+/// // Each holder of the node counts one unit.
+/// assert_eq!(c.read().refcount(id), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Serialize, Deserialize)]
@@ -158,14 +153,12 @@ pub struct Coords {
     dim: u8,
     /// Geometric hypothesis the coordinates obey.
     frame: CoordinateFrame,
-    /// `configs[c][id * dim + k]` — each configuration holds `capacity * dim` values.
+    /// `configs[c][id * dim + k]` — each configuration holds `node_count * dim`
+    /// values, which is where the node count is read.
     configs: Vec<Vec<f64>>,
     config_names: Vec<String>,
     active: usize,
-    /// `alive[id] == false` ⇒ collected by the GC. Once `false`, stays so forever.
-    alive: Vec<bool>,
     /// Per-node refcount, one unit per **occurrence** in a connectivity.
-    /// The GC collects `alive` nodes whose refcount is 0.
     ///
     /// **Never archived.** A file holds some of the objects that reference these
     /// nodes, not all of them, so a saved count would be a count of a world that
@@ -173,7 +166,7 @@ pub struct Coords {
     /// it, then each reloaded `SubMesh` re-increments what it uses.
     #[serde(skip)]
     refcount: Vec<u32>,
-    /// Solver permutation (length == capacity) or `None` for identity.
+    /// Solver permutation (length == node count) or `None` for identity.
     permutation: Option<Vec<u32>>,
 }
 
@@ -211,7 +204,6 @@ impl Coords {
             configs: vec![Vec::new()],
             config_names: vec!["default".into()],
             active: 0,
-            alive: Vec::new(),
             refcount: Vec::new(),
             permutation: None,
         })
@@ -240,7 +232,6 @@ impl Coords {
             configs: vec![Vec::new()],
             config_names: vec!["default".into()],
             active: 0,
-            alive: Vec::new(),
             refcount: Vec::new(),
             permutation: None,
         }
@@ -309,7 +300,7 @@ impl Coords {
     }
 
     /// The bulk writers' common checks, made once before anything is written:
-    /// `values` holds `dim` values per id, and every id is live.
+    /// `values` holds `dim` values per id, and every id names a node.
     fn check_bulk(&self, what: &str, ids: &[NodeId], values: &[f64]) -> Result<()> {
         let d = self.dim as usize;
         if values.len() != ids.len() * d {
@@ -322,46 +313,24 @@ impl Coords {
         self.ensure_all_alive(ids)
     }
 
-    /// Number of live (not collected) nodes.
+    /// Number of nodes ever created: no node is removed, so it is also one
+    /// past the largest id.
     ///
     /// ```
     /// # use pyrucast::coords::Coords;
     /// let mut c = Coords::new(2).unwrap();
-    /// c.add_node(&[0.0, 0.0]).unwrap();
-    /// assert_eq!(c.node_count(), 1); // nœuds **vivants**, pas la capacité
+    /// let id = c.add_node(&[0.0, 0.0]).unwrap();
+    /// c.decref(id).unwrap();
+    /// // No longer referenced, the node is still counted.
+    /// assert_eq!(c.node_count(), 1);
     /// ```
     pub fn node_count(&self) -> usize {
-        self.alive.iter().filter(|&&a| a).count()
+        self.configs[0].len() / self.dim as usize
     }
 
-    /// Capacity (total slots, live + collected). Never decreases.
-    ///
-    /// ```
-    /// # use pyrucast::coords::Coords;
-    /// let mut c = Coords::new(2).unwrap();
-    /// let id = c.add_node(&[0.0, 0.0]).unwrap();
-    /// c.decref(id).unwrap();
-    /// c.gc();
-    /// // The node is dead but its slot stays reserved: capacity ≠ node_count.
-    /// assert_eq!((c.node_count(), c.capacity()), (0, 1));
-    /// ```
-    pub fn capacity(&self) -> usize {
-        self.alive.len()
-    }
-
-    /// Whether a node is still alive.
-    ///
-    /// ```
-    /// # use pyrucast::coords::Coords;
-    /// let mut c = Coords::new(2).unwrap();
-    /// let id = c.add_node(&[0.0, 0.0]).unwrap();
-    /// assert!(c.is_alive(id));
-    /// c.decref(id).unwrap();
-    /// c.gc();
-    /// assert!(!c.is_alive(id));
-    /// ```
-    pub fn is_alive(&self, id: NodeId) -> bool {
-        self.alive.get(id.0 as usize).copied().unwrap_or(false)
+    /// Whether `id` names a node of this `Coords`.
+    pub(crate) fn contains(&self, id: NodeId) -> bool {
+        (id.0 as usize) < self.node_count()
     }
 
     /// Add a node with these coordinates in **all** configurations. Initializes its
@@ -386,11 +355,10 @@ impl Coords {
             )));
         }
         self.check_radius("add_node", coords)?;
-        let id = self.alive.len() as u32;
+        let id = self.node_count() as u32;
         for set in &mut self.configs {
             set.extend_from_slice(coords);
         }
-        self.alive.push(true);
         self.refcount.push(1);
         if let Some(perm) = &mut self.permutation {
             perm.push(id);
@@ -433,12 +401,11 @@ impl Coords {
         // rejected call adds no node at all.
         self.check_radii("add_nodes", flat)?;
 
-        let start = self.alive.len() as u32;
+        let start = self.node_count() as u32;
         let n = flat.len() / d;
         for set in &mut self.configs {
             set.extend_from_slice(flat);
         }
-        self.alive.resize(self.alive.len() + n, true);
         self.refcount.resize(self.refcount.len() + n, 1);
         if let Some(perm) = &mut self.permutation {
             perm.extend(start..start + n as u32);
@@ -463,7 +430,7 @@ impl Coords {
     ) -> Result<std::ops::Range<u32>> {
         let d = self.dim as usize;
         let n = refcounts.len();
-        let start = self.alive.len();
+        let start = self.node_count();
         let base = start * d;
         let (first, rest) = self.configs.split_at_mut(1);
         let first = &mut first[0];
@@ -483,7 +450,6 @@ impl Coords {
         for set in rest {
             set.extend_from_slice(&first[base..]);
         }
-        self.alive.resize(start + n, true);
         self.refcount.extend_from_slice(refcounts);
         let (start, end) = (start as u32, (start + n) as u32);
         if let Some(perm) = &mut self.permutation {
@@ -493,8 +459,8 @@ impl Coords {
     }
 
     /// Positions of `ids`, `dim` values each, written into `out` in the order
-    /// of `ids` — one locked pass for a whole cloud. The ids come from live
-    /// connectivities, so they are alive by construction: nothing to report.
+    /// of `ids` — one locked pass for a whole cloud. The ids come from
+    /// connectivities, so they name nodes of this `Coords`: nothing to report.
     pub(crate) fn positions_of(&self, ids: &[NodeId], out: &mut [f64]) {
         let d = self.dim as usize;
         let set = &self.configs[self.active];
@@ -504,7 +470,7 @@ impl Coords {
         }
     }
 
-    /// Increment the refcount of a live node.
+    /// Increment the refcount of a node.
     ///
     /// ```
     /// # use pyrucast::coords::Coords;
@@ -520,16 +486,15 @@ impl Coords {
         Ok(())
     }
 
-    /// Decrement the refcount of a live node. The node is not immediately
-    /// collected even if the refcount reaches 0: call
-    /// [`Coords::gc`] for that.
+    /// Decrement the refcount of a node. A node whose count reaches 0 stays:
+    /// nothing removes a node.
     ///
     /// ```
     /// # use pyrucast::coords::Coords;
     /// let mut c = Coords::new(2).unwrap();
     /// let id = c.add_node(&[0.0, 0.0]).unwrap();
     /// c.decref(id).unwrap();
-    /// assert_eq!(c.refcount(id), 0); // plus personne ne le tient : gc peut le prendre
+    /// assert_eq!(c.refcount(id), 0); // nothing holds it any more; it stays
     /// ```
     pub fn decref(&mut self, id: NodeId) -> Result<()> {
         self.ensure_alive(id)?;
@@ -607,7 +572,7 @@ impl Coords {
         Ok(())
     }
 
-    /// Current refcount of a node (0 for a collected or unknown node).
+    /// Current refcount of a node (0 for an unknown id).
     ///
     /// ```
     /// # use pyrucast::coords::Coords;
@@ -616,37 +581,11 @@ impl Coords {
     /// assert_eq!(c.refcount(id), 1);
     /// ```
     pub fn refcount(&self, id: NodeId) -> u32 {
-        if self.is_alive(id) {
-            self.refcount[id.0 as usize]
-        } else {
-            0
-        }
+        self.refcount.get(id.0 as usize).copied().unwrap_or(0)
     }
 
-    /// Garbage collector: mark as collected every live node whose refcount
-    /// is 0. Returns the number of collected nodes. Ids are never reused.
-    ///
-    /// ```
-    /// # use pyrucast::coords::Coords;
-    /// let mut c = Coords::new(2).unwrap();
-    /// let id = c.add_node(&[0.0, 0.0]).unwrap();
-    /// assert_eq!(c.gc(), 0); // un ticket subsiste : rien n'est ramassé
-    /// c.decref(id).unwrap();
-    /// assert_eq!(c.gc(), 1); // ramassé
-    /// ```
-    pub fn gc(&mut self) -> usize {
-        let mut collected = 0;
-        for i in 0..self.alive.len() {
-            if self.alive[i] && self.refcount[i] == 0 {
-                self.alive[i] = false;
-                collected += 1;
-            }
-        }
-        collected
-    }
-
-    /// Coordinates of a node in the active configuration. Error if the node was
-    /// collected or never existed.
+    /// Coordinates of a node in the active configuration. Error if no node of
+    /// this `Coords` has that id.
     ///
     /// ```
     /// # use pyrucast::coords::Coords;
@@ -661,8 +600,9 @@ impl Coords {
         Ok(&self.configs[self.active][s..s + d])
     }
 
-    /// Check that **every** id of `ids` names a live node — the whole-list form
-    /// of the test [`position`](Self::position) does one node at a time.
+    /// Check that **every** id of `ids` names a node of this `Coords` — the
+    /// whole-list form of the test [`position`](Self::position) does one node at
+    /// a time.
     ///
     /// A driver calls this once for a cell connectivity, before its parallel
     /// region, and then reads positions with
@@ -670,17 +610,15 @@ impl Coords {
     /// per zone instead of once per node of every cell of every call.
     ///
     /// ```
-    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::atoms::{Node, NodeId};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// let coords = Handle::new(Coords::new(2)?);
     /// let a = Node::create_in(coords.clone(), &[0.0, 1.0])?;
     /// let b = Node::create_in(coords.clone(), &[2.0, 3.0])?;
     /// coords.read().ensure_all_alive(&[a.id(), b.id()])?;
-    /// // A collected node is refused — and it is, **before** the loop.
-    /// drop(a);
-    /// coords.write().gc();
-    /// assert!(coords.read().ensure_all_alive(&[b.id()]).is_ok());
+    /// // An id no node carries is refused — and it is, **before** the loop.
+    /// assert!(coords.read().ensure_all_alive(&[b.id(), NodeId(7)]).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn ensure_all_alive(&self, ids: &[NodeId]) -> Result<()> {
@@ -691,19 +629,19 @@ impl Coords {
         match ids
             .par_iter()
             .with_min_len(MIN_PARALLEL_LEN)
-            .find_any(|&&id| !self.is_alive(id))
+            .find_any(|&&id| !self.contains(id))
         {
             Some(&id) => self.ensure_alive(id),
             None => Ok(()),
         }
     }
 
-    /// The position of a node **already known to be live**.
+    /// The position of a node **already known to exist**.
     ///
     /// The unchecked twin of [`position`](Self::position), for a caller that
     /// validated its whole node list with
-    /// [`ensure_all_alive`](Self::ensure_all_alive). Reading a dead or unknown
-    /// id here panics on the slice bounds rather than returning an error: the
+    /// [`ensure_all_alive`](Self::ensure_all_alive). Reading an unknown id here
+    /// panics on the slice bounds rather than returning an error: the
     /// contract is the caller's, and it is a cheap one to honour — one pass over
     /// a connectivity, once per zone.
     pub(crate) fn position_alive(&self, id: NodeId) -> &[f64] {
@@ -767,16 +705,13 @@ impl Coords {
     }
 
     fn ensure_alive(&self, id: NodeId) -> Result<()> {
-        if !self.is_alive(id) {
-            return Err(PyrucastError::Message(format!(
-                "node {} not found or collected",
-                id.0
-            )));
+        if !self.contains(id) {
+            return Err(PyrucastError::Message(format!("unknown node {}", id.0)));
         }
         Ok(())
     }
 
-    /// Iterate over live NodeIds in ascending id order.
+    /// Iterate over every NodeId, in ascending id order — referenced or not.
     ///
     /// ```
     /// # use pyrucast::coords::Coords;
@@ -784,14 +719,11 @@ impl Coords {
     /// let a = c.add_node(&[0.0, 0.0]).unwrap();
     /// let b = c.add_node(&[1.0, 0.0]).unwrap();
     /// c.decref(a).unwrap();
-    /// c.gc();
-    /// assert_eq!(c.iter_live().collect::<Vec<_>>(), vec![b]); // le mort est sauté
+    /// // No longer referenced, `a` is still a node of the Coords.
+    /// assert_eq!(c.iter_live().collect::<Vec<_>>(), vec![a, b]);
     /// ```
     pub fn iter_live(&self) -> impl Iterator<Item = NodeId> + '_ {
-        self.alive
-            .iter()
-            .enumerate()
-            .filter_map(|(i, &a)| a.then_some(NodeId(i as u32)))
+        (0..self.node_count() as u32).map(NodeId)
     }
 
     // ─── Configurations ───
@@ -848,7 +780,7 @@ impl Coords {
     /// are checked before the first write.
     ///
     /// Errors: an index out of range, `target == reference` (the reference
-    /// would be lost), a collected node, a length that is not `dim` per id, a
+    /// would be lost), an unknown node, a length that is not `dim` per id, a
     /// negative radius on a body of revolution.
     ///
     /// ```
@@ -911,7 +843,7 @@ impl Coords {
     /// All or nothing: the ids, the length and the radii are checked before
     /// the first node moves.
     ///
-    /// Errors: a collected node, a length that is not `dim` per id, a
+    /// Errors: an unknown node, a length that is not `dim` per id, a
     /// negative radius on a body of revolution.
     ///
     /// ```
@@ -990,7 +922,7 @@ impl Coords {
 
     // ─── Solver permutation ───
 
-    /// Current permutation (length = capacity), or `None` for identity.
+    /// Current permutation (length = node count), or `None` for identity.
     ///
     /// ```
     /// # use pyrucast::coords::Coords;
@@ -1004,8 +936,8 @@ impl Coords {
         self.permutation.as_deref()
     }
 
-    /// Set the solver permutation. Its length must equal `capacity`; each
-    /// value must be unique and within `[0, capacity)`.
+    /// Set the solver permutation. Its length must equal the node count; each
+    /// value must be unique and within `[0, node_count)`.
     ///
     /// ```
     /// # use pyrucast::coords::Coords;
@@ -1017,21 +949,21 @@ impl Coords {
     /// assert!(c.set_permutation(vec![0, 0, 1]).is_err());
     /// ```
     pub fn set_permutation(&mut self, perm: Vec<u32>) -> Result<()> {
-        let cap = self.capacity();
-        if perm.len() != cap {
+        let n = self.node_count();
+        if perm.len() != n {
             return Err(PyrucastError::Message(format!(
-                "set_permutation: length {} ≠ capacity {}",
+                "set_permutation: length {} ≠ node count {}",
                 perm.len(),
-                cap
+                n
             )));
         }
-        let cap_u = cap as u32;
-        let mut seen = vec![false; cap];
+        let n_u = n as u32;
+        let mut seen = vec![false; n];
         for &v in &perm {
-            if v >= cap_u {
+            if v >= n_u {
                 return Err(PyrucastError::Message(format!(
-                    "set_permutation: value {} ≥ capacity {}",
-                    v, cap_u
+                    "set_permutation: value {} ≥ node count {}",
+                    v, n_u
                 )));
             }
             let i = v as usize;
@@ -1070,7 +1002,6 @@ impl fmt::Debug for Coords {
             .field("configs", &self.config_names)
             .field("active", &self.active)
             .field("node_count", &self.node_count())
-            .field("capacity", &self.capacity())
             .field("permutation", &self.permutation.is_some())
             .finish()
     }
@@ -1079,7 +1010,6 @@ impl fmt::Debug for Coords {
 impl fmt::Display for Coords {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let active_name = &self.config_names[self.active];
-        let collected = self.capacity() - self.node_count();
         let perm_label = if self.permutation.is_some() {
             "custom"
         } else {
@@ -1093,13 +1023,12 @@ impl fmt::Display for Coords {
         };
         write!(
             f,
-            "Coords: dim={}{}, configs={} (active=\"{}\"), nodes={} ({} collected), permutation: {}",
+            "Coords: dim={}{}, configs={} (active=\"{}\"), nodes={}, permutation: {}",
             self.dim,
             frame_label,
             self.configs.len(),
             active_name,
             self.node_count(),
-            collected,
             perm_label
         )
     }
@@ -1145,11 +1074,11 @@ impl crate::archive::Archivable for Coords {
     const TAG: &'static str = "Coords";
 
     /// The per-node refcount is not in the file (see the field's own note).
-    /// Size it to the node capacity, at zero: each reloaded `SubMesh` will
+    /// Size it to the node count, at zero: each reloaded `SubMesh` will
     /// re-increment what it references, and the post-order guarantees they come
     /// after this.
     fn on_load(&mut self) {
-        self.refcount = vec![0; self.alive.len()];
+        self.refcount = vec![0; self.node_count()];
     }
 }
 
@@ -1162,7 +1091,6 @@ mod tests {
         let c = Coords::new(3).unwrap();
         assert_eq!(c.dim(), 3);
         assert_eq!(c.node_count(), 0);
-        assert_eq!(c.capacity(), 0);
     }
 
     #[test]
@@ -1221,7 +1149,7 @@ mod tests {
         let mut c = Coords::new(2).unwrap();
         let a = c.add_node(&[0.0, 0.0]).unwrap();
         assert_eq!(c.refcount(a), 1);
-        assert!(c.is_alive(a));
+        assert!(c.contains(a));
     }
 
     #[test]
@@ -1232,53 +1160,33 @@ mod tests {
     }
 
     #[test]
-    fn gc_does_not_collect_referenced_nodes() {
-        let mut c = Coords::new(2).unwrap();
-        let a = c.add_node(&[0.0, 0.0]).unwrap();
-        // refcount = 1, gc must not collect anything
-        assert_eq!(c.gc(), 0);
-        assert!(c.is_alive(a));
-        // After decref, refcount drops to 0
-        c.decref(a).unwrap();
-        assert_eq!(c.refcount(a), 0);
-        // but only gc actually removes
-        assert_eq!(c.gc(), 1);
-        assert!(!c.is_alive(a));
-    }
-
-    #[test]
-    fn incref_protects_from_gc() {
+    fn an_unreferenced_node_stays() {
         let mut c = Coords::new(1).unwrap();
         let a = c.add_node(&[3.0]).unwrap();
         c.incref(a).unwrap(); // refcount = 2
         c.decref(a).unwrap(); // refcount = 1
-        assert_eq!(c.gc(), 0);
         c.decref(a).unwrap(); // refcount = 0
-        assert_eq!(c.gc(), 1);
-    }
-
-    #[test]
-    fn id_not_reused_after_gc() {
-        let mut c = Coords::new(1).unwrap();
-        let a = c.add_node(&[0.0]).unwrap();
-        c.decref(a).unwrap();
-        c.gc();
+        assert_eq!(c.refcount(a), 0);
+        // Still a node: readable, and counted again on demand.
+        assert_eq!(c.position(a).unwrap(), &[3.0]);
+        c.incref(a).unwrap();
+        assert_eq!(c.refcount(a), 1);
+        // Ids are handed out in order, whatever the counts.
         let b = c.add_node(&[1.0]).unwrap();
-        assert_ne!(a.0, b.0);
-        assert_eq!(b.0, 1);
-        assert_eq!(c.capacity(), 2);
+        assert_eq!((b.0, c.node_count()), (1, 2));
     }
 
     #[test]
-    fn coord_after_gc_is_error() {
+    fn an_unknown_id_is_an_error() {
         let mut c = Coords::new(1).unwrap();
-        let a = c.add_node(&[42.0]).unwrap();
-        c.decref(a).unwrap();
-        c.gc();
-        assert!(c.position(a).is_err());
-        assert!(c.set_position(a, &[0.0]).is_err());
-        assert!(c.incref(a).is_err());
-        assert!(c.decref(a).is_err());
+        c.add_node(&[42.0]).unwrap();
+        let ghost = NodeId(1);
+        let err = c.position(ghost).unwrap_err();
+        assert!(format!("{err}").contains("unknown node 1"));
+        assert!(c.set_position(ghost, &[0.0]).is_err());
+        assert!(c.incref(ghost).is_err());
+        assert!(c.decref(ghost).is_err());
+        assert_eq!(c.refcount(ghost), 0);
     }
 
     #[test]
@@ -1320,15 +1228,14 @@ mod tests {
     }
 
     #[test]
-    fn iter_live_skips_collected() {
+    fn iter_live_walks_every_node() {
         let mut c = Coords::new(1).unwrap();
-        let a = c.add_node(&[0.0]).unwrap();
+        c.add_node(&[0.0]).unwrap();
         let b = c.add_node(&[1.0]).unwrap();
-        let _cc = c.add_node(&[2.0]).unwrap();
+        c.add_node(&[2.0]).unwrap();
         c.decref(b).unwrap();
-        c.gc();
-        let live: Vec<u32> = c.iter_live().map(|n| n.0).collect();
-        assert_eq!(live, vec![a.0, 2]);
+        let ids: Vec<u32> = c.iter_live().map(|n| n.0).collect();
+        assert_eq!(ids, vec![0, 1, 2]);
     }
 
     #[test]

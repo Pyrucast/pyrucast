@@ -52,13 +52,13 @@ Ils ne sont pas écrits non plus, et c'est délibéré : un fichier contient *ce
 
 À la relecture, tout est recompté depuis zéro. Les objets se comptent seuls — chaque référence rendue par `load` compte pour une. Les nœuds sont réincrémentés par les sous-maillages relus.
 
-**Conséquence à connaître** : un nœud relu n'est protégé que par les objets présents dans le fichier. Un `Node` que vous teniez dans une variable Python n'est pas archivé — c'est un atome de votre script, pas un objet du graphe. Sauver une `Coords` seule et la relire donne donc des nœuds à compteur nul, qu'un `gc()` collectera :
+**Conséquence à connaître** : un nœud relu n'est compté que par les objets présents dans le fichier. Un `Node` que vous teniez dans une variable Python n'est pas archivé — c'est un atome de votre script, pas un objet du graphe. Sauver une `Coords` seule et la relire donne donc des nœuds à compteur nul : aucun objet du fichier ne les utilise.
 
 ```python
 {{#include ../../tests/python/test_doc_sauvegarde.py:refcount}}
 ```
 
-C'est exactement l'état où l'on serait après avoir reconstruit les mêmes objets à la main sans en garder de `Node`. Pour qu'un nœud survive, sauvez ce qui l'utilise.
+C'est exactement l'état où l'on serait après avoir reconstruit les mêmes objets à la main sans en garder de `Node`. Pour qu'un nœud reste compté après relecture, sauvez avec lui ce qui l'utilise.
 
 ## Les valeurs simples
 

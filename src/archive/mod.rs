@@ -34,10 +34,9 @@
 //! `load` hands the handles out. Node counts inside a
 //! [`Coords`] are **recounted from zero**: each reloaded
 //! sub-mesh re-increments the nodes it uses. The consequence is deliberate —
-//! *reloaded nodes are protected only by the objects present in the file*.
-//! Saving a bare `Coords` and reloading it gives nodes at count zero, which a
-//! `gc()` will collect, exactly as if the same objects had been rebuilt by hand
-//! without keeping a `Node`. A [`Node`](crate::atoms::Node) is an atom of the
+//! *reloaded nodes are counted only by the objects present in the file*.
+//! Saving a bare `Coords` and reloading it gives nodes at count zero, exactly
+//! as if the same objects had been rebuilt by hand without keeping a `Node`. A [`Node`](crate::atoms::Node) is an atom of the
 //! caller's stack; it is not archived.
 //!
 //! # Reloading adds, it never replaces
@@ -75,7 +74,7 @@ use std::path::Path;
 const MAGIC: &[u8; 8] = b"PYRUCAST";
 /// Format number. Bumped on any incompatible change; before 1.0.0 no migration
 /// is offered, an unknown number is simply refused.
-const FORMAT: u32 = 7;
+const FORMAT: u32 = 8;
 
 // ─── What a type must offer to be archived ──────────────────────────────────
 

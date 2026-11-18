@@ -416,9 +416,9 @@ impl SubMesh {
     }
 
     /// Add a cell. The length of `nodes` must equal
-    /// `element_type.nodes_per_cell()`, and each node must be alive in the
+    /// `element_type.nodes_per_cell()`, and each node must belong to the
     /// `Coords`; each node is increfed. On increment failure
-    /// (invalid / collected id), the increfs already performed for this
+    /// (unknown id), the increfs already performed for this
     /// cell are rolled back.
     ///
     /// ```
@@ -515,9 +515,9 @@ impl SubMesh {
         {
             let c = self.coords.read();
             for &n in nodes {
-                if !c.is_alive(n) {
+                if !c.contains(n) {
                     return Err(PyrucastError::Message(format!(
-                        "add_cell_taking: node {} is not alive",
+                        "add_cell_taking: unknown node {}",
                         n
                     )));
                 }
@@ -653,12 +653,12 @@ impl SubMesh {
         let mut rewritten = 0;
         {
             let mut c = self.coords.write();
-            // Nothing is written until every image is known to be live.
+            // Nothing is written until every image is known to exist.
             for &old in &self.connectivity {
                 let new = image(old);
-                if new != old && !c.is_alive(new) {
+                if new != old && !c.contains(new) {
                     return Err(PyrucastError::Message(format!(
-                        "remap_nodes: node {} is not found or collected",
+                        "remap_nodes: unknown node {}",
                         new.0
                     )));
                 }
@@ -1896,22 +1896,16 @@ mod tests {
     }
 
     #[test]
-    fn submesh_add_cell_collected_node_rollback() {
+    fn submesh_add_cell_unknown_node_rollback() {
         let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-        let dead_id = coords.write().add_node(&[2.0]).unwrap();
-        // dead_id starts at refcount=1; decrement then collect.
-        {
-            let mut c = coords.write();
-            c.decref(dead_id).unwrap();
-            assert_eq!(c.gc(), 1);
-        }
+        let ghost = NodeId(2); // no node carries this id
 
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-        // a (live), b (live), dead_id (collected) → add_cell fails after
-        // increfing a and b. The rollback must undo those increfs.
-        let err = sm.add_cell(&[a.id(), b.id(), dead_id]).unwrap_err();
+        // a, b, then an unknown id → add_cell fails after increfing a and b.
+        // The rollback must undo those increfs.
+        let err = sm.add_cell(&[a.id(), b.id(), ghost]).unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
         {
             let cf = coords.read();
@@ -1922,21 +1916,16 @@ mod tests {
     }
 
     #[test]
-    fn from_connectivity_refuses_a_dead_node_without_increfing_anything() {
+    fn from_connectivity_refuses_an_unknown_node_without_increfing_anything() {
         let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-        let dead_id = coords.write().add_node(&[2.0]).unwrap();
-        {
-            let mut c = coords.write();
-            c.decref(dead_id).unwrap();
-            assert_eq!(c.gc(), 1);
-        }
+        let ghost = NodeId(2); // no node carries this id
 
         let err = SubMesh::from_connectivity(
             coords.clone(),
             ElementType::TRI3,
-            vec![a.id(), b.id(), dead_id],
+            vec![a.id(), b.id(), ghost],
         )
         .unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));

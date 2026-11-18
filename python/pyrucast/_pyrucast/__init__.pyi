@@ -258,7 +258,7 @@ class Cell:
 @typing.final
 class Coords:
     r"""
-    The registry of live nodes and their coordinates, in a fixed spatial
+    The registry of nodes and their coordinates, in a fixed spatial
     dimension.
     
     Create one with `Coords(dim)`, then add nodes with
@@ -282,12 +282,8 @@ class Coords:
     @property
     def node_count(self) -> builtins.int:
         r"""
-        Number of live nodes.
-        """
-    @property
-    def capacity(self) -> builtins.int:
-        r"""
-        Number of allocated node slots (live plus not-yet-collected).
+        Number of nodes ever created: no node is removed, so it is also one
+        past the largest id.
         """
     @property
     def active(self) -> builtins.int:
@@ -308,14 +304,6 @@ class Coords:
         Every FE space built on it integrates over the full ring; mechanics adds
         the hoop strain through `model.elasticity(fes, "axisymmetric")`.
         """
-    def is_alive(self, id: builtins.int) -> builtins.bool:
-        r"""
-        Whether node `id` is still live (not garbage-collected).
-        
-        Takes a **raw id**, not a `Node`, on purpose: a `Node` holds a
-        refcount, so it could never be observed dead. This is the API for
-        inspecting nodes you may no longer hold (post-GC checks).
-        """
     def add_node(self, coords: typing.Sequence[builtins.float]) -> Node:
         r"""
         Add a node at `coords` and return it as a `Node` (refcount = 1).
@@ -326,14 +314,11 @@ class Coords:
         """
     def refcount(self, id: builtins.int) -> builtins.int:
         r"""
-        Reference count of node `id` (how many holders keep it alive).
+        Reference count of node `id`: how many holders — `Node`s, cells — use
+        it; 0 for an unknown id.
         
-        Takes a **raw id** (see [`Self::is_alive`]): observing a refcount of
+        Takes a **raw id**, not a `Node`, on purpose: observing a refcount of
         0 is impossible while holding the `Node` that would carry it.
-        """
-    def gc(self) -> builtins.int:
-        r"""
-        Run the garbage collector; return the number of collected nodes.
         """
     def add_config(self, name: builtins.str) -> builtins.int:
         r"""
@@ -7427,7 +7412,7 @@ def from_arrays(coords: Coords, node_tags: typing.Any, node_coords: typing.Any, 
 
 def from_live_nodes(coords: Coords) -> Mesh:
     r"""
-    A POI1 mesh holding every live node of `coords`.
+    A POI1 mesh holding every node of `coords`, referenced or not.
     
     # Parameters
     

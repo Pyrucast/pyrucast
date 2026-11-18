@@ -196,19 +196,6 @@ vectorisation. The loop is memory-bound today (first item), so measure before
 changing it — e.g. a generic `F: Fn(f64, f64) -> f64` monomorphised per
 operator, from the Python slots down to `merge_zones`.
 
-## Node garbage collector
-
-`Coords::gc()` (`src/coords.rs`) marks the nodes whose refcount fell to 0 as
-dead. It frees no memory, ids are never reused, and pyrucast never calls it.
-Python exposes it with `is_alive()` and `node_count()`, which only matter with
-it (without gc, `node_count()` equals `capacity()`). The per-node refcount has
-no other consumer than `gc`, `refcount(id)` and the `dump` column.
-
-Decide: remove it from the API, or keep it undocumented. Mentions left either
-way: `book/src/sauvegarde.md` (a reloaded `Coords` alone "qu'un `gc()`
-collectera"), `book/src/aspect-informatique.md` ("`coords.gc()` collecte…"),
-and the Rust docs of `src/coords.rs` and `src/atoms/node.rs`.
-
 ## Improve the multi-variable interpolation of evolutions
 
 A table of several variables (`SubEvolution` with tuple abscissas,

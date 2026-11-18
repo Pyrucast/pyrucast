@@ -1838,7 +1838,7 @@ mod tests {
     }
 
     #[test]
-    fn protects_nodes_from_gc_after_node_and_submesh_drop() {
+    fn holds_its_nodes_after_node_and_submesh_drop() {
         let coords = Handle::new(Coords::new(1).unwrap());
         let n = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let nid = n.id();
@@ -1850,14 +1850,12 @@ mod tests {
         let field = SubNodeField::from_poi1(&sm_handle, vec!["T".into()]).unwrap();
         // Drop the Node and the user's SubMesh handle; the field still
         // holds a clone of the SubMesh handle, which keeps the SubMesh
-        // alive, which keeps the nodes alive.
+        // alive, which keeps counting the node.
         drop(n);
         drop(sm_handle);
-        assert_eq!(coords.write().gc(), 0);
-        assert!(coords.read().is_alive(nid));
+        assert_eq!(coords.read().refcount(nid), 1);
         drop(field);
-        assert_eq!(coords.write().gc(), 1);
-        assert!(!coords.read().is_alive(nid));
+        assert_eq!(coords.read().refcount(nid), 0);
     }
 
     #[test]

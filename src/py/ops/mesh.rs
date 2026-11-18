@@ -21,7 +21,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyrucast_macros::py_op;
 
-/// A POI1 mesh holding every live node of `coords`.
+/// A POI1 mesh holding every node of `coords`, referenced or not.
 ///
 /// # Parameters
 ///
