@@ -35,13 +35,32 @@ actif le temps d'un calcul par `in_config` : voir
 
 | Python | Effet |
 |---|---|
-| [`node_field.restrict(field, mesh)`](../reference/node_field.md#node_field-restrict) | restreint un `NodeField` aux nœuds de `mesh`, avec toutes ses composantes, sur un support que partagent toutes les restrictions au même `mesh`. Un sous-maillage listé deux fois donne une seule zone. |
-| [`node_field.restrict_like(field, target)`](../reference/node_field.md#node_field-restrict_like) | relit `field` sur le support **et** les composantes de `target`, zone par zone : `restrict(field, target.support())`, réduit aux composantes de `target`, celles que `field` n'a pas valant 0. Le résultat se combine directement avec `target`. |
-| [`element_field.restrict(field, fespace)`](../reference/element_field.md#element_field-restrict) | pose un `ElementField` sur les sous-espaces de `fespace` (chacun une fois), avec toutes ses composantes. Une maille prend ses valeurs d'une zone de même définition (type, interpolation, quadrature) qui tient la même maille (mêmes nœuds, même ordre), 0 sinon. |
+| [`node_field.restrict(field, mesh)`](../reference/node_field.md#node_field-restrict) | restreint un `NodeField` aux nœuds de `mesh`, sur un support que partagent toutes les restrictions au même `mesh`. Chaque zone du résultat prend les composantes des zones de `field` qui portent au moins un de ses nœuds ; un sous-maillage qui n'en porte aucun ne donne pas de zone, et un `mesh` sur un autre `Coords` donne un champ vide. Un sous-maillage listé deux fois donne une seule zone. |
+| [`node_field.restrict_like(field, target)`](../reference/node_field.md#node_field-restrict_like) | relit `field` sur le support **et** les composantes de `target`, zone par zone : chaque zone de `target` donne une zone, et les composantes que `field` ne donne pas à ses nœuds valent 0. Le résultat se combine directement avec `target`. |
+| [`element_field.restrict(field, fespace)`](../reference/element_field.md#element_field-restrict) | pose un `ElementField` sur les sous-espaces de `fespace` (chacun une fois). Une maille prend ses valeurs d'une zone de même définition (type, interpolation, quadrature) qui tient la même maille (mêmes nœuds, même ordre), 0 sinon. Chaque zone du résultat prend les composantes des zones qui tiennent au moins une de ses mailles ; un sous-espace qui n'en partage aucune ne donne pas de zone. |
 | [`element_field.restrict_like(field, target)`](../reference/element_field.md#element_field-restrict_like) | relit `field` sur les sous-espaces **et** les composantes de `target`, zone par zone, à 0 celles que `field` n'a pas. Le résultat se combine directement avec `target`. |
 | [`node_field.merge(a, b)`](../reference/node_field.md#node_field-merge) | union de deux `NodeField`, consolidée — c'est le nom de `a \| b`. |
 | [`node_field.consolidate(field)`](../reference/node_field.md#node_field-consolidate) | fusionne les zones de **même support** en vérifiant la cohérence des valeurs partagées. |
 | [`element_field.consolidate(field)`](../reference/element_field.md#element_field-consolidate) | fusionne les zones d'une même `FiniteElementSpace` (union des composantes) — le pendant de `\|`, qui les laisse côte à côte. |
+
+Les deux `restrict` et les deux `restrict_like` lisent le champ de la même
+façon, pour chaque zone du résultat, qu'on appelle ici la cible :
+
+1. si la cible n'est pas sur le `Coords` du champ, elle ne partage rien avec
+   lui, et rien n'est cherché ;
+2. pour chaque zone du champ, une **table de correspondance** donne, pour
+   chaque nœud (ou maille) de la cible, sa ligne dans cette zone, ou son
+   absence. Une zone posée sur le support même de la cible n'en a pas besoin :
+   la ligne k est la ligne k. Les autres cherchent chaque nœud de la cible
+   dans la table « nœud → ligne » de leur support, ou chaque maille dans une
+   table de leurs mailles, en parallèle. Une seule table est construite par
+   support, même s'il porte plusieurs zones ;
+3. une zone dont la table ne trouve rien est écartée. `restrict` garde les
+   composantes des zones restantes, et ne crée pas la zone cible s'il n'en
+   reste aucune. `restrict_like` garde celles de la cible ;
+4. la copie, en parallèle sur les lignes de la cible, ne cherche plus rien :
+   elle lit les tables. Pour chaque composante, la première zone qui porte la
+   ligne et la composante l'emporte.
 
 La consolidation d'un `NodeField` est exactement la **finalisation** de l'union
 `|` : après déduplication par handle, les zones définies sur le même `SubMesh`

@@ -662,12 +662,28 @@ def test_restrict_onto_a_selection_and_back():
 
 
 def test_restrict_does_not_read_another_definition():
-    """A REDUCED space is another definition: nothing is read, all is 0."""
+    """A REDUCED space is another definition: nothing is read. `restrict` gives
+    no zone, `restrict_like` the zone of its target, all at 0."""
     grid, _, _, k = _grid_and_rank()
     reduced = pyrucast.FiniteElementSpace(grid, quadrature="REDUCED")
-    r = pyrucast.element_field.restrict(k, reduced)
+    assert len(pyrucast.element_field.restrict(k, reduced)) == 0
+    target = pyrucast.ElementField(reduced, ["k"])
+    r = pyrucast.element_field.restrict_like(k, target)
     assert r[0].gauss_count == 1
     assert _per_cell(r, "k") == [0.0] * 4
+
+
+def test_restrict_takes_the_components_of_the_zones_sharing_a_cell():
+    """`k` on the left column, `m` on the right one: the left column takes `k`
+    alone, the whole grid both."""
+    grid, sel, fes, k = _grid_and_rank()
+    left = fes.restrict(sel)
+    right = fes.restrict(pyrucast.mesh.difference(grid, sel))
+    both = k.restrict(left) | pyrucast.ElementField(right, [("m", 7.0)])
+    assert pyrucast.element_field.restrict(both, left).components() == ["k"]
+    r = pyrucast.element_field.restrict(both, fes)
+    assert r.components() == ["k", "m"]
+    assert _per_cell(r, "m") == [0.0, 7.0, 0.0, 7.0]
 
 
 def test_restrict_like_takes_the_target_components():

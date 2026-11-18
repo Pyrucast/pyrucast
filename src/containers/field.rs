@@ -241,6 +241,149 @@ impl<S: SubField + Any + Send + Sync> FieldView<S> {
             })
             .collect()
     }
+
+    /// Copy into `out` the requested components of the zones of `overlaps`,
+    /// row by row of the target they were found for: `points` values per row
+    /// and component — one at a node, the Gauss points of a cell — in the
+    /// layout of a zone on that target.
+    ///
+    /// For each component, the first zone that holds the row and carries the
+    /// component wins, as `NodeFieldView::value_opt` reads a node: the zones
+    /// are walked from last to first, each writing over what the later ones
+    /// wrote. A component no zone gives at a row keeps what `out` holds —
+    /// `0.0` for a fresh zone. `reads` comes from
+    /// [`resolve_reads`](Self::resolve_reads). The rows are filled in
+    /// parallel, each by one task; nothing is looked up any more, the tables
+    /// of `overlaps` say where each row lies.
+    pub(crate) fn gather_rows(
+        &self,
+        overlaps: &Overlaps,
+        reads: &[Vec<u32>],
+        points: usize,
+        out: &mut [f64],
+    ) {
+        let n_out = reads.first().map_or(0, Vec::len);
+        // Per zone: its values, and the (column read, column written) pairs of
+        // the components it carries among those requested.
+        struct Source<'a> {
+            values: &'a [f64],
+            stride: usize,
+            columns: Vec<(usize, usize)>,
+            rows: Option<&'a [u32]>,
+        }
+        let sources: Vec<Source> = overlaps
+            .zones
+            .iter()
+            .filter_map(|&(z, table)| {
+                let columns: Vec<(usize, usize)> = reads[z]
+                    .iter()
+                    .enumerate()
+                    .filter(|&(_, &ci)| ci != ABSENT_COMPONENT)
+                    .map(|(c, &ci)| (ci as usize, c))
+                    .collect();
+                (!columns.is_empty()).then(|| Source {
+                    values: self.zones[z].values(),
+                    stride: self.zones[z].component_count(),
+                    columns,
+                    rows: table.map(|k| overlaps.tables[k].as_slice()),
+                })
+            })
+            .collect();
+        if sources.is_empty() || n_out == 0 || points == 0 {
+            return;
+        }
+        let row = points * n_out;
+        out.par_chunks_mut(row)
+            .with_min_len((MIN_PARALLEL_LEN / row).max(1))
+            .enumerate()
+            .for_each(|(t, dst)| {
+                for source in sources.iter().rev() {
+                    let s = match source.rows {
+                        None => t,
+                        Some(rows) => match rows[t] {
+                            ABSENT_ROW => continue,
+                            s => s as usize,
+                        },
+                    };
+                    let block = points * source.stride;
+                    let src = &source.values[s * block..(s + 1) * block];
+                    for g in 0..points {
+                        for &(ci, c) in &source.columns {
+                            dst[g * n_out + c] = src[g * source.stride + ci];
+                        }
+                    }
+                }
+            });
+    }
+}
+
+/// Marks a row of a target that a zone does not hold, in an [`Overlaps`]
+/// table. `u32::MAX` and not `Option<u32>`, as [`ABSENT_COMPONENT`]: the table
+/// is read once per row of the copy, and stays a flat `&[u32]`.
+pub(crate) const ABSENT_ROW: u32 = u32::MAX;
+
+/// The zones of a [`FieldView`] that share at least one row with a target —
+/// a node of a POI1 support, a cell of a subspace — each with where the rows
+/// of the target lie in it: the correspondence tables of a restriction.
+///
+/// Built by `NodeFieldView::overlaps` or `ElementFieldView::overlaps`, read
+/// by [`FieldView::gather_rows`]. A zone left out shares no row with the
+/// target: a restriction takes its components only from the zones listed
+/// here.
+pub(crate) struct Overlaps {
+    /// `(zone, table)`, in the order of the view: the zone's rank, and the
+    /// rank in `tables` of the table its rows are read through — `None` when
+    /// the zone stands on the target's own `SubMesh`, the target's row `t`
+    /// being its row `t`.
+    pub(crate) zones: Vec<(usize, Option<usize>)>,
+    /// For each row of the target, its row in a source `SubMesh`, or
+    /// [`ABSENT_ROW`]. One table per distinct source, shared by the zones that
+    /// stand on it; none that finds no row.
+    pub(crate) tables: Vec<Vec<u32>>,
+}
+
+impl Overlaps {
+    /// Gather, among `sources` — each a zone's rank and the `SubMesh` its rows
+    /// stand on — those that share a row with `target`.
+    ///
+    /// A zone on `target` itself is kept without a table. Any other is read
+    /// through the table `table(zone, source)` builds, the first time its
+    /// `source` is met, and is left out when that table finds no row.
+    pub(crate) fn new(
+        target: &Handle<SubMesh>,
+        sources: impl IntoIterator<Item = (usize, Handle<SubMesh>)>,
+        mut table: impl FnMut(usize, &Handle<SubMesh>) -> Vec<u32>,
+    ) -> Self {
+        let mut out = Self {
+            zones: Vec::new(),
+            tables: Vec::new(),
+        };
+        // The sources met so far, with the rank of their table, `None` for one
+        // that finds no row.
+        let mut met: Vec<(Handle<SubMesh>, Option<usize>)> = Vec::new();
+        for (zone, source) in sources {
+            if source.same_object(target) {
+                out.zones.push((zone, None));
+                continue;
+            }
+            let rank = match met.iter().find(|(m, _)| m.same_object(&source)) {
+                Some(&(_, rank)) => rank,
+                None => {
+                    let rows = table(zone, &source);
+                    let rank = rows.iter().any(|&r| r != ABSENT_ROW).then(|| {
+                        out.tables.push(rows);
+                        out.tables.len() - 1
+                    });
+                    met.push((source, rank));
+                    rank
+                }
+            };
+            if let Some(k) = rank {
+                out.zones.push((zone, Some(k)));
+            }
+        }
+        out
+    }
 }
 
 // ─── SubField ───────────────────────────────────────────────────────────────

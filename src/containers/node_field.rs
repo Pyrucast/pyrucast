@@ -66,11 +66,12 @@
 use crate::aggregate::Aggregate;
 use crate::atoms::ElementType;
 use crate::atoms::NodeId;
-use crate::containers::field::{RowPoints, SubField};
+use crate::containers::field::{Overlaps, RowPoints, SubField, ABSENT_COMPONENT, ABSENT_ROW};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::handle::{Handle, ReadGuard};
+use crate::parallel::*;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::{Index, IndexMut};
@@ -1668,6 +1669,37 @@ impl NodeFieldView {
                 }
             }
         }
+    }
+
+    /// The zones of this view that hold at least one node of `target`, a POI1
+    /// support, among those carrying a component of `reads`, each with the row
+    /// of every node of `target` in it: see [`Overlaps`].
+    ///
+    /// A zone on `target` itself holds its node `t` at its row `t`. Any other
+    /// is searched node by node of `target` in its support's `NodeId → row`
+    /// map, in parallel, once per support. `target` stands on the `Coords` of
+    /// the view: on another one, a node id names another node.
+    pub(crate) fn overlaps(&self, target: &Handle<SubMesh>, reads: &[Vec<u32>]) -> Overlaps {
+        let guard = target.read();
+        // POI1: one node per cell, so the connectivity is the list of rows.
+        let nodes = guard.connectivity();
+        let sources = self
+            .inner
+            .zones
+            .iter()
+            .zip(reads)
+            .enumerate()
+            .filter(|(_, (_, idx))| idx.iter().any(|&ci| ci != ABSENT_COMPONENT))
+            .map(|(z, (zone, _))| (z, zone.support.clone()));
+        Overlaps::new(target, sources, |z, _| {
+            // The support's guard is the view's: no second lock on it.
+            let index = self.supports[z].node_index();
+            nodes
+                .par_iter()
+                .with_min_len(MIN_PARALLEL_LEN)
+                .map(|nid| index.get(nid).map_or(ABSENT_ROW, |&i| i as u32))
+                .collect()
+        })
     }
 }
 

@@ -1,54 +1,47 @@
 use crate::aggregate::Aggregate;
-use crate::containers::field::{Field, SubField};
+use crate::atoms::ElementType;
+use crate::containers::field::{Field, SubField, ABSENT_COMPONENT};
 use crate::containers::mesh::Mesh;
-use crate::containers::node_field::{NodeField, NodeFieldView, SubNodeField};
+use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
 use crate::handle::Handle;
 
-/// Fill `sub` (already on its target support) with the values of `source`,
-/// component by component, node by node: a `(node, component)` pair that
-/// `source` covers is copied, one it does not is left at `0.0`. Shared by
-/// [`restrict`] and [`restrict_like`].
-fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) {
-    let components = sub.components().to_vec();
-    let nodes = sub.node_ids();
-    // The source's component positions, resolved **once** per zone; the gather
-    // then writes straight into the target's rows, which are in `nodes` order.
-    // Writing by name instead took a read lock on the support, hashed the
-    // `NodeId` and searched the component name — per node and per component.
-    let reads = source.resolve_reads(&components);
-    source.gather_cell(&nodes, &reads, sub.values_mut());
-}
-
-/// Restrict `field` to the nodes used by `mesh`, with every component of `field`.
+/// Restrict `field` to the nodes of `mesh`, keeping the components found there.
 ///
-/// Returns a new [`NodeField`] with one zone per submesh of `mesh`, each
-/// submesh once: one listed twice gives one zone. Each zone is supported on the submesh's **canonical POI1 node cloud** — its distinct
-/// nodes, via [`SubMesh::to_poi1`](crate::containers::mesh::SubMesh::to_poi1),
-/// which is materialised once and cached. Two restrictions onto the **same**
-/// `mesh` therefore land on the **same support slot** and combine directly by
-/// the arithmetic operators: `restrict(a, mesh) - restrict(b, mesh)` is the
+/// Returns a new [`NodeField`] with at most one zone per submesh of `mesh`,
+/// each submesh once: one listed twice gives one zone. Each zone is supported
+/// on the submesh's **canonical POI1 node cloud** — its distinct nodes, via
+/// [`SubMesh::to_poi1`](crate::containers::mesh::SubMesh::to_poi1), which is
+/// materialised once and cached. Two restrictions onto the **same** `mesh`
+/// therefore land on the **same support slot** and combine directly by the
+/// arithmetic operators: `restrict(a, mesh) - restrict(b, mesh)` is the
 /// node-by-node difference. That cached support is also the one a stiffness
 /// block over `mesh` uses, so `&K * &restrict(f, mesh)` and
 /// `solve(K, f) - restrict(g, mesh)` line up too.
 ///
-/// Each zone carries the union of `field`'s components. Values are read
-/// through the aggregate (first zone of `field` defining the pair wins); a
-/// node of `mesh` that `field` does not cover is assigned `0.0`; a node of
-/// `field` absent from `mesh` is dropped.
+/// A zone takes the components of the zones of `field` that hold at least one
+/// of its nodes, in the order of `field`: a zone of `field` sharing no node
+/// with the submesh adds nothing to it, and a submesh sharing no node with
+/// `field` gives no zone. The test is on the nodes, not on the values: a
+/// component that is `0.0` everywhere stays. Values are read through the
+/// aggregate (first zone of `field` defining the pair wins); a node of `mesh`
+/// a zone of `field` does not cover is assigned `0.0` for its components; a
+/// node of `field` absent from `mesh` is dropped.
 ///
 /// Element operations on the region — [`gradient`](fn@crate::ops::element_field::gradient),
 /// [`integral`](fn@crate::ops::measure::integral),
 /// [`deformation`](fn@crate::ops::element_field::deformation),
 /// [`interp_to_gauss`](fn@crate::ops::element_field::interp_to_gauss) — take the mesh /
 /// finite-element space as a **separate argument** and read the field by node
-/// id. To land on the supports of an existing field `a`, pass `&a.support()`:
-/// the result keeps the components of `field`, where [`restrict_like`] takes
-/// those of `a`, zone by zone.
+/// id. To land on the supports of an existing field `a`, every one of them and
+/// with its components, take [`restrict_like`]: `restrict(field, &a.support())`
+/// keeps the components of `field`, and leaves out a support sharing no node
+/// with it.
 ///
 /// An empty field carries no component: it gives an empty field, as with
-/// [`restrict_like`]. A `mesh` on another `Coords` shares no node with
-/// `field`: its zones are all `0.0`.
+/// [`restrict_like`]. A `mesh` on another `Coords` shares no node with `field`
+/// — a node id names a node only in its own `Coords` — and gives an empty field
+/// too.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -84,6 +77,8 @@ fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) {
 /// let r = node_field::restrict(&temp, &bout)?;
 /// assert_eq!(r.node_count(), 1);
 /// assert_eq!(r.get(0)?.read().value(n[0].id(), "T")?, 10.0);
+/// // Onto nodes it does not hold, a field gives nothing.
+/// assert!(node_field::restrict(&r, &mesh::poi1_from_nodes(&n[1..])?)?.is_empty());
 /// assert!(node_field::restrict(&NodeField::empty(), &bout)?.is_empty());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -94,14 +89,40 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
     let coords = field.coords()?;
     let components = Field::components(field);
     let view = field.view();
+    let all = view.resolve_reads(&components);
     let mut out = NodeField::default();
     for sm in &mesh.deduplicate() {
-        let mut sub = SubNodeField::from_support(sm, components.clone())?;
-        // A node id names a node only in its own `Coords`: on another one,
-        // `field` shares no node with the zone, which stays at 0.
-        if sub.coords().same_object(&coords) {
-            fill_from(&mut sub, &view);
+        // Another `Coords` first: no node in common, nothing to search.
+        if !sm.read().coords().same_object(&coords) {
+            continue;
         }
+        // The support `SubNodeField::from_support` takes: a POI1 itself, any
+        // other its cached companion.
+        let support = if sm.read().element_type() == ElementType::POI1 {
+            sm.clone()
+        } else {
+            sm.read().to_poi1()?
+        };
+        let overlaps = view.overlaps(&support, &all);
+        // The components of the zones holding one of its nodes, in the order
+        // of `field`.
+        let kept: Vec<String> = components
+            .iter()
+            .enumerate()
+            .filter(|&(c, _)| {
+                overlaps
+                    .zones
+                    .iter()
+                    .any(|&(z, _)| all[z][c] != ABSENT_COMPONENT)
+            })
+            .map(|(_, name)| name.clone())
+            .collect();
+        if kept.is_empty() {
+            continue;
+        }
+        let mut sub = SubNodeField::from_poi1(&support, kept)?;
+        let reads = view.resolve_reads(sub.components());
+        view.gather_rows(&overlaps, &reads, 1, sub.values_mut());
         out.add_sub(Handle::new(sub))?;
     }
     Ok(out)
@@ -109,10 +130,12 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
 
 /// Read `field` on the supports **and the components** of `target`.
 ///
-/// Zone by zone, it is [`restrict`]`(field, &target.support())` cut down to the
-/// components of that zone of `target`: those `target` lacks are dropped, those
-/// `field` lacks are created at `0.0`. [`restrict`] alone lands on the same
-/// supports but keeps the components of `field`.
+/// Zone by zone of `target`, `field` is read as [`restrict`] reads it, on the
+/// zone's support and with the zone's components: those `target` lacks are
+/// dropped, those no zone of `field` gives at its nodes are created at `0.0`.
+/// Every zone of `target` gets its zone, where [`restrict`]`(field,
+/// &target.support())` keeps the components of `field` and leaves out a
+/// support sharing no node with it.
 ///
 /// Taking the components of `target` too is what lets the result combine with
 /// `target` by the arithmetic operators (`&target + &field.restrict_like(target)`),
@@ -193,9 +216,11 @@ pub fn restrict_like(field: &NodeField, target: &NodeField) -> Result<NodeField>
         // supports are shared as-is), so the output pairs with `target` under
         // `same_support` — the precondition of the field operators.
         let mut sub = SubNodeField::from_support(&zone.support(), zone.components().to_vec())?;
-        // Another `Coords`: no node in common, the zone stays at 0.
+        // Another `Coords` first: no node in common, the zone stays at 0.
         if sub.coords().same_object(&coords) {
-            fill_from(&mut sub, &view);
+            let reads = view.resolve_reads(sub.components());
+            let overlaps = view.overlaps(&sub.support(), &reads);
+            view.gather_rows(&overlaps, &reads, 1, sub.values_mut());
         }
         out.add_sub(Handle::new(sub))?;
     }
@@ -400,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn restrict_onto_another_coords_gives_zero() {
+    fn restrict_onto_another_coords_gives_nothing() {
         let (_cfg1, nodes1, f) = poi1_field(1, vec!["T".into()]);
         f.get(0).unwrap().write().set(0, 0, 7.0).unwrap();
         let cfg2 = Handle::new(Coords::new(1).unwrap());
@@ -408,9 +433,71 @@ mod tests {
         assert_eq!(n2.id(), nodes1[0].id(), "the same id, in two Coords");
         let mut m2 = Mesh::from_submesh(SubMesh::new(cfg2.clone(), ElementType::POI1));
         m2.add_cell(&[n2.id()]).unwrap();
-        let r = restrict(&f, &m2).unwrap();
-        assert_eq!(r.node_count(), 1);
-        assert_eq!(r.value(n2.id(), "T").unwrap(), 0.0);
+        assert!(restrict(&f, &m2).unwrap().is_empty());
+    }
+
+    /// `T` on `a`, `p` on `b`, no node in common: a submesh of the target takes
+    /// the components of the zones holding one of its nodes, and one holding
+    /// none of the nodes of the field gives no zone.
+    #[test]
+    fn restrict_takes_the_components_of_the_zones_sharing_a_node() {
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let n: Vec<Node> = (0..5)
+            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
+            .collect();
+        let poi1 = |nodes: &[&Node]| {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            for nd in nodes {
+                sm.add_cell(&[nd.id()]).unwrap();
+            }
+            Handle::new(sm)
+        };
+        let (a, b) = (poi1(&[&n[0], &n[1]]), poi1(&[&n[2], &n[3]]));
+        let mut t = SubNodeField::from_poi1(&a, vec!["T".into()]).unwrap();
+        t.set_value(n[1].id(), "T", 3.0).unwrap();
+        let mut p = SubNodeField::from_poi1(&b, vec!["p".into()]).unwrap();
+        p.set_value(n[2].id(), "p", 4.0).unwrap();
+        let mut field = NodeField::from_sub(t);
+        field.add_sub(Handle::new(p)).unwrap();
+
+        // `a`, `b`, one straddling both, and one on a node of neither.
+        let mut m = Mesh::empty();
+        for sm in [a, b, poi1(&[&n[1], &n[2]]), poi1(&[&n[4]])] {
+            m.add_sub(sm).unwrap();
+        }
+        let r = restrict(&field, &m).unwrap();
+        let components: Vec<Vec<String>> =
+            r.iter().map(|z| z.read().components().to_vec()).collect();
+        assert_eq!(components, [vec!["T"], vec!["p"], vec!["T", "p"]]);
+        assert_eq!(r.get(2).unwrap().read().value(n[1].id(), "T").unwrap(), 3.0);
+        assert_eq!(r.get(2).unwrap().read().value(n[2].id(), "p").unwrap(), 4.0);
+        // Present, not read: `p` at a node of `a` is 0.
+        assert_eq!(r.get(2).unwrap().read().value(n[1].id(), "p").unwrap(), 0.0);
+    }
+
+    /// Two zones on one support, with a component each: the table of that
+    /// support is built once, and both read through it.
+    #[test]
+    fn two_zones_on_one_support_read_through_one_table() {
+        let (coords, nodes, t) = poi1_field(3, vec!["T".into()]);
+        let support = t.get(0).unwrap().read().support();
+        let mut p = SubNodeField::from_poi1(&support, vec!["p".into()]).unwrap();
+        for (i, nd) in nodes.iter().enumerate() {
+            t.get(0).unwrap().write().set(i, 0, i as f64).unwrap();
+            p.set_value(nd.id(), "p", 10.0 + i as f64).unwrap();
+        }
+        let mut field = t;
+        field.add_sub(Handle::new(p)).unwrap();
+        assert_eq!(field.len(), 2);
+
+        let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
+        m.add_cell(&[nodes[2].id()]).unwrap();
+        m.add_cell(&[nodes[0].id()]).unwrap();
+        let r = restrict(&field, &m).unwrap();
+        assert_eq!(Field::components(&r), vec!["T", "p"]);
+        assert_eq!(r.value(nodes[2].id(), "T").unwrap(), 2.0);
+        assert_eq!(r.value(nodes[0].id(), "p").unwrap(), 10.0);
+        assert_eq!(r.value(nodes[2].id(), "p").unwrap(), 12.0);
     }
 
     /// Two restrictions onto the **same element mesh** land on its cached POI1

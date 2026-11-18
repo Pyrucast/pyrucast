@@ -41,15 +41,20 @@ pub fn consolidate(field: PyRef<PyElementField>) -> PyResult<PyElementField> {
     })
 }
 
-/// Restrict `field` to the cells of `fespace`, with every component of `field`.
+/// Restrict `field` to the cells of `fespace`, keeping the components found there.
 ///
-/// Same cells and same finite-element definition: a cell of `fespace` takes the values of `field` at its Gauss points when a
-/// zone of `field` holds that cell (same nodes in the same order) under the
-/// same definition: same element type, interpolation and quadrature. A zone of
-/// another definition is not read. To move a field to another definition,
-/// interpolate it from the nodes (`interp_to_gauss`) or integrate it cell by
-/// cell (`cell_integral`). The part of a field on a mesh is
-/// `restrict(f, f.support().restrict(part))`.
+/// Same cells and same finite-element definition: a cell of `fespace` takes
+/// the values of `field` at its Gauss points when a zone of `field` holds that
+/// cell (same nodes in the same order) under the same definition: same element
+/// type, interpolation and quadrature. A zone of another definition is not
+/// read. To move a field to another definition, interpolate it from the nodes
+/// (`interp_to_gauss`) or integrate it cell by cell (`cell_integral`). The part
+/// of a field on a mesh is `restrict(f, f.support().restrict(part))`.
+///
+/// A zone takes the components of the zones of `field` that hold at least one
+/// of its cells: a zone of `field` sharing no cell with the subspace, or of
+/// another definition, adds nothing to it. The test is on the cells, not on
+/// the values: a component that is `0.0` everywhere stays.
 ///
 /// # Parameters
 ///
@@ -58,10 +63,11 @@ pub fn consolidate(field: PyRef<PyElementField>) -> PyResult<PyElementField> {
 ///
 /// # Returns
 ///
-/// A new `ElementField` with one zone per subspace of `fespace`, each subspace
-/// once, each carrying the union of the components of `field`. A cell no zone
-/// of `field` gives gets `0.0`; for each component, the first zone holding the
-/// cell and carrying it wins. An empty field gives an empty field.
+/// A new `ElementField` with at most one zone per subspace of `fespace`, each
+/// subspace once; a subspace sharing no cell with `field` gives none. A cell a
+/// zone of `field` does not hold gets `0.0` for its components; for each
+/// component, the first zone holding the cell and carrying it wins. An empty
+/// field gives an empty field, and so does a `fespace` on another `Coords`.
 #[py_op(method_on = PyElementField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -77,11 +83,13 @@ pub fn restrict(
 
 /// Read `field` on the subspaces **and the components** of `target`.
 ///
-/// Same cells and same finite-element definition. Zone by zone, it is `restrict(field, target.support())` cut down to the
-/// components of that zone of `target`: those `target` lacks are dropped,
-/// those `field` lacks are created at `0.0`. The result combines with `target`
-/// directly by the arithmetic operators (`target + restrict_like(f, target)`),
-/// even when `field` lies on other subspaces of the same cells.
+/// Same cells and same finite-element definition. Zone by zone of `target`,
+/// `field` is read as `pyrucast.element_field.restrict` reads it, on the zone's
+/// subspace and with the zone's components: those `target` lacks are dropped,
+/// those no zone of `field` gives at its cells are created at `0.0`. Every
+/// zone of `target` gets its zone. The result combines with `target` directly
+/// by the arithmetic operators (`target + restrict_like(f, target)`), even
+/// when `field` lies on other subspaces of the same cells.
 ///
 /// # Parameters
 ///

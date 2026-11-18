@@ -1,33 +1,27 @@
 use crate::aggregate::Aggregate;
-use crate::containers::element_field::{ElementField, ElementFieldView, SubElementField};
-use crate::containers::field::{Field, SubField};
+use crate::containers::element_field::{ElementField, SubElementField};
+use crate::containers::field::{Field, SubField, ABSENT_COMPONENT};
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::handle::Handle;
 
-/// Fill `sub` (already on its target subspace) with the values of `source`,
-/// component by component, cell by cell: a `(cell, component)` pair a zone of
-/// `source` gives under the same finite-element definition is copied at every
-/// Gauss point, one no zone gives is left at `0.0`. Shared by [`restrict`] and
-/// [`restrict_like`].
-fn fill_from(sub: &mut SubElementField, source: &ElementFieldView) {
-    // The source's component positions, resolved **once** per zone; the gather
-    // then writes straight into the target's rows, in cell order.
-    let reads = source.resolve_reads(sub.components());
-    let target = sub.support();
-    source.gather_cells(&target, &reads, sub.values_mut());
-}
-
-/// Restrict `field` to the cells of `fespace`, with every component of `field`.
+/// Restrict `field` to the cells of `fespace`, keeping the components found there.
 ///
-/// Same cells and same finite-element definition. Returns a new [`ElementField`] with one zone per subspace of `fespace`, on
-/// that very subspace, each subspace once: one listed twice gives one zone.
-/// Each zone carries the union of `field`'s components. A cell of the subspace
-/// takes the values of `field` at its Gauss points when a zone of `field` holds
-/// that cell — same nodes in the same order — under the **same finite-element
-/// definition**: same element type, interpolation and quadrature, on the same
-/// `Coords`. A zone of another definition is not read; a cell no zone gives
-/// is assigned `0.0`; a cell of `field` outside `fespace` is dropped. For each
-/// component, the first zone holding the cell and carrying it wins.
+/// Same cells and same finite-element definition. Returns a new
+/// [`ElementField`] with at most one zone per subspace of `fespace`, on that
+/// very subspace, each subspace once: one listed twice gives one zone. A cell
+/// of the subspace takes the values of `field` at its Gauss points when a zone
+/// of `field` holds that cell — same nodes in the same order — under the
+/// **same finite-element definition**: same element type, interpolation and
+/// quadrature. A zone of another definition is not read; a cell of `field`
+/// outside `fespace` is dropped. For each component, the first zone holding
+/// the cell and carrying it wins.
+///
+/// A zone takes the components of the zones of `field` that hold at least one
+/// of its cells, in the order of `field`: a zone of `field` sharing no cell
+/// with the subspace — or of another definition — adds nothing to it, and a
+/// subspace sharing no cell with `field` gives no zone. The test is on the
+/// cells, not on the values: a component that is `0.0` everywhere stays. A
+/// cell a zone of `field` does not hold is assigned `0.0` for its components.
 ///
 /// To bring a field onto **another** definition, interpolate it from the nodes
 /// ([`interp_to_gauss`](fn@crate::ops::element_field::interp_to_gauss)) or
@@ -37,7 +31,9 @@ fn fill_from(sub: &mut SubElementField, source: &ElementFieldView) {
 /// `restrict(&f, &finite_element_space::restrict(&f.support(), &part))`.
 ///
 /// An empty field carries no component: it gives an empty field, as with
-/// [`restrict_like`].
+/// [`restrict_like`]. A `fespace` on another `Coords` shares no cell with
+/// `field` — a node id names a node only in its own `Coords` — and gives an
+/// empty field too.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -74,23 +70,51 @@ pub fn restrict(field: &ElementField, fespace: &FiniteElementSpace) -> ElementFi
     }
     let components = Field::components(field);
     let view = field.view();
+    // Every zone of a field stands on one `Coords`.
+    let coords = view.zones[0].support().read().coords();
+    let all = view.resolve_reads(&components);
     let mut out = ElementField::empty();
     for subspace in &fespace.deduplicate() {
-        let mut sub = SubElementField::new(subspace.clone(), components.clone())
+        // Another `Coords` first: no cell in common, nothing to search.
+        if !subspace.read().coords().same_object(&coords) {
+            continue;
+        }
+        let overlaps = view.overlaps(subspace, &all);
+        // The components of the zones holding one of its cells, in the order
+        // of `field`.
+        let kept: Vec<String> = components
+            .iter()
+            .enumerate()
+            .filter(|&(c, _)| {
+                overlaps
+                    .zones
+                    .iter()
+                    .any(|&(z, _)| all[z][c] != ABSENT_COMPONENT)
+            })
+            .map(|(_, name)| name.clone())
+            .collect();
+        if kept.is_empty() {
+            continue;
+        }
+        let mut sub = SubElementField::new(subspace.clone(), kept)
             .expect("the components of a field are valid names");
-        fill_from(&mut sub, &view);
+        let reads = view.resolve_reads(sub.components());
+        let points = sub.gauss_count();
+        view.gather_rows(&overlaps, &reads, points, sub.values_mut());
         out.add_sub(Handle::new(sub))
-            .expect("one zone per distinct subspace of `fespace`, all on its Coords");
+            .expect("one zone per distinct subspace of `fespace`, all on the Coords of `field`");
     }
     out
 }
 
 /// Read `field` on the subspaces **and the components** of `target`.
 ///
-/// Same cells and same finite-element definition. Zone by zone, it is [`restrict`]`(field, &target.support())` cut down to the
-/// components of that zone of `target`: those `target` lacks are dropped, those
-/// `field` lacks are created at `0.0`. [`restrict`] alone lands on the same
-/// subspaces but keeps the components of `field`.
+/// Same cells and same finite-element definition. Zone by zone of `target`,
+/// `field` is read as [`restrict`] reads it, on the zone's subspace and with
+/// the zone's components: those `target` lacks are dropped, those no zone of
+/// `field` gives at its cells are created at `0.0`. Every zone of `target` gets
+/// its zone, where [`restrict`]`(field, &target.support())` keeps the
+/// components of `field` and leaves out a subspace sharing no cell with it.
 ///
 /// Taking the components of `target` too is what lets the result combine with
 /// `target` by the arithmetic operators (`&target + &field.restrict_like(target)`),
@@ -99,7 +123,8 @@ pub fn restrict(field: &ElementField, fespace: &FiniteElementSpace) -> ElementFi
 /// [`restrict`].
 ///
 /// An empty `field` gives an empty field, as with [`restrict`]; so does an
-/// empty `target`.
+/// empty `target`. A `target` on another `Coords` shares no cell with `field`:
+/// its zones are all `0.0`.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -130,15 +155,23 @@ pub fn restrict_like(field: &ElementField, target: &ElementField) -> ElementFiel
         return ElementField::empty();
     }
     let view = field.view();
+    let coords = view.zones[0].support().read().coords();
     let mut out = ElementField::empty();
     for h in target.iter() {
         let (subspace, components) = {
             let zone = h.read();
             (zone.support(), zone.components().to_vec())
         };
-        let mut sub = SubElementField::new(subspace, components)
+        // Another `Coords` first: no cell in common, the zone stays at 0.
+        let same_coords = subspace.read().coords().same_object(&coords);
+        let mut sub = SubElementField::new(subspace.clone(), components)
             .expect("the components of a zone are valid names");
-        fill_from(&mut sub, &view);
+        if same_coords {
+            let reads = view.resolve_reads(sub.components());
+            let overlaps = view.overlaps(&subspace, &reads);
+            let points = sub.gauss_count();
+            view.gather_rows(&overlaps, &reads, points, sub.values_mut());
+        }
         out.add_sub(Handle::new(sub))
             .expect("the zones of `target` already hold each component once per subspace");
     }
@@ -277,9 +310,51 @@ mod tests {
             &[(Interpolation::Lagrange1, QuadratureRule::Reduced)],
         )
         .unwrap();
-        let r = restrict(&g.k, &reduced);
+        assert!(restrict(&g.k, &reduced).is_empty());
+        // `restrict_like` keeps the zone of its target, at 0.
+        let target = ElementField::new(&reduced, vec!["k".into()]).unwrap();
+        let r = restrict_like(&g.k, &target);
         assert_eq!(r.get(0).unwrap().read().gauss_count(), 1);
         assert!(values(&r, "k").iter().all(|&v| v == 0.0));
+    }
+
+    /// `k` on the left column, `m` on the right one: a subspace takes the
+    /// components of the zones holding one of its cells.
+    #[test]
+    fn restrict_takes_the_components_of_the_zones_sharing_a_cell() {
+        let g = grid();
+        let left = crate::ops::finite_element_space::restrict(&g.fes, &g.sel);
+        let right_cells = crate::ops::mesh::difference(&g.grid, &g.sel);
+        let right = crate::ops::finite_element_space::restrict(&g.fes, &right_cells);
+        let m = ElementField::new(&right, vec!["m".into()]).unwrap();
+        for c in 0..2 {
+            m.get(0)
+                .unwrap()
+                .write()
+                .set_cell_uniform(c, "m", 7.0)
+                .unwrap();
+        }
+        let mut both = restrict(&g.k, &left);
+        both.add_sub(m.get(0).unwrap()).unwrap();
+
+        let r = restrict(&both, &left);
+        assert_eq!(Field::components(&r), vec!["k"]);
+        let r = restrict(&both, &g.fes);
+        assert_eq!(Field::components(&r), vec!["k", "m"]);
+        let per_cell = |c: &str| -> Vec<f64> { values(&r, c).chunks(4).map(|v| v[0]).collect() };
+        assert_eq!(per_cell("k"), vec![0.0, 0.0, 2.0, 0.0]);
+        assert_eq!(per_cell("m"), vec![0.0, 7.0, 0.0, 7.0]);
+    }
+
+    #[test]
+    fn restrict_onto_another_coords_gives_nothing() {
+        let g = grid();
+        let other = grid();
+        assert!(restrict(&g.k, &other.fes).is_empty());
+        let target = ElementField::new(&other.fes, vec!["k".into()]).unwrap();
+        assert!(values(&restrict_like(&g.k, &target), "k")
+            .iter()
+            .all(|&v| v == 0.0));
     }
 
     #[test]

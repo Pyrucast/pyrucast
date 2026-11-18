@@ -769,15 +769,20 @@ class ElementField:
         """
     def restrict(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
-        Restrict `field` to the cells of `fespace`, with every component of `field`.
+        Restrict `field` to the cells of `fespace`, keeping the components found there.
         
-        Same cells and same finite-element definition: a cell of `fespace` takes the values of `field` at its Gauss points when a
-        zone of `field` holds that cell (same nodes in the same order) under the
-        same definition: same element type, interpolation and quadrature. A zone of
-        another definition is not read. To move a field to another definition,
-        interpolate it from the nodes (`interp_to_gauss`) or integrate it cell by
-        cell (`cell_integral`). The part of a field on a mesh is
-        `restrict(f, f.support().restrict(part))`.
+        Same cells and same finite-element definition: a cell of `fespace` takes
+        the values of `field` at its Gauss points when a zone of `field` holds that
+        cell (same nodes in the same order) under the same definition: same element
+        type, interpolation and quadrature. A zone of another definition is not
+        read. To move a field to another definition, interpolate it from the nodes
+        (`interp_to_gauss`) or integrate it cell by cell (`cell_integral`). The part
+        of a field on a mesh is `restrict(f, f.support().restrict(part))`.
+        
+        A zone takes the components of the zones of `field` that hold at least one
+        of its cells: a zone of `field` sharing no cell with the subspace, or of
+        another definition, adds nothing to it. The test is on the cells, not on
+        the values: a component that is `0.0` everywhere stays.
         
         # Parameters
         
@@ -786,20 +791,23 @@ class ElementField:
         
         # Returns
         
-        A new `ElementField` with one zone per subspace of `fespace`, each subspace
-        once, each carrying the union of the components of `field`. A cell no zone
-        of `field` gives gets `0.0`; for each component, the first zone holding the
-        cell and carrying it wins. An empty field gives an empty field.
+        A new `ElementField` with at most one zone per subspace of `fespace`, each
+        subspace once; a subspace sharing no cell with `field` gives none. A cell a
+        zone of `field` does not hold gets `0.0` for its components; for each
+        component, the first zone holding the cell and carrying it wins. An empty
+        field gives an empty field, and so does a `fespace` on another `Coords`.
         """
     def restrict_like(self, target: ElementField) -> ElementField:
         r"""
         Read `field` on the subspaces **and the components** of `target`.
         
-        Same cells and same finite-element definition. Zone by zone, it is `restrict(field, target.support())` cut down to the
-        components of that zone of `target`: those `target` lacks are dropped,
-        those `field` lacks are created at `0.0`. The result combines with `target`
-        directly by the arithmetic operators (`target + restrict_like(f, target)`),
-        even when `field` lies on other subspaces of the same cells.
+        Same cells and same finite-element definition. Zone by zone of `target`,
+        `field` is read as `pyrucast.element_field.restrict` reads it, on the zone's
+        subspace and with the zone's components: those `target` lacks are dropped,
+        those no zone of `field` gives at its cells are created at `0.0`. Every
+        zone of `target` gets its zone. The result combines with `target` directly
+        by the arithmetic operators (`target + restrict_like(f, target)`), even
+        when `field` lies on other subspaces of the same cells.
         
         # Parameters
         
@@ -4374,7 +4382,7 @@ class NodeField:
         """
     def restrict(self, mesh: Mesh) -> NodeField:
         r"""
-        Restrict `field` to the nodes of `mesh`, with every component of `field`.
+        Restrict `field` to the nodes of `mesh`, keeping the components found there.
         
         Each zone of the result lies on the POI1 cloud of a submesh of `mesh` — its
         distinct nodes, built once and kept with the submesh. Two restrictions onto
@@ -4383,11 +4391,17 @@ class NodeField:
         That support is also the one a stiffness block over `mesh` uses, so
         `K * restrict(f, mesh)` and `solve(K, f) - restrict(g, mesh)` line up too.
         
+        A zone takes the components of the zones of `field` that hold at least one
+        of its nodes: a zone of `field` sharing no node with the submesh adds
+        nothing to it. The test is on the nodes, not on the values: a component
+        that is `0.0` everywhere stays.
+        
         Element operations on the region (`gradient`, `integral`, `deformation`,
         `interp_to_gauss`) take `mesh` as a separate argument and read the field by
-        node. To land on the supports of an existing field `a`, pass `a.support()`:
-        the result keeps the components of `field`, where
-        `pyrucast.node_field.restrict_like` takes those of `a`, zone by zone.
+        node. To land on every support of an existing field `a`, with its
+        components, take `pyrucast.node_field.restrict_like`: `restrict(field,
+        a.support())` keeps the components of `field`, and leaves out a support
+        sharing no node with it.
         
         # Parameters
         
@@ -4396,13 +4410,13 @@ class NodeField:
         
         # Returns
         
-        A new `NodeField` with one zone per submesh of `mesh`, each submesh once
-        (one listed twice gives one zone), each carrying the union of the
-        components of `field`. A node of `mesh` the field does not
-        define gets `0.0`; the nodes outside `mesh` are dropped. An empty field
-        carries no component, and gives an empty field, as with `restrict_like`.
-        A `mesh` on another `Coords` shares no node with `field`: its zones are all
-        `0.0`.
+        A new `NodeField` with at most one zone per submesh of `mesh`, each submesh
+        once (one listed twice gives one zone); a submesh sharing no node with
+        `field` gives none. A node of `mesh` a zone of `field` does not define gets
+        `0.0` for its components; the nodes outside `mesh` are dropped. An empty
+        field carries no component, and gives an empty field, as with
+        `restrict_like`. A `mesh` on another `Coords` shares no node with `field`,
+        and gives an empty field too.
         """
     def project(self, mesh: Mesh, target: Mesh, tol: builtins.float = 1e-06) -> NodeField:
         r"""
@@ -4420,10 +4434,12 @@ class NodeField:
         r"""
         Read `field` on the supports **and the components** of `target`.
         
-        Zone by zone, it is `restrict(field, target.support())` cut down to the
-        components of that zone of `target`: those `target` lacks are dropped,
-        those `field` lacks are created at `0.0`. `pyrucast.node_field.restrict`
-        alone lands on the same supports but keeps the components of `field`.
+        Zone by zone of `target`, `field` is read as `pyrucast.node_field.restrict`
+        reads it, on the zone's support and with the zone's components: those
+        `target` lacks are dropped, those no zone of `field` gives at its nodes are
+        created at `0.0`. Every zone of `target` gets its zone, where
+        `restrict(field, target.support())` keeps the components of `field` and
+        leaves out a support sharing no node with it.
         
         Taking the components of `target` too is what lets the result combine with
         `target` directly by the arithmetic operators, whatever its zones. A field
@@ -9073,15 +9089,20 @@ def regularize(mesh: Mesh, sweeps: builtins.int = 20, angular: builtins.bool = T
 
 def restrict_element(field: ElementField, fespace: FiniteElementSpace) -> ElementField:
     r"""
-    Restrict `field` to the cells of `fespace`, with every component of `field`.
+    Restrict `field` to the cells of `fespace`, keeping the components found there.
     
-    Same cells and same finite-element definition: a cell of `fespace` takes the values of `field` at its Gauss points when a
-    zone of `field` holds that cell (same nodes in the same order) under the
-    same definition: same element type, interpolation and quadrature. A zone of
-    another definition is not read. To move a field to another definition,
-    interpolate it from the nodes (`interp_to_gauss`) or integrate it cell by
-    cell (`cell_integral`). The part of a field on a mesh is
-    `restrict(f, f.support().restrict(part))`.
+    Same cells and same finite-element definition: a cell of `fespace` takes
+    the values of `field` at its Gauss points when a zone of `field` holds that
+    cell (same nodes in the same order) under the same definition: same element
+    type, interpolation and quadrature. A zone of another definition is not
+    read. To move a field to another definition, interpolate it from the nodes
+    (`interp_to_gauss`) or integrate it cell by cell (`cell_integral`). The part
+    of a field on a mesh is `restrict(f, f.support().restrict(part))`.
+    
+    A zone takes the components of the zones of `field` that hold at least one
+    of its cells: a zone of `field` sharing no cell with the subspace, or of
+    another definition, adds nothing to it. The test is on the cells, not on
+    the values: a component that is `0.0` everywhere stays.
     
     # Parameters
     
@@ -9090,10 +9111,11 @@ def restrict_element(field: ElementField, fespace: FiniteElementSpace) -> Elemen
     
     # Returns
     
-    A new `ElementField` with one zone per subspace of `fespace`, each subspace
-    once, each carrying the union of the components of `field`. A cell no zone
-    of `field` gives gets `0.0`; for each component, the first zone holding the
-    cell and carrying it wins. An empty field gives an empty field.
+    A new `ElementField` with at most one zone per subspace of `fespace`, each
+    subspace once; a subspace sharing no cell with `field` gives none. A cell a
+    zone of `field` does not hold gets `0.0` for its components; for each
+    component, the first zone holding the cell and carrying it wins. An empty
+    field gives an empty field, and so does a `fespace` on another `Coords`.
     """
 
 def restrict_fespace(fespace: FiniteElementSpace, mesh: Mesh) -> FiniteElementSpace:
@@ -9121,11 +9143,13 @@ def restrict_like_element(field: ElementField, target: ElementField) -> ElementF
     r"""
     Read `field` on the subspaces **and the components** of `target`.
     
-    Same cells and same finite-element definition. Zone by zone, it is `restrict(field, target.support())` cut down to the
-    components of that zone of `target`: those `target` lacks are dropped,
-    those `field` lacks are created at `0.0`. The result combines with `target`
-    directly by the arithmetic operators (`target + restrict_like(f, target)`),
-    even when `field` lies on other subspaces of the same cells.
+    Same cells and same finite-element definition. Zone by zone of `target`,
+    `field` is read as `pyrucast.element_field.restrict` reads it, on the zone's
+    subspace and with the zone's components: those `target` lacks are dropped,
+    those no zone of `field` gives at its cells are created at `0.0`. Every
+    zone of `target` gets its zone. The result combines with `target` directly
+    by the arithmetic operators (`target + restrict_like(f, target)`), even
+    when `field` lies on other subspaces of the same cells.
     
     # Parameters
     
@@ -9144,10 +9168,12 @@ def restrict_like_node(field: NodeField, target: NodeField) -> NodeField:
     r"""
     Read `field` on the supports **and the components** of `target`.
     
-    Zone by zone, it is `restrict(field, target.support())` cut down to the
-    components of that zone of `target`: those `target` lacks are dropped,
-    those `field` lacks are created at `0.0`. `pyrucast.node_field.restrict`
-    alone lands on the same supports but keeps the components of `field`.
+    Zone by zone of `target`, `field` is read as `pyrucast.node_field.restrict`
+    reads it, on the zone's support and with the zone's components: those
+    `target` lacks are dropped, those no zone of `field` gives at its nodes are
+    created at `0.0`. Every zone of `target` gets its zone, where
+    `restrict(field, target.support())` keeps the components of `field` and
+    leaves out a support sharing no node with it.
     
     Taking the components of `target` too is what lets the result combine with
     `target` directly by the arithmetic operators, whatever its zones. A field
@@ -9176,7 +9202,7 @@ def restrict_like_node(field: NodeField, target: NodeField) -> NodeField:
 
 def restrict_node(field: NodeField, mesh: Mesh) -> NodeField:
     r"""
-    Restrict `field` to the nodes of `mesh`, with every component of `field`.
+    Restrict `field` to the nodes of `mesh`, keeping the components found there.
     
     Each zone of the result lies on the POI1 cloud of a submesh of `mesh` — its
     distinct nodes, built once and kept with the submesh. Two restrictions onto
@@ -9185,11 +9211,17 @@ def restrict_node(field: NodeField, mesh: Mesh) -> NodeField:
     That support is also the one a stiffness block over `mesh` uses, so
     `K * restrict(f, mesh)` and `solve(K, f) - restrict(g, mesh)` line up too.
     
+    A zone takes the components of the zones of `field` that hold at least one
+    of its nodes: a zone of `field` sharing no node with the submesh adds
+    nothing to it. The test is on the nodes, not on the values: a component
+    that is `0.0` everywhere stays.
+    
     Element operations on the region (`gradient`, `integral`, `deformation`,
     `interp_to_gauss`) take `mesh` as a separate argument and read the field by
-    node. To land on the supports of an existing field `a`, pass `a.support()`:
-    the result keeps the components of `field`, where
-    `pyrucast.node_field.restrict_like` takes those of `a`, zone by zone.
+    node. To land on every support of an existing field `a`, with its
+    components, take `pyrucast.node_field.restrict_like`: `restrict(field,
+    a.support())` keeps the components of `field`, and leaves out a support
+    sharing no node with it.
     
     # Parameters
     
@@ -9198,13 +9230,13 @@ def restrict_node(field: NodeField, mesh: Mesh) -> NodeField:
     
     # Returns
     
-    A new `NodeField` with one zone per submesh of `mesh`, each submesh once
-    (one listed twice gives one zone), each carrying the union of the
-    components of `field`. A node of `mesh` the field does not
-    define gets `0.0`; the nodes outside `mesh` are dropped. An empty field
-    carries no component, and gives an empty field, as with `restrict_like`.
-    A `mesh` on another `Coords` shares no node with `field`: its zones are all
-    `0.0`.
+    A new `NodeField` with at most one zone per submesh of `mesh`, each submesh
+    once (one listed twice gives one zone); a submesh sharing no node with
+    `field` gives none. A node of `mesh` a zone of `field` does not define gets
+    `0.0` for its components; the nodes outside `mesh` are dropped. An empty
+    field carries no component, and gives an empty field, as with
+    `restrict_like`. A `mesh` on another `Coords` shares no node with `field`,
+    and gives an empty field too.
     """
 
 def revolve(mesh: Mesh, angle: builtins.float, n_layers: builtins.int, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:

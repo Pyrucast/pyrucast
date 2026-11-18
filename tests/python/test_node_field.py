@@ -616,6 +616,24 @@ def test_restrict_to_mesh_subset():
     assert r.value(nodes[2], "T") == 3.0
 
 
+def test_restrict_takes_the_components_of_the_zones_sharing_a_node():
+    """`T` on `a`, `p` on `b`, no node in common: each submesh of the target
+    takes the components found at its nodes; one holding none gives no zone,
+    and so does a mesh on another `Coords`."""
+    _, nodes, _ = _poi1_with(5)
+    a, b, ab, none = (
+        pyrucast.mesh.poi1_from_nodes(ns)
+        for ns in (nodes[0:2], nodes[2:4], nodes[1:3], nodes[4:])
+    )
+    field = pyrucast.NodeField(a, [("T", 3.0)]) | pyrucast.NodeField(b, [("p", 4.0)])
+    r = pyrucast.node_field.restrict(field, a | b | ab | none)
+    assert [z.components() for z in r] == [["T"], ["p"], ["T", "p"]]
+    assert r[2].value(nodes[1], "p") == 0.0  # present, not read
+    other = pyrucast.Coords(1)
+    elsewhere = pyrucast.mesh.poi1_from_nodes([other.add_node([0.0])])
+    assert len(pyrucast.node_field.restrict(field, elsewhere)) == 0
+
+
 def test_restrict_twice_to_element_mesh_is_subtractable():
     """Two restricts onto the *same* element (TRI3) mesh land on its cached
     POI1 companion, so they subtract node-by-node rather than passing through

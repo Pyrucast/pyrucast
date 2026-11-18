@@ -119,7 +119,9 @@ un même sous-espace le citent deux fois ; `s | s` le garde une fois.
 Pour relire un champ sur un autre espace qui a **les mêmes mailles et la même
 définition** (même type d'élément, même interpolation, même quadrature),
 `element_field.restrict(champ, espace)` le pose sur les sous-espaces de
-`espace`, avec toutes ses composantes. `element_field.restrict_like(champ,
+`espace`. Chaque zone du résultat prend les composantes des zones du champ qui
+portent au moins une de ses mailles avec la même définition, et un sous-espace
+qui ne partage aucune maille avec le champ n'en donne pas. `element_field.restrict_like(champ,
 cible)` reprend en plus les composantes de `cible`, zone par zone, à 0 celles
 que le champ n'a pas : le résultat s'additionne alors toujours à `cible`. Une
 maille est la même quand elle a les mêmes nœuds dans le même ordre ; une
