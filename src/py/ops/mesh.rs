@@ -128,6 +128,58 @@ pub fn elements_on(mesh: PyRef<PyMesh>, points: PyRef<PyMesh>, strict: bool) -> 
     Ok(PyMesh { inner: result })
 }
 
+/// The cells of `a` that `b` holds too.
+///
+/// Two cells are the same with the same type and the same nodes in the same
+/// order: a cell numbered from another node, or turned over, is another cell.
+/// Meshes on two different `Coords` share no cell.
+///
+/// # Parameters
+///
+/// - `a`: the cells to sort.
+/// - `b`: the cells to look for in `a`.
+///
+/// # Returns
+///
+/// A `Mesh` mirroring `a` zone by zone — same types, same order of cells,
+/// same face colours, possibly empty zones. A zone kept whole comes back as it
+/// is, shared, so a field laid on it still combines with one laid on the
+/// result.
+#[py_op(method_on = PyMesh)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn intersection(a: PyRef<PyMesh>, b: PyRef<PyMesh>) -> PyMesh {
+    PyMesh {
+        inner: crate::ops::mesh::intersection(&a.inner, &b.inner),
+    }
+}
+
+/// The cells of `a` that `b` does not hold.
+///
+/// Two cells are the same with the same type and the same nodes in the same
+/// order, as for `intersection`. With `intersection(a, b)`, it splits each zone of `a` in two; the symmetric
+/// difference is `difference(a, b) | difference(b, a)`. Meshes on two
+/// different `Coords` share no cell, so all of `a` is kept.
+///
+/// # Parameters
+///
+/// - `a`: the cells to sort.
+/// - `b`: the cells to take out of `a`.
+///
+/// # Returns
+///
+/// A `Mesh` mirroring `a` zone by zone — same types, same order of cells,
+/// same face colours, possibly empty zones. A zone kept whole comes back as it
+/// is, shared.
+#[py_op(method_on = PyMesh)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn difference(a: PyRef<PyMesh>, b: PyRef<PyMesh>) -> PyMesh {
+    PyMesh {
+        inner: crate::ops::mesh::difference(&a.inner, &b.inner),
+    }
+}
+
 // --- Node selection by geometric region (Cast3m `POIN … SPHE / CYLI / …`) ---
 //
 // One operator per (shape, side). They all return a POI1 mesh mirroring

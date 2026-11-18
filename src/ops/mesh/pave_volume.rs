@@ -184,7 +184,7 @@ pub fn pave_volume_cancellable(
     // ── The advancing front ───────────────────────────────────────────────
     for layer in 0..layers {
         cancel.check()?;
-        if !front.advance(step)? {
+        if !front.advance(step) {
             return Err(PyrucastError::Message(format!(
                 "pave_volume: layer {} has nowhere to go — every step, down to a fraction of \
                  the one asked for, would turn a cell inside out. Ask for fewer layers, a \

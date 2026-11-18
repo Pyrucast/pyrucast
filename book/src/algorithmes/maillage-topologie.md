@@ -235,6 +235,46 @@ nœud n'a de sens qu'au sein d'une `Coords`), sinon une erreur est levée. Un
 
 Côté Rust, `ops::mesh::elements_on(&mesh, &points, strict)`.
 
+## Intersection et différence : `intersection`, `difference`
+
+{{#pyalgo mesh.intersection mesh.difference}}
+
+`intersection(a, b)` garde les mailles de `a` que `b` contient aussi, et
+`difference(a, b)` celles que `b` ne contient pas. Une maille est la même quand
+elle a le même type et les mêmes nœuds, **dans le même ordre**. Un triangle
+numéroté à partir d'un autre sommet, ou retourné, est donc une autre maille :
+ses points de Gauss et sa normale ne sont pas les mêmes.
+
+Le résultat épouse la structure de `a`, zone par zone (même ordre, mêmes types
+d'éléments, mêmes couleurs). Chaque zone garde, dans l'ordre de `a`, celles de
+ses mailles qu'une zone de `b` du même type contient (ou ne contient pas), et
+reste à sa place même vide. Les deux opérations se partagent ainsi chaque zone
+de `a`.
+
+Une zone gardée en entier revient **telle quelle** : c'est le même objet, pas
+une copie. C'est le cas quand `b` contient cette zone elle-même ou chacune de
+ses mailles et, pour une différence, quand `b` n'en contient aucune. Un champ
+posé sur cette zone se combine alors avec un champ posé sur le résultat.
+
+Deux maillages sur deux `Coords` différents n'ont aucune maille commune : un
+numéro de nœud n'a de sens qu'au sein d'un même `Coords`.
+
+Les opérateurs historiques `INTE` et `DIFF` reconnaissent une maille à ses
+nœuds pris dans n'importe quel ordre, et `DIFF` rend la différence symétrique :
+les mailles que l'un des deux maillages a et que l'autre n'a pas. Elle s'écrit
+ici `difference(a, b) | difference(b, a)`.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-intersection}}
+```
+
+```python
+{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-difference}}
+```
+
+Côté Rust, `ops::mesh::intersection(&a, &b)` et `ops::mesh::difference(&a, &b)`,
+ou les méthodes `a.intersection(&b)` et `a.difference(&b)`.
+
 ## Sélection de nœuds par région géométrique : la famille `points_*`
 
 {{#pyalgo mesh.points_in_sphere mesh.points_on_sphere mesh.points_on_plane mesh.points_below_plane mesh.points_on_line mesh.points_in_cylinder mesh.points_on_cylinder mesh.points_in_cone mesh.points_on_cone mesh.points_in_torus mesh.points_on_torus}}

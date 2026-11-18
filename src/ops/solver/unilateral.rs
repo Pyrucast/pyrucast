@@ -301,7 +301,7 @@ pub(super) fn solve(
 
     // ── Step 2 — full rhs (g at the constraint rows) + base CSC, both at
     //    the structure's scale when the relations are scaled ────────────
-    let mut b_full = rhs.gather(&state.row_dofs)?;
+    let mut b_full = rhs.gather(&state.row_dofs);
     let mut csc = matrix.to_csc()?;
     if let Some(scale) = &state.scaling {
         let (col_offsets, row_indices, values) = csc.csc_data_mut();

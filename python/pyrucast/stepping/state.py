@@ -1,4 +1,4 @@
-"""The evolving state of a step-by-step computation (Cast3M ``PAS_INIT``).
+"""The evolving state of a step-by-step computation.
 
 What the loop carries from one step to the next — the converged solution,
 the behaviour state, the iteration operator while it stays valid, what the
@@ -37,7 +37,7 @@ class State:
     # Cᵀλ, the opposite of the reactions, at the last converged step.
     constraint_forces: object | None = None
     heat_behaviour: object | None = None
-    # The iteration operator, kept while it stays valid (Cast3M RRRR): the
+    # The iteration operator, kept while it stays valid: the
     # materials it was built from and, in dynamics, the time step.
     operator: object | None = None
     operator_key: tuple = (None, None)
@@ -50,7 +50,7 @@ class State:
     heat_relations: str = "eliminate"
     mass: object | None = None
     mass_materials: object | None = None
-    # What the next step's predictor reads (Cast3M FNONL, INCREMENT, ZDEP1, RESIDU).
+    # What the next step's predictor reads.
     nonlinear_forces: object | None = None
     load_increment: object | None = None
     first_correction: object | None = None
@@ -70,7 +70,7 @@ class State:
 
 
 def initial_state(data, problem, options):
-    """The state at the first instant (Cast3M ``PAS_INIT``).
+    """The state at the first instant.
 
     ``data["initial"]`` may give ``displacement``, ``behaviour`` (stresses and
     internal variables), ``temperature``, ``velocity`` and ``acceleration``;

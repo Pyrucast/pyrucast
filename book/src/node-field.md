@@ -116,7 +116,9 @@ cohérence](field.md#les-règles-de-cohérence) veut qu'un tel nœud ait la mêm
 valeur dans toutes les zones qui le portent, pour chaque composante qu'elles
 ont en commun. Le champ s'appuie sur elle :
 
-- `value` et `values` lisent la première zone qui porte le nœud ;
+- `value`, `values` et les opérateurs qui lisent le champ (`restrict`,
+  `gradient`…) prennent chaque composante dans la première zone qui porte le
+  nœud et cette composante ;
 - `sum`, `norm`, `node_count`, `pyrucast.measure.xtx` et `xty` comptent un nœud
   partagé une fois ;
 - `add_to_component` et les autres opérations par composante modifient toutes

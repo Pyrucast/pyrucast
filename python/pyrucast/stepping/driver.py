@@ -1,4 +1,4 @@
-"""The loop over time (Cast3M ``PASAPAS``)."""
+"""The loop over time."""
 
 import math
 
@@ -100,8 +100,7 @@ def _commit(problem, state, instant, heat, mechanics, temperature):
 
 
 def step_by_step(data):
-    """Run a step-by-step computation and fill ``data["results"]`` (Cast3M
-    ``PASAPAS``).
+    """Run a step-by-step computation and fill ``data["results"]``.
 
     ``data`` is the input table: ``model`` and ``times`` are required,
     ``materials`` too; ``loads``, ``temperature`` (prescribed, without a

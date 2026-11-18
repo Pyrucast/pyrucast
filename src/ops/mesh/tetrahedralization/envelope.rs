@@ -488,7 +488,7 @@ impl Envelope {
     /// Subdividing is what makes recovery possible at all when it is stuck:
     /// a segment surrounded closely enough by its own subdivisions is
     /// recovered by the Delaunay triangulation on its own.
-    pub fn subdivide(&mut self, at: &[Stuck]) -> Result<()> {
+    pub fn subdivide(&mut self, at: &[Stuck]) {
         let mut edges: Vec<(u32, u32)> = Vec::new();
         let mut facets: Vec<[u32; 3]> = Vec::new();
         for s in at {
@@ -500,7 +500,7 @@ impl Envelope {
         edges.sort_unstable();
         edges.dedup();
         if edges.is_empty() && facets.is_empty() {
-            return Ok(());
+            return;
         }
 
         // Every edge gets its midpoint first, so a facet carrying more than
@@ -592,7 +592,6 @@ impl Envelope {
         }
 
         self.volume = self.signed_volume();
-        Ok(())
     }
 }
 

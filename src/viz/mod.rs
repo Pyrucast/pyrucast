@@ -322,11 +322,11 @@ pub enum FieldArg<'a> {
 
 impl FieldArg<'_> {
     /// Take the zero-copy views (read guards on every zone).
-    fn data(&self) -> Result<field_color::FieldData> {
-        Ok(match self {
-            FieldArg::Node(f) => field_color::FieldData::Node(f.view()?),
-            FieldArg::Element(f) => field_color::FieldData::Element(f.view()?),
-        })
+    fn data(&self) -> field_color::FieldData {
+        match self {
+            FieldArg::Node(f) => field_color::FieldData::Node(f.view()),
+            FieldArg::Element(f) => field_color::FieldData::Element(f.view()),
+        }
     }
 }
 
@@ -347,7 +347,7 @@ pub(crate) fn render_mesh_with_field(
     title: Option<&str>,
 ) -> Result<()> {
     check_revolve(mesh, &view)?;
-    let data = field.data()?;
+    let data = field.data();
     let resolved = field_color::resolve_component(&data, component)?;
     match save {
         Some(path) => {
@@ -394,7 +394,7 @@ pub fn render_submesh_with_field(
     title: Option<&str>,
 ) -> Result<()> {
     check_revolve(&*submesh.read(), &view)?;
-    let data = field.data()?;
+    let data = field.data();
     let resolved = field_color::resolve_component(&data, component)?;
     match save {
         Some(path) => {
@@ -503,7 +503,7 @@ pub(crate) fn render_node_field_points(
     save: Option<&Path>,
     title: Option<&str>,
 ) -> Result<()> {
-    let data = field_color::FieldData::Node(field.view()?);
+    let data = field_color::FieldData::Node(field.view());
     let resolved = field_color::resolve_component(&data, component)?.to_string();
     drop(data);
     let points = node_field_points(field, &resolved)?;

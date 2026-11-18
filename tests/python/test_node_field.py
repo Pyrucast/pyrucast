@@ -616,6 +616,24 @@ def test_restrict_to_mesh_subset():
     assert r.value(nodes[2], "T") == 3.0
 
 
+def test_restrict_takes_the_components_of_the_zones_sharing_a_node():
+    """`T` on `a`, `p` on `b`, no node in common: each submesh of the target
+    takes the components found at its nodes; one holding none gives no zone,
+    and so does a mesh on another `Coords`."""
+    _, nodes, _ = _poi1_with(5)
+    a, b, ab, none = (
+        pyrucast.mesh.poi1_from_nodes(ns)
+        for ns in (nodes[0:2], nodes[2:4], nodes[1:3], nodes[4:])
+    )
+    field = pyrucast.NodeField(a, [("T", 3.0)]) | pyrucast.NodeField(b, [("p", 4.0)])
+    r = pyrucast.node_field.restrict(field, a | b | ab | none)
+    assert [z.components() for z in r] == [["T"], ["p"], ["T", "p"]]
+    assert r[2].value(nodes[1], "p") == 0.0  # present, not read
+    other = pyrucast.Coords(1)
+    elsewhere = pyrucast.mesh.poi1_from_nodes([other.add_node([0.0])])
+    assert len(pyrucast.node_field.restrict(field, elsewhere)) == 0
+
+
 def test_restrict_twice_to_element_mesh_is_subtractable():
     """Two restricts onto the *same* element (TRI3) mesh land on its cached
     POI1 companion, so they subtract node-by-node rather than passing through
@@ -1136,3 +1154,19 @@ def test_norm_measures_the_components_named():
     # A name the field does not carry is ignored.
     assert f.norm(components=["nope"]) == 0.0
     assert f.norm(components=["T", "nope"]) == 2.0
+
+
+def test_restrict_onto_a_submesh_listed_twice_gives_one_zone():
+    """A mesh listing one submesh twice (as `fes.mesh()` does for a zone two
+    physics share): one zone, no error."""
+    c = pyrucast.Coords(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    line = pyrucast.mesh.line(a, b, 2)
+    twice = pyrucast.Mesh.empty()
+    twice.add_subs(line)
+    twice.add_subs(line)
+    t = pyrucast.NodeField(line, [("T", 3.0)])
+    r = pyrucast.node_field.restrict(t, twice)
+    assert len(r) == 1
+    assert r.value(a, "T") == 3.0

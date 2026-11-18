@@ -71,7 +71,7 @@ use std::collections::HashMap;
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn integral(field: &NodeField, fespace: &FiniteElementSpace, component: &str) -> Result<f64> {
-    let view = field.view()?;
+    let view = field.view();
     let mut total = 0.0;
     for sub_h in fespace {
         let submesh = sub_h.read().submesh();

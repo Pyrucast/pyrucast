@@ -35,7 +35,7 @@ pub(crate) struct CellFit {
 impl CellFit {
     /// The fit of `fespace`, its `M` computed once.
     pub(crate) fn for_space(fespace: &SubFiniteElementSpace) -> Result<Self> {
-        let nodes_per_cell = fespace.nodes_per_cell()?;
+        let nodes_per_cell = fespace.nodes_per_cell();
         let n_gauss = fespace.gauss_count();
         if n_gauss < nodes_per_cell {
             return Ok(Self::mean(nodes_per_cell, n_gauss));

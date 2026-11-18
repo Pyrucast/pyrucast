@@ -245,7 +245,7 @@ pub(crate) fn project_points_at(
                 {
                     continue; // cannot beat the current best
                 }
-                let xi = closest_on_facet(facet.element_type, &facet.coords, x)?;
+                let xi = closest_on_facet(facet.element_type, &facet.coords, x);
                 let interp = interpolation_for(facet.element_type);
                 let n = interp.shape(facet.element_type, &xi)?;
                 let mut d2 = 0.0;
@@ -307,7 +307,7 @@ fn bbox_dist2(x: &[f64], lo: &[f64], hi: &[f64]) -> f64 {
 
 /// Projected Gauss–Newton: the `ξ` (clamped to the reference domain) minimising
 /// `‖x − F(ξ)‖²` over one facet. Clamping handles edge/corner projections.
-fn closest_on_facet(element_type: ElementType, coords: &[Vec<f64>], x: &[f64]) -> Result<Vec<f64>> {
+fn closest_on_facet(element_type: ElementType, coords: &[Vec<f64>], x: &[f64]) -> Vec<f64> {
     let kind = element_type.as_kind();
     let tdim = element_type.topological_dim();
     let sdim = x.len();
@@ -352,7 +352,7 @@ fn closest_on_facet(element_type: ElementType, coords: &[Vec<f64>], x: &[f64]) -
             break;
         }
     }
-    Ok(xi)
+    xi
 }
 
 /// Clamp `ξ` into `element_type`'s reference domain (in place).

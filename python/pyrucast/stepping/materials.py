@@ -1,4 +1,4 @@
-"""Materials at a given instant and state (Cast3M ``PAS_ETAT`` + ``PAS_MATE``)."""
+"""Materials at a given instant and state."""
 
 from .. import element_field
 

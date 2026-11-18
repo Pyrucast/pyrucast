@@ -90,11 +90,15 @@
 //! ```
 
 use crate::aggregate::Aggregate;
-use crate::containers::field::SubField;
+use crate::atoms::NodeId;
+use crate::containers::field::{Overlaps, SubField, ABSENT_COMPONENT, ABSENT_ROW};
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+use crate::containers::mesh::SubMesh;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::parallel::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt;
 
 // ─── SubElementField ───────────────────────────────────────────────────────
@@ -1083,6 +1087,69 @@ impl ElementFieldView {
             }
         }
         None
+    }
+
+    /// The zones of this view that hold at least one cell of `target`, among
+    /// those carrying a component of `reads`, each with the rank of every cell
+    /// of `target` in it: see [`Overlaps`].
+    ///
+    /// A zone takes part only under the **same finite-element definition** as
+    /// `target` — same element type, interpolation and quadrature — checked
+    /// once per zone before any cell is looked at. Such a zone holds a cell of
+    /// `target` when it holds the same cell: the same nodes in the same order.
+    /// A zone on the same `SubMesh` as `target` holds cell `t` as its own cell
+    /// `t`. Any other is searched cell by cell of `target`, in parallel,
+    /// through a table of its cells built once per `SubMesh`. `target` stands
+    /// on the `Coords` of the view: on another one, a node id names another
+    /// node.
+    ///
+    /// The pendant of `NodeFieldView::overlaps`; the copy that follows is
+    /// [`gather_rows`](crate::containers::field::FieldView::gather_rows).
+    pub(crate) fn overlaps(
+        &self,
+        target: &Handle<SubFiniteElementSpace>,
+        reads: &[Vec<u32>],
+    ) -> Overlaps {
+        let (definition, target_mesh) = {
+            let t = target.read();
+            (
+                (t.element_type(), t.interpolation(), t.quadrature()),
+                t.submesh(),
+            )
+        };
+        let sources: Vec<(usize, Handle<SubMesh>)> = self
+            .zones
+            .iter()
+            .zip(reads)
+            .enumerate()
+            .filter(|(_, (_, idx))| idx.iter().any(|&ci| ci != ABSENT_COMPONENT))
+            .filter_map(|(z, (zone, _))| {
+                let support = zone.support();
+                let s = support.read();
+                let same = (s.element_type(), s.interpolation(), s.quadrature()) == definition;
+                same.then(|| (z, s.submesh()))
+            })
+            .collect();
+        let npc = definition.0.nodes_per_cell();
+        let guard = target_mesh.read();
+        let cells = guard.connectivity();
+        Overlaps::new(&target_mesh, sources, |_, source| {
+            let source = source.read();
+            // From the last cell to the first: a cell listed twice finds its
+            // first.
+            let table: HashMap<&[NodeId], u32> = source
+                .connectivity()
+                .chunks_exact(npc)
+                .enumerate()
+                .rev()
+                .map(|(i, cell)| (cell, i as u32))
+                .collect();
+            cells
+                .par_chunks_exact(npc)
+                .with_min_len((MIN_PARALLEL_LEN / npc).max(1))
+                .map(|cell| table.get(cell).copied().unwrap_or(ABSENT_ROW))
+                .collect()
+        })
     }
 }
 

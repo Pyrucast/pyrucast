@@ -38,6 +38,9 @@ from . import (
     field as field,
 )
 from . import (
+    finite_element_space as finite_element_space,
+)
+from . import (
     matrix as matrix,
 )
 from . import (

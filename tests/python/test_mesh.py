@@ -1003,3 +1003,56 @@ def test_from_live_nodes_holds_exactly_the_live_nodes():
     mesh = pyrucast.mesh.from_live_nodes(c)
     ids = sorted(n.id for i in range(mesh.cell_count) for n in mesh.cell(0, i))
     assert ids == sorted([a.id, b.id])
+
+
+def _grid_and_left_column():
+    """A 2×2 QUA4 grid, cells 0, 1 below and 2, 3 above, and its left column
+    (cells 0 and 2) taken back by the nodes it rests on."""
+    c = pyrucast.Coords(2)
+    n = [c.add_node([float(k % 3), float(k // 3)]) for k in range(9)]
+    grid = pyrucast.Mesh(c, "QUA4")
+    for i, j in [(0, 0), (1, 0), (0, 1), (1, 1)]:
+        k = 3 * j + i
+        grid.unit().add_cell([n[k], n[k + 1], n[k + 4], n[k + 3]])
+    left = pyrucast.mesh.poi1_from_nodes([n[k] for k in (0, 1, 3, 4, 6, 7)])
+    return c, grid, pyrucast.mesh.elements_on(grid, left)
+
+
+def _cells(mesh):
+    return [[node.id for node in cell] for cell in mesh[0]]
+
+
+def test_intersection_and_difference_split_each_zone_in_two():
+    """The left column of the grid is its cells 0 and 2, the rest its cells 1
+    and 3, in the grid's order; the two parts share no cell."""
+    _, grid, sel = _grid_and_left_column()
+    cells = _cells(grid)
+    inside = pyrucast.mesh.intersection(grid, sel)
+    outside = grid.difference(sel)
+    assert _cells(inside) == [cells[0], cells[2]]
+    assert _cells(outside) == [cells[1], cells[3]]
+    assert inside.intersection(outside).cell_count == 0
+
+
+def test_a_zone_kept_whole_comes_back_as_it_is():
+    """Kept whole, the zone is the very same object: the union keeps it once,
+    and a field laid on the grid combines with one laid on the result."""
+    _, grid, sel = _grid_and_left_column()
+    assert len(grid | pyrucast.mesh.intersection(grid, grid)) == 1
+    assert len(sel | pyrucast.mesh.intersection(sel, grid)) == 1
+    assert pyrucast.mesh.difference(grid, grid).cell_count == 0
+    t = pyrucast.NodeField(grid, [("T", 1.0)])
+    assert len(t + pyrucast.NodeField(grid.intersection(grid), [("T", 2.0)])) == 1
+
+
+def test_a_cell_numbered_from_another_node_is_another_cell():
+    """Same nodes in another order: not the same cell. Two Coords: no cell in
+    common."""
+    c, grid, _ = _grid_and_left_column()
+    first = list(grid[0][0])
+    turned = pyrucast.Mesh(c, "QUA4")
+    turned.unit().add_cell(first[1:] + first[:1])
+    assert pyrucast.mesh.intersection(grid, turned).cell_count == 0
+    _, other, _ = _grid_and_left_column()
+    assert pyrucast.mesh.intersection(grid, other).cell_count == 0
+    assert pyrucast.mesh.difference(grid, other).cell_count == 4

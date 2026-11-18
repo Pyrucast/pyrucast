@@ -200,10 +200,10 @@ impl Element {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let el = Element::new(zone.clone(), 0).unwrap();
-    /// assert_eq!(el.nodes_per_cell()?, 3);
+    /// assert_eq!(el.nodes_per_cell(), 3);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn nodes_per_cell(&self) -> Result<usize> {
+    pub fn nodes_per_cell(&self) -> usize {
         self.fespace.read().nodes_per_cell()
     }
 
@@ -250,10 +250,10 @@ impl Element {
     /// # let el = Element::new(zone.clone(), 0).unwrap();
     /// // A triangle has dimension 2 in its reference element; it could live in a
     /// // 3-D space (a shell) without that changing.
-    /// assert_eq!(el.ref_dim()?, 2);
+    /// assert_eq!(el.ref_dim(), 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn ref_dim(&self) -> Result<usize> {
+    pub fn ref_dim(&self) -> usize {
         self.fespace.read().ref_dim()
     }
 
@@ -325,7 +325,7 @@ impl Element {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let el = Element::new(zone.clone(), 0).unwrap();
-    /// assert_eq!(el.gauss_xi(0)?.len(), el.ref_dim()?);
+    /// assert_eq!(el.gauss_xi(0)?.len(), el.ref_dim());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn gauss_xi(&self, g: usize) -> Result<Vec<f64>> {
@@ -625,7 +625,7 @@ mod tests {
         let el = fes.element(0, 0).unwrap();
 
         assert_eq!(el.index(), 0);
-        assert_eq!(el.nodes_per_cell().unwrap(), 2);
+        assert_eq!(el.nodes_per_cell(), 2);
         assert_eq!(el.node_ids().unwrap(), vec![nodes[0].id(), nodes[1].id()]);
 
         let cell = el.cell().unwrap();

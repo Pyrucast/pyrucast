@@ -98,7 +98,7 @@ pub fn shell_deformation(
     formulation: ShellFormulation,
 ) -> Result<ElementField> {
     let components = Field::components(field);
-    let view = field.view()?;
+    let view = field.view();
     let mut out = ElementField::empty();
     for sub in fespace {
         out.add_sub(Handle::new(subspace_shell_deformation(

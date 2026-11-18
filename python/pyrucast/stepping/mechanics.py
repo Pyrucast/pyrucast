@@ -1,4 +1,4 @@
-"""One mechanical step and the parts it is made of (Cast3M ``UNPAS``).
+"""One mechanical step and the parts it is made of.
 
 The unknown is the full solution — displacement and the constraints'
 multipliers — and every linear solve returns a displacement **correction**
@@ -12,8 +12,8 @@ the nominal stress ``P = F S``. The operator, the follower loads and the
 geometric stiffness are evaluated on the current configuration
 ``x = X + u`` (``configuration.Configurations``), and the operator is rebuilt
 there at the second iteration, then every ``max(delta_iterations, 20)``
-iterations (Cast3M ``K_e(GEOM2) + K_σ``). Each time, the contacts are updated
-to that configuration (``model.update_contact``, Cast3M ``RFCO``): the
+iterations, as ``K_e + K_σ`` on the configuration reached. Each time, the
+contacts are updated to that configuration (``model.update_contact``): the
 relations stay as they are between two rebuilds — the multipliers are totals,
 solved against the operator's relations — and, once converged, the contact is
 updated once more to check that the equilibrium holds with it.
@@ -54,8 +54,7 @@ __all__ = [
 
 _TINY = 1e-300
 # Large displacements: the operator is rebuilt at least every so many
-# iterations, and a substep that needs more rebuilds than this has failed
-# (Cast3M UNPAS).
+# iterations, and a substep that needs more rebuilds than this has failed.
 _REBUILD_EVERY = 20
 _MAX_REBUILDS = 20
 
@@ -203,7 +202,7 @@ def balance(problem, mechanics, solution, behaviour, step, inertia=None):
 def mechanics_at(problem, solution):
     """The mechanical model to iterate with at ``solution``: in large
     displacements with contact, ``problem.mechanics`` with its contacts
-    updated to ``X + u`` (Cast3M ``RFCO``); otherwise ``problem.mechanics``
+    updated to ``X + u``; otherwise ``problem.mechanics``
     itself."""
     if not problem.updates_contact:
         return problem.mechanics
@@ -229,7 +228,7 @@ def iteration_operator(
 
     By default the elastic stiffness at the end-of-step materials, with the
     constraints; it is **kept** in the state and reused while the materials
-    are the same object and the time step is unchanged (Cast3M ``RRRR``), so
+    are the same object and the time step is unchanged, so
     its factorization is reused too. With ``tangent`` and a ``strain``, the
     consistent tangent at that iterate instead, never kept. An explicit
     ``augmented_stiffness`` is added; in dynamics, ``4/Δt² M``.
@@ -307,7 +306,7 @@ def reference_forces(
     ``F_ref = |δx⁰·(F_ext ; −g)| / ‖δu⁰‖∞ + 2 F_s``, bounded below by the
     largest applied force — ``F_s`` being ``internal_scale``, the largest
     internal force at the start of the step with and without its imposed
-    strain — and by ``floor`` (in large displacements ``‖K uₙ‖∞``, as Cast3M).
+    strain — and by ``floor`` (in large displacements ``‖K uₙ‖∞``).
     ``M_ref`` divides the same work by the largest rotation. Each falls back to
     1 when vanishing (a step with nothing applied).
     """
@@ -340,7 +339,7 @@ def nonlinear_predictor(
     problem, state, options, first_correction, increment, reference, dt
 ):
     """The share of the previous step's non-linear forces to add to this
-    step's first residual, or ``None`` (Cast3M ``INITIALISATION``).
+    step's first residual, or ``None``.
 
     The previous step left ``F_NL = K Δx − ΔR⁰ + r`` — what the elastic
     operator mispredicted. If it converged without substeps and was
@@ -406,7 +405,7 @@ class Tracker:
     relaxation: float = 1.0
     # The iteration the stall test counts from: a contact updated at
     # convergence changes the residual, and the test waits ``delta_iterations``
-    # more before judging it (Cast3M ``DLTAIT``).
+    # more before judging it.
     window_start: int = 0
 
 
@@ -567,9 +566,9 @@ def equilibrium_iterations(
                     inertia(solution) if inertia else None,
                 )
         elif large and i > 1 and (i - 2) % rebuild_every == 0:
-            # The operator of the configuration reached (Cast3M K_e(GEOM2) + K_σ),
-            # at the second iteration — the first correction has moved the
-            # geometry — then every `rebuild_every` iterations (UNPAS l. 1540-1795).
+            # The operator of the configuration reached (K_e + K_σ there), at
+            # the second iteration — the first correction has moved the
+            # geometry — then every `rebuild_every` iterations.
             rebuilds += 1
             if rebuilds > _MAX_REBUILDS:
                 return Equilibrium(
@@ -860,7 +859,7 @@ def mechanical_step(data, problem, state, t_end, temperature, options):
     result = None
     for substep in range(options.max_substeps):
         # A new substep: the history and the stall flag start over, the cap
-        # does not (Cast3M ``ZMAXIT``).
+        # does not.
         tracker = Tracker(max_iterations=tracker.max_iterations)
         step = step_data(data, problem, state, start, t_end, temperature, options)
         dt = step.t_end - step.t_start

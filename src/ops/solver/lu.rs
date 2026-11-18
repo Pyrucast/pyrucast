@@ -618,7 +618,7 @@ pub(super) fn solve(
 
     // ── Step 2 — build the b vector at the row DOFs ────────────────────
     // "No zone defines this DOF" means "no imposed value here" — zero.
-    let b = rhs.gather_keys(&fact.row_keys, &fact.vars)?;
+    let b = rhs.gather_keys(&fact.row_keys, &fact.vars);
 
     // ── Step 3 — substitution ──────────────────────────────────────────
     let x = fact.solve_vec(&b);

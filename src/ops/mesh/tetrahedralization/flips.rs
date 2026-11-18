@@ -233,7 +233,7 @@ pub fn remove_edge_if(
     // layer of neighbours gives the rebuild the room it needs.
     let mut region = fan.cells.clone();
     loop {
-        if let Some(created) = rebuild_without(mesh, p, q, &fan, &region, protect, accept)? {
+        if let Some(created) = rebuild_without(mesh, p, q, &fan, &region, protect, accept) {
             return Ok(Some(created));
         }
         let wider = grow(mesh, &region);
@@ -253,7 +253,7 @@ fn rebuild_without(
     region: &[u32],
     protect: &Protected<'_>,
     accept: Option<Accept<'_>>,
-) -> Result<Option<Vec<u32>>> {
+) -> Option<Vec<u32>> {
     let mut boundary = mesh.region_boundary(region);
 
     let mode = if fan.closed {
@@ -263,7 +263,7 @@ fn rebuild_without(
         let first = *fan.cells.first().expect("non-empty fan");
         let last = *fan.cells.last().expect("non-empty fan");
         if !mesh.face_is_free(first, &[p, q, x0]) || !mesh.face_is_free(last, &[p, q, xn]) {
-            return Ok(None);
+            return None;
         }
         let pts = mesh.points();
         if orient3d(
@@ -273,16 +273,14 @@ fn rebuild_without(
             &pts[xn as usize],
         ) != 0.0
         {
-            return Ok(None); // the two end faces are not one flat quadrilateral
+            return None; // the two end faces are not one flat quadrilateral
         }
         // Re-cutting swaps those two triangles for two others. An envelope
         // facet is not ours to swap: it is the answer, not scratch space.
         if protect.holds(&[p, q, x0]) || protect.holds(&[p, q, xn]) {
-            return Ok(None);
+            return None;
         }
-        let Some(recut) = recut_end_faces(mesh, fan, p, q) else {
-            return Ok(None);
-        };
+        let recut = recut_end_faces(mesh, fan, p, q)?;
         boundary.retain(|f| {
             let k = sorted(f);
             k != sorted(&[p, q, x0]) && k != sorted(&[p, q, xn])
@@ -311,19 +309,17 @@ fn rebuild_without(
     let Ok(new) = delaunay_fill(mesh.points(), &boundary, want)
         .or_else(|_| fill(mesh.points(), &boundary, want, budget).ok_or(()))
     else {
-        return Ok(None);
+        return None;
     };
     if let Some(accept) = accept
         && !accept(mesh, &new)
     {
-        return Ok(None);
+        return None;
     }
     // A filling the mesh will not take is declined, and declined without
     // having touched anything: the swap decides that before it mutates.
-    match mesh.replace_region_with(region, &new, "an edge removal", mode) {
-        Ok(created) => Ok(Some(created)),
-        Err(_) => Ok(None),
-    }
+    mesh.replace_region_with(region, &new, "an edge removal", mode)
+        .ok()
 }
 
 /// The envelope facets a rebuild of this region could disturb: those wholly

@@ -284,7 +284,7 @@ impl Front {
     ///
     /// Returns `false` when not one facet could move, which is the front
     /// saying it has nowhere left to go.
-    pub fn advance(&mut self, step: f64) -> Result<bool> {
+    pub fn advance(&mut self, step: f64) -> bool {
         let ring = self.ring();
         let at: HashMap<u32, usize> = ring.iter().enumerate().map(|(i, &v)| (v, i)).collect();
         let dir = self.unit_offsets(&ring);
@@ -312,7 +312,8 @@ impl Front {
                 }
             }
             if stuck.is_empty() {
-                return self.commit(&at, &moved, &moving).map(|()| true);
+                self.commit(&at, &moved, &moving);
+                return true;
             }
             if round == RETREAT_STEPS {
                 // Out of patience: these facets stay put, the rest advance.
@@ -320,9 +321,10 @@ impl Front {
                     moving[fi] = false;
                 }
                 if !moving.iter().any(|&m| m) {
-                    return Ok(false);
+                    return false;
                 }
-                return self.commit(&at, &moved, &moving).map(|()| true);
+                self.commit(&at, &moved, &moving);
+                return true;
             }
             for fi in stuck {
                 for &v in self.facets[fi].corners() {
@@ -330,17 +332,12 @@ impl Front {
                 }
             }
         }
-        Ok(false)
+        false
     }
 
     /// Write the advancing facets' cells into the fabric, move those facets
     /// onto their offsets, and wall in the steps that leaves.
-    fn commit(
-        &mut self,
-        at: &HashMap<u32, usize>,
-        moved: &[Point3],
-        moving: &[bool],
-    ) -> Result<()> {
+    fn commit(&mut self, at: &HashMap<u32, usize>, moved: &[Point3], moving: &[bool]) {
         // Only the nodes an advancing facet stands on get a new copy; a node
         // used solely by facets staying put does not move at all.
         let mut fresh: HashMap<u32, u32> = HashMap::new();
@@ -414,7 +411,6 @@ impl Front {
             }
         }
         self.facets.extend(walls);
-        Ok(())
     }
 
     /// Weld front nodes that have come within touching distance of each other.
@@ -989,7 +985,7 @@ mod tests {
         // cell could fill.
         let mut f = slab_front(4, 0.05);
         let facets = f.facets.len();
-        assert!(f.advance(1.0).unwrap());
+        assert!(f.advance(1.0));
         let welded = f.weld();
         assert!(welded > 0, "the two faces should have welded together");
         assert!(
@@ -1021,7 +1017,7 @@ mod tests {
 
         let mut moving = vec![true; f.facets.len()];
         moving[0] = false; // one face stays behind
-        f.commit(&at, &moved, &moving).unwrap();
+        f.commit(&at, &moved, &moving);
 
         // Five cells, not six, and four walls closing the step round the face
         // that stayed.
@@ -1051,7 +1047,7 @@ mod tests {
         // longer says which side is out.
         let mut f = slab_front(4, 0.3);
         for _ in 0..3 {
-            f.advance(0.5).unwrap();
+            f.advance(0.5);
             let mut balance: HashMap<(u32, u32), i32> = HashMap::new();
             for facet in &f.facets {
                 let c = facet.corners();
@@ -1071,7 +1067,7 @@ mod tests {
     #[test]
     fn advancing_leaves_one_cell_per_facet_and_all_right_way_out() {
         let mut f = box_front([1.0, 1.0, 1.0]);
-        assert!(f.advance(0.2).unwrap());
+        assert!(f.advance(0.2));
         assert_eq!(f.fab.hexes.len(), 6);
         let patch = super::super::smooth::Patch {
             hexes: &f.fab.hexes,

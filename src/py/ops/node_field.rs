@@ -44,7 +44,7 @@ pub fn positions(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResu
     })
 }
 
-/// Restrict `field` to the nodes of `mesh`, with every component of `field`.
+/// Restrict `field` to the nodes of `mesh`, keeping the components found there.
 ///
 /// Each zone of the result lies on the POI1 cloud of a submesh of `mesh` — its
 /// distinct nodes, built once and kept with the submesh. Two restrictions onto
@@ -53,30 +53,36 @@ pub fn positions(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResu
 /// That support is also the one a stiffness block over `mesh` uses, so
 /// `K * restrict(f, mesh)` and `solve(K, f) - restrict(g, mesh)` line up too.
 ///
+/// A zone takes the components of the zones of `field` that hold at least one
+/// of its nodes: a zone of `field` sharing no node with the submesh adds
+/// nothing to it. The test is on the nodes, not on the values: a component
+/// that is `0.0` everywhere stays.
+///
 /// Element operations on the region (`gradient`, `integral`, `deformation`,
 /// `interp_to_gauss`) take `mesh` as a separate argument and read the field by
-/// node. To land on the supports of an existing field `a`, pass `a.support()`:
-/// the result keeps the components of `field`, where
-/// `pyrucast.node_field.restrict_like` takes those of `a`, zone by zone.
+/// node. To land on every support of an existing field `a`, with its
+/// components, take `pyrucast.node_field.restrict_like`: `restrict(field,
+/// a.support())` keeps the components of `field`, and leaves out a support
+/// sharing no node with it.
 ///
 /// # Parameters
 ///
 /// - `field`: the field to restrict.
-/// - `mesh`: the region, on the same `Coords` as `field`.
+/// - `mesh`: the region.
 ///
 /// # Returns
 ///
-/// A new `NodeField` with one zone per submesh of `mesh`, each carrying the
-/// union of the components of `field`. A node of `mesh` the field does not
-/// define gets `0.0`; the nodes outside `mesh` are dropped. An empty field
-/// carries no component, and gives an empty field, as with `restrict_like`.
-///
-/// # Raises
-///
-/// `RuntimeError` if `mesh` and `field` are attached to different `Coords`.
+/// A new `NodeField` with at most one zone per submesh of `mesh`, each submesh
+/// once (one listed twice gives one zone); a submesh sharing no node with
+/// `field` gives none. A node of `mesh` a zone of `field` does not define gets
+/// `0.0` for its components; the nodes outside `mesh` are dropped. An empty
+/// field carries no component, and gives an empty field, as with
+/// `restrict_like`. A `mesh` on another `Coords` shares no node with `field`,
+/// and gives an empty field too.
 #[py_op(method_on = PyNodeField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
+#[pyo3(name = "restrict_node")]
 pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNodeField> {
     Ok(PyNodeField {
         inner: crate::ops::node_field::restrict(&field.inner, &mesh.inner)?,
@@ -247,10 +253,12 @@ pub fn project_sub_element(
 
 /// Read `field` on the supports **and the components** of `target`.
 ///
-/// Zone by zone, it is `restrict(field, target.support())` cut down to the
-/// components of that zone of `target`: those `target` lacks are dropped,
-/// those `field` lacks are created at `0.0`. `pyrucast.node_field.restrict`
-/// alone lands on the same supports but keeps the components of `field`.
+/// Zone by zone of `target`, `field` is read as `pyrucast.node_field.restrict`
+/// reads it, on the zone's support and with the zone's components: those
+/// `target` lacks are dropped, those no zone of `field` gives at its nodes are
+/// created at `0.0`. Every zone of `target` gets its zone, where
+/// `restrict(field, target.support())` keeps the components of `field` and
+/// leaves out a support sharing no node with it.
 ///
 /// Taking the components of `target` too is what lets the result combine with
 /// `target` directly by the arithmetic operators, whatever its zones. A field
@@ -266,21 +274,19 @@ pub fn project_sub_element(
 ///
 /// - `field`: the field to read.
 /// - `target`: the field whose zones, supports and components the result
-///   takes, on the same `Coords` as `field`.
+///   takes.
 ///
 /// # Returns
 ///
 /// A new `NodeField` zone for zone like `target`. A `(node, component)` pair
 /// takes the value of `field` when it defines it, `0.0` otherwise; the nodes
 /// and components of `field` absent from `target` are dropped. An empty field
-/// gives an empty field, as with `restrict`.
-///
-/// # Raises
-///
-/// `RuntimeError` if `target` and `field` are attached to different `Coords`.
+/// gives an empty field, as with `restrict`. A `target` on another `Coords`
+/// shares no node with `field`: its zones are all `0.0`.
 #[py_op(method_on = PyNodeField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
+#[pyo3(name = "restrict_like_node")]
 pub fn restrict_like(
     field: PyRef<PyNodeField>,
     target: PyRef<PyNodeField>,

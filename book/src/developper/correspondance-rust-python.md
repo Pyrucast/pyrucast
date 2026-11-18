@@ -155,6 +155,8 @@ degré des lignes (`"QUA4"` entre deux `SEG2`, `"QUA8"` entre deux `SEG3`).
 | `barycenter(mesh: &Mesh) -> Mesh` | `barycenter(mesh) -> Mesh` |
 | `to_poi1(mesh: &Mesh) -> Mesh` | `to_poi1(mesh) -> Mesh` |
 | `elements_on(mesh: &Mesh, points: &Mesh, strict: bool) -> Mesh` | `elements_on(mesh, points, strict=True) -> Mesh` |
+| `intersection(a: &Mesh, b: &Mesh) -> Mesh` | `intersection(a, b) -> Mesh` |
+| `difference(a: &Mesh, b: &Mesh) -> Mesh` | `difference(a, b) -> Mesh` |
 | `points_in_sphere(mesh: &Mesh, center: &[f64], radius: f64, tol: Option<f64>) -> Mesh` | `points_in_sphere(mesh, center, radius, tol=None) -> Mesh` |
 | `points_on_sphere(mesh: &Mesh, center: &[f64], radius: f64, tol: Option<f64>) -> Mesh` | `points_on_sphere(mesh, center, radius, tol=None) -> Mesh` |
 | `points_on_plane(mesh: &Mesh, origin: &[f64], normal: &[f64], tol: Option<f64>) -> Mesh` | `points_on_plane(mesh, origin, normal, tol=None) -> Mesh` |
@@ -233,12 +235,20 @@ par la sortie.
 | `shell_deformation(field: &NodeField, fespace: &FiniteElementSpace, formulation: ShellFormulation) -> ElementField` | `shell_deformation(field, fespace, formulation) -> ElementField` |
 | `beam_deformation(field: &NodeField, fespace: &FiniteElementSpace, material: &ElementField) -> ElementField` | `beam_deformation(field, fespace, material) -> ElementField` (1-D, plan ou spatial selon le maillage ; le matériau est requis, l'interpolation dépendant de `Φ`) |
 | `consolidate(field: &ElementField) -> ElementField` | `consolidate(field) -> ElementField` (fusionne les zones d'une même fespace) |
+| `restrict(field: &ElementField, fespace: &FiniteElementSpace) -> ElementField` | `restrict(field, fespace) -> ElementField` |
+| `restrict_like(field: &ElementField, target: &ElementField) -> ElementField` | `restrict_like(field, target) -> ElementField` |
 | `mask(field: &ElementField, band: &Band, …) -> ElementField` / `mask_sub(sub: &SubElementField, …) -> SubElementField` | `mask(field, ge=None, …) -> ElementField` ; accepte aussi un `SubElementField` |
 | `sub_material_field(sub: &SubModel, components_and_values: &[(&str, f64)]) -> SubElementField` | `sub_material_field(sub_model, components_and_values) -> SubElementField` |
 | `material_field(model: &Model, components_and_values: &[(&str, f64)]) -> ElementField` | `material_field(model, components_and_values) -> ElementField` |
 | `material_field_per_sub_model(model: &Model, per_sub_model: &[&[(&str, f64)]]) -> ElementField` | `material_field_per_sub_model(model, components_and_values_per_sub_model) -> ElementField` |
 | `behavior::initial_state(model: &Model, materials: &ElementField) -> ElementField` | `initial_state(model, materials) -> ElementField` (l'état de repos, `prev` du premier pas) |
 | `behavior::integrate(model, deformation, prev: &ElementField, materials, dt: Option<f64>) -> ElementField` | `integrate_behavior(model, deformation, materials, prev, dt=None) -> ElementField` (`COMP`) |
+
+### `ops::finite_element_space` — opérateurs produisant un espace éléments finis
+
+| Rust | Python |
+|---|---|
+| `restrict(fespace: &FiniteElementSpace, mesh: &Mesh) -> FiniteElementSpace` | `restrict(fespace, mesh) -> FiniteElementSpace` |
 
 ### `ops::evolution` — opérateurs produisant une évolution
 

@@ -66,11 +66,12 @@
 use crate::aggregate::Aggregate;
 use crate::atoms::ElementType;
 use crate::atoms::NodeId;
-use crate::containers::field::{RowPoints, SubField};
+use crate::containers::field::{Overlaps, RowPoints, SubField, ABSENT_COMPONENT, ABSENT_ROW};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::handle::{Handle, ReadGuard};
+use crate::parallel::*;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::{Index, IndexMut};
@@ -875,7 +876,7 @@ impl NodeField {
     /// `NodeId → index` map in O(1). Shadows the generic
     /// [`crate::containers::field::Field::view`] to return the node-specific
     /// [`NodeFieldView`].
-    pub(crate) fn view(&self) -> Result<NodeFieldView> {
+    pub(crate) fn view(&self) -> NodeFieldView {
         NodeFieldView::new(self)
     }
 
@@ -1120,7 +1121,7 @@ impl NodeField {
     /// assert_eq!(u.values_at(&[a.id(), b.id()], "T").unwrap(), vec![0.0, 1.5]);
     /// ```
     pub fn values_at(&self, nodes: &[NodeId], component: &str) -> Result<Vec<f64>> {
-        let view = self.view()?;
+        let view = self.view();
         nodes
             .iter()
             .map(|&nid| view.value(nid, component))
@@ -1337,16 +1338,15 @@ impl NodeField {
     /// f.get(0)?.write().set_value(n[1].id(), "T", 50.0)?;
     /// // In the requested order. A DOF no zone defines reads **zero** — the
     /// // natural neutral of a right-hand side.
-    /// let v = f.gather(&[(n[1].id(), "T".into()), (n[0].id(), "q".into())])?;
+    /// let v = f.gather(&[(n[1].id(), "T".into()), (n[0].id(), "q".into())]);
     /// assert_eq!(v, vec![50.0, 0.0]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn gather(&self, dofs: &[(NodeId, String)]) -> Result<Vec<f64>> {
-        let view = self.view()?;
-        Ok(dofs
-            .iter()
+    pub fn gather(&self, dofs: &[(NodeId, String)]) -> Vec<f64> {
+        let view = self.view();
+        dofs.iter()
             .map(|(nid, name)| view.value_opt(*nid, name).unwrap_or(0.0))
-            .collect())
+            .collect()
     }
 
     /// [`gather`](Self::gather) over packed
@@ -1380,26 +1380,25 @@ impl NodeField {
     /// // The same values as `gather`, without a `String` per DOF.
     /// let noms = vec!["T".to_string()];
     /// let cles = vec![dof_key(n[0].id(), 0), dof_key(n[1].id(), 0)];
-    /// assert_eq!(f.gather_keys(&cles, &noms)?, vec![10.0, 50.0]);
+    /// assert_eq!(f.gather_keys(&cles, &noms), vec![10.0, 50.0]);
     /// // A DOF no zone defines is zero, as everywhere else.
-    /// assert_eq!(f.gather_keys(&[dof_key(n[0].id(), 1)], &["absente".into()])?, vec![0.0]);
+    /// assert_eq!(f.gather_keys(&[dof_key(n[0].id(), 1)], &["absente".into()]), vec![0.0]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn gather_keys(
         &self,
         keys: &[crate::containers::matrix::DofKey],
         vars: &[String],
-    ) -> Result<Vec<f64>> {
+    ) -> Vec<f64> {
         use crate::containers::matrix::{dof_node, dof_var};
-        let view = self.view()?;
+        let view = self.view();
         let reads = view.resolve_reads(vars);
-        Ok(keys
-            .iter()
+        keys.iter()
             .map(|&k| {
                 view.value_at_slot(dof_node(k), dof_var(k) as usize, &reads)
                     .unwrap_or(0.0)
             })
-            .collect())
+            .collect()
     }
 
     /// Build a fresh single-zone `NodeField` on `coords` holding `values` at
@@ -1430,7 +1429,7 @@ impl NodeField {
     /// // the flat vectors of linear algebra.
     /// let dofs = vec![(n[0].id(), "T".to_string()), (n[1].id(), "T".to_string())];
     /// let f = NodeField::from_dof_values(coords.clone(), &dofs, &[10.0, 50.0])?;
-    /// assert_eq!(f.gather(&dofs)?, vec![10.0, 50.0]);
+    /// assert_eq!(f.gather(&dofs), vec![10.0, 50.0]);
     /// // Longueurs inégales : refusé.
     /// assert!(NodeField::from_dof_values(coords.clone(), &dofs, &[10.0]).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1560,20 +1559,24 @@ pub(crate) struct NodeFieldView {
     supports: Vec<crate::handle::ReadGuard<SubMesh>>,
 }
 
+/// A node view is a [`FieldView`](crate::containers::field::FieldView) plus
+/// its support guards: the generic reads (`components`, `resolve_reads`) apply
+/// as they are.
+impl std::ops::Deref for NodeFieldView {
+    type Target = crate::containers::field::FieldView<SubNodeField>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
 impl NodeFieldView {
     /// Build the view: read every zone in place, and open a read guard on
     /// each zone's support so its node-index map can be queried lock-free.
-    pub(crate) fn new(field: &NodeField) -> Result<Self> {
-        let inner = crate::containers::field::Field::view(field)?;
+    pub(crate) fn new(field: &NodeField) -> Self {
+        let inner = crate::containers::field::Field::view(field);
         let supports = inner.zones.iter().map(|z| z.support.read()).collect();
-        Ok(Self { inner, supports })
-    }
-
-    /// Union of the zones' component names, first-seen order.
-    // Consumed by the viz layer (feature-gated).
-    #[allow(dead_code)]
-    pub(crate) fn components(&self) -> &[String] {
-        self.inner.components()
+        Self { inner, supports }
     }
 
     /// Value at `(node, component)` — first zone wins; errors if absent.
@@ -1602,7 +1605,7 @@ impl NodeFieldView {
     }
 
     /// Value at `(node, variable slot)`, the components having been resolved
-    /// once by [`resolve_reads`](Self::resolve_reads).
+    /// once by [`resolve_reads`](crate::containers::field::FieldView::resolve_reads).
     ///
     /// Same first-zone-wins rule as [`value_opt`](Self::value_opt), and the same
     /// answer — only the component is found by index instead of by comparing
@@ -1628,38 +1631,21 @@ impl NodeFieldView {
             })
     }
 
-    /// Resolve `components` against every zone of this view — **once**, for the
-    /// whole gather that follows.
-    ///
-    /// Row `z` of the result gives, for zone `z`, the position of each requested
-    /// component, or [`ABSENT_COMPONENT`](crate::containers::field::ABSENT_COMPONENT)
-    /// where that zone does not carry it. Without this, a gather compares
-    /// component *names* at every node of every cell, which is the same string
-    /// comparison repeated for a property of the zone.
-    pub(crate) fn resolve_reads(&self, components: &[String]) -> Vec<Vec<u32>> {
-        self.inner
-            .zones
-            .iter()
-            .map(|zone| {
-                components
-                    .iter()
-                    .map(|c| {
-                        zone.component_index(c)
-                            .map_or(crate::containers::field::ABSENT_COMPONENT, |i| i as u32)
-                    })
-                    .collect()
-            })
-            .collect()
-    }
-
     /// Gather the requested components for `nodes` into `out`, node-major — the
     /// form a per-cell kernel wants.
     ///
     /// One pass per **cell** instead of one lookup per (Gauss point, component,
     /// node): the values of a cell's nodes do not change between its Gauss
-    /// points. `reads` comes from [`resolve_reads`](Self::resolve_reads), so no
-    /// component name is compared here — only the `NodeId` of each node is
+    /// points. `reads` comes from
+    /// [`resolve_reads`](crate::containers::field::FieldView::resolve_reads), so
+    /// no component name is compared here — only the `NodeId` of each node is
     /// looked up, which is the one thing that genuinely varies per cell.
+    ///
+    /// Each `(node, component)` reads the first zone that holds both, as
+    /// [`value_opt`](Self::value_opt) does. The zones are walked from last to
+    /// first, each writing over what the later ones wrote. Stopping at the first
+    /// zone holding the node would lose a component that only a later zone
+    /// carries there: the multiplier of a solve, beside the displacement.
     ///
     /// A `(node, component)` no zone defines reads as **zero**, the house
     /// convention for nodal fields, shared with
@@ -1670,7 +1656,8 @@ impl NodeFieldView {
         let n = reads.first().map_or(0, |r| r.len());
         out.fill(0.0);
         for (k, &nid) in nodes.iter().enumerate() {
-            for ((zone, support), idx) in self.inner.zones.iter().zip(&self.supports).zip(reads) {
+            let zones = self.inner.zones.iter().zip(&self.supports).zip(reads);
+            for ((zone, support), idx) in zones.rev() {
                 let Some(&ni) = support.node_index().get(&nid) else {
                     continue;
                 };
@@ -1680,9 +1667,39 @@ impl NodeFieldView {
                         out[k * n + c] = zone.values[ni * stride + ci as usize];
                     }
                 }
-                break; // first zone defining the node wins, as `value_opt` does
             }
         }
+    }
+
+    /// The zones of this view that hold at least one node of `target`, a POI1
+    /// support, among those carrying a component of `reads`, each with the row
+    /// of every node of `target` in it: see [`Overlaps`].
+    ///
+    /// A zone on `target` itself holds its node `t` at its row `t`. Any other
+    /// is searched node by node of `target` in its support's `NodeId → row`
+    /// map, in parallel, once per support. `target` stands on the `Coords` of
+    /// the view: on another one, a node id names another node.
+    pub(crate) fn overlaps(&self, target: &Handle<SubMesh>, reads: &[Vec<u32>]) -> Overlaps {
+        let guard = target.read();
+        // POI1: one node per cell, so the connectivity is the list of rows.
+        let nodes = guard.connectivity();
+        let sources = self
+            .inner
+            .zones
+            .iter()
+            .zip(reads)
+            .enumerate()
+            .filter(|(_, (_, idx))| idx.iter().any(|&ci| ci != ABSENT_COMPONENT))
+            .map(|(z, (zone, _))| (z, zone.support.clone()));
+        Overlaps::new(target, sources, |z, _| {
+            // The support's guard is the view's: no second lock on it.
+            let index = self.supports[z].node_index();
+            nodes
+                .par_iter()
+                .with_min_len(MIN_PARALLEL_LEN)
+                .map(|nid| index.get(nid).map_or(ABSENT_ROW, |&i| i as u32))
+                .collect()
+        })
     }
 }
 

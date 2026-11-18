@@ -23,6 +23,16 @@ impl ElementField {
     pub fn consolidate(&self) -> Result<ElementField> {
         crate::ops::element_field::consolidate(self)
     }
+
+    /// See [`element_field::restrict`](fn@crate::ops::element_field::restrict).
+    pub fn restrict(&self, fespace: &FiniteElementSpace) -> ElementField {
+        crate::ops::element_field::restrict(self, fespace)
+    }
+
+    /// `self` on the subspaces **and components** of `target`, see [`element_field::restrict_like`](fn@crate::ops::element_field::restrict_like).
+    pub fn restrict_like(&self, target: &ElementField) -> ElementField {
+        crate::ops::element_field::restrict_like(self, target)
+    }
 }
 
 impl NodeField {

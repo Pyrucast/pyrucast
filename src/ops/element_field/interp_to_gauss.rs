@@ -65,7 +65,7 @@ use crate::models::kernel::MAX_CELL_DOFS;
 /// ```
 pub fn interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
     let components = Field::components(field);
-    let view = field.view()?;
+    let view = field.view();
     let mut out = ElementField::empty();
     for sub in fespace {
         out.add_sub(Handle::new(interp_to_gauss_zone(sub, &view, &components)?))?;

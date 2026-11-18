@@ -30,7 +30,6 @@
 //! taken from a global-Z reference, the two bending planes with their sign
 //! convention, the torsion, and the 12×12 rotation.
 
-use crate::error::Result;
 use crate::models::CellGeom;
 
 // ─── Geometry helpers ────────────────────────────────────────────────────────
@@ -210,12 +209,15 @@ fn transpose(a: &[[f64; 12]; 12]) -> [[f64; 12]; 12] {
 ///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, None,
 ///     // The kernel takes the section constants, not the field: the physics
 ///     // is what reads its contract, the kernel only does the maths.
-///     |geoms, m, s, ke| frame3d::element_stiffness(
-///         &geoms[0], 210000.0 * 0.01, 80000.0 * 2e-05, 210000.0,
-///         1e-05, 1e-05, 80000.0, 0.008, 0.008, ke),
+///     |geoms, m, s, ke| {
+///         frame3d::element_stiffness(
+///             &geoms[0], 210000.0 * 0.01, 80000.0 * 2e-05, 210000.0,
+///             1e-05, 1e-05, 80000.0, 0.008, 0.008, ke);
+///         Ok(())
+///     },
 /// )?;
-/// // Portique spatial : axial, torsion et flexion autour de deux axes
-/// // principal ones — six DOFs per node.
+/// // A space frame: axial, torsion and bending about the two principal
+/// // axes — six DOFs per node.
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (12, 12));
 /// // The raw sum of the entries is not zero: the DOFs mix translations and
 /// // rotations, and only the **translation** mode is rigid. The symmetry,
@@ -236,7 +238,7 @@ pub fn element_stiffness(
     a_sy: f64,
     a_sz: f64,
     ke: &mut [f64],
-) -> Result<()> {
+) {
     let xa = geom.node_coord(0);
     let xb = geom.node_coord(1);
     let d = [xb[0] - xa[0], xb[1] - xa[1], xb[2] - xa[2]];
@@ -250,7 +252,6 @@ pub fn element_stiffness(
             ke[r * 12 + c] = kg[r][c];
         }
     }
-    Ok(())
 }
 
 /// Local 12×12 **consistent mass** (linear element): `(ρAL/6)[[2,1],[1,2]]` on
@@ -353,9 +354,12 @@ fn local_geometric(n: f64, l: f64) -> [[f64; 12]; 12] {
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, None,
-///     |geoms, m, s, ke| frame3d::element_mass(
-///         &geoms[0], 3.0, 0.01, 1e-05, 1e-05, 210000.0,
-///         Some(80000.0), Some(0.008), Some(0.008), ke),
+///     |geoms, m, s, ke| {
+///         frame3d::element_mass(
+///             &geoms[0], 3.0, 0.01, 1e-05, 1e-05, 210000.0,
+///             Some(80000.0), Some(0.008), Some(0.008), ke);
+///         Ok(())
+///     },
 /// )?;
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (12, 12));
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -372,7 +376,7 @@ pub fn element_mass(
     a_sy: Option<f64>,
     a_sz: Option<f64>,
     ke: &mut [f64],
-) -> Result<()> {
+) {
     let xa = geom.node_coord(0);
     let xb = geom.node_coord(1);
     let d = [xb[0] - xa[0], xb[1] - xa[1], xb[2] - xa[2]];
@@ -380,7 +384,6 @@ pub fn element_mass(
     let ml = local_mass(rho, area, iy, iz, e, g, a_sy, a_sz, l);
     let t = rotation(&local_axes(d));
     write_12x12(ke, &matmul(&transpose(&t), &matmul(&ml, &t)));
-    Ok(())
 }
 
 /// Element kernel: local 3-D frame **geometric stiffness** `K_g = Tᵀ K_loc T`
@@ -413,13 +416,16 @@ pub fn element_mass(
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, Some(&mat),
-///     |geoms, m, s, ke| frame3d::element_geometric(&geoms[0], 100.0, ke),
+///     |geoms, m, s, ke| {
+///         frame3d::element_geometric(&geoms[0], 100.0, ke);
+///         Ok(())
+///     },
 /// )?;
 /// let total: f64 = bloc.iter_entries()?.into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!(total.abs() < 1e-6);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn element_geometric(geom: &CellGeom, n: f64, ke: &mut [f64]) -> Result<()> {
+pub fn element_geometric(geom: &CellGeom, n: f64, ke: &mut [f64]) {
     let xa = geom.node_coord(0);
     let xb = geom.node_coord(1);
     let d = [xb[0] - xa[0], xb[1] - xa[1], xb[2] - xa[2]];
@@ -427,7 +433,6 @@ pub fn element_geometric(geom: &CellGeom, n: f64, ke: &mut [f64]) -> Result<()> 
     let kl = local_geometric(n, l);
     let t = rotation(&local_axes(d));
     write_12x12(ke, &matmul(&transpose(&t), &matmul(&kl, &t)));
-    Ok(())
 }
 
 /// Scatter a 12×12 matrix into the flat row-major `ke` (accumulating).

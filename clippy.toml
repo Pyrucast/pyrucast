@@ -1,0 +1,4 @@
+# Sans cette ligne, clippy épargne toute fonction publique dans les lints qui
+# en changeraient la signature, `unnecessary_wraps` en tête. Or la règle « pas
+# de `Result` qui ne peut pas échouer » vaut pour toute fonction, publique ou non.
+avoid-breaking-exported-api = false

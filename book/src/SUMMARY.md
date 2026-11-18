@@ -66,6 +66,7 @@
   - [Référence]()
     - [pyrucast.mesh](reference/mesh.md)
     - [pyrucast.model](reference/model.md)
+    - [pyrucast.finite_element_space](reference/finite_element_space.md)
     - [pyrucast.element_field](reference/element_field.md)
     - [pyrucast.node_field](reference/node_field.md)
     - [pyrucast.field](reference/field.md)

@@ -53,6 +53,16 @@ impl Mesh {
         crate::ops::mesh::elements_on(self, points, strict)
     }
 
+    /// See [`mesh::intersection`](fn@crate::ops::mesh::intersection).
+    pub fn intersection(&self, b: &Mesh) -> Mesh {
+        crate::ops::mesh::intersection(self, b)
+    }
+
+    /// See [`mesh::difference`](fn@crate::ops::mesh::difference).
+    pub fn difference(&self, b: &Mesh) -> Mesh {
+        crate::ops::mesh::difference(self, b)
+    }
+
     /// See [`mesh::extrude`](fn@crate::ops::mesh::extrude).
     pub fn extrude(&self, direction: &[f64], n_layers: usize) -> Result<Mesh> {
         crate::ops::mesh::extrude(self, direction, n_layers)

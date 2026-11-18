@@ -23,8 +23,8 @@ Maillage - génération;AFFI;Affinité (mise à l'échelle anisotrope);—
 Maillage - assemblage;ET;Union (assemblage) de plusieurs maillages;union (opérateur |)
 Maillage - assemblage;ELIM;Élimine les nœuds doubles (fusion par tolérance);merge_nodes (drapeau in_place pour souder les maillages en place)
 Maillage - assemblage;ENLE;Enlève des éléments d'un maillage;—
-Maillage - assemblage;DIFF;Différence de maillages;—
-Maillage - assemblage;INTE;Intersection de maillages;—
+Maillage - assemblage;DIFF;Différence de maillages;difference (A \ B ; la différence symétrique de DIFF = difference(a, b) | difference(b, a))
+Maillage - assemblage;INTE;Intersection de maillages;intersection (même maille = mêmes nœuds dans le même ordre)
 Maillage - transformation;CHAN;Change le type d'élément (POI1, passage quadratique…);to_poi1 (cas POI1) / to_quadratic (linéaire→quadratique) / convert (QUA4→TRI3, HEX8→TET4)
 Maillage - transformation;PLUS;Translate les coordonnées des nœuds;coords.displace / coords.set
 Maillage - transformation;FORM;Configuration déformée (coordonnées courantes = initiales + déplacement);coords.displace_from (pose en absolu la configuration cible X + u, sans changer la configuration active) · Coords.add_config / select · coords.in_config (calculer le temps d'un bloc sur une configuration)
@@ -93,7 +93,7 @@ Champs - extraction;EXCO;Extrait/renomme une composante d'un champ;filter_compon
 Champs - extraction;DEPL;Extrait le champ de déplacement;NodeField
 Champs - extraction;CHAN (CHAM);Change le support d'un champ (Gauss <-> nœuds);interp_to_gauss (nœuds -> Gauss) / divergence (Gauss -> nœuds) / node_field.consolidate
 Champs - extraction;ELNO;Passe un champ des points de Gauss aux nœuds;divergence (partiel)
-Champs - extraction;REDU;Restreint un champ à un sous-maillage;restrict
+Champs - extraction;REDU;Restreint un champ à un sous-maillage;node_field.restrict (champ aux nœuds) / element_field.restrict (champ aux points de Gauss, sur un espace) / finite_element_space.restrict (modèle réduit à un maillage)
 Champs - extraction;PROI;Projette un champ aux nœuds d'une autre géométrie par les fonctions de forme;node_field.project (interpolé par les mailles de mesh aux nœuds de target, 0 hors de mesh, tol=1e-6 ; un champ aux points de Gauss est lu par l'ajustement propre à chaque maille, sans moyenne entre mailles ; syntaxe GEO2 seule, ni 'MINI' ni 'POLY')
 Champs - extraction;;Reprojette un champ sur le support et les composantes d'un champ cible (combinable par + - * /);restrict_like
 Champs - assemblage;NOMC;Renomme les composantes;rename_component

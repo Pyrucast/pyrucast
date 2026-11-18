@@ -195,7 +195,7 @@ fn constraint_force(
             kind.label()
         ))
     })?;
-    let view = solution.view()?;
+    let view = solution.view();
     let relations = constraint.relations()?;
     let mut values: std::collections::HashMap<(NodeId, String), f64> =
         std::collections::HashMap::new();
@@ -323,7 +323,7 @@ mod tests {
         let f_int = internal_forces(&model, &stress, &u, &materials).unwrap();
         let ku = (&crate::ops::matrix::stiffness(&model, &materials).unwrap() * &u).unwrap();
 
-        let (fv, kv) = (f_int.view().unwrap(), ku.view().unwrap());
+        let (fv, kv) = (f_int.view(), ku.view());
         for node in [&n[1], &n[4]] {
             let got = fv.value(node.id(), "f_x").unwrap();
             // +½ from the left cell, −3·½ from the right one.
@@ -383,8 +383,8 @@ mod tests {
         let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
         let ku = (&k * &u).unwrap();
 
-        let fv = f_int.view().unwrap();
-        let kv = ku.view().unwrap();
+        let fv = f_int.view();
+        let kv = ku.view();
         let tol = 1e-9;
         for nid in [a.id(), b.id(), c.id()] {
             for comp in ["f_x", "f_y"] {
@@ -445,8 +445,8 @@ mod tests {
         let via_model = internal_forces(&model, &stress, &u, &materials).unwrap();
         let via_divergence = crate::ops::node_field::divergence(&stress, "sigma").unwrap();
 
-        let m = via_model.view().unwrap();
-        let d = via_divergence.view().unwrap();
+        let m = via_model.view();
+        let d = via_divergence.view();
         let tol = 1e-12;
         for nid in [a.id(), b.id(), c.id()] {
             for (force, div) in [("f_x", "div_sigma_x"), ("f_y", "div_sigma_y")] {
@@ -503,7 +503,7 @@ mod tests {
         let f_int = internal_forces(&model, &stress, &u, &materials).unwrap();
 
         let n = e * area * eps; // axial force
-        let fv = f_int.view().unwrap();
+        let fv = f_int.view();
         let tol = 1e-9;
         assert!((fv.value(a.id(), "f_x").unwrap() + n * c[0]).abs() < tol);
         assert!((fv.value(a.id(), "f_y").unwrap() + n * c[1]).abs() < tol);

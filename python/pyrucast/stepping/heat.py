@@ -1,5 +1,4 @@
-"""The heat step, in its three schemes (Cast3M ``TRANSNON``, ``TRANSLIN``,
-``DUPONT2``).
+"""The heat step, in its three schemes.
 
 The same bookkeeping as the mechanics: the unknown carries the temperature and
 the multipliers of the imposed temperatures, every solve returns a
@@ -162,7 +161,7 @@ def _capacity(problem, materials, dt):
 
 def heat_step(data, problem, state, t_end, options):
     """The heat problem from ``state.time`` to ``t_end`` by the θ-scheme,
-    iterated (Cast3M ``TRANSNON``).
+    iterated.
 
     The operator ``θK + C/Δt`` is built once at the start temperature; the
     residual ``F − F_int(T_θ) − C(T − Tₙ)/Δt`` is exact at
@@ -246,10 +245,9 @@ def heat_step(data, problem, state, t_end, options):
 
 
 def heat_step_linear(data, problem, state, t_end, options):
-    """The heat problem in a single solve, materials frozen at the start
-    (Cast3M ``TRANSLIN``): ``(θK + C/Δt) ΔT = F − K Tₙ`` linearised at
-    ``Tₙ`` — radiation included through its tangent, where ``TRANSLIN``
-    drops it."""
+    """The heat problem in a single solve, materials frozen at the start:
+    ``(θK + C/Δt) ΔT = F − K Tₙ`` linearised at ``Tₙ`` — radiation included
+    through its tangent."""
     dt = t_end - state.time
     theta = options.theta if problem.transient_heat else 1.0
     start = state.temperature
@@ -296,14 +294,13 @@ def heat_step_linear(data, problem, state, t_end, options):
 
 
 def heat_step_dupont(data, problem, state, t_end, options):
-    """The heat problem by Dupont's three-level scheme (Cast3M ``DUPONT2``).
+    """The heat problem by Dupont's three-level scheme.
 
     ``(C/Δt + (½+λ)K) T₂ = (C/Δt + (2λ−½)K) T₁ − λK T₀ + F``, linearised at
     ``T* = T₁ + ½ Δt/Δt₀ (T₁ − T₀)`` — the temperature extrapolated to the
     middle of the step, where the materials are read and the sources taken;
-    imposed temperatures are read at the end. Unlike ``DUPONT2``, ``T₀`` is the
-    true previous temperature, so the scheme stays three-level from one step
-    to the next. The first step, or a step whose length changed, goes through
+    imposed temperatures are read at the end. ``T₀`` is the true previous
+    temperature, so the scheme stays three-level from one step to the next. The first step, or a step whose length changed, goes through
     ``heat_step``.
     """
     dt = t_end - state.time

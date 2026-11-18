@@ -100,8 +100,8 @@ fn the_basis_reproduces_the_euler_bernoulli_stiffness() -> Result<()> {
 fn the_field_basis_and_the_geometry_part_company() -> Result<()> {
     let fes = segment(2.0)?;
     let s = fes.get(0)?.read();
-    assert_eq!(s.shape_count()?, 4);
-    assert_eq!(s.nodes_per_cell()?, 2);
+    assert_eq!(s.shape_count(), 4);
+    assert_eq!(s.nodes_per_cell(), 2);
     assert_eq!(s.field_n_at_g(0)?.len(), 4);
     assert_eq!(s.n_at_g(0)?.len(), 2, "geometry stays Lagrange-1");
     // …and the geometric basis is still a partition of unity.
@@ -161,6 +161,6 @@ fn a_whole_beam_mesh_can_be_hermite() -> Result<()> {
     let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
     let s = fes.get(0)?.read();
     assert_eq!(s.cell_count(), 3);
-    assert_eq!(s.shape_count()?, 4);
+    assert_eq!(s.shape_count(), 4);
     Ok(())
 }

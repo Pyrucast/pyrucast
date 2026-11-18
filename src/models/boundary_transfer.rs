@@ -211,7 +211,8 @@ impl SubModelKind for BoundaryTransfer {
         lay: &ElementLayout,
         fe: &mut [f64],
     ) -> Result<()> {
-        self.ambient_element(geoms, material, lay, fe)
+        self.ambient_element(geoms, material, lay, fe);
+        Ok(())
     }
 
     fn stiffness_layout(&self) -> Option<MatrixLayout> {
@@ -329,7 +330,8 @@ impl Domain for BoundaryTransfer {
             &lay.material[..self.components.len()],
             1.0,
             ke,
-        )
+        );
+        Ok(())
     }
 }
 
@@ -347,7 +349,7 @@ impl BoundaryTransfer {
         material: &SubElementField,
         lay: &ElementLayout,
         fe: &mut [f64],
-    ) -> Result<()> {
+    ) {
         let geom = &geoms[0];
         let n = self.components.len();
         for g in 0..geom.n_gauss {
@@ -364,7 +366,6 @@ impl BoundaryTransfer {
                 }
             }
         }
-        Ok(())
     }
 }
 

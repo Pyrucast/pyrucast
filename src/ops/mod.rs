@@ -65,6 +65,7 @@ pub mod element_field;
 pub mod evolution;
 pub mod export;
 pub mod field;
+pub mod finite_element_space;
 pub mod geom;
 pub mod matrix;
 pub mod measure;

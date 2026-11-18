@@ -186,28 +186,28 @@ pub fn locate_points(host: &Mesh, points: &[Vec<f64>], tol: f64) -> Result<Vec<O
     // slot exactly once ⇒ result is independent of the thread count). Within a
     // point, candidates are visited in ascending cell order, so the "first
     // containing cell wins" tie-break is deterministic and matches a full scan.
-    points
+    Ok(points
         .par_iter()
         .with_min_len(MIN_PARALLEL_LEN)
-        .map(|x| -> Result<Option<Location>> {
+        .map(|x| {
             for &ci in grid.candidates(x) {
                 let cell = &cells[ci];
                 if !in_bbox(x, &cell.lo, &cell.hi) {
                     continue;
                 }
-                if let Some((xi, weights)) = invert_cell(cell.element_type, &cell.coords, x, tol)? {
-                    return Ok(Some(Location {
+                if let Some((xi, weights)) = invert_cell(cell.element_type, &cell.coords, x, tol) {
+                    return Some(Location {
                         submesh: cell.submesh,
                         cell: cell.cell,
                         xi,
                         weights,
                         nodes: cell.nodes.clone(),
-                    }));
+                    });
                 }
             }
-            Ok(None)
+            None
         })
-        .collect()
+        .collect())
 }
 
 /// A uniform grid over the host bounding box, mapping each grid cell to the host
@@ -360,7 +360,7 @@ fn invert_cell(
     coords: &[Vec<f64>],
     x: &[f64],
     tol: f64,
-) -> Result<Option<(Vec<f64>, Vec<f64>)>> {
+) -> Option<(Vec<f64>, Vec<f64>)> {
     let kind = element_type.as_kind();
     let tdim = element_type.topological_dim();
     let sdim = x.len();
@@ -417,9 +417,9 @@ fn invert_cell(
     }
     let scale = bbox_scale(coords);
     if r2.sqrt() <= 1e-9 * scale.max(1.0) && contains_reference(element_type, &xi, tol) {
-        Ok(Some((xi, n)))
+        Some((xi, n))
     } else {
-        Ok(None)
+        None
     }
 }
 

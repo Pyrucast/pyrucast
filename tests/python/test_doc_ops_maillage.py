@@ -591,6 +591,41 @@ print(loose.cell_count)  # 2  (both touch a node of pts)
 assert strict.cell_count == 1
 assert loose.cell_count == 2
 
+# ── intersection and difference ────────────────────────────
+
+# ANCHOR: mesh-intersection
+import pyrucast
+
+# A 2×2 grid of QUA4: cells 0, 1 below, 2, 3 above.
+c = pyrucast.Coords(2)
+n = [c.add_node([float(k % 3), float(k // 3)]) for k in range(9)]
+grille = pyrucast.Mesh(c, "QUA4")
+for i, j in [(0, 0), (1, 0), (0, 1), (1, 1)]:
+    k = 3 * j + i
+    grille.unit().add_cell([n[k], n[k + 1], n[k + 4], n[k + 3]])
+
+# Its left column, taken back by the nodes it rests on: cells 0 and 2.
+gauche = pyrucast.mesh.poi1_from_nodes([n[k] for k in (0, 1, 3, 4, 6, 7)])
+sel = pyrucast.mesh.elements_on(grille, gauche)
+
+commun = pyrucast.mesh.intersection(grille, sel)
+print(commun.cell_count)  # 2  (cells 0 and 2, in the grid's order)
+# ANCHOR_END: mesh-intersection
+assert commun.cell_count == 2
+
+# ANCHOR: mesh-difference
+reste = pyrucast.mesh.difference(grille, sel)  # or grille.difference(sel)
+print(reste.cell_count)  # 2  (cells 1 and 3)
+
+# The symmetric difference: what one has and the other lacks.
+symetrique = pyrucast.mesh.difference(grille, sel) | pyrucast.mesh.difference(
+    sel, grille
+)
+print(symetrique.cell_count)  # 2  (sel has no cell the grid lacks)
+# ANCHOR_END: mesh-difference
+assert reste.cell_count == 2
+assert symetrique.cell_count == 2
+
 # ── geometric selections ───────────────────────────────────
 
 _, contour = _contour_rectangle(2.0, 2.0, 8)

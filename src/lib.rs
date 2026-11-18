@@ -245,6 +245,8 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesh::chain, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::merge_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::elements_on, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::intersection, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::difference, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::points_in_sphere, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::points_on_sphere, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::points_on_plane, m)?)?;
@@ -267,6 +269,8 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesh::consolidate, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::consolidate, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::consolidate, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::restrict, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::restrict_like, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::positions, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::coords::set, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::coords::displace, m)?)?;
@@ -303,6 +307,10 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::divergence, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        py::ops::finite_element_space::restrict,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(py::ops::measure::integral, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::measure::xty, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::measure::xtx, m)?)?;

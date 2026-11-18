@@ -165,7 +165,7 @@ impl Flux {
         let normal_rows: Vec<String> = if dual == NORMAL {
             let (space_dim, ref_dim) = {
                 let s = fespace.read();
-                (s.space_dim(), s.ref_dim()?)
+                (s.space_dim(), s.ref_dim())
             };
             if ref_dim + 1 != space_dim {
                 return Err(PyrucastError::Message(format!(

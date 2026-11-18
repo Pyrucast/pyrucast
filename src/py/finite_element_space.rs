@@ -54,8 +54,8 @@ impl PySubFiniteElementSpace {
 
     /// Reference (parametric) dimension of the elements.
     #[getter]
-    fn ref_dim(&self) -> PyResult<usize> {
-        Ok(self.handle.read().ref_dim()?)
+    fn ref_dim(&self) -> usize {
+        self.handle.read().ref_dim()
     }
 
     /// Spatial dimension the elements live in.
@@ -73,8 +73,8 @@ impl PySubFiniteElementSpace {
 
     /// Number of nodes per element.
     #[getter]
-    fn nodes_per_cell(&self) -> PyResult<usize> {
-        Ok(self.handle.read().nodes_per_cell()?)
+    fn nodes_per_cell(&self) -> usize {
+        self.handle.read().nodes_per_cell()
     }
 
     /// Number of elements (cells) in this subspace.

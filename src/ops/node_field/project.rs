@@ -96,7 +96,7 @@ pub fn project_node(field: &NodeField, mesh: &Mesh, target: &Mesh, tol: f64) -> 
 
     // The values at every distinct node, node-major: each slot written once.
     let n_comp = components.len();
-    let view = field.view()?;
+    let view = field.view();
     let reads = view.resolve_reads(&components);
     let mut values = vec![0.0; points.len() * n_comp];
     values
@@ -189,7 +189,7 @@ pub fn project_element(
         fit: CellFit,
         reads: Vec<(usize, usize)>,
     }
-    let view = field.view()?;
+    let view = field.view();
     let mut hosts = Vec::with_capacity(mesh.len());
     for (s, sm) in mesh.into_iter().enumerate() {
         let zone = view.zone_for_submesh(sm).ok_or_else(|| {

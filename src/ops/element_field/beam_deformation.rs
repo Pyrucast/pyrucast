@@ -100,7 +100,7 @@ pub fn beam_deformation(
     material: &ElementField,
 ) -> Result<ElementField> {
     let components = Field::components(field);
-    let view = field.view()?;
+    let view = field.view();
     let mut out = ElementField::empty();
     for sub in fespace {
         let mat = material.sub_for_fespace(sub)?;
@@ -130,7 +130,7 @@ pub(crate) fn subspace_beam_deformation(
     let model = BeamModel::from_space_dim(space_dim)
         .map_err(|e| PyrucastError::Message(format!("beam_deformation: {e}")))?;
     let (dofs, out_comps) = (model.primal(), model.strains());
-    let n_nodes = s.nodes_per_cell()?;
+    let n_nodes = s.nodes_per_cell();
     let n_g = s.gauss_count();
     if n_nodes != 2 {
         return Err(PyrucastError::Message(format!(

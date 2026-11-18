@@ -343,18 +343,21 @@ impl Domain for Timoshenko {
                 frame::element_stiffness(geom, m(0) * m(1), m(0) * m(2), m(3) * m(4), ke)
             }
             // [E, A, I_y, I_z, J, G, A_sy, A_sz]
-            BeamModel::Frame3d => frame3d::element_stiffness(
-                geom,
-                m(0) * m(1),
-                m(5) * m(4),
-                m(0),
-                m(2),
-                m(3),
-                m(5),
-                m(6),
-                m(7),
-                ke,
-            ),
+            BeamModel::Frame3d => {
+                frame3d::element_stiffness(
+                    geom,
+                    m(0) * m(1),
+                    m(5) * m(4),
+                    m(0),
+                    m(2),
+                    m(3),
+                    m(5),
+                    m(6),
+                    m(7),
+                    ke,
+                );
+                Ok(())
+            }
         }
     }
 
@@ -375,7 +378,8 @@ impl Domain for Timoshenko {
             // [E, I, G, A_s] + facultatives [A, rho]
             BeamModel::Planar1d => {
                 let a = optional(row, lay, 0, "A")?;
-                planar_mass(geom, rho * a, rho * m(1), m(0) * m(1), m(2) * m(3), ke)
+                planar_mass(geom, rho * a, rho * m(1), m(0) * m(1), m(2) * m(3), ke);
+                Ok(())
             }
             // [E, A, I, G, A_s]
             BeamModel::Frame2d => frame::element_mass(
@@ -387,18 +391,21 @@ impl Domain for Timoshenko {
                 ke,
             ),
             // [E, A, I_y, I_z, J, G, A_sy, A_sz]
-            BeamModel::Frame3d => frame3d::element_mass(
-                geom,
-                rho,
-                m(1),
-                m(2),
-                m(3),
-                m(0),
-                Some(m(5)),
-                Some(m(6)),
-                Some(m(7)),
-                ke,
-            ),
+            BeamModel::Frame3d => {
+                frame3d::element_mass(
+                    geom,
+                    rho,
+                    m(1),
+                    m(2),
+                    m(3),
+                    m(0),
+                    Some(m(5)),
+                    Some(m(6)),
+                    Some(m(7)),
+                    ke,
+                );
+                Ok(())
+            }
         }
     }
 
@@ -421,7 +428,10 @@ impl Domain for Timoshenko {
                 let n = state.row(geom.cell, 0)[lay.state[0] as usize];
                 match self.model {
                     BeamModel::Frame2d => frame::element_geometric(geom, n, ke),
-                    _ => frame3d::element_geometric(geom, n, ke),
+                    _ => {
+                        frame3d::element_geometric(geom, n, ke);
+                        Ok(())
+                    }
                 }
             }
         }
@@ -561,14 +571,7 @@ fn planar_stiffness(geom: &CellGeom, ei: f64, gas: f64, ke: &mut [f64]) -> Resul
 /// rotary inertia `(ρIL/6)[[2,1],[1,2]]`, in DOF order `[w0, θ0, w1, θ1]`.
 ///
 /// This is the *linear* element's mass, kept as it was; see the module note.
-fn planar_mass(
-    geom: &CellGeom,
-    rho_a: f64,
-    rho_i: f64,
-    ei: f64,
-    gas: f64,
-    ke: &mut [f64],
-) -> Result<()> {
+fn planar_mass(geom: &CellGeom, rho_a: f64, rho_i: f64, ei: f64, gas: f64, ke: &mut [f64]) {
     let (xa, xb) = (geom.node_coord(0), geom.node_coord(1));
     let l = (xb[0] - xa[0]).abs();
     let m = mass_4x4(rho_a, rho_i, ei, Some(gas), l);
@@ -577,7 +580,6 @@ fn planar_mass(
             ke[r * 4 + c] += v;
         }
     }
-    Ok(())
 }
 
 // ─── Unit tests ──────────────────────────────────────────────────────────────

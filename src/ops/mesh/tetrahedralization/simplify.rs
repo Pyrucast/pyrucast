@@ -78,7 +78,7 @@ pub fn remove_vertex(
         if star.is_empty() {
             return Ok(false);
         }
-        if star.len() <= STAR_LIMIT && rebuild_star(mesh, m, &star, merged, protect)? {
+        if star.len() <= STAR_LIMIT && rebuild_star(mesh, m, &star, merged, protect) {
             return Ok(true);
         }
         if !thin_star(mesh, m, &star, protect)? {
@@ -101,7 +101,7 @@ fn rebuild_star(
     star: &[u32],
     merged: &[[u32; 3]],
     protect: &Protected<'_>,
-) -> Result<bool> {
+) -> bool {
     let mut boundary = mesh.region_boundary(star);
     let surfaced: Vec<[u32; 3]> = boundary
         .iter()
@@ -150,18 +150,16 @@ fn rebuild_star(
             .flatten()
             .ok_or(missing)
     }) else {
-        return Ok(false);
+        return false;
     };
     if cells.iter().any(|c| c.contains(&m)) {
-        return Ok(false); // `m` is off the boundary, so this cannot happen
+        return false; // `m` is off the boundary, so this cannot happen
     }
 
     // A refusal costs nothing: the swap decides whether the cells tile the
     // star before it touches the mesh.
-    match mesh.replace_region_with(star, &cells, "a vertex removal", mode) {
-        Ok(_) => Ok(true),
-        Err(_) => Ok(false),
-    }
+    mesh.replace_region_with(star, &cells, "a vertex removal", mode)
+        .is_ok()
 }
 
 /// Take one interior edge running to `m` out, so its star loses a cell.

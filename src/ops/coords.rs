@@ -55,7 +55,7 @@ struct AxisValues {
     undefined: usize,
 }
 
-fn axis_values(field: &NodeField, comps: &[String]) -> Result<AxisValues> {
+fn axis_values(field: &NodeField, comps: &[String]) -> AxisValues {
     let width = comps.len();
     let (mut nodes, mut values) = (Vec::new(), Vec::new());
     // (node, component) the first zone holding the node lacks: some later zone
@@ -97,7 +97,7 @@ fn axis_values(field: &NodeField, comps: &[String]) -> Result<AxisValues> {
     }
     let mut undefined = 0;
     if !missing.is_empty() {
-        let view = field.view()?;
+        let view = field.view();
         for (i, k) in missing {
             match view.value_opt(nodes[i], &comps[k]) {
                 Some(v) => values[i * width + k] = v,
@@ -105,17 +105,17 @@ fn axis_values(field: &NodeField, comps: &[String]) -> Result<AxisValues> {
             }
         }
     }
-    Ok(AxisValues {
+    AxisValues {
         nodes,
         values,
         undefined,
-    })
+    }
 }
 
 /// The positions `set` writes: every node of `field` must carry every
 /// component — a coordinate the field does not give has no value to take.
 fn positions_to_set(field: &NodeField, comps: &[String]) -> Result<(Vec<NodeId>, Vec<f64>)> {
-    let found = axis_values(field, comps)?;
+    let found = axis_values(field, comps);
     if found.undefined > 0 {
         return Err(PyrucastError::Message(format!(
             "set: {} node coordinate(s) missing — every node must carry {comps:?}",
@@ -129,9 +129,9 @@ fn positions_to_set(field: &NodeField, comps: &[String]) -> Result<(Vec<NodeId>,
 /// carries, and nothing else. A component a node lacks moves it by 0 along
 /// that axis; a node carrying none of them — a multiplier node of a
 /// solution — is not read, so it does not move at all.
-fn increments(field: &NodeField, comps: &[String]) -> Result<(Vec<NodeId>, Vec<f64>)> {
-    let found = axis_values(field, comps)?;
-    Ok((found.nodes, found.values))
+fn increments(field: &NodeField, comps: &[String]) -> (Vec<NodeId>, Vec<f64>) {
+    let found = axis_values(field, comps);
+    (found.nodes, found.values)
 }
 
 /// **Set** node coordinates from `field` (absolute): for every distinct
@@ -240,7 +240,7 @@ pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()
     let coords = field.coords()?;
     let dim = coords.read().dim() as usize;
     let comps = axis_components(components, dim, &["u_x", "u_y", "u_z"])?;
-    let (nodes, increments) = increments(field, &comps)?;
+    let (nodes, increments) = increments(field, &comps);
     coords.write().displace(&nodes, &increments)
 }
 
@@ -293,7 +293,7 @@ pub fn displace_from(
     let coords = field.coords()?;
     let dim = coords.read().dim() as usize;
     let comps = axis_components(components, dim, &["u_x", "u_y", "u_z"])?;
-    let (nodes, increments) = increments(field, &comps)?;
+    let (nodes, increments) = increments(field, &comps);
     coords
         .write()
         .displace_from(reference, target, &nodes, &increments)

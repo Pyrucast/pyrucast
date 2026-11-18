@@ -151,12 +151,7 @@ impl Continuum {
     ) -> Result<Self> {
         let (submesh, space_dim, ref_dim, axisymmetric) = {
             let s = fespace.read();
-            (
-                s.submesh(),
-                s.space_dim(),
-                s.ref_dim()?,
-                s.is_axisymmetric(),
-            )
+            (s.submesh(), s.space_dim(), s.ref_dim(), s.is_axisymmetric())
         };
         check_continuum_dimensions(label, space_dim, ref_dim)?;
         #[allow(clippy::match_like_matches_macro)]

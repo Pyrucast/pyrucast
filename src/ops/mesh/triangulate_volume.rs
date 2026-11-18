@@ -332,7 +332,7 @@ pub fn triangulate_volume_cancellable(
                 // Cutting the surface there may or may not free the cell;
                 // remember the complaint in case it never does.
                 unusable = Some(complaint);
-                env.subdivide(&cuts)?;
+                env.subdivide(&cuts);
                 continue;
             }
 
@@ -347,7 +347,7 @@ pub fn triangulate_volume_cancellable(
         // Rebuilding from scratch rather than patching keeps the
         // triangulation a true Delaunay one at the start of every attempt,
         // which is what the recovery reasons about.
-        env.subdivide(&stuck)?;
+        env.subdivide(&stuck);
     }
     // Whichever wall the loop ran into, say which one.
     Err(unusable.unwrap_or_else(|| {

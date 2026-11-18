@@ -169,7 +169,7 @@ impl SubFiniteElementSpace {
     /// # let maillage = Mesh::from_submesh(sm);
     /// let z = SubFiniteElementSpace::new(
     ///     maillage.get(0)?, Interpolation::Lagrange1, QuadratureRule::Gauss)?;
-    /// assert_eq!(z.nodes_per_cell()?, 3);
+    /// assert_eq!(z.nodes_per_cell(), 3);
     /// // A POI1 has no reference element to integrate on: refused.
     /// # let mut p = SubMesh::new(coords.clone(), ElementType::POI1);
     /// # p.add_cell(&[n[0].id()])?;
@@ -452,10 +452,10 @@ impl SubFiniteElementSpace {
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
     /// // Dimension of the **reference** element: 2 for a triangle…
-    /// assert_eq!(s.ref_dim().unwrap(), 2);
+    /// assert_eq!(s.ref_dim(), 2);
     /// ```
-    pub fn ref_dim(&self) -> Result<usize> {
-        Ok(self.element_type().topological_dim())
+    pub fn ref_dim(&self) -> usize {
+        self.element_type().topological_dim()
     }
 
     /// Geometric (physical) dimension of the underlying `Coords`.
@@ -527,10 +527,10 @@ impl SubFiniteElementSpace {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
-    /// assert_eq!(s.nodes_per_cell().unwrap(), 3);
+    /// assert_eq!(s.nodes_per_cell(), 3);
     /// ```
-    pub fn nodes_per_cell(&self) -> Result<usize> {
-        Ok(self.element_type().nodes_per_cell())
+    pub fn nodes_per_cell(&self) -> usize {
+        self.element_type().nodes_per_cell()
     }
 
     /// Number of cells in the underlying submesh.
@@ -599,11 +599,11 @@ impl SubFiniteElementSpace {
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
     /// // Coordinates of the Gauss point in the reference element.
-    /// assert_eq!(s.gauss_xi(0).unwrap().len(), s.ref_dim().unwrap());
+    /// assert_eq!(s.gauss_xi(0).unwrap().len(), s.ref_dim());
     /// ```
     pub fn gauss_xi(&self, g: usize) -> Result<&[f64]> {
         self.check_g(g)?;
-        let ref_dim = self.ref_dim()?;
+        let ref_dim = self.ref_dim();
         Ok(&self.gauss_xi[g * ref_dim..(g + 1) * ref_dim])
     }
 
@@ -662,7 +662,7 @@ impl SubFiniteElementSpace {
     /// ```
     pub fn n_at_g(&self, g: usize) -> Result<&[f64]> {
         self.check_g(g)?;
-        let n_nodes = self.nodes_per_cell()?;
+        let n_nodes = self.nodes_per_cell();
         Ok(&self.n_at_g[g * n_nodes..(g + 1) * n_nodes])
     }
 
@@ -691,8 +691,8 @@ impl SubFiniteElementSpace {
     /// ```
     pub fn dn_at_g(&self, g: usize) -> Result<&[f64]> {
         self.check_g(g)?;
-        let n_nodes = self.nodes_per_cell()?;
-        let ref_dim = self.ref_dim()?;
+        let n_nodes = self.nodes_per_cell();
+        let ref_dim = self.ref_dim();
         let stride = n_nodes * ref_dim;
         Ok(&self.dn_at_g[g * stride..(g + 1) * stride])
     }
@@ -745,10 +745,10 @@ impl SubFiniteElementSpace {
     /// // The number of shape functions **of the field** — it differs from the
     /// // node count for a Hermite interpolation, where each node carries a
     /// // value and a slope.
-    /// assert_eq!(s.shape_count().unwrap(), 3);
+    /// assert_eq!(s.shape_count(), 3);
     /// ```
-    pub fn shape_count(&self) -> Result<usize> {
-        Ok(self.interpolation.shape_count(self.element_type()))
+    pub fn shape_count(&self) -> usize {
+        self.interpolation.shape_count(self.element_type())
     }
 
     /// Field shape values `N_i(ξ_g)`, length [`shape_count`](Self::shape_count).
@@ -770,7 +770,7 @@ impl SubFiniteElementSpace {
     /// # let s = sub.read();
     /// // The **field**'s shapes, distinct from the geometry's as soon as the
     /// // element is sub- or super-parametric.
-    /// assert_eq!(s.field_n_at_g(0).unwrap().len(), s.shape_count().unwrap());
+    /// assert_eq!(s.field_n_at_g(0).unwrap().len(), s.shape_count());
     /// ```
     pub fn field_n_at_g(&self, g: usize) -> Result<&[f64]> {
         self.reject_if_model_embedded("shape values")?;
@@ -778,7 +778,7 @@ impl SubFiniteElementSpace {
             return self.n_at_g(g);
         }
         self.check_g(g)?;
-        let count = self.shape_count()?;
+        let count = self.shape_count();
         Ok(&self.field_n_at_g[g * count..(g + 1) * count])
     }
 
@@ -812,7 +812,7 @@ impl SubFiniteElementSpace {
             return self.dn_at_g(g);
         }
         self.check_g(g)?;
-        let stride = self.shape_count()? * self.ref_dim()?;
+        let stride = self.shape_count() * self.ref_dim();
         Ok(&self.field_dn_at_g[g * stride..(g + 1) * stride])
     }
 
@@ -855,7 +855,7 @@ impl SubFiniteElementSpace {
                 self.interpolation
             )));
         }
-        let stride = self.shape_count()? * self.ref_dim()?;
+        let stride = self.shape_count() * self.ref_dim();
         Ok(&self.field_d2n_at_g[g * stride..(g + 1) * stride])
     }
 
@@ -889,14 +889,14 @@ impl SubFiniteElementSpace {
         self.check_g(g)?;
         let coords = self.cell_node_coords(cell_idx)?;
         let dn = self.dn_at_g(g)?;
-        let (space_dim, ref_dim) = (self.space_dim, self.ref_dim()?);
+        let (space_dim, ref_dim) = (self.space_dim, self.ref_dim());
         let mut jac = [0.0_f64; MAX_JACOBIAN];
         build_jacobian(
             &coords,
             dn,
             space_dim,
             ref_dim,
-            self.nodes_per_cell()?,
+            self.nodes_per_cell(),
             &mut jac,
         );
         Ok(jac[..space_dim * ref_dim].to_vec())
@@ -933,7 +933,7 @@ impl SubFiniteElementSpace {
     /// ```
     pub fn det_jacobian(&self, cell_idx: usize, g: usize) -> Result<f64> {
         let jac = self.jacobian(cell_idx, g)?;
-        Ok(jacobian_measure(&jac, self.space_dim, self.ref_dim()?))
+        Ok(jacobian_measure(&jac, self.space_dim, self.ref_dim()))
     }
 
     /// Physical derivatives `∂N_i/∂x_a` at cell `cell_idx`, Gauss point
@@ -968,8 +968,8 @@ impl SubFiniteElementSpace {
     pub fn dn_dx(&self, cell_idx: usize, g: usize) -> Result<Vec<f64>> {
         let jac = self.jacobian(cell_idx, g)?;
         let dn_dxi = self.dn_at_g(g)?;
-        let n_nodes = self.nodes_per_cell()?;
-        let ref_dim = self.ref_dim()?;
+        let n_nodes = self.nodes_per_cell();
+        let ref_dim = self.ref_dim();
         let space_dim = self.space_dim;
         let mut out = vec![0.0_f64; n_nodes * space_dim];
         build_dn_dx(&jac, dn_dxi, space_dim, ref_dim, n_nodes, &mut out)?;
@@ -981,7 +981,7 @@ impl SubFiniteElementSpace {
     /// Read all node coordinates of a cell into a flat buffer
     /// `[n_nodes × space_dim]`, row-major (`[i * space_dim + a]`).
     fn cell_node_coords(&self, cell_idx: usize) -> Result<Vec<f64>> {
-        let n_nodes = self.nodes_per_cell()?;
+        let n_nodes = self.nodes_per_cell();
         let (coords, ids): (Handle<Coords>, Vec<NodeId>) = {
             let s = self.submesh.read();
             let total = s.cell_count();

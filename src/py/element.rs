@@ -27,8 +27,8 @@ impl PyElement {
 
     /// Number of nodes of this element.
     #[getter]
-    fn nodes_per_cell(&self) -> PyResult<usize> {
-        Ok(self.inner.nodes_per_cell()?)
+    fn nodes_per_cell(&self) -> usize {
+        self.inner.nodes_per_cell()
     }
 
     /// Spatial dimension the element lives in.
@@ -39,8 +39,8 @@ impl PyElement {
 
     /// Reference (parametric) dimension of the element.
     #[getter]
-    fn ref_dim(&self) -> PyResult<usize> {
-        Ok(self.inner.ref_dim()?)
+    fn ref_dim(&self) -> usize {
+        self.inner.ref_dim()
     }
 
     /// Number of Gauss (quadrature) points.
