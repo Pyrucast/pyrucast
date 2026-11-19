@@ -71,10 +71,9 @@ model = model | pc.model.dirichlet(edge, model, "T")
 model = model | pc.model.flux(fes, model, "q")
 materials = pc.element_field.material_field(model, [("k", 50.0), ("phi_q", 1.0e6)])
 
-T = pc.solver.solve(
-    pc.matrix.stiffness(model, materials),
-    pc.node_field.external_forces(model, materials),
-)
+rhs = pc.node_field.external_forces(model, materials)
+K = pc.matrix.stiffness(model, materials)
+T = pc.solver.solve(K, rhs)
 print(f"T max = {T.max('T'):.2f} °C")  # T max = 14.76 °C
 plate.plot(field=T, component="T", save="plate.png")  # omit save= for a window
 ```
