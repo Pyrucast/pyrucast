@@ -2062,7 +2062,10 @@ mod tests {
         mesh.add_sub(repeated.clone()).unwrap();
         let field = NodeField::new(&mesh, vec!["T".into()]).unwrap();
         let zone = field.get(0).unwrap();
-        assert!(zone.read().support().same_object(&SubMesh::to_poi1(&repeated)));
+        assert!(zone
+            .read()
+            .support()
+            .same_object(&SubMesh::to_poi1(&repeated)));
         assert!(!zone.read().support().same_object(&repeated));
         assert!(!repeated.read().is_sealed());
         zone.write().set_value(n[1].id(), "T", 7.0).unwrap();

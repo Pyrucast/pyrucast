@@ -6,12 +6,16 @@ use crate::error::Result;
 use crate::handle::Handle;
 use std::collections::HashSet;
 
-/// Fuse submeshes of the same element type into one, dropping duplicate
+/// Fuse the zones of the same element type into one, dropping duplicate
 /// cells (identical node sequences).
 ///
-/// Types appear in their first-seen order; the face colour of the first
-/// submesh of each type is kept. Every node referenced by the result is
-/// increfed afresh by the new submeshes; `mesh` itself is left untouched.
+/// Types appear in their first-seen order. A type held by **a single zone
+/// with no duplicate cell** has nothing to merge: that zone comes back as
+/// itself, and the result **shares** it with `mesh` — mutating one
+/// (`add_cell`, `merge_nodes` in place) mutates the other, and a sealed zone
+/// stays sealed; [`SubMesh::duplicate`] makes an independent copy. Any other
+/// type gives a new zone, with the face colour of the first zone of that type,
+/// which increfs its nodes afresh. `mesh` itself is left untouched.
 ///
 /// Errors if `mesh` has no submeshes (no Coords to attach to).
 ///
@@ -27,11 +31,13 @@ use std::collections::HashSet;
 /// // Merges the zones of the same element type into one.
 /// let a = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[1.0, 0.0, 0.0]), 1, ElementType::SEG2)?;
 /// let b = mesh::line(&p(&[1.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 1, ElementType::SEG2)?;
-/// let deux = a.union(&b)?;
-/// assert_eq!(deux.len(), 2);
-/// let une = mesh::consolidate(&deux)?;
-/// assert_eq!(une.len(), 1);
-/// assert_eq!(une.cell_count(), 2);
+/// let two = a.union(&b)?;
+/// assert_eq!(two.len(), 2);
+/// let one = mesh::consolidate(&two)?;
+/// assert_eq!(one.len(), 1);
+/// assert_eq!(one.cell_count(), 2);
+/// // A zone with nothing to merge comes back as itself.
+/// assert!(mesh::consolidate(&a)?.get(0)?.same_object(&a.get(0)?));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
@@ -49,27 +55,20 @@ pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
 
     for et in ordered_types {
         let npc = et.nodes_per_cell();
-
-        // Face colour from the first submesh of this type.
-        let first_color = mesh
+        // Never empty: `et` was read off one of these zones.
+        let zones: Vec<&Handle<SubMesh>> = mesh
             .iter()
-            .find(|h| h.read().element_type() == et)
-            .map(|h| -> Result<_> { Ok(h.read().face_color()) })
-            .transpose()?
-            .unwrap_or_default();
+            .filter(|h| h.read().element_type() == et)
+            .collect();
 
         // The surviving cells are gathered whole, then posted in one locked
         // pass over the `Coords`.
         let mut kept: Vec<NodeId> = Vec::new();
         let mut seen: HashSet<Vec<NodeId>> = HashSet::new();
-        for sm_handle in mesh {
-            let sm_et = sm_handle.read().element_type();
-            if sm_et != et {
-                continue;
-            }
+        for zone in &zones {
             // Read under the guard: a staging copy here would be paid once
             // per (zone, element type) pair.
-            let s = sm_handle.read();
+            let s = zone.read();
             for chunk in s.connectivity().chunks(npc) {
                 if seen.insert(chunk.to_vec()) {
                     kept.extend_from_slice(chunk);
@@ -77,6 +76,17 @@ pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
             }
         }
 
+        // One zone without a duplicate cell has nothing to merge: the zone
+        // itself is the result, not a copy of it.
+        if let [only] = zones.as_slice()
+            && kept.len() == only.read().connectivity().len()
+        {
+            result.add_sub((*only).clone())?;
+            continue;
+        }
+
+        // Face colour from the first zone of this type.
+        let first_color = zones[0].read().face_color();
         let mut new_sm = SubMesh::from_connectivity(coords.clone(), et, kept)?;
         new_sm.set_face_color(first_color);
         result.add_sub(Handle::new(new_sm))?;
@@ -186,5 +196,50 @@ mod tests {
             "first-seen order"
         );
         assert_eq!(c2.cell_counts().unwrap(), vec![1, 1]);
+    }
+
+    #[test]
+    fn keeps_a_zone_with_nothing_to_merge() {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
+        let mut tri = SubMesh::new(coords.clone(), ElementType::TRI3);
+        tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        let tri = Handle::new(tri);
+        let mut points = SubMesh::new(coords.clone(), ElementType::POI1);
+        points.add_cell(&[a.id()]).unwrap();
+        points.add_cell(&[b.id()]).unwrap();
+        let points = Handle::new(points);
+        let mut mesh = Mesh::empty();
+        mesh.add_sub(tri.clone()).unwrap();
+        mesh.add_sub(points.clone()).unwrap();
+        let refs_before = coords.read().refcount(a.id());
+
+        let c2 = consolidate(&mesh).unwrap();
+        // Each type has one zone and no duplicate: both zones come back as
+        // they are, and no node gains a reference.
+        assert!(c2.get(0).unwrap().same_object(&tri));
+        assert!(c2.get(1).unwrap().same_object(&points));
+        assert_eq!(coords.read().refcount(a.id()), refs_before);
+    }
+
+    #[test]
+    fn rebuilds_a_single_zone_holding_a_duplicate_cell() {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let mut seg = SubMesh::new(coords.clone(), ElementType::SEG2);
+        seg.add_cell(&[a.id(), b.id()]).unwrap();
+        seg.add_cell(&[a.id(), b.id()]).unwrap(); // the same cell again
+        let seg = Handle::new(seg);
+        let mut mesh = Mesh::empty();
+        mesh.add_sub(seg.clone()).unwrap();
+
+        let c2 = consolidate(&mesh).unwrap();
+        // Something to drop: a new zone, without the duplicate.
+        assert!(!c2.get(0).unwrap().same_object(&seg));
+        assert_eq!(c2.cell_count(), 1);
+        assert_eq!(seg.read().cell_count(), 2);
     }
 }

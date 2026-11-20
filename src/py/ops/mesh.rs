@@ -613,8 +613,11 @@ pub fn points_on_torus(
 /// Fuse the submeshes of `mesh` of one element type, dropping duplicate cells.
 ///
 /// A duplicate cell has the same node sequence as another. Types appear in the
-/// order they are first seen; the face colour of the first submesh of each type is
-/// kept.
+/// order they are first seen. A type held by a single submesh with no duplicate
+/// cell has nothing to merge: that submesh comes back as itself, shared with
+/// `mesh` — mutating one mutates the other, and `duplicate()` makes an
+/// independent copy. Any other type gives a new submesh, with the face colour
+/// of the first submesh of that type.
 ///
 /// # Parameters
 ///
@@ -622,7 +625,7 @@ pub fn points_on_torus(
 ///
 /// # Returns
 ///
-/// A new `Mesh`, one submesh per element type.
+/// A `Mesh`, one submesh per element type.
 ///
 /// # Raises
 ///
