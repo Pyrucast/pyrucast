@@ -11,7 +11,17 @@ butée.
 | opérateur | `pyrucast.model.dirichlet(imposed_mesh, target, variable, sense="=")` |
 | tag | `constraint` et celui de la cible |
 | type | contrainte (`label()` : `"Dirichlet"`) |
-| support | un maillage POI1 : les nœuds imposés, une relation par maille |
+| support | un maillage de tout type : ses nœuds distincts, toutes zones confondues, une relation par nœud |
+
+`imposed_mesh` est n'importe quel maillage : un bord, une face, une sélection
+de points. La contrainte tient chacun de ses nœuds **une seule fois**, même
+quand plusieurs zones le partagent, comme le coin commun à deux bords : deux
+relations sur un même nœud rendraient le système impossible à résoudre. Les
+nœuds imposés forment **une** zone POI1 : une seule zone donnée est tenue par
+son [compagnon POI1](../mesh.md#ce-quune-zone-garde-en-cache), si bien que la
+solution posée sur ce support se combine nœud à nœud avec les champs posés sur
+cette zone ; une sélection de points qui ne cite chaque nœud qu'une fois est
+prise telle quelle ; plusieurs zones sont réunies en une zone POI1 nouvelle.
 
 `target` est le modèle contraint, `variable` l'une de ses inconnues ; une
 variable que la cible ne déclare pas est refusée à la construction. Une seule
@@ -60,7 +70,7 @@ chargement impose 0.
 
 | | |
 |---|---|
-| raideur | les blocs \\(C\\) et \\(C^{\mathsf T}\\), une paire par zone du support |
+| raideur | les blocs \\(C\\) et \\(C^{\mathsf T}\\), une paire sur la zone des nœuds imposés |
 | masse, géométrique | — |
 | tangente | = raideur |
 | forces internes | \\(C^{\mathsf T}\lambda\\) sur la duale de la cible, \\(C\\,u\\) sur les lignes `imposed` |

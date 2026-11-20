@@ -235,6 +235,19 @@ assert len(compagnon | pyrucast.mesh.to_poi1(tri)) == 2
 assert (f - g).value(a, "T") == 0.75
 assert r.node_count == 4 and r.value(a, "T") == 1.0
 
+# ANCHOR: compagnon_poi1
+# Une zone POI1 qui ne cite chaque nœud qu'une fois est son propre
+# compagnon : to_poi1 la rend telle quelle, sans la recopier.
+points = pyrucast.mesh.poi1_from_nodes([a, b])
+print(len(points | pyrucast.mesh.to_poi1(points)))  # 1 — la même zone
+
+# La même règle zone par zone : la méthode to_poi1 d'une zone.
+print(points[0].to_poi1().cell_count)  # 2
+print(tri[0].to_poi1().element_type, tri[0].to_poi1().cell_count)  # POI1 4
+# ANCHOR_END: compagnon_poi1
+assert len(points | pyrucast.mesh.to_poi1(points)) == 1
+assert tri[0].to_poi1().cell_count == 4
+
 # ── aggregat ───────────────────────────────────────────────
 
 # ANCHOR: aggregat

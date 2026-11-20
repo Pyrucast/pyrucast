@@ -75,8 +75,9 @@ scelle.
 ```
 
 Les nœuds d'un support doivent être **distincts**, comme ceux que rend
-`to_poi1` : un support qui répète un nœud est refusé, comme pour un
-[champ aux nœuds](node-field.md). Quand un bloc porte plusieurs noms, `ordering` dit comment ses
+`to_poi1` : un bloc prend ses supports tels quels, et en refuse un qui répète
+un nœud. Un [champ aux nœuds](node-field.md), lui, se pose sur le compagnon
+POI1 de sa zone, et l'accepte donc sur ses nœuds distincts. Quand un bloc porte plusieurs noms, `ordering` dit comment ses
 lignes se suivent : nœud par nœud (`"nodes_then_vars"`, par défaut) ou nom par
 nom (`"vars_then_nodes"`). `symmetry` vaut `"full"` ou `"none"` (par défaut),
 voir [Symétrie](#symétrie).

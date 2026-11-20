@@ -117,8 +117,8 @@ impl Truss {
     /// Truss physics on a `SEG2` FE subspace, its law reading
     /// `strain_measure`: `linear`, or `green_lagrange` for large displacements — the
     /// law then reads `E_*` and writes the second Piola–Kirchhoff axial force
-    /// `S_n`. Builds the stable POI1 [`SubMesh`] over the subspace's unique
-    /// nodes.
+    /// `S_n`. Its zone's POI1 companion ([`SubMesh::to_poi1`]), the subspace's
+    /// distinct nodes, is the support of its blocks.
     ///
     /// Errors:
     /// - any element but `SEG2`: the bar kernels read the two end nodes of a

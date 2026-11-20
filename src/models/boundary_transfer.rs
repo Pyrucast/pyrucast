@@ -123,8 +123,8 @@ impl BoundaryTransfer {
     /// dual `target` pairs it with, and all must belong to one nature, which
     /// the exchange then carries.
     ///
-    /// Builds the stable POI1 [`SubMesh`] covering the subspace's unique nodes
-    /// (reused as the row/col support of every assembled block). Errors on an
+    /// Its zone's POI1 companion ([`SubMesh::to_poi1`]), the subspace's distinct
+    /// nodes, is the row/col support of every assembled block. Errors on an
     /// empty `variables`, on a variable `target` does not declare, and on
     /// variables of two natures.
     ///

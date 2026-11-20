@@ -215,9 +215,10 @@ pub struct HeatConduction {
 impl HeatConduction {
     /// Heat conduction on an FE subspace, with the given material symmetry. An
     /// orthotropic or anisotropic conductivity carries its material axes through
-    /// the material field (see [`crate::models::symmetry`]). Builds the stable
-    /// POI1 [`SubMesh`] covering the subspace's unique nodes (reused as the
-    /// row/col support of every assembled block).
+    /// the material field (see [`crate::models::symmetry`]). Its zone's POI1
+    /// companion ([`SubMesh::to_poi1`]) — the subspace's distinct nodes, shared
+    /// with the node fields on that zone — is the row/col support of every
+    /// assembled block.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;

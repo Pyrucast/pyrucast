@@ -74,7 +74,8 @@ pub fn interface_transfer(
 ///   an edge, a face, a selection of points. Its distinct nodes, all zones
 ///   together, are held, each once: a node that two zones share gets one
 ///   relation. A single zone is held through its POI1 companion,
-///   `SubMesh.to_poi1()`, so the constraint pairs with fields on that mesh.
+///   `SubMesh.to_poi1()`, so the solution on that support pairs node by node
+///   with the fields on that zone; several zones are fused into a new POI1 zone.
 /// - `target`: the model being constrained; the dual row of `variable` is read
 ///   from it.
 /// - `variable`: the unknown of `target` to hold, one of its primals.

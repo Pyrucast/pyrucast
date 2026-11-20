@@ -107,9 +107,11 @@ impl Dirichlet {
     /// `imposed_mesh` is any mesh: its distinct nodes, all zones together, are
     /// the constrained nodes — `imposed_mesh.to_poi1().consolidate()`. A node
     /// that several zones share gets one relation, not one per zone (two would
-    /// leave the system singular). A single zone, the usual case (an edge, a
-    /// face), lands on its own POI1 companion, so the constraint pairs with the
-    /// fields on that mesh; a POI1 zone listing each node once is used as is.
+    /// leave the system singular). The constrained nodes form **one** POI1
+    /// zone: a single zone, the usual case (an edge, a face), gives its own
+    /// POI1 companion, so the solution on that support pairs node by node with
+    /// the fields on that zone — a POI1 zone listing each node once is used as
+    /// is; several zones are fused into a new POI1 zone.
     ///
     /// `variable` is a primal of `target`, whose dual row (e.g. `"q"`) is read
     /// from it.
@@ -448,7 +450,7 @@ mod tests {
         assert_eq!(held.imposed_mesh.len(), 1);
         assert_eq!(held.imposed_mesh.cell_count(), 3);
 
-        // Two relations on `b` used to leave the system singular; one solves.
+        // `b` is held once, so the system solves.
         let whole = conduction
             .union(&model::dirichlet(&halves, &conduction, "T", RelationSense::Equality).unwrap())
             .unwrap();

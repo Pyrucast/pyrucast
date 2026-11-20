@@ -240,8 +240,10 @@ ci-dessus possibles ou rapides :
 - **le compagnon POI1 d'une zone de maillage.** `NodeField(maillage, …)`,
   `restrict` et les opérateurs qui produisent un champ aux nœuds posent leurs
   zones sur le compagnon POI1 de chaque zone de maillage : la zone POI1 de ses
-  nœuds, celle que rend `to_poi1`. Ce compagnon est calculé une fois, puis rendu tel quel à chaque demande, tant que la zone de maillage
-  ne change pas. Deux champs construits sur le même maillage reçoivent donc le
+  nœuds, celle que rend `to_poi1` — la zone elle-même quand c'est une zone
+  POI1 qui ne cite chaque nœud qu'une fois. Ce compagnon est calculé une fois,
+  puis rendu tel quel à chaque demande, tant que la zone de maillage ne change
+  pas. Deux champs construits sur le même maillage reçoivent donc le
   même support et se combinent nœud à nœud : c'est ce qui fait marcher `a - b`
   et `restrict(…, carre)` dans les exemples ci-dessus ;
 - **la table qui donne la ligne d'un nœud** dans ce support, construite à la
