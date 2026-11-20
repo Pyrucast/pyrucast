@@ -83,9 +83,9 @@ use crate::parallel::*;
 /// let both = a.union(&b)?;
 /// // `to_poi1` deduplicates **per zone**: over two zones it still counts
 /// // four nodes. Consolidating first gives the true count.
-/// assert_eq!(mesh::to_poi1(&mesh::consolidate(&both)?)?.cell_count(), 4);
+/// assert_eq!(mesh::to_poi1(&mesh::consolidate(&both)).cell_count(), 4);
 /// let stitched = mesh::merge_nodes(&both, 1e-6, false)?;
-/// assert_eq!(mesh::to_poi1(&mesh::consolidate(&stitched)?)?.cell_count(), 3);
+/// assert_eq!(mesh::to_poi1(&mesh::consolidate(&stitched)).cell_count(), 3);
 /// // The structure is untouched: same zones, same cells, in the same order —
 /// // only **which node** a cell refers to has changed.
 /// assert_eq!(stitched.cell_count(), both.cell_count());
@@ -691,7 +691,7 @@ mod tests {
 
         let mut sealed = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         sealed.add_cell(&[b2.id(), d.id()]).unwrap();
-        crate::containers::mesh::seal(&sealed.get(0).unwrap());
+        SubMesh::seal(&sealed.get(0).unwrap());
 
         let mut open = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         open.add_cell(&[a.id(), b.id()]).unwrap();

@@ -1,7 +1,6 @@
 use crate::aggregate::Aggregate;
-use crate::atoms::ElementType;
 use crate::containers::field::{Field, SubField, ABSENT_COMPONENT};
-use crate::containers::mesh::Mesh;
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
 use crate::handle::Handle;
@@ -96,13 +95,9 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
         if !sm.read().coords().same_object(&coords) {
             continue;
         }
-        // The support `SubNodeField::from_support` takes: a POI1 itself, any
-        // other its cached companion.
-        let support = if sm.read().element_type() == ElementType::POI1 {
-            sm.clone()
-        } else {
-            sm.read().to_poi1()?
-        };
+        // The support `SubNodeField::from_support` takes: the zone's POI1
+        // companion.
+        let support = SubMesh::to_poi1(sm);
         let overlaps = view.overlaps(&support, &all);
         // The components of the zones holding one of its nodes, in the order
         // of `field`.

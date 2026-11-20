@@ -45,7 +45,7 @@ use serde::{Deserialize, Serialize};
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["k".into()], &[2.0]).unwrap());
 /// # use pyrucast::models::heat_conduction;
@@ -75,7 +75,7 @@ pub const PRIMAL_VAR: &str = "T";
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["k".into()], &[2.0]).unwrap());
 /// # use pyrucast::models::heat_conduction;
@@ -104,7 +104,7 @@ pub const DUAL_VAR: &str = "q";
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["k".into()], &[2.0]).unwrap());
 /// # use pyrucast::models::heat_conduction;
@@ -196,7 +196,7 @@ fn flux_components(space_dim: usize) -> Vec<String> {
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::heat_conduction::{self, HeatConduction};
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
-/// let hc = HeatConduction::new(zone.clone(), MaterialSymmetry::Isotropic)?;
+/// let hc = HeatConduction::new(zone.clone(), MaterialSymmetry::Isotropic);
 /// assert_eq!(hc.primal_vars(), vec![heat_conduction::PRIMAL_VAR.to_string()]);
 /// assert_eq!(hc.dual_vars(), vec![heat_conduction::DUAL_VAR.to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -215,9 +215,10 @@ pub struct HeatConduction {
 impl HeatConduction {
     /// Heat conduction on an FE subspace, with the given material symmetry. An
     /// orthotropic or anisotropic conductivity carries its material axes through
-    /// the material field (see [`crate::models::symmetry`]). Builds the stable
-    /// POI1 [`SubMesh`] covering the subspace's unique nodes (reused as the
-    /// row/col support of every assembled block).
+    /// the material field (see [`crate::models::symmetry`]). Its zone's POI1
+    /// companion ([`SubMesh::to_poi1`]) — the subspace's distinct nodes, shared
+    /// with the node fields on that zone — is the row/col support of every
+    /// assembled block.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -236,25 +237,25 @@ impl HeatConduction {
     /// # let zone = fes.get(0).unwrap();
     /// # use pyrucast::models::heat_conduction::HeatConduction;
     /// # use pyrucast::models::Domain;
-    /// let hc = HeatConduction::new(zone.clone(), MaterialSymmetry::Isotropic)?;
+    /// let hc = HeatConduction::new(zone.clone(), MaterialSymmetry::Isotropic);
     /// assert_eq!(hc.material_components(), vec!["k".to_string()]);
     /// // An orthotropic conductivity reads its principal values and its axes.
-    /// let ortho = HeatConduction::new(zone.clone(), MaterialSymmetry::Orthotropic)?;
+    /// let ortho = HeatConduction::new(zone.clone(), MaterialSymmetry::Orthotropic);
     /// assert!(ortho.material_components().len() > 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn new(fespace: Handle<SubFiniteElementSpace>, symmetry: MaterialSymmetry) -> Result<Self> {
+    pub fn new(fespace: Handle<SubFiniteElementSpace>, symmetry: MaterialSymmetry) -> Self {
         let (submesh, space_dim) = {
             let s = fespace.read();
             (s.submesh(), s.space_dim())
         };
-        let support = submesh.read().to_poi1()?;
-        Ok(Self {
+        let support = SubMesh::to_poi1(&submesh);
+        Self {
             fespace,
             support,
             space_dim,
             symmetry,
-        })
+        }
     }
 }
 
@@ -464,7 +465,7 @@ impl Behavior for HeatConduction {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["k".into()], &[2.0]).unwrap());
 /// # use pyrucast::models::heat_conduction;
@@ -569,7 +570,7 @@ pub fn element_stiffness(
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["rho".into(), "cp".into()], &[3.0, 4.0]).unwrap());
 /// # use pyrucast::models::heat_conduction;
@@ -651,7 +652,7 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        HeatConduction::new(fes.get(0).unwrap(), MaterialSymmetry::Isotropic).unwrap()
+        HeatConduction::new(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
     }
 
     #[test]

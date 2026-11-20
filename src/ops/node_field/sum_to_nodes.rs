@@ -12,6 +12,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::ElementField;
 use crate::containers::field::add_partials;
 use crate::containers::field::SubField;
+use crate::containers::mesh::SubMesh;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::models::kernel;
@@ -67,7 +68,7 @@ pub fn sum_to_nodes(field: &ElementField) -> Result<NodeField> {
                  build it on a space with the REDUCED quadrature (see cell_integral)"
             )));
         }
-        let support = fespace.read().submesh().read().to_poi1()?;
+        let support = SubMesh::to_poi1(&fespace.read().submesh());
         let n = components.len();
         let guard = zone.read();
         let values = guard.values();

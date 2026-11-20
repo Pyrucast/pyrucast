@@ -162,7 +162,7 @@ impl SubNodeField {
 
         // The field indexes its rows by position in this support; freeze it so
         // the row order can never move under the values.
-        let support = crate::containers::mesh::seal(submesh);
+        let support = SubMesh::seal(submesh);
 
         let n_comp = components.len();
         Ok(SubNodeField {
@@ -172,16 +172,18 @@ impl SubNodeField {
         })
     }
 
-    /// Build a SubNodeField on the distinct nodes of **any** [`SubMesh`]. A
-    /// POI1 support is shared as-is (same handle); any other element type lands
-    /// on the submesh's **canonical POI1 companion** ([`SubMesh::to_poi1`]) —
-    /// materialised once and cached, so every field restricted to this submesh
-    /// (and the stiffness block / `divergence` / `flux` output over it) shares
-    /// one support slot and pairs under `same_support`.
+    /// Build a SubNodeField on the distinct nodes of **any** [`SubMesh`]: it
+    /// lands on the zone's **POI1 companion** ([`SubMesh::to_poi1`]) — the zone
+    /// itself for a POI1 listing each node once, else a companion materialised
+    /// once and cached — so every field restricted to this submesh (and the
+    /// stiffness block / `divergence` / `flux` output over it) shares one
+    /// support slot and pairs under `same_support`.
     ///
-    /// **`submesh` itself is left unsealed.** The field never reads it again —
-    /// it holds the companion, and it is the *companion* that is frozen. The
-    /// argument may therefore keep growing; doing so drops its companion
+    /// **A `submesh` other than its own companion is left unsealed.** The field
+    /// never reads it again — it holds the companion, and it is the *companion*
+    /// that is frozen (a POI1 listing each node once is its own companion, so
+    /// that one is sealed). The argument may therefore keep growing; doing so
+    /// drops its companion
     /// ([`SubMesh::to_poi1`] memoizes per connectivity state), so a field built
     /// afterwards lands on a **new** support and no longer pairs with this one.
     /// Nothing is invalidated — the older fields are simply defined on the
@@ -215,14 +217,9 @@ impl SubNodeField {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn from_support(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
-        let element_type = submesh.read().element_type();
-        if element_type == ElementType::POI1 {
-            return Self::from_poi1(submesh, components);
-        }
-        // Share the source's cached POI1 companion — `from_poi1` seals *that*
-        // and validates `components`. The source stays as it is.
-        let poi = submesh.read().to_poi1()?;
-        Self::from_poi1(&poi, components)
+        // `from_poi1` seals the companion and validates `components`; a source
+        // other than its own companion stays as it is.
+        Self::from_poi1(&SubMesh::to_poi1(submesh), components)
     }
 
     /// Number of nodes in the support.
@@ -416,8 +413,8 @@ impl SubNodeField {
     ///
     /// The support is a sealed POI1 SubMesh, so its `NodeId → index` map is
     /// cached and indexes exactly the rows of this field (same order).
-    /// We consult that map for an O(1) lookup instead of the linear scan that
-    /// used to dominate the hot write paths (`set_value`, arithmetic, …). A
+    /// The lookup is O(1) through that map, on the hot write paths (`set_value`,
+    /// arithmetic, …) where a scan of the rows would dominate. A
     /// short read guard on the support is opened and released here; callers
     /// looping over many nodes should hoist it with [`index_of_with`].
     ///
@@ -1591,8 +1588,8 @@ impl NodeFieldView {
 
     /// Like [`NodeFieldView::value`], `None` when absent. Each zone's node
     /// lookup goes through its support's cached `NodeId → index` map (held
-    /// open by `supports`), so the scan that used to dominate `deformation`
-    /// is now O(1).
+    /// open by `supports`): O(1), where a scan of the rows would dominate
+    /// `deformation`.
     pub(crate) fn value_opt(&self, nid: NodeId, component: &str) -> Option<f64> {
         self.inner
             .zones
@@ -2045,29 +2042,35 @@ mod tests {
     }
 
     #[test]
-    fn a_poi1_support_listing_a_node_twice_is_refused_and_left_unsealed() {
+    fn a_poi1_listing_a_node_twice_is_no_support_but_its_companion_is() {
         let coords = Handle::new(Coords::new(1).unwrap());
         let n = nodes_on_a_line(&coords, 2);
         // [a, a, b]: `b` sits at row 2 but ranks 1 among the distinct nodes.
         let held = [n[0].clone(), n[0].clone(), n[1].clone()];
-        let support = Handle::new(SubMesh::poi1_from_nodes(&held).unwrap());
-        let err = SubNodeField::from_poi1(&support, vec!["T".into()]).unwrap_err();
+        let repeated = Handle::new(SubMesh::poi1_from_nodes(&held).unwrap());
+        // Taken as a support as it is, the zone is refused, and left unsealed.
+        let err = SubNodeField::from_poi1(&repeated, vec!["T".into()]).unwrap_err();
         assert!(
             err.to_string().contains("3 cell(s) but 2 distinct node(s)"),
             "{err}"
         );
-        assert!(!support.read().is_sealed());
-        // The aggregate constructor reaches the zone through the same door.
-        let mut mesh = Mesh::empty();
-        mesh.add_sub(support.clone()).unwrap();
-        assert!(NodeField::new(&mesh, vec!["T".into()]).is_err());
+        assert!(!repeated.read().is_sealed());
 
-        // Its distinct nodes make a support: one row per node, `b` at row 1.
-        let distinct = support.read().to_poi1().unwrap();
-        let mut f = SubNodeField::from_poi1(&distinct, vec!["T".into()]).unwrap();
-        f.set_value(n[1].id(), "T", 7.0).unwrap();
-        assert_eq!(f.node_count(), 2);
-        assert_eq!(f.get(1, 0).unwrap(), 7.0);
+        // A field *on* the zone lands on its POI1 companion, as on any zone:
+        // one row per distinct node, `b` at row 1 — the zone stays unsealed.
+        let mut mesh = Mesh::empty();
+        mesh.add_sub(repeated.clone()).unwrap();
+        let field = NodeField::new(&mesh, vec!["T".into()]).unwrap();
+        let zone = field.get(0).unwrap();
+        assert!(zone
+            .read()
+            .support()
+            .same_object(&SubMesh::to_poi1(&repeated)));
+        assert!(!zone.read().support().same_object(&repeated));
+        assert!(!repeated.read().is_sealed());
+        zone.write().set_value(n[1].id(), "T", 7.0).unwrap();
+        assert_eq!(zone.read().node_count(), 2);
+        assert_eq!(zone.read().get(1, 0).unwrap(), 7.0);
     }
 
     #[test]

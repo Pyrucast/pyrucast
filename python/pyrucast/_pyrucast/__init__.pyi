@@ -1928,6 +1928,11 @@ class Mesh:
         r"""
         The distinct nodes of `mesh`, as a POI1 mesh, submesh by submesh.
         
+        Each submesh gives its POI1 companion, `SubMesh.to_poi1()`: a POI1 submesh
+        that lists each node once comes back as itself, shared with `mesh`; any
+        other gives the POI1 submesh of its distinct nodes, built once and the same
+        at every call. Fields built on the result pair with fields built on `mesh`.
+        
         # Parameters
         
         - `mesh`: the mesh whose nodes to take.
@@ -2294,8 +2299,11 @@ class Mesh:
         Fuse the submeshes of `mesh` of one element type, dropping duplicate cells.
         
         A duplicate cell has the same node sequence as another. Types appear in the
-        order they are first seen; the face colour of the first submesh of each type is
-        kept.
+        order they are first seen. A type held by a single submesh with no duplicate
+        cell has nothing to merge: that submesh comes back as itself, shared with
+        `mesh` — mutating one mutates the other, and `duplicate()` makes an
+        independent copy. Any other type gives a new submesh, with the face colour
+        of the first submesh of that type.
         
         # Parameters
         
@@ -2303,11 +2311,7 @@ class Mesh:
         
         # Returns
         
-        A new `Mesh`, one submesh per element type.
-        
-        # Raises
-        
-        `RuntimeError` if `mesh` has no submesh (no `Coords` to attach to).
+        A `Mesh`, one submesh per element type; empty for an empty `mesh`.
         """
     def border(self, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
@@ -3792,9 +3796,9 @@ class NodeField:
         r"""
         `NodeField(support, components)` — a field with uniform values. With a
         `Mesh` support: one `SubNodeField` per submesh, each on the
-        distinct nodes of its zone. With a `SubMesh`: a single zone. A POI1
-        zone is its own support, and is refused if it lists a node twice
-        (`pyrucast.mesh.to_poi1` gives its distinct nodes).
+        distinct nodes of its zone — its POI1 companion, `SubMesh.to_poi1()`.
+        With a `SubMesh`: a single zone. A POI1 zone listing each node once is
+        its own companion, so the field lands on that very zone.
         
         Each entry of `components` is a `(name, value)` pair, the component
         holding `value` at every node, or a bare name, holding zero:
@@ -5401,6 +5405,15 @@ class SubMesh:
         Deep-copy into a fresh, **unsealed** SubMesh with the same
         connectivity — the way to keep editing after this one has been sealed.
         """
+    def to_poi1(self) -> SubMesh:
+        r"""
+        The POI1 companion of this zone: its nodes, each once, in order of
+        first appearance. A POI1 zone listing each node once is its own
+        companion, so this very zone comes back; any other zone gets its
+        companion built once and cached, the same one at every call. Node
+        fields, `pyrucast.node_field.restrict` and the matrix supports of a
+        model all land on it, which is why their results combine node to node.
+        """
     def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, field: typing.Optional[typing.Any] = None, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, wireframe: builtins.bool = False, revolve: builtins.bool = False, revolve_angle: builtins.float = 360.0, title: typing.Optional[builtins.str] = None) -> None:
         r"""
         Visualize this submesh.
@@ -6464,8 +6477,11 @@ def consolidate_mesh(mesh: Mesh) -> Mesh:
     Fuse the submeshes of `mesh` of one element type, dropping duplicate cells.
     
     A duplicate cell has the same node sequence as another. Types appear in the
-    order they are first seen; the face colour of the first submesh of each type is
-    kept.
+    order they are first seen. A type held by a single submesh with no duplicate
+    cell has nothing to merge: that submesh comes back as itself, shared with
+    `mesh` — mutating one mutates the other, and `duplicate()` makes an
+    independent copy. Any other type gives a new submesh, with the face colour
+    of the first submesh of that type.
     
     # Parameters
     
@@ -6473,11 +6489,7 @@ def consolidate_mesh(mesh: Mesh) -> Mesh:
     
     # Returns
     
-    A new `Mesh`, one submesh per element type.
-    
-    # Raises
-    
-    `RuntimeError` if `mesh` has no submesh (no `Coords` to attach to).
+    A `Mesh`, one submesh per element type; empty for an empty `mesh`.
     """
 
 def consolidate_node(field: NodeField) -> NodeField:
@@ -6888,7 +6900,12 @@ def dirichlet(imposed_mesh: Mesh, target: Model, variable: builtins.str, sense: 
     
     # Parameters
     
-    - `imposed_mesh`: the POI1 mesh of the constrained nodes.
+    - `imposed_mesh`: the mesh of the constrained nodes, of any element type —
+      an edge, a face, a selection of points. Its distinct nodes, all zones
+      together, are held, each once: a node that two zones share gets one
+      relation. A single zone is held through its POI1 companion,
+      `SubMesh.to_poi1()`, so the solution on that support pairs node by node
+      with the fields on that zone; several zones are fused into a new POI1 zone.
     - `target`: the model being constrained; the dual row of `variable` is read
       from it.
     - `variable`: the unknown of `target` to hold, one of its primals.
@@ -6903,7 +6920,7 @@ def dirichlet(imposed_mesh: Mesh, target: Model, variable: builtins.str, sense: 
     # Raises
     
     - `ValueError` for an unknown `sense`.
-    - `RuntimeError` if `imposed_mesh` is not POI1, or if `variable` is not a
+    - `RuntimeError` if `imposed_mesh` holds no node, or if `variable` is not a
       primal of `target`.
     """
 
@@ -10083,6 +10100,11 @@ def to_arrays(groups: dict, *, node_fields: typing.Sequence[NodeField] = [], ele
 def to_poi1(mesh: Mesh) -> Mesh:
     r"""
     The distinct nodes of `mesh`, as a POI1 mesh, submesh by submesh.
+    
+    Each submesh gives its POI1 companion, `SubMesh.to_poi1()`: a POI1 submesh
+    that lists each node once comes back as itself, shared with `mesh`; any
+    other gives the POI1 submesh of its distinct nodes, built once and the same
+    at every call. Fields built on the result pair with fields built on `mesh`.
     
     # Parameters
     

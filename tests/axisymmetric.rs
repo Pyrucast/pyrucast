@@ -303,7 +303,7 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
 
     // Plane strain: u_z = 0 on both z faces (every node on them, mid-edge
     // nodes included — hence the coordinate filter rather than an index list).
-    let poi1 = mesh::to_poi1(&solid_mesh)?;
+    let poi1 = mesh::to_poi1(&solid_mesh);
     let nodes: Vec<Node> = (0..poi1.get(0)?.read().cell_count())
         .map(|c| poi1.node(0, c, 0))
         .collect::<Result<_>>()?;

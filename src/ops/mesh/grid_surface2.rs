@@ -113,7 +113,7 @@ use crate::ops::mesh::{contour, paving};
 /// #     .union(&cote(&[2.0, 2.0], &[0.0, 2.0])).unwrap()
 /// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
 /// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
-/// # let contour = mesh::consolidate(&quatre).unwrap();
+/// # let contour = mesh::consolidate(&quatre);
 /// // The variant whose rows come **one per contour node** and whose rows are
 /// // allowed to bend: better on rectilinear shapes, worse on curved ones.
 /// let m = mesh::grid_surface2(&contour, ElementType::QUA4, Some(0.5), 1, false, mesh::FrontRelax::Free)?;
@@ -158,7 +158,7 @@ pub fn grid_surface2(
 /// #     .union(&cote(&[2.0, 2.0], &[0.0, 2.0])).unwrap()
 /// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
 /// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
-/// # let contour = mesh::consolidate(&quatre).unwrap();
+/// # let contour = mesh::consolidate(&quatre);
 /// # use std::sync::atomic::AtomicBool;
 /// // The token is polled at the mesher's **checkpoints**, not between two
 /// // instructions: a contour this short is paved before reaching one, and the

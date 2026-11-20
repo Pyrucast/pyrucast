@@ -394,12 +394,17 @@ impl SubModel {
     /// assert!(ortho.material_components().unwrap().len() > 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "the `via` constructor of `physics_operator!`: one signature for every \
+                  physics, which `spanning` calls zone by zone"
+    )]
     pub fn heat_conduction(
         fespace: Handle<SubFiniteElementSpace>,
         symmetry: MaterialSymmetry,
     ) -> Result<Self> {
         Ok(SubModel::HeatConduction(
-            heat_conduction::HeatConduction::new(fespace, symmetry)?,
+            heat_conduction::HeatConduction::new(fespace, symmetry),
         ))
     }
 
@@ -902,8 +907,9 @@ impl SubModel {
     }
 
     /// Dirichlet sub-model: enforce `variable = u_d` on the nodes of
-    /// `imposed_mesh`, one relation per node with a multiplier node of its own,
-    /// and `u_d` supplied later by the user through the load `SubNodeField`.
+    /// `imposed_mesh` — any mesh, its distinct nodes all zones together — one
+    /// relation per node with a multiplier node of its own, and `u_d` supplied
+    /// later by the user through the load `SubNodeField`.
     ///
     /// `variable` is a primal of `target`, the model being constrained; the dual
     /// row its reaction lands in is read from it (e.g. `"q"` for heat

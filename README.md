@@ -63,7 +63,7 @@ coords = pc.Coords(2)
 a = coords.add_node([0.0, 0.0])
 b = coords.add_node([0.10, 0.0])
 plate = pc.mesh.extrude(pc.mesh.line(a, b, 20), [0.0, 0.10], 20)  # 20 × 20 QUA4
-edge = pc.mesh.to_poi1(pc.mesh.border(plate))
+edge = pc.mesh.border(plate)
 
 fes = pc.FiniteElementSpace(plate)
 model = pc.model.heat_conduction(fes)

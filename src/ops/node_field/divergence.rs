@@ -21,6 +21,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::add_partials;
 use crate::containers::field::SubField;
+use crate::containers::mesh::SubMesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
@@ -172,7 +173,7 @@ fn subspace_divergence(field: &Handle<SubElementField>, prefix: &str) -> Result<
     let refs: Vec<&str> = names.iter().map(String::as_str).collect();
     let lay = f.resolve_components(&refs, prefix)?;
 
-    let support = submesh.read().to_poi1()?;
+    let support = SubMesh::to_poi1(&submesh);
     // The field guard is captured by the element closure (borrowed in place) and
     // held across the parallel scatter.
     kernel::scatter_to_nodes(

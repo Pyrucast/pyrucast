@@ -55,6 +55,7 @@ Plusieurs types se composent par l'union `|`.
 | `add_cell([nœuds])` | pose une maille, rend son indice |
 | `is_sealed` | la zone est-elle scellée ? |
 | `duplicate()` | une copie non scellée |
+| `to_poi1()` | son compagnon POI1 (voir [Ce qu'une zone garde en cache](#ce-quune-zone-garde-en-cache)) |
 | `face_color` | la couleur de tracé `(r, g, b)`, en lecture et en écriture |
 
 Une **maille** (`Cell`) est une **vue** : elle tient sa zone et son indice, et
@@ -129,11 +130,12 @@ la partagent sans la figer, et la zone peut grossir tant qu'aucun de ces objets
 ne s'y est posé. De même, `pyrucast.mesh.merge_nodes(…, in_place=True)`, qui
 réécrit la connectivité en place, refuse une zone scellée.
 
-Le champ aux nœuds mérite un mot. Posé sur une zone POI1, il prend cette zone
-pour support et la scelle. Posé sur une autre zone, il n'en indexe pas les
-mailles : il se pose sur son **compagnon POI1**, la zone POI1 de ses nœuds que
-`to_poi1` rend (voir [ci-dessous](#ce-quune-zone-garde-en-cache)), et c'est ce
-compagnon qui est scellé. La zone de départ reste modifiable ; si on la
+Le champ aux nœuds mérite un mot. Il se pose toujours sur le **compagnon POI1**
+de sa zone, la zone POI1 de ses nœuds que `to_poi1` rend (voir
+[ci-dessous](#ce-quune-zone-garde-en-cache)), et c'est ce compagnon qui est
+scellé. Une zone POI1 qui ne cite chaque nœud qu'une fois est son propre
+compagnon : c'est donc elle qui sert de support, et elle est scellée. Toute
+autre zone n'est pas indexée par le champ et reste modifiable ; si on la
 modifie, les champs déjà posés restent valides sur l'ancien compagnon, et les
 suivants se posent sur un nouveau.
 
@@ -153,13 +155,26 @@ positions.
 Une zone garde deux résultats tirés de sa connectivité. Chacun se calcule à la
 première demande, puis resert tel quel.
 
-**Son compagnon POI1.** `pyrucast.mesh.to_poi1(mesh)` rend, pour chaque zone,
-la zone POI1 de ses nœuds distincts, dans leur ordre de première apparition :
-son compagnon POI1. Il est calculé une fois par zone, puis **le même** est
-rendu à chaque appel. Tout ce qui pose un champ aux nœuds sur un maillage passe par lui :
+**Son compagnon POI1.** Le compagnon POI1 d'une zone est la zone POI1 de ses
+nœuds distincts, dans leur ordre de première apparition. `zone.to_poi1()` le
+rend pour une zone, `pyrucast.mesh.to_poi1(mesh)` pour chaque zone d'un
+maillage. Deux cas :
+
+- une zone POI1 qui ne cite chaque nœud qu'une fois **est** son propre
+  compagnon : elle revient telle quelle, sans copie ;
+- toute autre zone (un SEG2, un HEX8, ou une zone POI1 qui cite deux fois un
+  nœud) reçoit un compagnon calculé une fois, puis **le même** est rendu à
+  chaque appel.
+
+Tout ce qui pose quelque chose aux nœuds d'un maillage passe par lui :
 `NodeField(mesh, …)`, les supports des matrices d'un modèle — donc le résultat
 de `solve(K, f)` et le produit `K * x` —, `pyrucast.node_field.restrict(champ,
-mesh)`, les sorties de `divergence` et de `sum_to_nodes`.
+mesh)`, les sorties de `divergence` et de `sum_to_nodes`, et une contrainte
+`pyrucast.model.dirichlet` posée sur une zone seule.
+
+```python
+{{#include ../../tests/python/test_doc_conteneurs.py:compagnon_poi1}}
+```
 
 C'est ce qui permet à ces champs de se combiner. Deux champs aux nœuds ne
 s'additionnent ou ne se soustraient **nœud à nœud** que s'ils sont posés sur
@@ -189,7 +204,10 @@ support, et `restrict` le porte sur le nouveau compagnon :
 Les caches ne sont pas écrits par [`pyrucast.save`](sauvegarde.md) : après une
 relecture, le compagnon POI1 se recalcule, et un champ relu ne partage donc plus son
 support avec les champs qu'on pose ensuite sur le maillage relu.
-`restrict(champ, mesh)` l'y ramène.
+`restrict(champ, mesh)` l'y ramène. Une zone POI1 qui ne cite chaque nœud
+qu'une fois n'a pas de compagnon à recalculer, puisqu'elle est le sien : un
+champ relu posé sur elle partage son support avec les champs qu'on pose
+ensuite sur cette zone relue.
 
 ## Visualisation
 
@@ -219,13 +237,21 @@ refuse une zone d'un autre `Coords`.
   connectivité)` reçoit tout le tableau, le valide et incrémente ses nœuds en
   une seule prise de verrou, et `Coords::add_nodes` crée des nœuds d'un coup :
   c'est par là que les opérateurs de maillage produisent leurs zones.
-- **Scellement.** Les consommateurs passent par la fonction libre
-  `mesh::seal(&handle)`, qui ne prend le verrou d'écriture que si la zone
-  n'est pas déjà scellée : sceller une zone qu'un lecteur tient déjà ne bloque
-  pas. `add_cell`, `add_cell_taking` et `remap_nodes` rendent alors
-  `PyrucastError::MeshSealed`.
-- **Caches.** Deux `OnceLock`, lus par `node_index()` et `to_poi1()`, vidés
-  par chaque mutation de la connectivité et marqués `#[serde(skip)]`.
+- **Scellement.** Les consommateurs passent par `SubMesh::seal(&zone)`, qui
+  prend le `Handle` de la zone plutôt que la zone elle-même : il peut ainsi
+  regarder d'abord si elle est déjà scellée, et ne prendre le verrou
+  d'écriture que si elle ne l'est pas. Sceller une zone qu'un lecteur tient
+  déjà ne bloque donc pas. C'est le seul moyen de sceller : le drapeau n'a pas
+  d'autre accès public. `add_cell`, `add_cell_taking` et `remap_nodes`
+  rendent alors `PyrucastError::MeshSealed`.
+- **Caches.** Deux `OnceLock`, lus par `node_index()` et
+  `SubMesh::to_poi1(&zone)`, vidés par chaque mutation de la connectivité et
+  marqués `#[serde(skip)]`.
+- **Compagnon POI1.** `SubMesh::to_poi1(&zone)` prend, comme `seal`, le
+  `Handle` de la zone : pour une zone POI1 qui ne cite chaque nœud qu'une fois,
+  il rend ce `Handle` même, ce qu'une méthode qui ne voit que le contenu de la
+  zone ne pourrait pas faire. C'est l'unique entrée : `restrict`, les champs,
+  les physiques et `dirichlet` passent tous par elle.
 - **Types d'éléments.** `ElementType` porte le nom, le nombre de nœuds et la
   dimension topologique ; ce que l'élément sait de lui-même (repère, fonctions
   de forme, quadrature) vit dans `src/atoms/element_kind/`, un fichier par

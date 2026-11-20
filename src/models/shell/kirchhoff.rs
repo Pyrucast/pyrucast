@@ -308,7 +308,7 @@ fn bending_b(
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["E".into(), "nu".into(), "h".into()],
 /// #     &[210_000.0, 0.3, 0.01]).unwrap());

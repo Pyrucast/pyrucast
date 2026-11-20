@@ -64,7 +64,7 @@ Une matrice sauvée telle quelle repasse par `assemble()` avant de servir ; sans
 
 ### Le compagnon POI1 d'une zone de maillage
 
-Une zone de maillage garde en cache son compagnon POI1, la zone POI1 de ses nœuds que `mesh.to_poi1` rend : les champs posés sur un même maillage reçoivent ainsi le même support. Ce compagnon n'est pas écrit : sur le maillage relu, `to_poi1` en fabrique un nouveau, distinct du support des champs relus avec lui. Les opérations entre champs ne les apparient alors pas : `|` en garde deux zones, aux mêmes nœuds. `restrict(champ, maillage)` porte un champ relu sur le compagnon du maillage relu :
+Une zone de maillage garde en cache son compagnon POI1, la zone POI1 de ses nœuds que `mesh.to_poi1` rend : les champs posés sur un même maillage reçoivent ainsi le même support. Ce compagnon n'est pas écrit : sur le maillage relu, `to_poi1` en fabrique un nouveau, distinct du support des champs relus avec lui. Les opérations entre champs ne les apparient alors pas : `|` en garde deux zones, aux mêmes nœuds. Une zone POI1 qui ne cite chaque nœud qu'une fois n'a pas ce cas, puisqu'elle est son propre compagnon : un champ relu posé sur elle partage son support avec les champs qu'on pose ensuite sur cette zone relue. Sur toute autre zone, `restrict(champ, maillage)` porte un champ relu sur le compagnon du maillage relu :
 
 ```python
 {{#include ../../tests/python/test_doc_sauvegarde.py:compagnon}}

@@ -370,7 +370,7 @@ pub enum KernelInputs {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let mat = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// // A **computed** block materializes no value: it carries the recipe
@@ -617,7 +617,7 @@ pub struct SubMatrix {
     sealed: bool,
 }
 
-/// Seal a block, as [`crate::containers::mesh::seal`] seals a zone: the write
+/// Seal a block, as [`SubMesh::seal`] seals a zone: the write
 /// lock is taken only if the block is not sealed yet, so sealing again a block
 /// already sealed coexists with a reader holding it.
 fn seal(handle: &Handle<SubMatrix>) {
@@ -706,8 +706,8 @@ impl SubMatrix {
         col_support
             .read()
             .check_node_support("SubMatrix column support")?;
-        crate::containers::mesh::seal(row_support);
-        crate::containers::mesh::seal(col_support);
+        SubMesh::seal(row_support);
+        SubMesh::seal(col_support);
         let nrows = row_support.read().cell_count() * dual_vars.len();
         let ncols = col_support.read().cell_count() * primal_vars.len();
         Ok((nrows, ncols))
@@ -742,7 +742,7 @@ impl SubMatrix {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let mat = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
     /// // The same seen from the constructor: a sized, empty template,

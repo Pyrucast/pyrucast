@@ -19,14 +19,15 @@ cette page en donne ce qui est propre aux nœuds.
 ## Créer et lire un champ
 
 `pyrucast.NodeField(maillage, [("T", 20.0), "ux"])` crée une zone par zone du
-maillage, avec ces composantes ; sur une seule zone de maillage (`SubMesh`), le
-champ a une zone. Un couple `(nom, valeur)` donne à la composante cette valeur
-en tout nœud, un nom seul la met à zéro. `pyrucast.NodeField.empty()` est un
-champ vide, que `|` complète.
+maillage, avec ces composantes, et refuse un maillage qui liste deux fois la
+même zone ; sur une seule zone de maillage (`SubMesh`), le champ a une zone. Un
+couple `(nom, valeur)` donne à la composante cette valeur en tout nœud, un nom
+seul la met à zéro. `pyrucast.NodeField.empty()` est un champ vide, que `|`
+complète.
 `NodeField.with_components_per_submesh(maillage, [["T", "ux"], ["T"]])` donne
 une liste de composantes **par** zone. Une liste vide, un nom en double, un
-nombre de listes qui ne correspond pas aux zones ou un maillage qui liste deux
-fois la même zone sont refusés.
+nombre de listes qui ne correspond pas aux zones sont refusés, comme une même
+composante donnée deux fois sur un même support.
 
 Le champ se lit nœud par nœud : `champ.value(nœud, "T")` lit la première zone
 qui porte ce nœud et cette composante, et lève une erreur si aucune ne les
@@ -80,14 +81,17 @@ Chaque zone est posée sur une zone de maillage **POI1** : une liste de nœuds,
 un par maille. La ligne `i` de la zone est le `i`-ème nœud de ce support ; le
 champ ne range que ses valeurs et lit ses nœuds dans le support.
 
-- **Sur une zone POI1**, le champ prend cette zone pour support, telle quelle.
-  Il la refuse si elle liste deux fois un même nœud, puisqu'il range une ligne
-  par nœud ; `pyrucast.mesh.to_poi1` en donne les nœuds distincts.
-- **Sur une zone d'un autre type** (TRI3, HEX8…), il prend son **compagnon
-  POI1** : la zone POI1 de ses nœuds distincts, dans leur ordre de première
-  apparition, celle que rend `pyrucast.mesh.to_poi1`. La zone de maillage le
-  calcule une fois et le garde en [cache](#ce-qui-est-mis-en-cache) : deux
-  champs construits sur le même maillage reçoivent le même support.
+Sur n'importe quelle zone, le champ prend pour support son **compagnon POI1** :
+la zone POI1 de ses nœuds distincts, dans leur ordre de première apparition,
+celle que rend `zone.to_poi1()`.
+
+- **Une zone POI1 qui ne cite chaque nœud qu'une fois** est son propre
+  compagnon : le champ la prend pour support, telle quelle.
+- **Toute autre zone** (TRI3, HEX8…, ou une zone POI1 qui cite deux fois un
+  nœud) reçoit un compagnon que la zone de maillage calcule une fois et garde
+  en [cache](#ce-qui-est-mis-en-cache) : deux champs construits sur le même
+  maillage reçoivent le même support. Une zone POI1 qui répète un nœud est
+  donc acceptée, sur ses nœuds distincts : le champ range une ligne par nœud.
 
 Le support est [scellé](mesh.md#scellement), puisque le champ range ses lignes
 dans l'ordre de ses nœuds. La zone TRI3 d'où vient le compagnon, elle, reste
@@ -100,8 +104,8 @@ sur un nouveau compagnon. Les deux ne se combinent plus nœud à nœud ;
 `champ.support()` rend le support de chaque zone, dans l'ordre, et
 `zone.support()` celui d'une zone. C'est le même objet, pas une copie : un
 champ construit dessus se combine nœud à nœud avec le premier. Le champ garde
-son support en vie, mais pas la zone de maillage dont il a été tiré : il n'a
-plus besoin d'elle.
+son support en vie. Quand ce support est le compagnon d'une autre zone, un TRI3
+par exemple, le champ ne tient pas cette zone : il n'a pas besoin d'elle.
 
 ```python
 {{#include ../../tests/python/test_doc_conteneurs.py:node_field_support}}
@@ -197,11 +201,12 @@ caches des zones de maillage (détaillés dans
 [Maillage](mesh.md#ce-quune-zone-garde-en-cache)) :
 
 - **le compagnon POI1**, gardé par la zone de maillage d'origine, calculé à la
-  première demande puis rendu tel quel. C'est lui qui donne le même support à
-  `NodeField(maillage, …)`, à `restrict(…, maillage)`, à la solution de `solve`
-  et aux sorties de `divergence` et de `sum_to_nodes` sur ce maillage : ils se
-  combinent nœud à nœud. Il épargne aussi le dédoublonnage des nœuds de la zone
-  à chaque nouveau champ ;
+  première demande puis rendu tel quel — ou la zone elle-même, pour une zone
+  POI1 qui ne cite chaque nœud qu'une fois. C'est lui qui donne le même
+  support à `NodeField(maillage, …)`, à `restrict(…, maillage)`, à la solution
+  de `solve` et aux sorties de `divergence` et de `sum_to_nodes` sur ce
+  maillage : ils se combinent nœud à nœud. Il épargne aussi le dédoublonnage
+  des nœuds de la zone à chaque nouveau champ ;
 - **l'index des nœuds**, gardé par le support : la table « nœud → ligne »,
   construite à la première lecture par nœud (`value`, `set_value`, `values`,
   les opérateurs qui lisent le champ nœud par nœud). Elle sert ensuite à tous
@@ -245,6 +250,10 @@ compagnon :
 {{#include ../../tests/python/test_doc_sauvegarde.py:compagnon}}
 ```
 
+Une zone POI1 qui ne cite chaque nœud qu'une fois n'a pas de compagnon à
+recalculer, puisqu'elle est le sien : un champ relu posé sur elle partage son
+support avec les champs qu'on pose ensuite sur cette zone relue.
+
 ## Côté Rust
 
 `SubNodeField` porte le `Handle<SubMesh>` de son support, ses noms de
@@ -258,10 +267,12 @@ Les composantes d'un nœud sont donc contiguës : `node_values(ligne)` en rend
 la tranche sans copie.
 
 Le `Handle<SubMesh>` du support est le **compagnon POI1 lui-même**, sans objet
-intermédiaire. `SubMesh::to_poi1` garde ce compagnon dans un `OnceLock` et en
-rend un clone du `Handle` ; le champ garde ce clone. Un `Handle` étant un
-`Arc<RwLock<SubMesh>>`, le champ et la zone d'origine tiennent deux clones du
-même `Arc`, et le champ ne référence pas la zone d'origine.
+intermédiaire. `SubMesh::to_poi1(&zone)` rend un clone du `Handle` de la zone
+quand elle est son propre compagnon, et sinon garde le compagnon dans un
+`OnceLock` et en rend un clone du `Handle` ; le champ garde ce clone. Un
+`Handle` étant un `Arc<RwLock<SubMesh>>`, le champ tient un clone du même
+`Arc` que la zone (son propre compagnon) ou que son cache (le compagnon d'une
+autre zone) ; dans le second cas, le champ ne référence pas la zone d'origine.
 
 `NodeField` est l'agrégat de `Handle<SubNodeField>`. Son `check_push` refuse
 une zone d'un autre `Coords`, son `check_add` une composante déjà portée sur le

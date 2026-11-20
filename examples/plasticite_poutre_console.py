@@ -89,12 +89,11 @@ def main():
     tip = mesh.nearest_node([length, height / 2.0])
     coords_field = pyrucast.node_field.positions(mesh, ["X"])
     free_mesh = pyrucast.mesh.select(coords_field, ge=length / nx / 2.0)
-    imposed_mesh = pyrucast.mesh.to_poi1(left_edge)
 
     # ── Model: plasticity (plane stress) + clamped end (Dirichlet) ──────────
     model = pyrucast.model.plasticity_perfect(fes, "plane_stress")
-    model = model | pyrucast.model.dirichlet(imposed_mesh, model, "u_x")
-    model = model | pyrucast.model.dirichlet(imposed_mesh, model, "u_y")
+    model = model | pyrucast.model.dirichlet(left_edge, model, "u_x")
+    model = model | pyrucast.model.dirichlet(left_edge, model, "u_y")
 
     # ── Reference load: unit shear (density −1) on the right face, as consistent
     #    nodal forces. It is a term of the model: it joins the model, and its

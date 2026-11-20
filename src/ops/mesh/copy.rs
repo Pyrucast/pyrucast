@@ -100,7 +100,7 @@ mod tests {
         }
         // …but the two cells still share the edge (b, c): 4 distinct nodes,
         // not 6.
-        assert_eq!(copie.to_poi1().unwrap().cell_count(), 4);
+        assert_eq!(copie.to_poi1().cell_count(), 4);
         // The source keeps its own nodes, unmoved.
         assert_eq!(mesh.node(0, 0, 0).unwrap().id(), n[0].id());
     }

@@ -125,6 +125,37 @@ def test_dirichlet_creates_multiplier_node_and_writes_both_blocks():
     assert K.get(a, "q", mult, "lambda") == 1.0
 
 
+def _heated_plate(hold):
+    """The README plate: 10 cm, 20 × 20 QUA4, heated throughout, T = 0 held on
+    `hold(plate)`. Returns the plate and the temperature."""
+    coords = pyrucast.Coords(2)
+    a = coords.add_node([0.0, 0.0])
+    b = coords.add_node([0.10, 0.0])
+    plate = pyrucast.mesh.extrude(pyrucast.mesh.line(a, b, 20), [0.0, 0.10], 20)
+    fes = pyrucast.FiniteElementSpace(plate)
+    model = pyrucast.model.heat_conduction(fes)
+    model = model | pyrucast.model.dirichlet(hold(plate), model, "T")
+    model = model | pyrucast.model.flux(fes, model, "q")
+    materials = pyrucast.element_field.material_field(
+        model, [("k", 50.0), ("phi_q", 1.0e6)]
+    )
+    rhs = pyrucast.node_field.external_forces(model, materials)
+    K = pyrucast.matrix.stiffness(model, materials)
+    return plate, pyrucast.solver.solve(K, rhs)
+
+
+def test_dirichlet_holds_an_edge_as_its_distinct_nodes():
+    """An edge mesh is held as it is: the same extremes as through its POI1
+    companion (the two plates live on two `Coords`, so only they compare)."""
+    _, on_edge = _heated_plate(lambda p: pyrucast.mesh.border(p))
+    _, on_points = _heated_plate(
+        lambda p: pyrucast.mesh.to_poi1(pyrucast.mesh.border(p))
+    )
+    assert round(on_edge.max("T"), 2) == 14.76
+    assert abs(on_edge.max("T") - on_points.max("T")) <= 1e-12 * on_edge.max("T")
+    assert abs(on_edge.min("T")) <= 1e-12 and abs(on_points.min("T")) <= 1e-12
+
+
 def test_dirichlet_empty_constraint_mesh_rejected():
     c = pyrucast.Coords(1)
     empty = pyrucast.Mesh(c, "POI1")  # one POI1 submesh, zero cells

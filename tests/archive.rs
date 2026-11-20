@@ -68,7 +68,7 @@ fn line(n: usize) -> Result<(Handle<Coords>, Mesh)> {
 #[test]
 fn sharing_survives_the_round_trip() -> Result<()> {
     let (_coords, mesh) = line(3)?;
-    let poi = mesh.get(0).unwrap().read().to_poi1()?;
+    let poi = SubMesh::to_poi1(&mesh.get(0).unwrap());
 
     let t = NodeField::from_sub(SubNodeField::from_poi1(&poi, vec!["T".into()])?);
     let f = NodeField::from_sub(SubNodeField::from_poi1(&poi, vec!["f".into()])?);
@@ -112,7 +112,7 @@ fn sharing_survives_the_round_trip() -> Result<()> {
 #[test]
 fn one_coords_for_the_whole_file() -> Result<()> {
     let (coords, mesh) = line(2)?;
-    let poi = mesh.get(0).unwrap().read().to_poi1()?;
+    let poi = SubMesh::to_poi1(&mesh.get(0).unwrap());
     let t = NodeField::from_sub(SubNodeField::from_poi1(&poi, vec!["T".into()])?);
 
     let path = tmp("one_coords.pyr");
@@ -208,7 +208,7 @@ fn a_node_the_caller_holds_is_not_archived() -> Result<()> {
 fn what_is_recomputable_is_not_written() -> Result<()> {
     let n = 2000;
     let (_coords, mesh) = line(n)?;
-    let poi = mesh.get(0).unwrap().read().to_poi1()?;
+    let poi = SubMesh::to_poi1(&mesh.get(0).unwrap());
     let t = NodeField::from_sub(SubNodeField::from_poi1(&poi, vec!["T".into()])?);
 
     let with_mesh = tmp("field_and_mesh.pyr");
@@ -242,7 +242,7 @@ fn what_is_recomputable_is_not_written() -> Result<()> {
 #[test]
 fn the_file_is_reproducible() -> Result<()> {
     let (_coords, mesh) = line(4)?;
-    let poi = mesh.get(0).unwrap().read().to_poi1()?;
+    let poi = SubMesh::to_poi1(&mesh.get(0).unwrap());
     let t = NodeField::from_sub(SubNodeField::from_poi1(&poi, vec!["T".into()])?);
 
     let (a, b) = (tmp("repro_a.pyr"), tmp("repro_b.pyr"));

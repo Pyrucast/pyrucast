@@ -181,7 +181,7 @@ impl Continuum {
                 )
             }));
         }
-        let support = submesh.read().to_poi1()?;
+        let support = SubMesh::to_poi1(&submesh);
         Ok(Self {
             fespace,
             support,
@@ -531,7 +531,7 @@ impl Continuum {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # let vars = || (vec!["f_x".to_string(), "f_y".to_string()],
     /// #                vec!["u_x".to_string(), "u_y".to_string()]);
     /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
@@ -612,7 +612,7 @@ impl Continuum {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # let vars = || (vec!["f_x".to_string(), "f_y".to_string()],
     /// #                vec!["u_x".to_string(), "u_y".to_string()]);
     /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
@@ -702,7 +702,7 @@ impl Continuum {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # let vars = || (vec!["f_x".to_string(), "f_y".to_string()],
     /// #                vec!["u_x".to_string(), "u_y".to_string()]);
     /// # let etat = Handle::new(SubElementField::from_uniform_per_component(

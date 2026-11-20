@@ -200,9 +200,8 @@ def main():
 
     # ── Model: plasticity (plane stress) + clamped end (Dirichlet) ──────────
     model = pyrucast.model.plasticity_perfect(fes, "plane_stress")
-    imposed_mesh = pyrucast.mesh.to_poi1(left_edge)
-    model = model | pyrucast.model.dirichlet(imposed_mesh, model, "u_x")
-    model = model | pyrucast.model.dirichlet(imposed_mesh, model, "u_y")
+    model = model | pyrucast.model.dirichlet(left_edge, model, "u_x")
+    model = model | pyrucast.model.dirichlet(left_edge, model, "u_y")
     # ── Reference load: unit shear (density −1) on the right face, as
     #    consistent nodal forces. A term of the model. ────────────────────────
     right_fes = pyrucast.FiniteElementSpace(right_edge)

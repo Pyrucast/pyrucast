@@ -208,7 +208,7 @@ impl Radiation {
         // that the `q` row the radiation writes into is assembled.
         target_physics("Radiation", target, &[(PRIMAL_VAR.into(), DUAL_VAR.into())])?;
         let submesh = fespace.read().submesh();
-        let support = submesh.read().to_poi1()?;
+        let support = SubMesh::to_poi1(&submesh);
         Ok(Self { fespace, support })
     }
 

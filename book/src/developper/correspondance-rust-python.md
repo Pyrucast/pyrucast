@@ -154,6 +154,7 @@ degré des lignes (`"QUA4"` entre deux `SEG2`, `"QUA8"` entre deux `SEG3`).
 | `chain(mesh: &Mesh) -> Mesh` | `chain(mesh) -> Mesh` |
 | `barycenter(mesh: &Mesh) -> Mesh` | `barycenter(mesh) -> Mesh` |
 | `to_poi1(mesh: &Mesh) -> Mesh` | `to_poi1(mesh) -> Mesh` |
+| `SubMesh::to_poi1(zone: &Handle<SubMesh>) -> Handle<SubMesh>` (fonction associée : elle rend le `Handle` de la zone) | `zone.to_poi1() -> SubMesh` (méthode) |
 | `elements_on(mesh: &Mesh, points: &Mesh, strict: bool) -> Mesh` | `elements_on(mesh, points, strict=True) -> Mesh` |
 | `intersection(a: &Mesh, b: &Mesh) -> Mesh` | `intersection(a, b) -> Mesh` |
 | `difference(a: &Mesh, b: &Mesh) -> Mesh` | `difference(a, b) -> Mesh` |
