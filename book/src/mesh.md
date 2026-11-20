@@ -219,11 +219,13 @@ refuse une zone d'un autre `Coords`.
   connectivité)` reçoit tout le tableau, le valide et incrémente ses nœuds en
   une seule prise de verrou, et `Coords::add_nodes` crée des nœuds d'un coup :
   c'est par là que les opérateurs de maillage produisent leurs zones.
-- **Scellement.** Les consommateurs passent par la fonction libre
-  `mesh::seal(&handle)`, qui ne prend le verrou d'écriture que si la zone
-  n'est pas déjà scellée : sceller une zone qu'un lecteur tient déjà ne bloque
-  pas. `add_cell`, `add_cell_taking` et `remap_nodes` rendent alors
-  `PyrucastError::MeshSealed`.
+- **Scellement.** Les consommateurs passent par `SubMesh::seal(&zone)`, qui
+  prend le `Handle` de la zone plutôt que la zone elle-même : il peut ainsi
+  regarder d'abord si elle est déjà scellée, et ne prendre le verrou
+  d'écriture que si elle ne l'est pas. Sceller une zone qu'un lecteur tient
+  déjà ne bloque donc pas. C'est le seul moyen de sceller : le drapeau n'a pas
+  d'autre accès public. `add_cell`, `add_cell_taking` et `remap_nodes`
+  rendent alors `PyrucastError::MeshSealed`.
 - **Caches.** Deux `OnceLock`, lus par `node_index()` et `to_poi1()`, vidés
   par chaque mutation de la connectivité et marqués `#[serde(skip)]`.
 - **Types d'éléments.** `ElementType` porte le nom, le nombre de nœuds et la

@@ -31,7 +31,7 @@
 //!
 //! The internal buffer is sized accordingly and **never reallocated**. The
 //! FE subspace has sealed its `SubMesh` (see
-//! [`mesh::seal`](fn@crate::containers::mesh::seal)): no cell can be added to it, so the
+//! [`SubMesh::seal`](crate::containers::mesh::SubMesh::seal)): no cell can be added to it, so the
 //! captured `cell_count` stays the submesh's. The nodes may still move; the
 //! values are unaffected. The Gauss-point coordinates and weights are kept as
 //! reference data on the `SubFiniteElementSpace` itself; only the user data

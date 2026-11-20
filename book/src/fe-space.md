@@ -591,7 +591,7 @@ portent sur l'anneau entier.
 `SubFiniteElementSpace` détient :
 
 - le `Handle<SubMesh>` de sa zone, scellé à la construction
-  ([`mesh::seal`](mesh.md#scellement)) ;
+  ([`SubMesh::seal`](mesh.md#scellement)) ;
 - son `Interpolation` et sa `QuadratureRule`, la dimension des `Coords` et leur
   caractère axisymétrique, lus une fois à la construction (un `Coords` n'en
   change pas) ;

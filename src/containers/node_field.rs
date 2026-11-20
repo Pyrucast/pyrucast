@@ -162,7 +162,7 @@ impl SubNodeField {
 
         // The field indexes its rows by position in this support; freeze it so
         // the row order can never move under the values.
-        let support = crate::containers::mesh::seal(submesh);
+        let support = SubMesh::seal(submesh);
 
         let n_comp = components.len();
         Ok(SubNodeField {

@@ -617,7 +617,7 @@ pub struct SubMatrix {
     sealed: bool,
 }
 
-/// Seal a block, as [`crate::containers::mesh::seal`] seals a zone: the write
+/// Seal a block, as [`SubMesh::seal`] seals a zone: the write
 /// lock is taken only if the block is not sealed yet, so sealing again a block
 /// already sealed coexists with a reader holding it.
 fn seal(handle: &Handle<SubMatrix>) {
@@ -706,8 +706,8 @@ impl SubMatrix {
         col_support
             .read()
             .check_node_support("SubMatrix column support")?;
-        crate::containers::mesh::seal(row_support);
-        crate::containers::mesh::seal(col_support);
+        SubMesh::seal(row_support);
+        SubMesh::seal(col_support);
         let nrows = row_support.read().cell_count() * dual_vars.len();
         let ncols = col_support.read().cell_count() * primal_vars.len();
         Ok((nrows, ncols))

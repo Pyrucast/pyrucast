@@ -257,7 +257,7 @@ impl SubFiniteElementSpace {
         // Capturing the submesh in a finite-element space freezes its
         // connectivity: the reference-space tables and any assembled matrix
         // are cell-indexed and must not be invalidated by later `add_cell`s.
-        let submesh = crate::containers::mesh::seal(&submesh);
+        let submesh = SubMesh::seal(&submesh);
 
         Ok(Self {
             submesh,

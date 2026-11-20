@@ -691,7 +691,7 @@ mod tests {
 
         let mut sealed = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         sealed.add_cell(&[b2.id(), d.id()]).unwrap();
-        crate::containers::mesh::seal(&sealed.get(0).unwrap());
+        SubMesh::seal(&sealed.get(0).unwrap());
 
         let mut open = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         open.add_cell(&[a.id(), b.id()]).unwrap();

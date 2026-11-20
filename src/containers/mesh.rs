@@ -284,7 +284,6 @@ impl SubMesh {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// // `NodeId → rank`, over the **distinct** nodes, in order of first
     /// // appearance: that is what gives the fields their addressing.
-    /// sm.seal();
     /// assert_eq!(sm.node_index()[&n[1].id()], 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -339,13 +338,27 @@ impl SubMesh {
         self.poi1_companion = OnceLock::new();
     }
 
-    /// Seal this submesh: freeze its connectivity permanently. After this,
+    /// Seal `zone`, freezing its connectivity for good: after this,
     /// [`SubMesh::add_cell`] / [`SubMesh::add_cell_taking`] return
-    /// [`PyrucastError::MeshSealed`]. Idempotent.
+    /// [`PyrucastError::MeshSealed`]. Idempotent; returns the same handle
+    /// (cloned) for chaining at a constructor's capture site.
     ///
-    /// Called by the container layer whenever a non-mesh object captures the
-    /// submesh — see the free function [`seal`]. A bare [`Mesh`] holding the
+    /// This is the seam every non-mesh consumer goes through when it captures a
+    /// [`SubMesh`] handle (finite-element space, node field, matrix support, …):
+    /// from that point on the submesh can no longer grow, so the consumer's
+    /// cell-indexed view can never go stale. A bare [`Mesh`] holding the
     /// submesh does **not** seal it (a mesh may keep growing until consumed).
+    ///
+    /// **It takes the handle, not `&mut self`, to choose its lock.** An
+    /// already-sealed zone costs only a read lock. A
+    /// [`restrict`](fn@crate::ops::node_field::restrict) onto a mesh can land on
+    /// the very support a source field already sits on (the shared POI1
+    /// companion), so `from_poi1` may seal a support while the caller still
+    /// holds a *read* guard on it (a field `view`): a read lock coexists with
+    /// that reader, where a write lock would deadlock against it. Taking a
+    /// write lock while a **write** guard on the same slot is held is still a
+    /// deadlock (the slot lock is not reentrant — see [`crate::handle`]); only
+    /// the sealed-read case is relaxed.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -358,14 +371,31 @@ impl SubMesh {
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// // Sealing by hand: the connectivity freezes, and for good.
-    /// sm.seal();
-    /// assert!(sm.is_sealed());
-    /// assert!(sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).is_err());
-    /// sm.seal(); // idempotent
+    /// # let mesh = Mesh::from_submesh(sm);
+    /// let zone = mesh.get(0)?;
+    /// assert!(!zone.read().is_sealed());
+    /// SubMesh::seal(&zone);
+    /// assert!(zone.read().is_sealed());
+    /// // The connectivity is frozen, for good.
+    /// assert!(zone.write().add_cell(&[n[0].id(), n[1].id(), n[2].id()]).is_err());
+    /// // Idempotent, and without a write the second time: the read guard below
+    /// // coexists, where a write lock would deadlock.
+    /// let reader = zone.read();
+    /// SubMesh::seal(&zone);
+    /// assert!(reader.is_sealed());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn seal(&mut self) {
+    pub fn seal(zone: &Handle<SubMesh>) -> Handle<SubMesh> {
+        if zone.read().is_sealed() {
+            return zone.clone();
+        }
+        zone.write().mark_sealed();
+        zone.clone()
+    }
+
+    /// Set the seal flag. Private: sealing goes through [`SubMesh::seal`],
+    /// which takes the write lock only while the flag is not set yet.
+    fn mark_sealed(&mut self) {
         self.sealed = true;
     }
 
@@ -551,12 +581,12 @@ impl SubMesh {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// // The way out of the seal: an independent copy, never sealed, sharing
     /// // the **same** nodes (only their counters go up).
-    /// sm.seal();
-    /// let mut copie = sm.duplicate()?;
-    /// assert!(!copie.is_sealed());
-    /// copie.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
-    /// assert_eq!(copie.cell_count(), 2);
-    /// assert_eq!(sm.cell_count(), 1); // l'original n'a pas bougé
+    /// let zone = SubMesh::seal(&Handle::new(sm));
+    /// let mut copy = zone.read().duplicate()?;
+    /// assert!(!copy.is_sealed());
+    /// copy.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// assert_eq!(copy.cell_count(), 2);
+    /// assert_eq!(zone.read().cell_count(), 1); // the original did not move
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn duplicate(&self) -> Result<SubMesh> {
@@ -614,11 +644,11 @@ impl SubMesh {
     /// # use std::collections::HashMap;
     /// // Rewriting **which node** a cell refers to — the positions do not
     /// // move. Refused on a sealed zone: its numbering is held.
-    /// let autre = Node::create_in(coords.clone(), &[5.0, 5.0])?;
-    /// let map = HashMap::from([(n[2].id(), autre.id())]);
+    /// let other = Node::create_in(coords.clone(), &[5.0, 5.0])?;
+    /// let map = HashMap::from([(n[2].id(), other.id())]);
     /// assert_eq!(sm.remap_nodes(&map)?, 1);
-    /// sm.seal();
-    /// assert!(sm.remap_nodes(&map).is_err());
+    /// let zone = SubMesh::seal(&Handle::new(sm));
+    /// assert!(zone.write().remap_nodes(&map).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn remap_nodes(&mut self, map: &HashMap<NodeId, NodeId>) -> Result<usize> {
@@ -886,7 +916,7 @@ impl SubMesh {
             ElementType::POI1,
             seen,
         )?);
-        seal(&handle);
+        SubMesh::seal(&handle);
         // Memoize. On a race the loser drops its build and everyone reads the
         // winner's companion. Mutating `self` later drops the cached one, so
         // what is cached always answers for the current connectivity.
@@ -929,59 +959,6 @@ impl SubMesh {
     ) -> Result<()> {
         crate::viz::render_submesh_styled(self, view, save, style, title)
     }
-}
-
-/// Seal the submesh behind `handle`, freezing its connectivity.
-///
-/// This is the seam every non-mesh consumer goes through when it captures a
-/// [`SubMesh`] handle (finite-element space, node field, matrix support, …):
-/// from that point on the submesh can no longer grow, so the consumer's
-/// cell-indexed view can never go stale. Idempotent; returns the same handle
-/// (cloned) for ergonomic chaining at a constructor's capture site.
-///
-/// **Already-sealed fast path takes only a read lock.** This matters now that
-/// [`SubMesh::to_poi1`] is cached: a `restrict` onto a mesh can land on the very
-/// support a source field already sits on (the shared POI1 companion), so
-/// `from_poi1` may `seal` a support while the caller still holds a *read* guard
-/// on it (a field `view`). Sealing is idempotent, so when the submesh is already
-/// sealed we skip the write entirely — a read lock coexists with that reader,
-/// whereas a write lock would deadlock against it. Taking a write lock while a
-/// **write** guard on the same slot is held is still a deadlock (the slot lock is
-/// not reentrant — see [`crate::handle`]); only the sealed-read case is relaxed.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # let coords = Handle::new(Coords::new(2).unwrap());
-/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let maillage = Mesh::from_submesh(sm);
-/// # use pyrucast::containers::mesh::seal;
-/// // Sealing through the free function rather than the method: it takes the
-/// // write lock **only if needed**, which lets it seal a support a reader
-/// // already holds — a field's `view`.
-/// let zone = maillage.get(0)?;
-/// assert!(!zone.read().is_sealed());
-/// seal(&zone);
-/// assert!(zone.read().is_sealed());
-/// // Idempotent, and without a write the second time: the read guard below
-/// // coexists, where a write lock would deadlock.
-/// let lecteur = zone.read();
-/// seal(&zone);
-/// assert!(lecteur.is_sealed());
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn seal(handle: &Handle<SubMesh>) -> Handle<SubMesh> {
-    if handle.read().is_sealed() {
-        return handle.clone();
-    }
-    handle.write().seal();
-    handle.clone()
 }
 
 impl Drop for SubMesh {
@@ -1734,7 +1711,7 @@ mod tests {
         let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
         sm.add_cell(&[a.id()]).unwrap();
         assert!(!sm.is_sealed());
-        sm.seal();
+        sm.mark_sealed();
         assert!(sm.is_sealed());
         // Both mutating paths are now blocked with MeshSealed.
         assert!(matches!(
@@ -1759,8 +1736,8 @@ mod tests {
             sm.add_cell(&[a.id()]).unwrap();
             sm
         });
-        seal(&h);
-        seal(&h); // idempotent
+        SubMesh::seal(&h);
+        SubMesh::seal(&h); // idempotent
         assert!(h.read().is_sealed());
         assert!(matches!(
             h.write().add_cell(&[a.id()]).unwrap_err(),
@@ -1777,7 +1754,7 @@ mod tests {
 
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-        sm.seal();
+        sm.mark_sealed();
 
         let mut copy = sm.duplicate().unwrap();
         // Copy carries the same connectivity but is not sealed.
@@ -1855,7 +1832,7 @@ mod tests {
 
         let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
         sm.add_cell(&[a.id(), b2.id()]).unwrap();
-        sm.seal();
+        sm.mark_sealed();
 
         assert!(matches!(
             sm.remap_nodes(&HashMap::from([(b2.id(), b.id())]))
@@ -1873,7 +1850,7 @@ mod tests {
 
         let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
         sm.add_cell(&[a.id()]).unwrap();
-        sm.seal();
+        sm.mark_sealed();
         let mesh = Mesh::from_submesh(sm);
 
         let mut copy = mesh.duplicate().unwrap();
@@ -2148,7 +2125,7 @@ mod tests {
         assert_eq!(u1.read().cell_count(), 3); // three distinct nodes
 
         // Sealing changes nothing: same slot.
-        seal(&h);
+        SubMesh::seal(&h);
         assert!(h.read().to_poi1().unwrap().same_object(&u1));
     }
 
