@@ -1750,7 +1750,7 @@ mod tests {
         assert!(!sm.is_sealed());
         sm.mark_sealed();
         assert!(sm.is_sealed());
-        // Both mutating paths are now blocked with MeshSealed.
+        // On a sealed submesh, both mutating paths fail with MeshSealed.
         assert!(matches!(
             sm.add_cell(&[b.id()]).unwrap_err(),
             PyrucastError::MeshSealed

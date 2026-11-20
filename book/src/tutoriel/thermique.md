@@ -156,11 +156,11 @@ sur le **volume**, sans en extraire la peau : les nœuds de la paroi du trou
 sont des nœuds de bord par définition, et `points_on_cylinder` y trouve les
 mêmes 320 nœuds que sur la peau.
 
-**Un `points_*` renvoie déjà un maillage `POI1`.** Le résultat est utilisable
-tel quel comme support d'un `pc.model.dirichlet`, sans passer par
-`pyrucast.mesh.to_poi1`. Seul `mesh.consolidate` reste nécessaire, pour écarter le
-sous-maillage **vide** que laisse la partie du volume qui ne touche pas le trou
-(le volume en compte deux : la grille et la couronne).
+**Un `points_*` renvoie un maillage `POI1`**, une zone par zone du volume (il en
+compte deux : la grille et la couronne), dont une **vide** pour la partie qui
+ne touche pas le trou. `pc.model.dirichlet` le prend tel quel : il tient chaque
+nœud une fois, quelle que soit la répartition en zones. `mesh.consolidate` sert
+ici à n'en garder qu'une zone, pour la colorer par `unit()` dans la figure.
 
 ### La face gauche, sur un plan
 

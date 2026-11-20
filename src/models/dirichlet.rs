@@ -165,7 +165,7 @@ impl Dirichlet {
         sense: RelationSense,
     ) -> Result<Self> {
         // The target's own names, read from the target rather than retyped: the
-        // `T → q` map is its business, and a mistyped one used to build a
+        // `T → q` map is its business, and a mistyped one would build a
         // constraint on a variable nobody assembles — a singular matrix, with
         // nothing to point at.
         let imposed_variable = variable.to_string();

@@ -81,8 +81,8 @@ données :
 ```
 
 **Mailler.** Une ligne de 20 segments, balayée sur la hauteur, donne une grille
-de 20 × 20 quadrangles. Le bord est repris en nœuds, pour y imposer la
-température :
+de 20 × 20 quadrangles. On en tire le bord, une ligne de segments : c'est sur
+ses nœuds que la température sera imposée :
 
 ```python
 {{#include ../../../tutoriel/premier_calcul.py:maillage}}

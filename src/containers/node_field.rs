@@ -413,8 +413,8 @@ impl SubNodeField {
     ///
     /// The support is a sealed POI1 SubMesh, so its `NodeId → index` map is
     /// cached and indexes exactly the rows of this field (same order).
-    /// We consult that map for an O(1) lookup instead of the linear scan that
-    /// used to dominate the hot write paths (`set_value`, arithmetic, …). A
+    /// The lookup is O(1) through that map, on the hot write paths (`set_value`,
+    /// arithmetic, …) where a scan of the rows would dominate. A
     /// short read guard on the support is opened and released here; callers
     /// looping over many nodes should hoist it with [`index_of_with`].
     ///
@@ -1588,8 +1588,8 @@ impl NodeFieldView {
 
     /// Like [`NodeFieldView::value`], `None` when absent. Each zone's node
     /// lookup goes through its support's cached `NodeId → index` map (held
-    /// open by `supports`), so the scan that used to dominate `deformation`
-    /// is now O(1).
+    /// open by `supports`): O(1), where a scan of the rows would dominate
+    /// `deformation`.
     pub(crate) fn value_opt(&self, nid: NodeId, component: &str) -> Option<f64> {
         self.inner
             .zones

@@ -78,7 +78,7 @@ use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::element_field::{deformation, StrainMeasure};
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::select_nodes;
-use pyrucast::ops::mesh::{line, sweep, to_poi1};
+use pyrucast::ops::mesh::{line, sweep};
 use pyrucast::ops::model;
 use pyrucast::ops::node_field::{external_forces, internal_forces};
 use pyrucast::ops::node_field::{positions, restrict, restrict_like};
@@ -173,15 +173,14 @@ fn main() -> Result<()> {
     println!("▸ Model: J2 plasticity (plane stress) + clamped end…");
     let mut model =
         model::plasticity_perfect(&fes, Kinematics::PlaneStress, StrainMeasure::Linear)?;
-    let imposed_mesh = to_poi1(&left_edge);
     model = model.union(&model::dirichlet(
-        &imposed_mesh,
+        &left_edge,
         &model,
         "u_x",
         Default::default(),
     )?)?;
     model = model.union(&model::dirichlet(
-        &imposed_mesh,
+        &left_edge,
         &model,
         "u_y",
         Default::default(),

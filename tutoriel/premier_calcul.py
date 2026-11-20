@@ -47,9 +47,9 @@ def main() -> None:
     b = coords.add_node([COTE, 0.0])
     plaque = pc.mesh.extrude(pc.mesh.line(a, b, N), [0.0, COTE], N)
 
-    # FR — Les nœuds du bord, qui seront tenus à 0 °C.
-    # EN — The boundary nodes, which will be held at 0 °C.
-    bord = pc.mesh.to_poi1(pc.mesh.border(plaque))
+    # FR — Le bord de la plaque, dont les nœuds seront tenus à 0 °C.
+    # EN — The plate's boundary, whose nodes will be held at 0 °C.
+    bord = pc.mesh.border(plaque)
     # ANCHOR_END: maillage
 
     # ANCHOR: modele
