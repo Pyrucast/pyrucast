@@ -106,16 +106,17 @@ def test_sub_matrix_repeated_entries_sum():
 
 
 def test_block_refuses_a_support_that_repeats_a_node():
-    """A block numbers its rows one per node, as a node field does: a support
-    listing a node twice is refused at once."""
+    """A block numbers its rows one per node and takes its supports as they
+    are: a support listing a node twice is refused at once. A node field on
+    that zone lands on its POI1 companion instead, one row per distinct node."""
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     repeated = pyrucast.mesh.poi1_from_nodes([a, a, b])
     with pytest.raises(RuntimeError, match="distinct node"):
         pyrucast.Matrix.block(repeated, repeated, ["q"], ["T"])
-    with pytest.raises(RuntimeError, match="distinct node"):
-        pyrucast.NodeField(repeated, ["T"])
+    field = pyrucast.NodeField(repeated, ["T"])
+    assert field.node_count == 2
 
 
 def test_an_assembled_matrix_seals_its_blocks():

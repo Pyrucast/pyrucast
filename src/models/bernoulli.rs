@@ -176,7 +176,7 @@ impl Bernoulli {
                     .into(),
             ));
         }
-        let support = submesh.read().to_poi1()?;
+        let support = SubMesh::to_poi1(&submesh);
         Ok(Self {
             fespace,
             support,

@@ -205,7 +205,7 @@ impl Flux {
 
         crate::models::kernel::require_field_basis(&fespace, "shape values")?;
         let submesh = fespace.read().submesh();
-        let support = submesh.read().to_poi1()?;
+        let support = SubMesh::to_poi1(&submesh);
         Ok(Self {
             fespace,
             support,

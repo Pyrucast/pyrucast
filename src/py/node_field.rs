@@ -288,9 +288,9 @@ pub struct PyNodeField {
 impl PyNodeField {
     /// `NodeField(support, components)` — a field with uniform values. With a
     /// `Mesh` support: one `SubNodeField` per submesh, each on the
-    /// distinct nodes of its zone. With a `SubMesh`: a single zone. A POI1
-    /// zone is its own support, and is refused if it lists a node twice
-    /// (`pyrucast.mesh.to_poi1` gives its distinct nodes).
+    /// distinct nodes of its zone — its POI1 companion, `SubMesh.to_poi1()`.
+    /// With a `SubMesh`: a single zone. A POI1 zone listing each node once is
+    /// its own companion, so the field lands on that very zone.
     ///
     /// Each entry of `components` is a `(name, value)` pair, the component
     /// holding `value` at every node, or a bare name, holding zero:

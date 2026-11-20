@@ -84,7 +84,7 @@ use serde::{Deserialize, Serialize};
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["D_H2".into()], &[2.0]).unwrap());
 /// # use pyrucast::models::fick;
@@ -117,7 +117,7 @@ pub fn primal_var(species: &str) -> String {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["D_H2".into()], &[2.0]).unwrap());
 /// # use pyrucast::models::fick;
@@ -289,7 +289,7 @@ impl Fick {
             let s = fespace.read();
             (s.submesh(), s.space_dim())
         };
-        let support = submesh.read().to_poi1()?;
+        let support = SubMesh::to_poi1(&submesh);
         Ok(Self {
             fespace,
             support,
@@ -503,7 +503,7 @@ impl Behavior for Fick {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["D_H2".into()], &[2.0]).unwrap());
 /// # use pyrucast::models::fick;
@@ -604,7 +604,7 @@ pub fn element_stiffness(
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["poro".into()], &[3.0]).unwrap());
 /// # use pyrucast::models::fick;

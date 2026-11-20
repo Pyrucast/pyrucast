@@ -171,7 +171,7 @@ impl BoundaryTransfer {
         material_contract("BoundaryTransfer", &variables)?;
         let (components, physics) = target_pairs("BoundaryTransfer", target, &variables)?;
         let submesh = fespace.read().submesh();
-        let support = submesh.read().to_poi1()?;
+        let support = SubMesh::to_poi1(&submesh);
         Ok(Self {
             fespace,
             support,

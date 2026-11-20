@@ -197,7 +197,7 @@ fn transpose(a: &[[f64; 12]; 12]) -> [[f64; 12]; 12] {
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["E".into(), "G".into(), "A".into(), "I_y".into(), "I_z".into(), "A_sy".into(), "A_sz".into(), "J".into()],
 /// #     &[210000.0, 80000.0, 0.01, 1e-05, 1e-05, 0.008, 0.008, 2e-05]).unwrap());
@@ -345,7 +345,7 @@ fn local_geometric(n: f64, l: f64) -> [[f64; 12]; 12] {
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["rho".into(), "A".into(), "I_y".into(), "I_z".into(), "E".into(), "G".into(), "A_sy".into(), "A_sz".into()], &[3.0, 0.01, 1e-05, 1e-05, 210000.0, 80000.0, 0.008, 0.008]).unwrap());
 /// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string(), "f_z".to_string(), "m_x".to_string(), "m_y".to_string(), "m_z".to_string()], vec!["u_x".to_string(), "u_y".to_string(), "u_z".to_string(), "r_x".to_string(), "r_y".to_string(), "r_z".to_string()]);
@@ -407,7 +407,7 @@ pub fn element_mass(
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["N".into()], &[100.0]).unwrap());
 /// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string(), "f_z".to_string(), "m_x".to_string(), "m_y".to_string(), "m_z".to_string()], vec!["u_x".to_string(), "u_y".to_string(), "u_z".to_string(), "r_x".to_string(), "r_y".to_string(), "r_z".to_string()]);

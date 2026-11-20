@@ -455,8 +455,8 @@ pub enum ResidualContribution {
 /// let l = CouplingLayout {
 ///     fespaces: vec![zone.clone()],
 ///     col_fespaces: vec![zone.clone()],
-///     row_support: zone.read().submesh().read().to_poi1()?,
-///     col_support: zone.read().submesh().read().to_poi1()?,
+///     row_support: pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh()),
+///     col_support: pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh()),
 ///     dual_vars: vec!["q".into()],
 ///     primal_vars: vec!["T".into()],
 ///     ordering: DofOrdering::NodesThenVars,

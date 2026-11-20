@@ -102,7 +102,7 @@ fn matmul(a: &[[f64; 6]; 6], b: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(),
 /// #     vec!["E".into(), "A".into(), "I".into(), "A_s".into(), "G".into()],
@@ -233,7 +233,7 @@ fn cell_frame(geom: &CellGeom) -> Result<(f64, f64, f64)> {
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["rho".into(), "A".into(), "I".into(), "E".into(), "A_s".into()], &[3.0, 0.01, 1e-05, 210000.0, 0.008]).unwrap());
 /// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string(), "m_z".to_string()], vec!["u_x".to_string(), "u_y".to_string(), "r_z".to_string()]);
@@ -285,7 +285,7 @@ pub fn element_mass(
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["N".into()], &[100.0]).unwrap());
 /// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string(), "m_z".to_string()], vec!["u_x".to_string(), "u_y".to_string(), "r_z".to_string()]);

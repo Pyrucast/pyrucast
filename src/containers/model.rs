@@ -394,12 +394,17 @@ impl SubModel {
     /// assert!(ortho.material_components().unwrap().len() > 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "the `via` constructor of `physics_operator!`: one signature for every \
+                  physics, which `spanning` calls zone by zone"
+    )]
     pub fn heat_conduction(
         fespace: Handle<SubFiniteElementSpace>,
         symmetry: MaterialSymmetry,
     ) -> Result<Self> {
         Ok(SubModel::HeatConduction(
-            heat_conduction::HeatConduction::new(fespace, symmetry)?,
+            heat_conduction::HeatConduction::new(fespace, symmetry),
         ))
     }
 

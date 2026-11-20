@@ -206,7 +206,7 @@ impl Truss {
                     .into(),
             ));
         }
-        let support = submesh.read().to_poi1()?;
+        let support = SubMesh::to_poi1(&submesh);
         Ok(Self {
             fespace,
             support,
@@ -499,7 +499,7 @@ pub(crate) fn cell_cosine(geom: &CellGeom, space_dim: usize, out: &mut [f64; 3])
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["E".into(), "A".into()], &[210000.0, 0.01]).unwrap());
 /// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string()], vec!["u_x".to_string(), "u_y".to_string()]);
@@ -570,7 +570,7 @@ pub fn element_stiffness(
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["rho".into(), "A".into()], &[3.0, 0.01]).unwrap());
 /// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string()], vec!["u_x".to_string(), "u_y".to_string()]);
@@ -652,7 +652,7 @@ pub fn element_mass(
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["n".into()], &[100.0]).unwrap());
 /// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string()], vec!["u_x".to_string(), "u_y".to_string()]);

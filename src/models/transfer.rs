@@ -372,7 +372,7 @@ pub(crate) fn target_pairs(
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["h_T".into()], &[2.0]).unwrap());
 /// # use pyrucast::models::ElementLayout;
@@ -463,7 +463,7 @@ pub fn exchange_matrix(
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["h_T".into()], &[2.0]).unwrap());
 /// # let flux = SubElementField::from_uniform_per_component(

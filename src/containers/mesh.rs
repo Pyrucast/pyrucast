@@ -872,60 +872,97 @@ impl SubMesh {
         SubMesh::from_connectivity(coords, ElementType::POI1, nodes.to_vec())
     }
 
-    /// Canonical POI1 companion of this submesh — its nodes **de-duplicated in
-    /// order of first appearance** (one POI1 cell per unique node), as a sealed
-    /// [`SubMesh`] handle.
+    /// The POI1 companion of `zone`: the POI1 zone of its nodes, each **once**,
+    /// in order of first appearance.
     ///
-    /// **Cached, per submesh.** The companion is built at most once per state
-    /// of the connectivity, and every later call returns the *same* handle,
-    /// so all the node fields that project this submesh to its nodes pair under
+    /// - A POI1 zone that lists each node once **is** its own companion: the
+    ///   same handle comes back, so whatever is built on the companion pairs
+    ///   with the zone the caller holds.
+    /// - Any other zone — a SEG2, a HEX8, or a POI1 that repeats a node — gets
+    ///   its companion built once and **cached** on it: every later call
+    ///   returns the same handle, until a mutation of `zone` drops the cache
+    ///   (see `invalidate_caches`). That companion is sealed: node fields index
+    ///   their rows by it.
+    ///
+    /// Everything that projects a zone to its nodes goes through here, so it
+    /// all pairs under
     /// [`same_support`](crate::containers::field::SubField::same_support): a
     /// stiffness block's support (built this way in every physics' `new`), a
-    /// [`restrict`](fn@crate::ops::node_field::restrict) onto this mesh, and a
-    /// `divergence`/`flux`/`internal_forces` output over it all share one handle
-    /// and combine directly by the field operators. This is what lets
-    /// `solve(K, f) - restrict(g, mesh)` and `&K * &restrict(f, mesh)` line up.
+    /// node field on the zone, a [`restrict`](fn@crate::ops::node_field::restrict)
+    /// onto it, a `divergence`/`flux`/`internal_forces` output over it, a
+    /// Dirichlet constraint on it. They share one handle and combine directly by
+    /// the field operators — what lets `solve(K, f) - restrict(g, mesh)` and
+    /// `&K * &restrict(f, mesh)` line up.
     ///
-    /// The cache does **not** require `self` to be sealed: every mutator drops
-    /// it (see `invalidate_caches`), so a submesh that keeps growing simply
-    /// hands out a new companion afterwards. The companion itself is always
-    /// sealed — it is what node fields index their rows by. Shared building
-    /// block: [`crate::ops::mesh::to_poi1()`] applies it submesh-by-submesh.
-    pub fn to_poi1(&self) -> Result<Handle<SubMesh>> {
-        if let Some(h) = self.poi1_companion.get() {
-            return Ok(h.clone());
+    /// **An associated function taking the handle**, not a method: the first
+    /// case returns `zone` itself, which `&self` — the content behind the lock —
+    /// cannot. [`crate::ops::mesh::to_poi1()`] applies it zone by zone.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::ElementType;
+    /// # use pyrucast::containers::mesh::SubMesh;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(1)?);
+    /// # let a = coords.write().add_node(&[0.0])?;
+    /// # let b = coords.write().add_node(&[1.0])?;
+    /// # let c = coords.write().add_node(&[2.0])?;
+    /// // A POI1 zone listing each node once is its own companion.
+    /// let points = Handle::new(SubMesh::poi1_from_node_ids(coords.clone(), &[a, b, c])?);
+    /// assert!(SubMesh::to_poi1(&points).same_object(&points));
+    ///
+    /// // One that repeats a node gets a companion of its distinct nodes, cached.
+    /// let repeated = Handle::new(SubMesh::poi1_from_node_ids(coords.clone(), &[a, a, b])?);
+    /// let distinct = SubMesh::to_poi1(&repeated);
+    /// assert!(!distinct.same_object(&repeated));
+    /// assert_eq!(distinct.read().connectivity(), &[a, b]);
+    /// assert!(SubMesh::to_poi1(&repeated).same_object(&distinct));
+    ///
+    /// // So does any other zone: the two SEG2 cells a-b and b-c hold a, b, c.
+    /// let line = SubMesh::from_connectivity(coords.clone(), ElementType::SEG2, vec![a, b, b, c])?;
+    /// let line = Handle::new(line);
+    /// let nodes = SubMesh::to_poi1(&line);
+    /// assert_eq!(nodes.read().connectivity(), &[a, b, c]);
+    /// assert!(SubMesh::to_poi1(&line).same_object(&nodes));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn to_poi1(zone: &Handle<SubMesh>) -> Handle<SubMesh> {
+        let sm = zone.read();
+        if sm.element_type == ElementType::POI1 && sm.node_index().len() == sm.cell_count() {
+            return zone.clone();
+        }
+        if let Some(h) = sm.poi1_companion.get() {
+            return h.clone();
         }
         // De-duplicate in **order of first appearance**. The membership test goes
         // through a hash set, not a linear scan of `seen`: this runs on every
         // model construction, and a `Vec::contains` would make it quadratic.
-        let mut seen: Vec<NodeId> = Vec::with_capacity(self.connectivity.len());
-        let mut known: HashSet<NodeId> = HashSet::with_capacity(self.connectivity.len());
-        for &nid in &self.connectivity {
+        let mut seen: Vec<NodeId> = Vec::with_capacity(sm.connectivity.len());
+        let mut known: HashSet<NodeId> = HashSet::with_capacity(sm.connectivity.len());
+        for &nid in &sm.connectivity {
             if known.insert(nid) {
                 seen.push(nid);
             }
         }
-        // Build (write-locks `Coords`) and seal the companion. `self` is behind
-        // the caller's read guard on this submesh, an object distinct from the
-        // companion and from the `Coords`, and a `SubMesh` is locked before its
-        // `Coords`: no lock inversion.
-        // `seen` is **handed over**, not lent: it is already the companion's
-        // connectivity, one POI1 cell per id.
-        let handle = Handle::new(SubMesh::from_connectivity(
-            self.coords.clone(),
-            ElementType::POI1,
-            seen,
-        )?);
+        // Build (write-locks `Coords`) and seal the companion. `zone` is behind
+        // our read guard, an object distinct from the companion and from the
+        // `Coords`, and a `SubMesh` is locked before its `Coords`: no lock
+        // inversion. `seen` is **handed over**, not lent: it is already the
+        // companion's connectivity, one POI1 cell per id — whole cells of live
+        // nodes, since `zone` holds a reference on each, so nothing can refuse it.
+        let handle = Handle::new(
+            SubMesh::from_connectivity(sm.coords.clone(), ElementType::POI1, seen)
+                .expect("whole POI1 cells of live nodes: the zone holds them"),
+        );
         SubMesh::seal(&handle);
         // Memoize. On a race the loser drops its build and everyone reads the
-        // winner's companion. Mutating `self` later drops the cached one, so
+        // winner's companion. Mutating `zone` later drops the cached one, so
         // what is cached always answers for the current connectivity.
-        let _ = self.poi1_companion.set(handle);
-        Ok(self
-            .poi1_companion
+        let _ = sm.poi1_companion.set(handle);
+        sm.poi1_companion
             .get()
             .expect("populated on this path")
-            .clone())
+            .clone()
     }
 
     /// Visualize this submesh.
@@ -2110,8 +2147,8 @@ mod tests {
 
         // Unsealed, and still memoized: the companion answers for the current
         // connectivity, and a mutation drops it.
-        let u1 = h.read().to_poi1().unwrap();
-        let u2 = h.read().to_poi1().unwrap();
+        let u1 = SubMesh::to_poi1(&h);
+        let u2 = SubMesh::to_poi1(&h);
         assert!(
             u1.same_object(&u2),
             "companion memoized on an unsealed submesh"
@@ -2126,7 +2163,7 @@ mod tests {
 
         // Sealing changes nothing: same slot.
         SubMesh::seal(&h);
-        assert!(h.read().to_poi1().unwrap().same_object(&u1));
+        assert!(SubMesh::to_poi1(&h).same_object(&u1));
     }
 
     #[test]
@@ -2141,12 +2178,12 @@ mod tests {
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let h = Handle::new(sm);
 
-        let before = h.read().to_poi1().unwrap();
+        let before = SubMesh::to_poi1(&h);
         assert_eq!(before.read().cell_count(), 3);
 
         // One more cell ⇒ other distinct nodes, so a different companion.
         h.write().add_cell(&[b.id(), d.id(), c.id()]).unwrap();
-        let after = h.read().to_poi1().unwrap();
+        let after = SubMesh::to_poi1(&h);
         assert!(
             !before.same_object(&after),
             "the stale companion was dropped"

@@ -197,8 +197,8 @@ impl InterfaceTransfer {
         let (components, physics) = target_pairs("InterfaceTransfer", target, &variables)?;
         let (mesh_a, mesh_b) = (side_a.read().submesh(), side_b.read().submesh());
         check_conforming_geometry(&mesh_a, &mesh_b, tol)?;
-        let support_a = mesh_a.read().to_poi1()?;
-        let support_b = mesh_b.read().to_poi1()?;
+        let support_a = SubMesh::to_poi1(&mesh_a);
+        let support_b = SubMesh::to_poi1(&mesh_b);
         Ok(Self {
             side_a,
             side_b,

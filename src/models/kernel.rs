@@ -236,7 +236,7 @@ fn scale_slope_slots_into(row: &[f64], j: f64, out: &mut [f64]) {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
 /// # // element kernel to `assemble_block`, exactly as a physics does. This
 /// # // kernel reads no material, but the assembler wants one: we hand it a
@@ -315,7 +315,7 @@ impl<'a> CellGeom<'a> {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
     /// # // element kernel to `assemble_block`, exactly as a physics does. This
     /// # // kernel reads no material, but the assembler wants one: we hand it a
@@ -360,7 +360,7 @@ impl<'a> CellGeom<'a> {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
     /// # // element kernel to `assemble_block`, exactly as a physics does. This
     /// # // kernel reads no material, but the assembler wants one: we hand it a
@@ -423,7 +423,7 @@ impl<'a> CellGeom<'a> {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
     /// # // element kernel to `assemble_block`, exactly as a physics does. This
     /// # // kernel reads no material, but the assembler wants one: we hand it a
@@ -484,7 +484,7 @@ impl<'a> CellGeom<'a> {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
     /// # // element kernel to `assemble_block`, exactly as a physics does. This
     /// # // kernel reads no material, but the assembler wants one: we hand it a
@@ -533,7 +533,7 @@ impl<'a> CellGeom<'a> {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
     /// # // element kernel to `assemble_block`, exactly as a physics does. This
     /// # // kernel reads no material, but the assembler wants one: we hand it a
@@ -578,7 +578,7 @@ impl<'a> CellGeom<'a> {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
     /// # // element kernel to `assemble_block`, exactly as a physics does. This
     /// # // kernel reads no material, but the assembler wants one: we hand it a
@@ -630,7 +630,7 @@ impl<'a> CellGeom<'a> {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
     /// # // element kernel to `assemble_block`, exactly as a physics does. This
     /// # // kernel reads no material, but the assembler wants one: we hand it a
@@ -777,7 +777,7 @@ impl<'a> CellGeom<'a> {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
     /// # // element kernel to `assemble_block`, exactly as a physics does. This
     /// # // kernel reads no material, but the assembler wants one: we hand it a
@@ -843,7 +843,7 @@ impl<'a> CellGeom<'a> {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
     /// # let zone = fes.get(0)?;
-    /// # let support = zone.read().submesh().read().to_poi1()?;
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # let mat_bidon = Handle::new(
     /// #     pyrucast::containers::element_field::SubElementField::from_uniform_per_component(
     /// #         zone.clone(), vec!["k".into()], &[1.0]).unwrap());
@@ -919,7 +919,7 @@ impl<'a> CellGeom<'a> {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
     /// # // element kernel to `assemble_block`, exactly as a physics does. This
     /// # // kernel reads no material, but the assembler wants one: we hand it a
@@ -988,7 +988,7 @@ impl<'a> CellGeom<'a> {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
     /// # // element kernel to `assemble_block`, exactly as a physics does. This
     /// # // kernel reads no material, but the assembler wants one: we hand it a
@@ -1072,7 +1072,7 @@ impl<'a> CellGeom<'a> {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// // The **unit** normal — the one `normal_from_tangents` returns raw,
     /// // divided by its norm. It only makes sense on a facet: one reference
     /// // dimension fewer than the space.
@@ -1137,7 +1137,7 @@ impl<'a> CellGeom<'a> {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
     /// # // element kernel to `assemble_block`, exactly as a physics does. This
     /// # // kernel reads no material, but the assembler wants one: we hand it a
@@ -1237,7 +1237,7 @@ impl<'a> CellGeom<'a> {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat_bidon = Handle::new(
 /// #     pyrucast::containers::element_field::SubElementField::from_uniform_per_component(
 /// #         zone.clone(), vec!["k".into()], &[1.0]).unwrap());
@@ -1571,7 +1571,7 @@ pub(crate) const MAX_CELL_DOFS: usize = 96;
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # let mat_bidon = Handle::new(
 /// #     pyrucast::containers::element_field::SubElementField::from_uniform_per_component(
 /// #         zone.clone(), vec!["k".into()], &[1.0]).unwrap());
@@ -1661,7 +1661,7 @@ pub fn assemble_block(
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # // This kernel reads no material; the assembler wants one, so we hand
 /// # // it a useless one rather than an `Option` to unwrap.
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
@@ -1709,7 +1709,7 @@ pub type BlockTriplets = (usize, usize, Vec<(usize, usize, f64)>);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # // This kernel reads no material; the assembler wants one, so we hand
 /// # // it a useless one rather than an `Option` to unwrap.
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
@@ -1777,7 +1777,7 @@ pub fn element_block_triplets(
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # // This kernel reads no material; the assembler wants one, so we hand
 /// # // it a useless one rather than an `Option` to unwrap.
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
@@ -1829,7 +1829,7 @@ pub type BlockTripletsPerCell = (usize, usize, Vec<Vec<(usize, usize, f64)>>);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # // This kernel reads no material; the assembler wants one, so we hand
 /// # // it a useless one rather than an `Option` to unwrap.
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
@@ -2008,7 +2008,7 @@ pub fn element_block_triplets_per_cell(
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
 /// # let zone = fes.get(0)?;
-/// # let support = zone.read().submesh().read().to_poi1()?;
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// // The **pattern** alone, without values: this is what gets cached and
 /// // reused from one assembly to the next, matter leaving it unchanged.
 /// let motif = kernel::element_block_pattern(
@@ -2071,7 +2071,7 @@ impl BlockPattern {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
     /// # let zone = fes.get(0)?;
-    /// # let support = zone.read().submesh().read().to_poi1()?;
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # let motif = kernel::element_block_pattern(
     /// #     &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars)?;
     /// // An entry's row, regenerated from the node's position.
@@ -2105,7 +2105,7 @@ impl BlockPattern {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
     /// # let zone = fes.get(0)?;
-    /// # let support = zone.read().submesh().read().to_poi1()?;
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # let motif = kernel::element_block_pattern(
     /// #     &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars)?;
     /// // The column likewise — the pattern stores no pair.
@@ -2138,7 +2138,7 @@ impl BlockPattern {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
     /// # let zone = fes.get(0)?;
-    /// # let support = zone.read().submesh().read().to_poi1()?;
+    /// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
     /// # let motif = kernel::element_block_pattern(
     /// #     &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars)?;
     /// // A scalar TRI3: three nodes squared.
@@ -2172,7 +2172,7 @@ impl BlockPattern {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
 /// # let zone = fes.get(0)?;
-/// # let support = zone.read().submesh().read().to_poi1()?;
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// // The compact pattern: each node's position in both supports.
 /// let motif = kernel::element_block_pattern(
 ///     &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars,
@@ -2268,7 +2268,7 @@ fn check_conforming(
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// # // This kernel reads no material; the assembler wants one, so we hand
 /// # // it a useless one rather than an `Option` to unwrap.
 /// # use pyrucast::containers::element_field::SubElementField;
@@ -2765,7 +2765,7 @@ pub fn coupling_block_values_per_cell(
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
 /// # let zone = fes.get(0)?;
-/// # let support = zone.read().submesh().read().to_poi1()?;
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// // An **off-diagonal** block: its rows live on one mesh, its columns on
 /// // the facing one. That is what an interface law demands.
 /// // Here both sides are the same, which is enough to show the shape.
@@ -2897,7 +2897,7 @@ fn local_positions(ids: &[NodeId], pos: &HashMap<NodeId, u32>, side: &str) -> Re
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// // The driver of the **nodal field producers**: internal forces, fluxes.
 /// // Concurrent writing goes through a colouring, hence a bit-for-bit
 /// // reproducible result.
@@ -3064,7 +3064,7 @@ pub fn scatter_to_nodes(
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let support = pyrucast::containers::mesh::SubMesh::to_poi1(&zone.read().submesh());
 /// // A reduction over the cells: the mesh area, for one, reads as the sum
 /// // of the integration measures.
 /// let aire = kernel::reduce_cells(&zone, |geom| {

@@ -117,6 +117,18 @@ impl PySubMesh {
         })
     }
 
+    /// The POI1 companion of this zone: its nodes, each once, in order of
+    /// first appearance. A POI1 zone listing each node once is its own
+    /// companion, so this very zone comes back; any other zone gets its
+    /// companion built once and cached, the same one at every call. Node
+    /// fields, `pyrucast.node_field.restrict` and the matrix supports of a
+    /// model all land on it, which is why their results combine node to node.
+    fn to_poi1(&self) -> PySubMesh {
+        PySubMesh {
+            handle: SubMesh::to_poi1(&self.handle),
+        }
+    }
+
     /// Face colour as an `(r, g, b)` tuple of bytes.
     #[getter]
     fn face_color(&self) -> (u8, u8, u8) {

@@ -84,12 +84,12 @@ fn un_champ_aux_noeuds_s_ecrit_par_zone_et_se_lit_par_agregat() -> Result<()> {
     let mut tri = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
     tri.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
 
-    // Une zone par zone de maillage, posée sur son nuage de nœuds : le
-    // `Handle` même que `to_poi1` garde en cache, sans objet intermédiaire.
+    // Une zone par zone de maillage, posée sur son compagnon POI1 : le
+    // `Handle` même que `SubMesh::to_poi1` rend, sans objet intermédiaire.
     let u = NodeField::new(&tri, vec!["ux".into(), "uy".into()])?;
     let zone = u.get(0)?;
-    let nuage = tri.get(0)?.read().to_poi1()?;
-    assert!(zone.read().support().same_object(&nuage));
+    let compagnon = SubMesh::to_poi1(&tri.get(0)?);
+    assert!(zone.read().support().same_object(&compagnon));
 
     // Écriture par la zone, lecture par le champ.
     zone.write().set_value(n[1].id(), "ux", 1.5)?;

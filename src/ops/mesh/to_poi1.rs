@@ -1,21 +1,21 @@
 use crate::aggregate::Aggregate;
-use crate::containers::mesh::Mesh;
+use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::Result;
 
-/// Convert a mesh to POI1, **submesh by submesh**.
+/// Convert a mesh to POI1, **zone by zone**: each zone gives its POI1
+/// companion ([`SubMesh::to_poi1`]).
 ///
-/// The result has the **same number of submeshes** as `mesh`; each output
-/// submesh is a POI1 submesh holding the de-duplicated list of nodes used
-/// by the corresponding input submesh, in order of first appearance (see
-/// [`SubMesh::to_poi1`](crate::containers::mesh::SubMesh::to_poi1)). A
-/// POI1 input submesh is therefore copied node-for-node; an empty input
-/// submesh yields an empty POI1 submesh (so the count is preserved).
+/// The result has the **same number of zones** as `mesh`. A POI1 zone listing
+/// each node once comes back **as itself** (same handle, no copy); any other
+/// zone gives the POI1 zone of its distinct nodes, in order of first
+/// appearance, built once and cached on it; an empty zone gives an empty POI1
+/// zone, so the count is preserved.
 ///
-/// Every node referenced by the result is increfed afresh by the POI1
-/// submeshes; `mesh`'s own connectivity is left untouched. Each output submesh
-/// is the input submesh's **memoized companion**, so calling this twice on the
-/// same mesh yields the same submesh slots — and those increfs live as long as
-/// that cache, which a mutation of the input submesh (or its drop) releases.
+/// The result **shares** those zones: calling this twice on the same mesh
+/// yields the same zones, and a field built on one pairs with a field built on
+/// the other. A built companion holds its own references on its nodes for as
+/// long as the zone's cache keeps it — a mutation of the input zone, or its
+/// drop, releases them. `mesh`'s own connectivity is left untouched.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -29,13 +29,18 @@ use crate::error::Result;
 /// // A mesh's **distinct** nodes, one POI1 cell each: two cells that
 /// // share a node count it once only.
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
-/// assert_eq!(mesh::to_poi1(&l)?.cell_count(), 3);
+/// let points = mesh::to_poi1(&l)?;
+/// assert_eq!(points.cell_count(), 3);
+/// // Those points are already their own companion: no copy.
+/// assert!(mesh::to_poi1(&points)?.get(0)?.same_object(&points.get(0)?));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
+///
+/// [`SubMesh::to_poi1`]: crate::containers::mesh::SubMesh::to_poi1
 pub fn to_poi1(mesh: &Mesh) -> Result<Mesh> {
     let mut result = Mesh::empty();
-    for sm_handle in mesh {
-        result.add_sub(sm_handle.read().to_poi1()?)?;
+    for zone in mesh {
+        result.add_sub(SubMesh::to_poi1(zone))?;
     }
     Ok(result)
 }
@@ -105,19 +110,22 @@ mod tests {
         );
         assert_eq!(poi.cell_counts().unwrap(), vec![1, 3]);
 
-        // The new POI1 submeshes increfed every node they reference.
+        // The POI1 zone is its own companion: the very zone, not a copy.
+        assert!(poi.get(0).unwrap().same_object(&mesh.get(0).unwrap()));
+
+        // Only the TRI3's companion, a new zone, increfed its nodes.
         {
             let cf = coords.read();
-            assert_eq!(cf.refcount(a.id()), 5); // +POI1(sub0) +POI1(sub1)
+            assert_eq!(cf.refcount(a.id()), 4); // +POI1(sub1)
             assert_eq!(cf.refcount(b.id()), 3); // +POI1(sub1)
         }
 
-        // Dropping the result gives nothing back: its submeshes are the
-        // companions memoized by the source submeshes, which still hold them.
+        // Dropping the result gives nothing back: its zones are the source's
+        // POI1 zone and the TRI3's memoized companion, which the source holds.
         drop(poi);
         {
             let cf = coords.read();
-            assert_eq!(cf.refcount(a.id()), 5);
+            assert_eq!(cf.refcount(a.id()), 4);
             assert_eq!(cf.refcount(b.id()), 3);
         }
 

@@ -184,7 +184,7 @@ impl Timoshenko {
         }
         let model = BeamModel::from_space_dim(space_dim)
             .map_err(|e| PyrucastError::Message(format!("Timoshenko: {e}")))?;
-        let support = submesh.read().to_poi1()?;
+        let support = SubMesh::to_poi1(&submesh);
         Ok(Self {
             fespace,
             support,
