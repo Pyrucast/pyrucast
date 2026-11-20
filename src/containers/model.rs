@@ -907,8 +907,9 @@ impl SubModel {
     }
 
     /// Dirichlet sub-model: enforce `variable = u_d` on the nodes of
-    /// `imposed_mesh`, one relation per node with a multiplier node of its own,
-    /// and `u_d` supplied later by the user through the load `SubNodeField`.
+    /// `imposed_mesh` — any mesh, its distinct nodes all zones together — one
+    /// relation per node with a multiplier node of its own, and `u_d` supplied
+    /// later by the user through the load `SubNodeField`.
     ///
     /// `variable` is a primal of `target`, the model being constrained; the dual
     /// row its reaction lands in is read from it (e.g. `"q"` for heat

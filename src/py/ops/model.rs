@@ -70,7 +70,11 @@ pub fn interface_transfer(
 ///
 /// # Parameters
 ///
-/// - `imposed_mesh`: the POI1 mesh of the constrained nodes.
+/// - `imposed_mesh`: the mesh of the constrained nodes, of any element type —
+///   an edge, a face, a selection of points. Its distinct nodes, all zones
+///   together, are held, each once: a node that two zones share gets one
+///   relation. A single zone is held through its POI1 companion,
+///   `SubMesh.to_poi1()`, so the constraint pairs with fields on that mesh.
 /// - `target`: the model being constrained; the dual row of `variable` is read
 ///   from it.
 /// - `variable`: the unknown of `target` to hold, one of its primals.
@@ -85,7 +89,7 @@ pub fn interface_transfer(
 /// # Raises
 ///
 /// - `ValueError` for an unknown `sense`.
-/// - `RuntimeError` if `imposed_mesh` is not POI1, or if `variable` is not a
+/// - `RuntimeError` if `imposed_mesh` holds no node, or if `variable` is not a
 ///   primal of `target`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]

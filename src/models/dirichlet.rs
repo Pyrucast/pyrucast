@@ -3,8 +3,8 @@
 //! A Dirichlet sub-model imposes `u = u_d` on a set of constrained nodes. It
 //! is a *constraint*, not a volumetric physics: it carries no material and no
 //! constitutive law. It is built from **one mesh supplied by the user**,
-//! `imposed_mesh` — POI1: the constrained nodes (shared with the
-//! target physics), one node per cell, one relation per cell.
+//! `imposed_mesh`, of any element type: its distinct nodes, all zones
+//! together, are the constrained nodes — one relation per node.
 //!
 //! Each relation gets a multiplier node of its own, minted at construction by
 //! the [`barycenter`](crate::ops::mesh::barycenter()) mesher — colocated with
@@ -33,7 +33,6 @@
 //! The last two are the names of every constraint relation.
 
 use crate::aggregate::Aggregate;
-use crate::atoms::ElementType;
 use crate::containers::element_field::SubElementField;
 use crate::containers::mesh::Mesh;
 use crate::dump::DumpOptions;
@@ -84,8 +83,9 @@ pub struct Dirichlet {
     pub(crate) imposed_variable: String,
     /// Target physics's dual; row where the reaction `Cᵀ` lands (e.g. `"q"`).
     pub(crate) target_dual: String,
-    /// POI1 mesh of the constrained nodes (one node per cell), as given by the
-    /// user. Shares the submeshes (refcounts keep the nodes alive).
+    /// POI1 mesh of the constrained nodes, one node per cell, each node once:
+    /// the user's mesh through `to_poi1` then `consolidate`. For a single zone
+    /// that is the zone's own POI1 companion, shared, not copied.
     pub(crate) imposed_mesh: Mesh,
     /// POI1 mesh of the multiplier nodes, minted at construction and paired
     /// element-for-element with `imposed_mesh` (same submesh structure, same
@@ -104,16 +104,23 @@ impl Dirichlet {
     /// `imposed_mesh`, one relation per node, each with a multiplier node of
     /// its own minted beside it.
     ///
+    /// `imposed_mesh` is any mesh: its distinct nodes, all zones together, are
+    /// the constrained nodes — `imposed_mesh.to_poi1().consolidate()`. A node
+    /// that several zones share gets one relation, not one per zone (two would
+    /// leave the system singular). A single zone, the usual case (an edge, a
+    /// face), lands on its own POI1 companion, so the constraint pairs with the
+    /// fields on that mesh; a POI1 zone listing each node once is used as is.
+    ///
     /// `variable` is a primal of `target`, whose dual row (e.g. `"q"`) is read
-    /// from it. `imposed_mesh` must be POI1.
+    /// from it.
     ///
     /// `sense` turns the constraint unilateral: `GreaterEqual` imposes
     /// `u ≥ u_d` (`LessEqual`: `u ≤ u_d`), enforced only while in contact — such
     /// a model is solved by the active-set operator
     /// [`solve`](crate::ops::solver::solve).
     ///
-    /// Errors when `variable` is not a primal of `target`, when `imposed_mesh`
-    /// holds no node, or when one of its submeshes is not POI1.
+    /// Errors when `variable` is not a primal of `target`, or when
+    /// `imposed_mesh` holds no node.
     ///
     /// ```
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
@@ -144,6 +151,9 @@ impl Dirichlet {
     /// assert_eq!(m.node(0, 0, 0)?.position()?, vec![0.0, 0.0]);
     /// // A variable the target does not assemble is refused.
     /// assert!(Dirichlet::new(&impose, &cible, "u_x", RelationSense::Equality).is_err());
+    /// // Any mesh will do: the triangle holds its three nodes.
+    /// let all = Dirichlet::new(&maillage, &cible, "T", RelationSense::Equality)?;
+    /// assert_eq!(all.multiplier_mesh().cell_count(), 3);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(
@@ -169,22 +179,16 @@ impl Dirichlet {
                 "Dirichlet: imposed_mesh must constrain at least one node".into(),
             ));
         }
-        for (i, imp) in imposed_mesh.into_iter().enumerate() {
-            let iet = imp.read().element_type();
-            if iet != ElementType::POI1 {
-                return Err(PyrucastError::Message(format!(
-                    "Dirichlet: imposed_mesh submesh {i} must be POI1, got {iet}"
-                )));
-            }
-        }
+        // Its distinct nodes, all zones together: one relation per node.
+        let imposed = imposed_mesh.to_poi1().consolidate();
         // One fresh node per relation, beside its constrained node.
-        let multiplier_mesh = barycenter(imposed_mesh)?;
+        let multiplier_mesh = barycenter(&imposed)?;
         let target_physics = constrained_physics(target, [imposed_variable.as_str()]);
 
         Ok(Self {
             imposed_variable,
             target_dual,
-            imposed_mesh: share(imposed_mesh)?,
+            imposed_mesh: imposed,
             multiplier_mesh,
             sense,
             target_physics,
@@ -322,12 +326,136 @@ impl Constraint for Dirichlet {
     }
 }
 
-/// Clone a mesh by sharing its submeshes — increfs each submesh handle so the
-/// nodes stay alive for the lifetime of the sub-model.
-fn share(mesh: &Mesh) -> Result<Mesh> {
-    let mut out = Mesh::empty();
-    for sm in mesh {
-        out.add_sub(sm.clone())?;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::atoms::{ElementType, Node, NodeId};
+    use crate::containers::finite_element_space::FiniteElementSpace;
+    use crate::containers::mesh::SubMesh;
+    use crate::containers::model::Model;
+    use crate::containers::node_field::NodeField;
+    use crate::coords::Coords;
+    use crate::handle::Handle;
+    use crate::models::symmetry::MaterialSymmetry;
+    use crate::ops::{element_field, matrix, mesh, model, node_field, solver};
+    use std::collections::HashSet;
+
+    /// The README plate: 10 cm of steel, 20 × 20 QUA4, heated throughout.
+    /// Returns the plate, its finite-element space and its conduction model.
+    fn plate() -> (Mesh, FiniteElementSpace, Model) {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords, &[0.10, 0.0]).unwrap();
+        let edge = mesh::line(&a, &b, 20, ElementType::SEG2).unwrap();
+        let plate = mesh::extrude(&edge, &[0.0, 0.10], 20).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&plate).unwrap();
+        let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
+        (plate, fes, conduction)
     }
-    Ok(out)
+
+    /// Solve the heated plate with `T = 0` held on `imposed`.
+    fn solve_holding(fes: &FiniteElementSpace, conduction: &Model, imposed: &Mesh) -> NodeField {
+        let held = model::dirichlet(imposed, conduction, "T", RelationSense::Equality).unwrap();
+        let source = model::flux(fes, conduction, "q").unwrap();
+        let whole = conduction.union(&held).unwrap().union(&source).unwrap();
+        let materials =
+            element_field::material_field(&whole, &[("k", 50.0), ("phi_q", 1.0e6)]).unwrap();
+        let k = matrix::stiffness(&whole, &materials).unwrap();
+        let rhs = node_field::external_forces(&whole, &materials).unwrap();
+        solver::solve(&k, &rhs).unwrap()
+    }
+
+    /// The distinct node ids of `mesh`, counted here, apart from `to_poi1`.
+    fn distinct_nodes(mesh: &Mesh) -> HashSet<NodeId> {
+        mesh.iter()
+            .flat_map(|zone| zone.read().connectivity().to_vec())
+            .collect()
+    }
+
+    #[test]
+    fn holds_an_edge_through_its_poi1_companion() {
+        let (plate, fes, conduction) = plate();
+        let border = mesh::border(&plate, None).unwrap();
+        let on_edge = Dirichlet::new(&border, &conduction, "T", RelationSense::Equality).unwrap();
+        let on_points = Dirichlet::new(
+            &mesh::to_poi1(&border),
+            &conduction,
+            "T",
+            RelationSense::Equality,
+        )
+        .unwrap();
+
+        // One relation per border node: 80 of them, counted apart.
+        assert_eq!(distinct_nodes(&border).len(), 80);
+        assert_eq!(on_edge.imposed_mesh.cell_count(), 80);
+        // Both land on the border's own POI1 companion, not on a copy.
+        let companion = SubMesh::to_poi1(&border.get(0).unwrap());
+        assert!(on_edge.imposed_mesh.get(0).unwrap().same_object(&companion));
+        assert!(on_points
+            .imposed_mesh
+            .get(0)
+            .unwrap()
+            .same_object(&companion));
+
+        // And they solve to the same temperature, node by node (to rounding:
+        // the solver is the one step allowed not to be bitwise reproducible).
+        let nodes: Vec<NodeId> = SubMesh::to_poi1(&plate.get(0).unwrap())
+            .read()
+            .connectivity()
+            .to_vec();
+        let t_edge = solve_holding(&fes, &conduction, &border);
+        let t_points = solve_holding(&fes, &conduction, &mesh::to_poi1(&border));
+        let edge_values = t_edge.values_at(&nodes, "T").unwrap();
+        let points_values = t_points.values_at(&nodes, "T").unwrap();
+        let t_max = edge_values.iter().cloned().fold(f64::MIN, f64::max);
+        for (e, p) in edge_values.iter().zip(&points_values) {
+            assert!((e - p).abs() <= 1e-12 * t_max, "{e} vs {p}");
+        }
+        assert!((t_max - 14.76).abs() < 5e-3, "T max = {t_max}");
+    }
+
+    #[test]
+    fn keeps_a_poi1_zone_given_as_it_is() {
+        let (plate, _fes, conduction) = plate();
+        let corner = mesh::poi1_from_nodes(&[plate.node(0, 0, 0).unwrap()]).unwrap();
+        let held = Dirichlet::new(&corner, &conduction, "T", RelationSense::Equality).unwrap();
+        assert!(held
+            .imposed_mesh
+            .get(0)
+            .unwrap()
+            .same_object(&corner.get(0).unwrap()));
+    }
+
+    #[test]
+    fn gives_a_node_two_zones_share_one_relation() {
+        // A bar a–b–d, held on its two segments as two zones sharing `b`.
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let d = Node::create_in(coords, &[2.0]).unwrap();
+        let bar = mesh::line(&a, &d, 2, ElementType::SEG2).unwrap();
+        let halves = mesh::line(&a, &b, 1, ElementType::SEG2)
+            .unwrap()
+            .union(&mesh::line(&b, &d, 1, ElementType::SEG2).unwrap())
+            .unwrap();
+        assert_eq!(halves.len(), 2);
+        let fes = FiniteElementSpace::lagrange1(&bar).unwrap();
+        let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
+
+        let held = Dirichlet::new(&halves, &conduction, "T", RelationSense::Equality).unwrap();
+        // One zone, one relation per distinct node: a, b, d.
+        assert_eq!(distinct_nodes(&halves).len(), 3);
+        assert_eq!(held.imposed_mesh.len(), 1);
+        assert_eq!(held.imposed_mesh.cell_count(), 3);
+
+        // Two relations on `b` used to leave the system singular; one solves.
+        let whole = conduction
+            .union(&model::dirichlet(&halves, &conduction, "T", RelationSense::Equality).unwrap())
+            .unwrap();
+        let materials = element_field::material_field(&whole, &[("k", 1.0)]).unwrap();
+        let k = matrix::stiffness(&whole, &materials).unwrap();
+        let rhs = node_field::external_forces(&whole, &materials).unwrap();
+        let t = solver::solve(&k, &rhs).unwrap();
+        assert_eq!(t.value(b.id(), "T").unwrap(), 0.0);
+    }
 }

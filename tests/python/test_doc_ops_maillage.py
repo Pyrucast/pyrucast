@@ -641,8 +641,8 @@ gauche = pyrucast.mesh.points_on_plane(plaque, [0.0, 0.0], [1.0, 0.0])
 # The nodes of the fillet: inside the disc of radius 0.2 around the re-entrant corner.
 conge = pyrucast.mesh.points_in_sphere(plaque, [1.0, 1.0], 0.2)
 
-# The selection serves directly as the imposed support of a Dirichlet — the
-# POI1 zone is what `model.dirichlet` expects (cf. Constraints / Dirichlet).
+# The selection serves directly as the imposed support of a Dirichlet: a POI1
+# zone listing each node once is held as it is (cf. Constraints / Dirichlet).
 mecanique = pyrucast.model.elasticity(
     pyrucast.FiniteElementSpace(plaque), "plane_stress"
 )

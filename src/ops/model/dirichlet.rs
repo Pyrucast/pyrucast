@@ -8,7 +8,9 @@ use crate::models::RelationSense;
 
 /// Dirichlet `Model` (a single sub-model) constraining `variable`, a primal of
 /// `target`, on the nodes of `imposed_mesh` via Lagrange multipliers, one per
-/// node on a node of its own. Parent-level operator — see
+/// node on a node of its own. `imposed_mesh` is any mesh — an edge, a face, a
+/// selection of points: its distinct nodes, all zones together, are held, each
+/// once. Parent-level operator — see
 /// [`SubModel::dirichlet`] and
 /// [`Dirichlet::new`](crate::models::dirichlet::Dirichlet::new) for the
 /// variable names and the errors.
@@ -44,6 +46,10 @@ use crate::models::RelationSense;
 /// let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?.union(
 ///     &model::dirichlet(&impose, &cible, "T", RelationSense::Equality)?)?;
 /// assert_eq!(m.len(), 2);
+/// // An edge mesh, given as it is: its three SEG2 cells hold three nodes.
+/// let edge = mesh::border(&maillage, None)?;
+/// let held = model::dirichlet(&edge, &cible, "T", RelationSense::Equality)?;
+/// assert_eq!(held.multiplier_mesh()?.cell_count(), 3);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn dirichlet(
