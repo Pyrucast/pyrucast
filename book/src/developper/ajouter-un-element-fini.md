@@ -9,16 +9,25 @@ place.
 
 L'énum [`ElementType`](../mesh.md) ne sert qu'au **stockage** et à la
 **sérialisation** ; **tout le comportement** vit dans une struct par élément
-(sous `src/atoms/element_kind/`) qui implémente le trait `ElementKind`. Un
-unique point de dispatch, `ElementType::as_kind()`, relie les deux. Le code
-générique — `skin`, `orient`, `border`, les localisateurs, l'export, le
-rendu — ne fait **jamais** de `match` par variante.
+(sous `src/atoms/element_kind/`) qui implémente le trait `ElementKind`. Le
+point de dispatch, `ElementType::as_kind()`, relie les deux. Le code
+générique — `skin`, `orient`, les localisateurs, l'export, le rendu — ne fait
+**jamais** de `match` par variante. Seuls les opérateurs qui n'acceptent que
+certains types (`border`, `sweep`, `extrude`, `revolve`, `pave_volume`,
+`triangulate_surface`, `regularize`) les nomment, pour dire lesquels.
+
+L'énum garde quatre `match` qui doublent des données du trait —
+`nodes_per_cell`, `topological_dim`, `name` et `reversal_permutation` — et un
+test de la batterie vérifie qu'ils disent la même chose que lui.
 
 ```text
-ElementType  (enum : stockage + sérialisation bincode + nom cast3m)
-├── POI1, SEG2, TRI3, …, HEX27
-├── ALL          -> &'static [ElementType]   ← la seule énumération
-└── as_kind(&self) -> &'static dyn ElementKind   ← l'unique match
+ElementType  (enum : stockage + sérialisation bincode + nom "TRI3")
+├── POI1, SEG2, TRI3, QUA4, TET4, PENTA6, PYRA5, HEX8,
+│   SEG3, TRI6, QUA8, TET10, PENTA15, HEX20, QUA9, HEX27
+├── ALL          -> &'static [ElementType]   ← la liste des types
+├── nodes_per_cell / topological_dim / name / reversal_permutation
+│                                            ← un match chacun
+└── as_kind(self) -> &'static dyn ElementKind   ← le match vers le trait
 
 ElementKind  (trait : le comportement d'un type d'élément)
 ├── Identité (requis)
@@ -44,7 +53,7 @@ ElementKind  (trait : le comportement d'un type d'élément)
 
 ## Les étapes
 
-Ajouter un élément se réduit à **trois** gestes :
+Ajouter un élément touche **trois** fichiers :
 
 1. **`src/atoms/element_kind/<mon_element>.rs`** (nouveau) — une struct unité
    et son `impl ElementKind`. Calquer sur `tri3.rs` (cas linéaire le plus
@@ -54,19 +63,24 @@ Ajouter un élément se réduit à **trois** gestes :
 2. **`src/atoms/element_kind/mod.rs`** — un `mod <mon_element>;` et un bras
    dans `as_kind()`.
 3. **`src/atoms/element_type.rs`** — une variante dans l'énum, son rustdoc,
-   et une entrée dans `ElementType::ALL`.
+   une entrée dans `ElementType::ALL`, un bras dans chacun des quatre `match`
+   (`nodes_per_cell`, `topological_dim`, `name`, `reversal_permutation`), et le
+   type dans le test `all_lists_every_variant_exactly_once` (son bras, et le
+   nombre de types qu'il compte).
 
-Rien d'autre. En particulier :
+Le compilateur signale un bras manquant dans chaque `match`, y compris celui du
+test. Une entrée oubliée dans `ALL`, elle, n'est attrapée que par le compte du
+test (`ALL.len()`), qu'il faut donc relever. Pour le reste :
 
 - **aucun wrapper PyO3** : `ElementType` traverse la frontière en **chaîne**,
-  et `from_name` se déduit de `ALL` + `name()` ;
-- `nodes_per_cell`, `topological_dim` et `from_name` sur `ElementType`
-  délèguent au trait, et n'ont donc pas de bras à compléter ;
-- `skin`, `orient`, `border`, `convert`, `to_quadratic`, l'export VTK, la
-  lecture gmsh, l'échange MED, le rendu et la subdivision colorée sont
-  **génériques** et ne changent pas — à condition que `gmsh_permutation` et
-  `med_permutation` disent comment ces formats numérotent les nœuds de la
-  maille. Pour un volume, la numérotation MED se vérifie contre medcoupling :
+  et `from_name` se déduit de `ALL` et de `name()` ;
+- `skin`, `orient`, `convert`, `to_quadratic`, l'export VTK, la lecture gmsh,
+  l'échange MED, le rendu et la subdivision colorée sont **génériques** et ne
+  changent pas — à condition que `gmsh_permutation` et `med_permutation` disent
+  comment ces formats numérotent les nœuds de la maille ;
+- un opérateur qui nomme les types qu'il accepte (`border`, `sweep`,
+  `extrude`, `revolve`, `pave_volume`, `triangulate_surface`, `regularize`)
+  refuse le nouveau type avec un message, tant qu'on ne l'y a pas ajouté. Pour un volume, la numérotation MED se vérifie contre medcoupling :
   `tests/python/test_medcoupling.py` exige un volume positif et des nœuds
   milieux au milieu des arêtes qu'il en déduit ; ajouter le type à sa table
   `REFERENCE`.
@@ -92,8 +106,8 @@ de celle de `pyrucast`.
 
 `ref_nodes()` est **la donnée racine** : les coordonnées de chaque nœud dans
 le repère \\( \xi \\), dans l'ordre local. Le nombre de nœuds et la dimension
-topologique s'en déduisent, et c'est la vérité contre laquelle tous les tests
-d'invariants recoupent les autres tables.
+topologique s'en déduisent, et c'est la référence contre laquelle les tests de
+cohérence recoupent les autres tables.
 
 Fixer d'abord la convention — repère, numérotation locale, orientation (CCW
 pour les faces) — et la documenter dans le rustdoc de la variante.
@@ -114,8 +128,8 @@ une face de `TET10` est un `TRI6`, une face de `HEX27` est un `QUA9`. Le champ
 coins — ce sur quoi deux mailles voisines s'accordent quel que soit leur degré,
 donc ce qui sert de clé d'adjacence.
 
-C'est cette seule table qui alimente `skin`, `orient`, le culling des faces
-cachées et la subdivision du rendu.
+C'est cette seule table qui alimente `skin`, `orient`, l'élimination des faces
+cachées au rendu et la subdivision du rendu.
 
 ### Le domaine de référence
 
@@ -133,10 +147,10 @@ fourni : c'est la forme à implémenter, parce que l'inversion de la géométrie
 une allocation par appel dominerait le coût. `shape`/`dshape` sont les
 surcouches allouantes, fournies.
 
-Astuce de validation : recouper les dérivées analytiques par différences
-finies, ce que fait déjà `check_dshape_matches_fd` pour tous les types.
+Les dérivées analytiques sont recoupées par différences finies, pour tous les
+types, par `check_dshape_matches_fd`.
 
-Le Jacobien, son déterminant (y compris le cas **manifold**
+Le Jacobien, son déterminant (y compris le cas d'une **variété** plongée,
 \\( d_s > d_r \\)) et les dérivées physiques \\( \partial N_i / \partial x \\)
 sont **génériques** — rien à écrire.
 
@@ -149,9 +163,9 @@ centroïde portant toute la mesure.
 
 ## Les tests que vous obtenez gratuitement
 
-`src/atoms/element_kind/mod.rs` porte une batterie d'invariants qui boucle sur
-`ElementType::ALL` — un type neuf y entre le jour où il est déclaré, sans une
-ligne de test à écrire :
+`src/atoms/element_kind/mod.rs` porte une batterie de tests de cohérence qui
+boucle sur `ElementType::ALL` — un type neuf y entre dès qu'il est déclaré,
+sans une ligne de test à écrire :
 
 - métadonnées cohérentes entre l'énum et le trait ;
 - nœuds milieux exactement au milieu de leur arête ;
@@ -179,17 +193,3 @@ supporte pas. On perdrait la persistance. L'énum donne en prime
 l'exhaustivité au compilateur sur `as_kind()`. Le trait n'est jamais
 sérialisé : `as_kind()` rend un `&'static`, reconstruit à la volée depuis la
 variante.
-
-## Ce que ça a coûté, et rapporté
-
-Avant ce découpage, le savoir d'un élément était réparti sur **une vingtaine
-de fichiers** et recopié jusqu'à quatre fois : les facettes en trois
-exemplaires, les nœuds de référence en quatre, le centroïde en trois. Huit de
-ces tables retombaient sur `_ => None`, donc s'oubliaient sans un mot du
-compilateur — et trois bugs en vivaient (`skin` muet sur `PYRA5` et sur tout
-élément quadratique, un défaut de rendu silencieusement faux, une liste de
-test à taille figée).
-
-Ce chapitre listait alors un tableau « quel fichier pour quoi ». Il n'en a
-plus besoin : il n'y a **plus de liste de fichiers à parcourir**, seulement un
-trait à remplir.

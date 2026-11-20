@@ -18,7 +18,7 @@ combinaison paraît sans effet.
 La solution est l'**interruption coopérative** : la boucle longue vérifie
 elle-même, à intervalles réguliers, s'il faut s'arrêter.
 
-## Le principe : un jeton, pas un détail de frontend
+## Le principe : un jeton, choisi par l'appelant
 
 L'écueil serait de faire appeler `Python::check_signals` directement par
 l'opérateur — cela couplerait le **cœur de calcul** à PyO3 et casserait
@@ -26,15 +26,16 @@ l'usage en Rust pur (cf. [Compilation et tests](../compilation.md), build sans
 `python-api`).
 
 À la place, l'opérateur reçoit un **jeton d'interruption** abstrait — le trait
-`Cancel` du module `interrupt` — qu'il interroge périodiquement. C'est le
-**frontend** qui décide *comment* l'interruption est signalée :
+`Cancel` du module `interrupt` — qu'il interroge périodiquement. C'est
+l'**appelant** qui décide *comment* l'interruption est signalée :
 
-| Frontend | Jeton | Déclencheur |
+| Appelant | Jeton | Déclencheur |
 |---|---|---|
-| Rust pur | `NoCancel` / `()` | jamais |
-| Rust pur | `AtomicBool` | un autre thread / handler `ctrlc` lève le drapeau |
-| Rust pur | `Deadline` | dépassement d'un délai (timeout) |
-| Python | `PySignals` (dans `src/py`, gaté `python-api`) | `Ctrl+C` via `Python::check_signals` |
+| Rust pur | `NoCancel` | jamais |
+| Rust pur | `()` | jamais |
+| Rust pur | `AtomicBool` | un autre thread, ou un gestionnaire de signal, lève le drapeau |
+| Rust pur | `Deadline` | dépassement d'un délai |
+| Python | `PySignals` (dans `src/py`, feature `python-api`) | `Ctrl+C` via `Python::check_signals` |
 
 Le trait est du **Rust pur, sans PyO3** :
 
@@ -43,7 +44,7 @@ Le trait est du **Rust pur, sans PyO3** :
 ```
 
 L'erreur renvoyée est `PyrucastError::Interrupted`. Sa conversion vers Python
-(gatée `python-api`) produit une vraie **`KeyboardInterrupt`**, pas un
+(feature `python-api`) produit une vraie **`KeyboardInterrupt`**, pas un
 `RuntimeError` générique. Le cœur, lui, ne voit que `&dyn Cancel` : il reste
 PyO3-free et utilisable depuis un programme Rust.
 
@@ -57,28 +58,31 @@ Trois gestes.
 coût d'un `check` soit négligeable) :
 
 ```text
-pub fn pave(/* … */, cancel: &dyn Cancel) -> Result<…> {
+pub fn mon_operateur(/* arguments */, cancel: &dyn Cancel) -> Result<Mesh> {
     loop {
         cancel.check()?;          // ← point d'interruption
-        // … une étape de travail …
+        // une étape de travail
     }
 }
 ```
 
-> Sonder une fois par étape grossière suffit ; inutile de throttler par un
-> compteur si chaque tour fait déjà un travail substantiel.
+> Sonder une fois par étape grossière suffit ; inutile d'espacer les sondes par
+> un compteur si chaque tour fait déjà un travail substantiel.
 
 **2. Exposer deux formes côté Rust** — une simple et une interruptible — pour
 ne pas imposer un jeton aux appelants qui n'en veulent pas :
 
 ```text
-pub fn triangulate_surface(contour: &Mesh, et: ElementType, size: Option<f64>) -> Result<Mesh> {
-    triangulate_surface_cancellable(contour, et, size, &NoCancel)
+pub fn triangulate_surface(
+    contour: &Mesh, element_type: ElementType, target_size: Option<f64>,
+) -> Result<Mesh> {
+    triangulate_surface_cancellable(contour, element_type, target_size, &NoCancel)
 }
 
 pub fn triangulate_surface_cancellable(
-    contour: &Mesh, et: ElementType, size: Option<f64>, cancel: &dyn Cancel,
-) -> Result<Mesh> { /* … boucle qui sonde `cancel` … */ }
+    contour: &Mesh, element_type: ElementType, target_size: Option<f64>,
+    cancel: &dyn Cancel,
+) -> Result<Mesh> { /* la boucle qui sonde `cancel` */ }
 ```
 
 Un programme Rust câble alors ce qu'il veut, sans toucher à Python :
@@ -87,7 +91,7 @@ Un programme Rust câble alors ce qu'il veut, sans toucher à Python :
 {{#include ../../../tests/doc_memoire.rs:annulation}}
 ```
 
-**3. Brancher le jeton Python dans la couche FFI** (`src/py`, gatée
+**3. Brancher le jeton Python dans le binding** (`src/py`, feature
 `python-api`) — le **seul** endroit où l'interruption Python rencontre le
 cœur :
 
@@ -96,20 +100,21 @@ cœur :
 ```
 
 Le paramètre `py: Python<'_>` est injecté par PyO3 et **n'apparaît pas** dans la
-signature Python : `pyrucast.mesh.triangulate_surface(contour, element_type, size=None)` reste
-inchangée, mais un `Ctrl+C` l'interrompt désormais.
+signature Python : `pyrucast.mesh.triangulate_surface(contour, element_type, size=None)`
+ne le montre pas, et un `Ctrl+C` l'interrompt.
 
-## Lien avec le parallélisme
+## Interruption et parallélisme
 
-Le même `AtomicBool` est le mécanisme naturel pour interrompre un calcul
-**parallèle à mémoire partagée** : chaque worker sonde le drapeau, et le thread
-principal (seul à détenir le GIL côté Python) le lève quand `check_signals`
-détecte le `Ctrl+C`. Poser le trait `Cancel` dès maintenant prépare ce terrain
-sans coût supplémentaire.
+Le jeton est sondé par le thread appelant, entre deux étapes. Une région
+parallèle (rayon) ne le sonde pas : `PySignals` tient le `Python<'py>` du
+thread qui détient le GIL, et ne passe pas aux autres threads. Un `Ctrl+C`
+pendant une région parallèle prend donc effet au point de sonde suivant, une
+fois la région terminée.
 
 ## À retenir
 
-- L'interruption est **coopérative** : l'opérateur sonde, le frontend décide.
-- Le cœur reste **PyO3-free** (`&dyn Cancel`) → utilisable en Rust pur.
+- L'interruption est **coopérative** : l'opérateur sonde, l'appelant décide.
+- Le cœur reste **sans PyO3** (`&dyn Cancel`) → utilisable en Rust pur.
 - `PyrucastError::Interrupted` → `KeyboardInterrupt` côté Python.
-- Sonder une fois par étape grossière ; coût nul pour `NoCancel` (inliné).
+- Sonder une fois par étape grossière : un appel indirect par étape, coût
+  négligeable devant le travail de l'étape.

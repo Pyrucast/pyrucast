@@ -33,9 +33,8 @@ use crate::error::{PyrucastError, Result};
 /// # use pyrucast::error::PyrucastError;
 /// # use pyrucast::interrupt::{Cancel, Deadline};
 /// # use std::sync::atomic::{AtomicBool, Ordering};
-/// // The token decides **how** the stop is signalled; the operators
-/// // n'en savent rien, et restent libres de toute considération de
-/// // frontal — Ctrl+C, délai, bouton d'interface.
+/// // The token decides **how** the stop is signalled; the operators know
+/// // nothing of it — Ctrl+C, deadline, interface button.
 /// let stop = AtomicBool::new(false);
 /// assert!(stop.check().is_ok());
 /// stop.store(true, Ordering::Relaxed);

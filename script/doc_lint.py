@@ -85,13 +85,11 @@ DETTE_MIGRATION = {}
 # Symbols cited in prose that the audit must not try to resolve.
 SYMBOLES_TOLERES = {
     "T::union_subs": "T is a type parameter, not a concrete type",
-    "ops::mesher": "historical name, cited to tell the 2026-08-03 renaming",
     "SubMesh::connectivity": "pub(crate): the Parallelism page describes the internal machinery",
     "SubMatrix::add_entry_with": "pub(crate): same page, the zero-copy twin of a public method",
     "SubNodeField::nodes_with": "pub(crate): same page, the zero-copy twin of a public method",
     "Type::membre": "metavariable of the Documentation et tests page",
     "module::verbe": "metavariable: the marker of delegation methods",
-    "Coords::acquire": "wrong name, cited to tell what the guard found",
 }
 
 # Roots that do not come from the crate: the right-hand side is not checked.
@@ -348,6 +346,7 @@ def check_symboles():
         return ["target/doc absent — lancer `cargo doc --no-deps --lib` d'abord"]
     modules, fonctions, types, membres = symboles_du_crate()
     modules.add("pyrucast")  # the crate root, as written in Rust
+    modules.add("crate")  # the same root, as written inside the crate
     par_type = membres_par_type()
     try:
         import pyrucast

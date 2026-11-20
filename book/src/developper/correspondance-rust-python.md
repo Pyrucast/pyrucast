@@ -8,9 +8,11 @@ Python). Elle matérialise la règle de [Conventions](../conventions.md) :
   `pyrucast.Foo` (le wrapper PyO3 interne `PyFoo` est masqué) ;
 - une fonction libre `ops::<module>::f` est exposée dans le **sous-module de
   même nom** : `pyrucast.<module>.f`. Le module Rust porte le nom du
-  **conteneur produit** (`mesh`, `node_field`, `element_field`, `matrix`,
-  `model`, `coords`), ou de l'activité quand il ne produit aucun conteneur
-  (`measure`, `geom`, `export`) ; `solver` est l'exception nommée. Seuls trois
+  **conteneur produit** (`mesh`, `finite_element_space`, `node_field`,
+  `element_field`, `matrix`, `model`, `evolution`), du magasin dans lequel il
+  écrit (`coords`), de l'activité quand il ne produit aucun conteneur
+  (`measure`, `geom`, `export`), ou du domaine quand le conteneur produit dépend
+  de l'argument (`field`) ; `solver` est l'exception nommée. Seuls trois
   verbes vivent au top-level, faute de conteneur produit : `save` et `load`
   (cf. [`archive`](#archive--sauvegarde-et-relecture-dun-graphe)) et
   `spill_stats` ;
@@ -41,8 +43,9 @@ non plus : elle ne s'applique qu'à des contraintes.
 
 `filter_components` et `rename_component` n'ont **que** la forme méthode
 (`f.filter_components(["u_x"])`, `f.rename_component("U", "DX")`) : un seul
-conteneur, de petits arguments, une vue dérivée — R1 en fait du vocabulaire du
-champ, pas un opérateur.
+conteneur, de petits arguments, une vue dérivée — la règle des méthodes
+([Conventions](../conventions.md#méthodes-vs-fonctions-libres)) en fait du
+vocabulaire du champ, pas un opérateur.
 
 La **complétude du miroir** est elle aussi vérifiée par un test
 (`tests/python/test_mirror_completeness.py`), **dans les deux sens** : aucun
@@ -110,8 +113,9 @@ zone avec `|` (cf. [Évolution](../evolution.md)).
 ## Fonctions ↔ fonctions
 
 Les fonctions `ops` prennent leurs conteneurs **par référence** et renvoient
-`Result<T>` (converti en exception Python `RuntimeError`), sauf celles qui ne
-peuvent pas échouer (`update_contact`, `mask_sub`). Les signatures ci-dessous
+`Result<T>` (converti en exception Python `RuntimeError`, ou `KeyboardInterrupt`
+pour une interruption), sauf celles qui ne peuvent pas échouer
+(`update_contact`, `mask_sub`). Les signatures ci-dessous
 omettent souvent le `&` et le `Result` pour la lisibilité.
 
 ### `ops::mesh` — construction et transformation de maillages
@@ -182,7 +186,7 @@ degré des lignes (`"QUA4"` entre deux `SEG2`, `"QUA8"` entre deux `SEG3`).
 | — (exige l'interpréteur) | `from_gmsh(coords, *, dim=-1, tag=-1, views=True) -> (dict[str, Mesh], dict)` |
 | — (exige l'interpréteur) | `from_medcoupling(coords, source, *, mesh_name=None) -> (dict[str, Mesh], dict)` |
 | `consolidate(mesh: &Mesh) -> Mesh` | `consolidate(mesh) -> Mesh` |
-| `select_nodes(field: &NodeField, band: &Band, …) -> Mesh` / `select_cells(field: &ElementField, …) -> Mesh`, et pour une zone `select_sub_nodes` / `select_sub_cells` | `select(field, ge=None, gt=None, le=None, lt=None, components=None) -> Mesh` (dispatch par type ; part d'un champ mais rend un maillage, d'où son rangement ici) |
+| `select_nodes(field: &NodeField, band: &Band, components: Option<Vec<String>>) -> Mesh` / `select_cells(field: &ElementField, band: &Band, components: Option<Vec<String>>) -> Mesh`, et pour une zone `select_sub_nodes(sub: &SubNodeField, band: &Band, components: Option<Vec<String>>) -> Mesh` / `select_sub_cells(sub: &SubElementField, band: &Band, components: Option<Vec<String>>) -> Mesh` | `select(field, ge=None, gt=None, le=None, lt=None, components=None) -> Mesh` (dispatch par type ; part d'un champ mais rend un maillage, d'où son rangement ici) |
 
 Les mailleurs longs (`triangulate_surface`, `pave_surface`, `grid_surface`,
 `grid_surface2`, `triangulate_volume`, `pave_volume`) ont en Rust une variante
@@ -196,16 +200,16 @@ Les mailleurs longs (`triangulate_surface`, `pave_surface`, `grid_surface`,
 | `positions(mesh: &Mesh, components: Option<Vec<String>>) -> NodeField` | `positions(mesh, components=None) -> NodeField` |
 | `divergence(field: &ElementField, prefix: &str) -> NodeField` | `divergence(field, prefix) -> NodeField` |
 | `restrict(field: &NodeField, mesh: &Mesh) -> NodeField` | `restrict(field, mesh) -> NodeField` |
-| `project_node(field: &NodeField, mesh: &Mesh, target: &Mesh, tol: f64) -> NodeField` / `project_element(field: &ElementField, …) -> NodeField` | `project(field, mesh, target, tol=1e-6) -> NodeField` (dispatch par type, aussi méthode `field.project(mesh, target, tol=1e-6)` sur les quatre saveurs de champ ; un champ aux nœuds est interpolé par les mailles de `mesh`, un champ aux points de Gauss est lu par l'ajustement propre à chaque maille, rien n'est moyenné entre mailles ; 0 hors de `mesh`) |
+| `project_node(field: &NodeField, mesh: &Mesh, target: &Mesh, tol: f64) -> NodeField` / `project_element(field: &ElementField, mesh: &Mesh, target: &Mesh, tol: f64) -> NodeField` | `project(field, mesh, target, tol=1e-6) -> NodeField` (dispatch par type, aussi méthode `field.project(mesh, target, tol=1e-6)` sur les quatre types de champ — `NodeField`, `SubNodeField`, `ElementField`, `SubElementField` ; un champ aux nœuds est interpolé par les mailles de `mesh`, un champ aux points de Gauss est lu par l'ajustement propre à chaque maille, rien n'est moyenné entre mailles ; 0 hors de `mesh`) |
 | `restrict_like(field: &NodeField, target: &NodeField) -> NodeField` | `restrict_like(field, target) -> NodeField` |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 | `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` |
-| `mask(field: &NodeField, band: &Band, …) -> NodeField` / `mask_sub(sub: &SubNodeField, …) -> SubNodeField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> NodeField` (champ `0/1` de même structure ; sucre `field >= x`). Accepte aussi un `SubNodeField` |
+| `mask(field: &NodeField, band: &Band, components: Option<Vec<String>>) -> NodeField` / `mask_sub(sub: &SubNodeField, band: &Band, components: Option<Vec<String>>) -> SubNodeField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> NodeField` (champ `0/1` de même structure ; sucre `field >= x`). Accepte aussi un `SubNodeField` |
 | `internal_forces(model: &Model, state: &ElementField, solution: &NodeField, materials: &ElementField) -> NodeField` | `internal_forces(model, state, solution, materials) -> NodeField`, aussi `model.internal_forces(state, solution, materials)` |
 | `external_forces(model: &Model, materials: &ElementField) -> NodeField` | `external_forces(model, materials) -> NodeField` |
 | `sum_to_nodes(field: &ElementField) -> NodeField` | `sum_to_nodes(field) -> NodeField` (champ à un point par maille ; chaque nœud reçoit la somme des mailles qui le touchent) |
 
-`internal_forces` (`BSIG`, `∫ Bᵀ σ`) et `external_forces` sont des **assemblages**,
+`internal_forces` (`∫ Bᵀ σ`) et `external_forces` sont des **assemblages**,
 mais leur résultat est un vecteur nodal et non un opérateur : on se range
 par la sortie.
 
@@ -226,10 +230,10 @@ par la sortie.
 | `deformation(u: &NodeField, fespace: &FiniteElementSpace, measure: StrainMeasure) -> ElementField` | `deformation(u, fespace, measure="linear") -> ElementField` (`StrainMeasure` passe par son nom : `"linear"`, `"gradient"`, `"green_lagrange"`, `"right_cauchy_green"`, `"left_cauchy_green"`, `"hencky"`, `"euler_almansi"`, `"jacobian"`) |
 | `interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `interp_to_gauss(field, fespace) -> ElementField` |
 | `thermal_strain(temperature: &ElementField, material: &ElementField, fespace: &FiniteElementSpace, t_ref: f64, measure: StrainMeasure) -> ElementField` | `thermal_strain(temperature, materials, fespace, t_ref, measure="linear") -> ElementField` (la dilatation exacte dans la mesure de la loi) |
-| `strain(model: &Model, solution: &NodeField, materials: &ElementField) -> ElementField` | `strain(model, solution, materials) -> ElementField` (`EPSI` : l'entrée de chaque loi ; aussi `model.strain(…)`) |
-| `elastic_stress(model: &Model, strain: &ElementField, materials: &ElementField) -> ElementField` | `elastic_stress(model, strain, materials) -> ElementField` (`σ = D:ε` ; aussi `model.elastic_stress(…)`) |
+| `strain(model: &Model, solution: &NodeField, materials: &ElementField) -> ElementField` | `strain(model, solution, materials) -> ElementField` (l'entrée de chaque loi ; aussi `model.strain(solution, materials)`) |
+| `elastic_stress(model: &Model, strain: &ElementField, materials: &ElementField) -> ElementField` | `elastic_stress(model, strain, materials) -> ElementField` (`σ = D:ε` ; aussi `model.elastic_stress(strain, materials)`) |
 | `von_mises(model: &Model, stress: &ElementField, coefficients: &[f64; 6]) -> ElementField` | `von_mises(model, stress, coefficients=[0.5, 0.5, 0.5, 1.5, 1.5, 1.5]) -> ElementField` (von Mises, ou Hill avec `[F, G, H, L, M, N]` ; défaut Rust : la constante `VON_MISES` ; pas de méthode) |
-| `elastic_strain(model: &Model, stress: &ElementField, materials: &ElementField) -> ElementField` | `elastic_strain(model, stress, materials) -> ElementField` (`ε = D⁻¹:σ` ; aussi `model.elastic_strain(…)`) |
+| `elastic_strain(model: &Model, stress: &ElementField, materials: &ElementField) -> ElementField` | `elastic_strain(model, stress, materials) -> ElementField` (`ε = D⁻¹:σ` ; aussi `model.elastic_strain(stress, materials)`) |
 | `stress_measure(stress: &ElementField, gradient: &ElementField, target: StressMeasure) -> ElementField` | `stress_measure(stress, gradient, target) -> ElementField` (`StressMeasure` par son nom : `"cauchy"`, `"kirchhoff"`, `"pk1"`, `"pk2"`, `"hencky"` ; pas de méthode : elle exige une contrainte et un gradient nommés) |
 | `rotate_frame(field: &ElementField, gradient: &ElementField) -> ElementField` | `rotate_frame(field, gradient) -> ElementField` (axes `V1*`, `V2*` tournés par la rotation `R` de `F = R U` ; pas de méthode : elle exige des axes et un gradient nommés) |
 | `cell_integral(field: &ElementField, target: &FiniteElementSpace) -> ElementField` | `cell_integral(field, target) -> ElementField` (`target` : un point par maille, quadrature `REDUCED`) |
@@ -238,12 +242,12 @@ par la sortie.
 | `consolidate(field: &ElementField) -> ElementField` | `consolidate(field) -> ElementField` (fusionne les zones d'une même fespace) |
 | `restrict(field: &ElementField, fespace: &FiniteElementSpace) -> ElementField` | `restrict(field, fespace) -> ElementField` |
 | `restrict_like(field: &ElementField, target: &ElementField) -> ElementField` | `restrict_like(field, target) -> ElementField` |
-| `mask(field: &ElementField, band: &Band, …) -> ElementField` / `mask_sub(sub: &SubElementField, …) -> SubElementField` | `mask(field, ge=None, …) -> ElementField` ; accepte aussi un `SubElementField` |
+| `mask(field: &ElementField, band: &Band, components: Option<Vec<String>>) -> ElementField` / `mask_sub(sub: &SubElementField, band: &Band, components: Option<Vec<String>>) -> SubElementField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> ElementField` ; accepte aussi un `SubElementField` |
 | `sub_material_field(sub: &SubModel, components_and_values: &[(&str, f64)]) -> SubElementField` | `sub_material_field(sub_model, components_and_values) -> SubElementField` |
 | `material_field(model: &Model, components_and_values: &[(&str, f64)]) -> ElementField` | `material_field(model, components_and_values) -> ElementField` |
 | `material_field_per_sub_model(model: &Model, per_sub_model: &[&[(&str, f64)]]) -> ElementField` | `material_field_per_sub_model(model, components_and_values_per_sub_model) -> ElementField` |
 | `behavior::initial_state(model: &Model, materials: &ElementField) -> ElementField` | `initial_state(model, materials) -> ElementField` (l'état de repos, `prev` du premier pas) |
-| `behavior::integrate(model, deformation, prev: &ElementField, materials, dt: Option<f64>) -> ElementField` | `integrate_behavior(model, deformation, materials, prev, dt=None) -> ElementField` (`COMP`) |
+| `behavior::integrate(model: &Model, deformation: &ElementField, prev: &ElementField, materials: &ElementField, dt: Option<f64>) -> ElementField` | `integrate_behavior(model, deformation, materials, prev, dt=None) -> ElementField` (l'intégration de la loi de comportement sur un pas ; aussi `model.integrate_behavior(deformation, materials, prev, dt=None)`) |
 
 ### `ops::finite_element_space` — opérateurs produisant un espace éléments finis
 
@@ -263,7 +267,7 @@ par la sortie.
 |---|---|
 | `integral(field: &NodeField, fespace, component) -> f64` / `integral_element(field: &ElementField, component) -> f64` | `integral(field, component, fespace=None) -> float` (dispatch par type ; `∫ f dΩ`, `fespace` requis pour un `NodeField`) |
 | `SubField::dot(&self, other, pairs: Option<&[(&str, &str)]>) -> Result<f64>` / `Field::dot_field(&self, other, pairs) -> f64` | `xty(x, y, pairs=None) -> float` (dispatch par type ; produit scalaire **global** de deux champs, composantes appariées par nom ou par `pairs`) |
-| `SubField::xtx(&self, components: Option<&[&str]>) -> f64` / `Field::xtx(&self, components) -> f64` | `xtx(x, components=None) -> float` (dispatch par type ; `Σ v²`, norme au carré `XTX`, restreinte aux composantes nommées si on les donne) |
+| `SubField::xtx(&self, components: Option<&[&str]>) -> f64` / `Field::xtx(&self, components) -> f64` | `xtx(x, components=None) -> float` (dispatch par type ; `Σ v²`, norme au carré, restreinte aux composantes nommées si on les donne) |
 
 ### `ops::field` — opérateurs génériques
 
@@ -274,7 +278,7 @@ produit » ne désigne donc pas *un* module, et ils se rangent par domaine.
 | Rust (`ops::field::…`) | Python (`pyrucast.field.…`) |
 |---|---|
 | `psca<T: Pscal>(x: &T, y: &T) -> T` | `psca(x, y) -> field` (produit scalaire **nœud par nœud**, champ à une composante `"psca"`). Deux conteneurs en pairs et opération symétrique : fonction libre **seule**, pas de méthode |
-| `abs` / `sqrt` / `exp` / `log` / `log10` / `cos` / `sin` / `tan` / `sinh` / `cosh` / `tanh` `<T: MapValues>(field: &T) -> T` | mêmes noms `pyrucast.field.…(field)` — maths **élément par élément** (style numpy), un champ neuf du même type ; acceptent les quatre saveurs de champ (`NodeField` / `SubNodeField` / `ElementField` / `SubElementField`). Résultats non bornés : `log` de ≤ 0 → `-inf`/`nan` |
+| `abs` / `sqrt` / `exp` / `log` / `log10` / `cos` / `sin` / `tan` / `sinh` / `cosh` / `tanh` `<T: MapValues>(field: &T) -> T` | mêmes noms `pyrucast.field.…(field)` — maths **élément par élément** (style numpy), un champ neuf du même type ; acceptent les quatre types de champ (`NodeField` / `SubNodeField` / `ElementField` / `SubElementField`). Résultats non bornés : `log` de ≤ 0 → `-inf`/`nan` |
 
 > La composition de zones passe par l'**union** (`|` Python / `union` Rust) ;
 > l'arithmétique champ + scalaire **et** champ + champ par les **opérateurs**
@@ -332,11 +336,10 @@ Rust n'a pas d'argument par défaut. Même nom, même ordre ; c'est
 fonction dit la valeur que Python prend par défaut, pour qu'un lecteur qui
 n'écrit que du Rust sache ce que l'autre obtient sans rien dire.
 
-**Le pli des lois.** Rust nomme la loi par une **enum** (`PlasticLaw`,
-`DamageLaw`) dans `plasticity` et `damage` ; Python déplie
-les lois en une fonction chacune, que Rust offre aussi. Les dérogations
-correspondantes sont enregistrées, avec leur raison, dans
-`tests/python/test_mirror_completeness.py`.
+**Une fonction par loi.** Rust nomme la loi par une **enum** (`PlasticLaw`,
+`DamageLaw`) dans `plasticity` et `damage` ; Python offre une fonction par loi,
+que Rust offre aussi. Les dérogations correspondantes sont enregistrées, avec
+leur raison, dans `tests/python/test_mirror_completeness.py`.
 
 ### `ops::matrix` — assemblage des matrices
 
@@ -348,8 +351,10 @@ correspondantes sont enregistrées, avec leur raison, dans
 | `geometric(model: &Model, materials: &ElementField, stress: &ElementField) -> Matrix` | `geometric(model, materials, stress) -> Matrix` |
 | `tangent(model, materials, deformation, prev: &ElementField, dt: Option<f64>) -> Matrix` | `tangent(model, materials, deformation, prev, dt=None) -> Matrix` |
 
-Les cinq reposent sur `assemble_kind(model, materials, kind: MatrixKind, inputs)`,
-le moteur commun des assembleurs, qui n'a pas de binding Python.
+Les quatre assembleurs (`stiffness`, `mass`, `geometric`, `tangent`) reposent
+sur `assemble_kind(model, materials, kind: MatrixKind, inputs)`, le moteur
+commun, qui n'a pas de binding Python ; `lump` condense une matrice déjà
+assemblée.
 
 ### `ops::solver` — résolution
 
@@ -368,7 +373,7 @@ matrice qui porte des inégalités.
 
 | Rust (`ops::export::…`) | Python (`pyrucast.export.…`) |
 |---|---|
-| `write_vtk_mesh(mesh: &Mesh, path: &Path, encoding: VtkEncoding)` | `export_vtk(mesh, path, binary=False) -> None` |
+| `write_vtk_mesh(mesh: &Mesh, path: &Path, encoding: VtkEncoding)` | `export_vtk(mesh, path, field=None, binary=False) -> None` |
 | `write_vtk_node_field(mesh: &Mesh, field: &NodeField, path: &Path, encoding: VtkEncoding)` | `export_vtk(mesh, path, field=node_field, binary=False) -> None` |
 | `write_vtk_element_field(mesh: &Mesh, field: &ElementField, path: &Path, encoding: VtkEncoding)` | `export_vtk(mesh, path, field=element_field, binary=False) -> None` |
 | `write_vtk_series(mesh: &Mesh, evolution: &Evolution, path: &Path, encoding: VtkEncoding) -> Vec<PathBuf>` | `export_vtk(mesh, path, field=evolution, binary=False) -> None` |
@@ -407,19 +412,19 @@ type attendu (`objets.mesh("clef")?`). Voir
 > `ops::geom` héberge `locate_points` (mapping iso-paramétrique inverse, sous
 > le [baignage](../contraintes/embedded.md)) et `project_points` (projection au
 > point le plus proche sur une surface, sous le [contact](../contraintes/contact.md)) ;
-> ces deux primitives sont internes (API Rust), pas encore exposées en Python —
-> la seule dérogation de module entier enregistrée dans le garde-fou de
+> ces deux primitives sont internes (API Rust) et ne sont pas exposées en
+> Python — la seule dérogation de module entier enregistrée dans le garde-fou de
 > complétude (`tests/python/test_mirror_completeness.py`).
-> `ops::coloring` (coloriage glouton des mailles) et `ops::scatter` (scatter
-> dans un motif CSR) sont la machinerie de l'assemblage parallèle : API Rust
-> interne, ni opérateurs ni bindings.
+> `ops::coloring` (coloriage glouton des mailles) et `ops::scatter` (dispersion
+> dans un motif creux CSR) sont la machinerie de l'assemblage parallèle : API
+> Rust interne, ni opérateurs ni bindings.
 > Le nœud le plus proche, lui, n'est **pas** un opérateur : c'est la méthode
 > `mesh.nearest_node([x, y])`, des deux côtés.
 
 ## Opérateurs (dunders ↔ traits Rust)
 
 **Toutes** les classes implémentent `__repr__` (← `Debug`, vue
-structurelle) et `__str__` (← `Display`, vue résumée façon Cast3M) — voir
+structurelle) et `__str__` (← `Display`, vue résumée) — voir
 [Conventions](../conventions.md). Les autres opérateurs, classe par classe :
 
 ### Arithmétique sur les champs
@@ -431,13 +436,13 @@ traits [`SubField` / `Field`](../field.md). Les dunders `+`, `-`, `*`, `/`, `**`
 scalaire, un champ du même type l'arithmétique **champ + champ** (valeur à
 valeur).
 
-| Classe | Opérateurs / méthodes Python | Sémantique | Backing Rust |
+| Classe | Opérateurs / méthodes Python | Sémantique | Côté Rust |
 |---|---|---|---|
-| `SubNodeField` / `SubElementField` | `f + s`, `f - s`, `f * s`, `f / s`, `f ** s` | broadcast scalaire, nouveau champ | `Add`/`Sub`/`Mul`/`Div<f64>`, `map_all` |
-| `SubNodeField` / `SubElementField` | `f + g`, `f - g`, `f * g`, `f / g`, `f ** g` | champ + champ **par composante**, union/passthrough (même support), nouveau champ | `SubField::merge_components` |
-| `NodeField` / `ElementField` | `f + s`, `f - s`, `f * s`, `f / s`, `f ** s` | broadcast scalaire sur toutes les zones | `Field::combine_scalar` |
-| `NodeField` / `ElementField` | `f + g`, `f - g`, `f * g`, `f / g`, `f ** g` | champ + champ **par `(support, composante)`**, union/passthrough | `Field::merge_field` |
-| `NodeField` / `ElementField` | `f + sub`, `f - sub`, … (`sub` = sous-champ) | maj **ciblée** de la (des) zone(s) de même support (union/passthrough) | `Field::merge_subfield` |
+| `SubNodeField` / `SubElementField` | `f + s`, `f - s`, `f * s`, `f / s`, `f ** s` | le scalaire appliqué à chaque valeur, nouveau champ | `Add`/`Sub`/`Mul`/`Div<f64>`, `map_all` |
+| `SubNodeField` / `SubElementField` | `f + g`, `f - g`, `f * g`, `f / g`, `f ** g` | champ + champ **par composante**, sur le même support : une composante des deux côtés est combinée, une composante d'un seul côté passe telle quelle ; nouveau champ | `SubField::merge_components` |
+| `NodeField` / `ElementField` | `f + s`, `f - s`, `f * s`, `f / s`, `f ** s` | le scalaire appliqué à chaque valeur de toutes les zones | `Field::combine_scalar` |
+| `NodeField` / `ElementField` | `f + g`, `f - g`, `f * g`, `f / g`, `f ** g` | champ + champ **par `(support, composante)`** : une composante des deux côtés est combinée, une composante d'un seul côté passe telle quelle | `Field::merge_field` |
+| `NodeField` / `ElementField` | `f + sub`, `f - sub`, … (`sub` = sous-champ) | mise à jour **ciblée** de la zone de même support (composantes combinées comme ci-dessus), les autres zones inchangées | `Field::merge_subfield` |
 | zone & agrégat | `add_to_component(c, s)`, `sub_/mul_/div_to_component` | scalaire sur **une** composante, en place | `SubField`/`Field::map_component` |
 | `SubElementField` | `set_uniform(c, v)` | force une composante à `v` | `SubField::set_uniform` |
 
@@ -465,10 +470,10 @@ jamais de mutation en place.
 (`|`, ci-dessous), qui écarte un bloc dont elle tient déjà l'emplacement : `k | k`
 vaut `k`, `k + k` vaut `2k`.
 
-| Classe | Opérateurs / méthodes Python | Sémantique | Backing Rust |
+| Classe | Opérateurs / méthodes Python | Sémantique | Côté Rust |
 |---|---|---|---|
 | `Matrix` | `k * field` | produit matrice-vecteur `A·x`, `NodeField` neuf | `Matrix::mul_field`, `Mul<&NodeField>` |
-| `Matrix` | `k * s`, `s * k`, `k / s` (`s`: `float`) | facteur scalaire, blocs clonés dans de nouveaux slots (aucune valeur réécrite), CSR assemblée mise à l'échelle avec, `k` inchangée | `Mul`/`Div<f64> for &Matrix`, `Mul<Matrix> for f64` |
+| `Matrix` | `k * s`, `s * k`, `k / s` (`s`: `float`) | facteur scalaire, blocs copiés dans de nouveaux emplacements (aucune valeur réécrite), CSR assemblée mise à l'échelle avec, `k` inchangée | `Mul`/`Div<f64> for &Matrix`, `Mul<Matrix> for f64` |
 | `Matrix` | `-k` | facteur nié, sucre pour `k * -1.0` | `Neg for &Matrix` |
 | `Matrix`, `SubMatrix` | `a + b`, `a - b` | somme : blocs des deux opérandes, partagés, **non** dédoublonnés ; résultat non assemblé | `Add`/`Sub` (toutes combinaisons `Matrix`/`SubMatrix`) |
 | `SubMatrix` | `b * s`, `s * b`, `b / s`, `-b` | bloc neuf au facteur ajusté (aucune valeur réécrite) | `Mul`/`Div<f64>`/`Neg for &SubMatrix` |
@@ -476,14 +481,14 @@ vaut `k`, `k + k` vaut `2k`.
 
 ### Indexation par clé
 
-| Classe | Opérateurs Python | Clé | Backing Rust |
+| Classe | Opérateurs Python | Clé | Côté Rust |
 |---|---|---|---|
 | `SubNodeField` | `f[nid, "c"]`, `f[nid, "c"] = v` | `(NodeId, composante)` | `Index`/`IndexMut<(NodeId, &str)>` |
 | `SubElementField` | `f[cell, g, "c"]`, `f[cell, g, "c"] = v` | `(maille, point de Gauss, composante)` | méthodes `value` / `set_value` (pas de trait `Index`) |
 
 ### Protocole séquence — `len(x)`, `x[i]`, `for _ in x`
 
-| Classe | `len(x)` | `x[i]` → | Backing Rust |
+| Classe | `len(x)` | `x[i]` → | Côté Rust |
 |---|---|---|---|
 | `Cell` | nombre de nœuds | `Node` | méthodes |
 | `SubMesh` | nombre de mailles | `Cell` | méthodes |
@@ -503,15 +508,15 @@ vaut `k`, `k + k` vaut `2k`.
 La composition d'agrégats est l'**union** : côté **Python** elle s'écrit `|`
 (comme `set | set`), côté **Rust** ce sont les méthodes nommées `union` /
 `union_sub` / `union_sub_first` / `union_subs` (renvoient `Result<…>`). Les
-sous-objets sont **partagés** (refcount), jamais copiés ; les contraintes de domaine (même
+sous-objets sont **partagés** (compteur de références), jamais copiés ; les contraintes de domaine (même
 `Coords` pour `Mesh`, etc.) restent vérifiées.
 
 Sémantique d'union (uniforme pour **tous** les agrégats) :
 
 1. **Déduplication par handle** : un sous-objet dont le `Handle` désigne un
    objet déjà présent (cf. `Handle::same_object`) n'est pas ajouté deux fois.
-2. **Finalisation** (`Aggregate::finalize`) : par défaut un no-op ; les
-   **champs** la surchargent pour fusionner les zones partageant un même
+2. **Finalisation** (`Aggregate::finalize`) : par défaut elle ne fait rien ; les
+   **champs** la redéfinissent pour fusionner les zones partageant un même
    support (voir plus bas).
 
 | Python | Rust | Résultat | Sémantique |

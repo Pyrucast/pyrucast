@@ -25,8 +25,8 @@ La règle qui décide si une opération est une **méthode** d'un conteneur ou
 une **fonction libre** d'un module `ops/` est figée dans le fichier
 `CONVENTIONS.md` à la racine du dépôt. En résumé :
 
-- **méthode** — accesseur, mutation préservant l'invariant, ou vue dérivée
-  d'**un seul** conteneur (`mesh.cell_count`, `field.set(...)`,
+- **méthode** — accesseur, mutation qui respecte les règles de cohérence du
+  conteneur, ou vue dérivée d'**un seul** conteneur (`mesh.cell_count`, `field.set(...)`,
   `field.components()`) ;
 - **fonction libre `ops::<module>`** — tout opérateur qui croise des
   conteneurs ou appartient à une famille d'opérateurs
@@ -36,14 +36,13 @@ une **fonction libre** d'un module `ops/` est figée dans le fichier
 Un **constructeur nommé** échappe aux deux : il fabrique son propre type, il
 reste donc sur le type (`FiniteElementSpace.lagrange1(mesh)`,
 `Matrix.block(...)`). Mais l'exception s'arrête au **pluriel** : une famille
-qui grossit — le catalogue de physiques d'un `Model`, 28 entrées — se range
-comme toute famille d'opérateurs, dans le module du conteneur produit. Deux
-raisons, l'une de principe, l'autre très concrète : en Python une
-`classmethod` s'atteint aussi depuis une **instance**, si bien que
-`m.heat_conduction(fes)` s'exécute en jetant `m` en silence, et
-l'auto-complétion d'un objet se remplit de verbes qui ne s'adressent pas à
-lui. D'où `pyrucast.model.heat_conduction(fes)` et
-non `Model.heat_conduction(fes)` (rupture du 2026-08-25).
+qui grossit — le catalogue de physiques d'un `Model` — se range comme toute
+famille d'opérateurs, dans le module du conteneur produit. Deux raisons, l'une
+de principe, l'autre très concrète : en Python une `classmethod` s'atteint
+aussi depuis une **instance**, si bien que `m.heat_conduction(fes)`
+s'exécuterait en jetant `m` en silence, et l'auto-complétion d'un objet se
+remplirait de verbes qui ne s'adressent pas à lui. D'où
+`pyrucast.model.heat_conduction(fes)` et non `Model.heat_conduction(fes)`.
 
 ## Où vit une fonction libre : le conteneur produit
 
@@ -55,11 +54,13 @@ dans `element_field`, à côté de `deformation` — pas dans `node_field`.
 | module | produit |
 |---|---|
 | `mesh` | un `Mesh` (mailleurs, transformations, `select`) |
+| `finite_element_space` | un `FiniteElementSpace` (`restrict`) |
 | `node_field` | un `NodeField` (dérivations, assemblage nodal) |
 | `element_field` | un `ElementField` (cinématique, matériaux, comportement) |
 | `matrix` | une `Matrix` (les assembleurs) |
 | `model` | un `Model` (les déclarations de physique) |
-| `coords` | écrit dans le magasin (`set`, `displace`) |
+| `evolution` | une `Evolution` (`along`) |
+| `coords` | écrit dans le magasin (`set`, `displace`, `displace_from`) ou calcule dans une configuration (`in_config`) |
 
 Ceux qui ne produisent **aucun** conteneur échappent à la règle par
 construction et se rangent par activité : `measure` (réductions à un
@@ -131,8 +132,7 @@ est du type du sujet il n'y a rien à qualifier, et le nom ne bouge pas
 
 Le binding Python est un **miroir 1:1** : une fonction Rust devient une
 fonction Python, une méthode reste une méthode. On vise le style
-numpy/scipy (et l'héritage cast3m) — des opérateurs **nommés** plutôt que
-des chaînes de méthodes. Le module de production est **reflété par un
+numpy/scipy — des opérateurs **nommés** plutôt que des chaînes de méthodes. Le module de production est **reflété par un
 sous-module** : une fonction libre `ops::<module>::f` est exposée comme
 `pyrucast.<module>.f`. Les conteneurs et les atomes restent des classes au
 top-level (`pyrucast.Coords`, `pyrucast.Mesh`, `pyrucast.Node`, …) :
@@ -141,8 +141,10 @@ top-level (`pyrucast.Coords`, `pyrucast.Mesh`, `pyrucast.Node`, …) :
 {{#include ../../tests/python/test_doc_conventions.py:miroir}}
 ```
 
-Le miroir est **sans exception** : aucune fonction libre ne vit au top-level
-Python. Les trois consolidations suivent leur module —
+Aucun opérateur d'`ops` ne vit au top-level Python. Seuls trois verbes y sont,
+faute de conteneur produit : `save` et `load` (module Rust `archive`) et
+`spill_stats` (module Rust `spill`). Les trois consolidations suivent leur
+module —
 `pyrucast.mesh.consolidate`, `pyrucast.node_field.consolidate`,
 `pyrucast.element_field.consolidate` — comme leurs homologues Rust.
 
@@ -162,7 +164,7 @@ un autre objet, reste une méthode : `components()`, `coords()`, `mesh()`.
 
 Toute l'API publique renvoie `pyrucast::Result<T>`, alias de `Result<T, PyrucastError>`.
 
-`PyrucastError` est l'unique type d'erreur de la librairie. Côté Python, il est converti automatiquement en `RuntimeError`.
+`PyrucastError` est l'unique type d'erreur de la librairie. Côté Python, il est converti automatiquement en `RuntimeError`, sauf `PyrucastError::Interrupted`, qui devient un `KeyboardInterrupt` (voir [Interrompre une fonction](developper/interrompre-une-fonction.md)).
 
 Rust :
 
@@ -214,10 +216,13 @@ Le socle figé est :
 - **toujours lié** — `serde` + `bincode` (persistance), `nalgebra` +
   `nalgebra-sparse` (primitives et stockage creux), `faer` (LU creux du
   solveur), `rayon` (parallélisme), `parking_lot` (verrous des objets), `paste`
-  (macros d'agrégat) ;
+  (macros d'agrégat et `physics_operator!`) ;
 - **optionnel, derrière une feature** — `pyo3` et `pyo3-stub-gen` (binding et
-  stub), `plotters` / `winit` / `softbuffer` (visualisation) ;
-- **outillage** — `maturin`, `mdbook`, `ruff`, `criterion` (bancs).
+  stub), `pyrucast-macros` (la macro `#[py_op]`, qui tire `syn`, `quote` et
+  `proc-macro2`), `libc` (allocations dans des fichiers, feature `spill`),
+  `plotters` / `flate2` / `winit` / `softbuffer` (visualisation) ;
+- **outillage** — `maturin`, `mdbook`, `mdbook-mermaid`, `ruff`, `pytest`,
+  `criterion` (bancs).
 
 Chaque dépendance est **confinée** à un étage et ne fuit pas hors de lui — le
 [graphe des dépendances](developper/arborescence.md#graphe-des-dépendances-externes)

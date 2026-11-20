@@ -6,12 +6,16 @@ sous-jacent, comment documenter, compiler et tester, et les deux extensions les
 plus courantes (ajouter une physique, ajouter un élément fini).
 
 - [Arborescence](developper/arborescence.md) — la carte des sources : où vit
-  chaque morceau (`containers/`, `ops/`, `models/`, `py/`, `viz/`…).
+  chaque morceau (`containers/`, `ops/`, `models/`, `archive/`, `py/`, `viz/`…),
+  et où ajouter quoi.
 - [Conventions & philosophie](conventions.md) — méthode vs fonction libre,
   erreurs, sérialisation, *Definition of Done*.
 - [Correspondance Rust ↔ Python](developper/correspondance-rust-python.md) — la
   table complète des structures, des fonctions et des opérateurs, des deux
   côtés.
+- [Macros Rust](developper/macros-rust.md) — les macros qu'un contributeur
+  invoque : `physics_operator!`, `#[py_op]`, `named_enum!`, celles des
+  agrégats, des champs et de l'archive.
 - [Documentation et tests](developper/documentation-et-tests.md) — les types de
   test et ce que chacun prouve, où vit un exemple, la règle « aucune page ne
   possède de code », et ce qui n'est pas vérifié.
@@ -21,10 +25,12 @@ plus courantes (ajouter une physique, ajouter un élément fini).
 - [Parallélisme](developper/parallelisme.md) — rayon porté *au-dessus* des
   noyaux, zéro-copie, déterminisme, et ce qui reste séquentiel.
 - [Compilation et tests](compilation.md) — installation détaillée, *features*
-  Cargo, génération du stub `.pyi`, script « tout-en-un », dépannage.
-- [Ajouter une physique](ajouter-une-physique.md) — le coût en **O(1)
-  fichier** d'une nouvelle variante de `SubModel` / `SubModelKind`.
+  Cargo, génération du stub `.pyi`, scripts de vérification, publication,
+  dépannage.
+- [Ajouter une physique](ajouter-une-physique.md) — un fichier et des lignes de
+  raccordement en nombre fixe pour une nouvelle variante de `SubModel` /
+  `SubModelKind`.
 - [Ajouter un élément fini](developper/ajouter-un-element-fini.md) — un nouveau
   `ElementType`, son interpolation et sa quadrature.
 - [Interrompre une fonction](developper/interrompre-une-fonction.md) — le jeton
-  `Cancel` : un `Ctrl+C` ou un *timeout* qui arrête une boucle longue.
+  `Cancel` : un `Ctrl+C` ou un délai qui arrête une boucle longue.

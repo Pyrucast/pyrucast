@@ -125,6 +125,7 @@
   - [Arborescence](developper/arborescence.md)
   - [Conventions & philosophie](conventions.md)
   - [Correspondance Rust ↔ Python](developper/correspondance-rust-python.md)
+  - [Macros Rust](developper/macros-rust.md)
   - [Documentation et tests](developper/documentation-et-tests.md)
   - [Modèle mémoire](memory-model.md)
   - [Parallélisme](developper/parallelisme.md)
