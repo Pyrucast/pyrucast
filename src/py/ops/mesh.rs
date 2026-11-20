@@ -63,6 +63,11 @@ pub fn poi1_from_nodes(nodes: Vec<PyRef<PyNode>>) -> PyResult<PyMesh> {
 
 /// The distinct nodes of `mesh`, as a POI1 mesh, submesh by submesh.
 ///
+/// Each submesh gives its POI1 companion, `SubMesh.to_poi1()`: a POI1 submesh
+/// that lists each node once comes back as itself, shared with `mesh`; any
+/// other gives the POI1 submesh of its distinct nodes, built once and the same
+/// at every call. Fields built on the result pair with fields built on `mesh`.
+///
 /// # Parameters
 ///
 /// - `mesh`: the mesh whose nodes to take.
@@ -74,9 +79,10 @@ pub fn poi1_from_nodes(nodes: Vec<PyRef<PyNode>>) -> PyResult<PyMesh> {
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn to_poi1(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
-    let result = crate::ops::mesh::to_poi1(&mesh.inner)?;
-    Ok(PyMesh { inner: result })
+pub fn to_poi1(mesh: PyRef<PyMesh>) -> PyMesh {
+    PyMesh {
+        inner: crate::ops::mesh::to_poi1(&mesh.inner),
+    }
 }
 
 /// A POI1 mesh of one fresh node at the centroid of each cell of `mesh`.
@@ -625,19 +631,15 @@ pub fn points_on_torus(
 ///
 /// # Returns
 ///
-/// A `Mesh`, one submesh per element type.
-///
-/// # Raises
-///
-/// `RuntimeError` if `mesh` has no submesh (no `Coords` to attach to).
+/// A `Mesh`, one submesh per element type; empty for an empty `mesh`.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "consolidate_mesh")]
-pub fn consolidate(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
-    Ok(PyMesh {
-        inner: crate::ops::mesh::consolidate(&mesh.inner)?,
-    })
+pub fn consolidate(mesh: PyRef<PyMesh>) -> PyMesh {
+    PyMesh {
+        inner: crate::ops::mesh::consolidate(&mesh.inner),
+    }
 }
 
 /// Weld together the nodes of `mesh` closer than `tol`.

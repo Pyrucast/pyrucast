@@ -1,6 +1,5 @@
 use crate::aggregate::Aggregate;
 use crate::containers::mesh::{Mesh, SubMesh};
-use crate::error::Result;
 
 /// Convert a mesh to POI1, **zone by zone**: each zone gives its POI1
 /// companion ([`SubMesh::to_poi1`]).
@@ -29,20 +28,23 @@ use crate::error::Result;
 /// // A mesh's **distinct** nodes, one POI1 cell each: two cells that
 /// // share a node count it once only.
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
-/// let points = mesh::to_poi1(&l)?;
+/// let points = mesh::to_poi1(&l);
 /// assert_eq!(points.cell_count(), 3);
 /// // Those points are already their own companion: no copy.
-/// assert!(mesh::to_poi1(&points)?.get(0)?.same_object(&points.get(0)?));
+/// assert!(mesh::to_poi1(&points).get(0)?.same_object(&points.get(0)?));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 ///
 /// [`SubMesh::to_poi1`]: crate::containers::mesh::SubMesh::to_poi1
-pub fn to_poi1(mesh: &Mesh) -> Result<Mesh> {
+pub fn to_poi1(mesh: &Mesh) -> Mesh {
     let mut result = Mesh::empty();
     for zone in mesh {
-        result.add_sub(SubMesh::to_poi1(zone))?;
+        // `push`, not `add_sub`: its only check, one `Coords` for all zones,
+        // holds by construction — every companion shares its zone's.
+        result.push(SubMesh::to_poi1(zone));
+        result.post_push();
     }
-    Ok(result)
+    result
 }
 
 #[cfg(test)]
@@ -68,7 +70,7 @@ mod tests {
         tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         tri.add_cell(&[b.id(), d.id(), c.id()]).unwrap();
 
-        let poi = to_poi1(&tri).unwrap();
+        let poi = to_poi1(&tri);
         assert_eq!(poi.len(), 1);
         assert_eq!(poi.element_types().unwrap(), vec![ElementType::POI1]);
         // 6 connectivity entries but only 4 unique nodes.
@@ -102,7 +104,7 @@ mod tests {
             assert_eq!(cf.refcount(b.id()), 2);
         }
 
-        let poi = to_poi1(&mesh).unwrap();
+        let poi = to_poi1(&mesh);
         assert_eq!(poi.len(), 2, "same number of submeshes");
         assert_eq!(
             poi.element_types().unwrap(),
@@ -140,7 +142,7 @@ mod tests {
 
     #[test]
     fn empty_mesh_gives_empty_mesh() {
-        let poi = to_poi1(&Mesh::empty()).unwrap();
+        let poi = to_poi1(&Mesh::empty());
         assert_eq!(poi.len(), 0);
     }
 }

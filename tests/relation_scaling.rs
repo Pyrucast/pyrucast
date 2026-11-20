@@ -39,8 +39,7 @@ fn clamped_bar(young: f64) -> (f64, f64) {
     .unwrap();
     let clamp = mesh::consolidate(
         &mesh::points_on_plane(&bar, &[0.0, 0.0, 0.0], &[1.0, 0.0, 0.0], None).unwrap(),
-    )
-    .unwrap();
+    );
     for variable in ["u_x", "u_y", "u_z"] {
         let blocked = model::dirichlet(&clamp, &solid, variable, RelationSense::Equality).unwrap();
         solid = solid.union(&blocked).unwrap();
@@ -50,8 +49,7 @@ fn clamped_bar(young: f64) -> (f64, f64) {
 
     let tip = mesh::consolidate(
         &mesh::points_on_plane(&bar, &[1.0, 0.0, 0.0], &[1.0, 0.0, 0.0], None).unwrap(),
-    )
-    .unwrap();
+    );
     let force = NodeField::new(&tip, vec!["f_z".into()]).unwrap();
     force
         .get(0)
@@ -116,12 +114,10 @@ fn released_bounds_push_nothing_and_both_methods_agree() {
     .unwrap();
     let clamp = mesh::consolidate(
         &mesh::points_on_plane(&bar, &[0.0, 0.0, 0.0], &[1.0, 0.0, 0.0], None).unwrap(),
-    )
-    .unwrap();
+    );
     let tip = mesh::consolidate(
         &mesh::points_on_plane(&bar, &[1.0, 0.0, 0.0], &[1.0, 0.0, 0.0], None).unwrap(),
-    )
-    .unwrap();
+    );
     for variable in ["u_x", "u_y", "u_z"] {
         let blocked = model::dirichlet(&clamp, &solid, variable, RelationSense::Equality).unwrap();
         solid = solid.union(&blocked).unwrap();

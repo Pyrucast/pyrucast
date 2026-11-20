@@ -137,7 +137,7 @@ fn main() -> Result<()> {
         &Band::new(Some(length / nx as f64 / 2.), None, None, None)?,
         None,
     )?;
-    let imposed_mesh = to_poi1(&left_edge)?;
+    let imposed_mesh = to_poi1(&left_edge);
 
     // ── Model: plasticity (plane stress) + clamped end (Dirichlet) ──────────
     println!("▸ Model: J2 plasticity (plane stress) + clamped end…");

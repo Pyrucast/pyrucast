@@ -131,7 +131,7 @@ const FRONT_RELAX: f64 = 0.5;
 /// #     .union(&cote(&[20.0, 20.0], &[0.0, 20.0], 20)).unwrap()
 /// #     .union(&cote(&[0.0, 20.0], &[0.0, 0.0], 20)).unwrap();
 /// # mesh::merge_nodes(&carre, 1e-6, true).unwrap();
-/// # let contour = mesh::consolidate(&carre).unwrap();
+/// # let contour = mesh::consolidate(&carre);
 /// // A 20 × 20 square at size 1 holds 400 unit cells. Free relaxation rounds
 /// // the front's corners, which then stops losing nodes and pays for the
 /// // domain's middle; projected onto the front, it leaves the square square.

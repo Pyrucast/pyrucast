@@ -68,7 +68,7 @@ const MIN_ANGLE_DEG: f64 = 20.0;
 /// #     .union(&cote(&[2.0, 2.0], &[0.0, 2.0])).unwrap()
 /// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
 /// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
-/// # let contour = mesh::consolidate(&quatre).unwrap();
+/// # let contour = mesh::consolidate(&quatre);
 /// // The constrained triangulation mesher: the contour is **respected
 /// // edge for edge**, and the target size drives the refinement.
 /// let m = mesh::triangulate_surface(&contour, ElementType::TRI3, Some(0.5))?;
@@ -103,7 +103,7 @@ pub fn triangulate_surface(
 /// #     .union(&cote(&[2.0, 2.0], &[0.0, 2.0])).unwrap()
 /// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
 /// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
-/// # let contour = mesh::consolidate(&quatre).unwrap();
+/// # let contour = mesh::consolidate(&quatre);
 /// # use std::sync::atomic::{AtomicBool, Ordering};
 /// // The token is polled at the mesher's checkpoints: armed in advance, the
 /// // call stops at the first of them.

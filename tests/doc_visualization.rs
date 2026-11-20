@@ -85,7 +85,7 @@ fn chaque_zone_porte_sa_couleur() -> Result<()> {
 #[test]
 fn tracer_un_champ_avec_son_echelle() -> Result<()> {
     let (dossier, _, mesh) = scene()?;
-    let poi1_h = mesh::to_poi1(&mesh)?.get(0)?;
+    let poi1_h = mesh::to_poi1(&mesh).get(0)?;
 
     // A displacement field with 2 components "UX" / "UY" on a POI1. `FieldArg`
     // takes the **aggregate**: a lone zone is lifted by `NodeField::from_sub`.

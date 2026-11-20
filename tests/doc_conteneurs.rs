@@ -206,7 +206,7 @@ fn sauver_et_relire_un_graphe_d_objets() -> Result<()> {
     let b = Node::create_in(coords.clone(), &[1.0, 0.0])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     mesh.add_cell(&[a.id(), b.id()])?;
-    let temperature = NodeField::new(&mesh::to_poi1(&mesh)?, vec!["T".into()])?;
+    let temperature = NodeField::new(&mesh::to_poi1(&mesh), vec!["T".into()])?;
 
     archive::save(
         chemin,
@@ -267,7 +267,7 @@ fn ajouter_un_bloc_invalide_l_assemblage() -> Result<()> {
         Default::default(),
     )?)?;
     let materials = element_field::material_field(&model, &[("k", 1.0)])?;
-    let support = mesh::to_poi1(&m)?.get(0)?;
+    let support = mesh::to_poi1(&m).get(0)?;
     let bloc_supplementaire = SubMatrix::new(
         support.clone(),
         support,

@@ -102,7 +102,7 @@ use crate::ops::mesh::{contour, paving};
 /// #     .union(&cote(&[2.0, 2.0], &[0.0, 2.0])).unwrap()
 /// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
 /// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
-/// # let contour = mesh::consolidate(&quatre).unwrap();
+/// # let contour = mesh::consolidate(&quatre);
 /// // Frontal paving: quadrangles laid in rows that follow the
 /// // contour, rather than triangles paired afterwards.
 /// let m = mesh::pave_surface(&contour, ElementType::QUA4, Some(0.5), false, mesh::FrontRelax::Free)?;
@@ -148,7 +148,7 @@ pub fn pave_surface(
 /// #     .union(&cote(&[2.0, 2.0], &[0.0, 2.0])).unwrap()
 /// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
 /// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
-/// # let contour = mesh::consolidate(&quatre).unwrap();
+/// # let contour = mesh::consolidate(&quatre);
 /// # use std::sync::atomic::{AtomicBool, Ordering};
 /// // The token is polled at the mesher's checkpoints: armed in advance, the
 /// // call stops at the first of them.

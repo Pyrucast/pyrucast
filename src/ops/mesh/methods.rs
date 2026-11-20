@@ -34,7 +34,7 @@ impl Mesh {
     }
 
     /// See [`mesh::consolidate`](fn@crate::ops::mesh::consolidate).
-    pub fn consolidate(&self) -> Result<Mesh> {
+    pub fn consolidate(&self) -> Mesh {
         crate::ops::mesh::consolidate(self)
     }
 
@@ -261,7 +261,7 @@ impl Mesh {
     }
 
     /// See [`mesh::to_poi1`](fn@crate::ops::mesh::to_poi1).
-    pub fn to_poi1(&self) -> Result<Mesh> {
+    pub fn to_poi1(&self) -> Mesh {
         crate::ops::mesh::to_poi1(self)
     }
 

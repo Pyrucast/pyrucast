@@ -155,7 +155,7 @@ use crate::ops::mesh::{contour, paving};
 /// #     .union(&cote(&[2.0, 2.0], &[0.0, 2.0])).unwrap()
 /// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
 /// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
-/// # let contour = mesh::consolidate(&quatre).unwrap();
+/// # let contour = mesh::consolidate(&quatre);
 /// // A core grid oriented on the contour, plus a frontal band of
 /// // `band` rows to join the grid to the border.
 /// let m = mesh::grid_surface(&contour, ElementType::QUA4, Some(0.5), 1, false, mesh::FrontRelax::Free)?;
@@ -200,7 +200,7 @@ pub fn grid_surface(
 /// #     .union(&cote(&[2.0, 2.0], &[0.0, 2.0])).unwrap()
 /// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
 /// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
-/// # let contour = mesh::consolidate(&quatre).unwrap();
+/// # let contour = mesh::consolidate(&quatre);
 /// # use std::sync::atomic::AtomicBool;
 /// // The token is polled at the mesher's **checkpoints**, not between two
 /// // instructions: a contour this short is paved before reaching one, and the

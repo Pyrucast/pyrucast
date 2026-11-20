@@ -139,7 +139,7 @@ fn main() -> Result<()> {
     println!("▸ Model: J2 plasticity (plane stress) + clamped end…");
     let mut model =
         model::plasticity_perfect(&fes, Kinematics::PlaneStress, StrainMeasure::Linear)?;
-    let imposed_mesh = to_poi1(&left_edge)?;
+    let imposed_mesh = to_poi1(&left_edge);
     model = model.union(&model::dirichlet(
         &imposed_mesh,
         &model,

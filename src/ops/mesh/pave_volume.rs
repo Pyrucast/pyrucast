@@ -420,7 +420,7 @@ mod tests {
         for m in [line(&d, &c, nx), line(&c, &b, nz), line(&b, &a, nx)] {
             ring = ring.union(&m).unwrap();
         }
-        let contour = crate::ops::mesh::consolidate(&ring).unwrap();
+        let contour = crate::ops::mesh::consolidate(&ring);
         let face = super::super::pave_surface(
             &contour,
             ElementType::QUA4,
@@ -466,7 +466,7 @@ mod tests {
                 Some(m) => m.union(&seg).unwrap(),
             });
         }
-        let contour = crate::ops::mesh::consolidate(&ring.unwrap()).unwrap();
+        let contour = crate::ops::mesh::consolidate(&ring.unwrap());
         let face = super::super::pave_surface(
             &contour,
             ElementType::QUA4,
