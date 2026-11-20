@@ -193,3 +193,53 @@ supporte pas. On perdrait la persistance. L'énum donne en prime
 l'exhaustivité au compilateur sur `as_kind()`. Le trait n'est jamais
 sérialisé : `as_kind()` rend un `&'static`, reconstruit à la volée depuis la
 variante.
+
+## To-do : ajouter un élément fini
+
+`<NOM>` est la variante (`PYRA5`), `<nom>` le fichier (`pyra5.rs`), `<Nom>` la
+struct (`Pyra5`).
+
+**Code**
+
+- [ ] Fixer la convention de l'élément : repère, numérotation locale,
+  orientation.
+- [ ] Créer le fichier de l'élément et y définir la struct unité `<Nom>`
+  (`src/atoms/element_kind/<nom>.rs`).
+- [ ] Implémenter `ElementKind` pour `<Nom>` : nœuds et domaine de référence,
+  fonctions de forme et leurs dérivées, quadrature, codes VTK et gmsh ; selon
+  le cas facettes, arêtes, permutations gmsh et MED, parent linéaire ou
+  version quadratique (`src/atoms/element_kind/<nom>.rs`).
+- [ ] Déclarer le module (`mod <nom>;`) et brancher la variante dans
+  `as_kind()` (`src/atoms/element_kind/mod.rs`).
+- [ ] Ajouter la variante `<NOM>` à `enum ElementType`, documenter sa
+  convention dans son rustdoc, et l'ajouter à `ElementType::ALL`
+  (`src/atoms/element_type.rs`).
+- [ ] Compléter les quatre `match` d'`ElementType` : `nodes_per_cell`,
+  `topological_dim`, `name`, `reversal_permutation`
+  (`src/atoms/element_type.rs`).
+- [ ] Mettre à jour le test `all_lists_every_variant_exactly_once` : ajouter
+  le bras, relever le compte `ALL.len()` (`src/atoms/element_type.rs`).
+- [ ] Ajouter le type aux opérateurs qui doivent l'accepter : `border`,
+  `sweep`, `extrude`, `revolve`, `pave_volume`, `triangulate_surface`,
+  `regularize` (`src/ops/mesh/`).
+- [ ] Écrire un test de volume sur un élément droit de géométrie connue
+  (`src/containers/finite_element_space/mod.rs`).
+
+**Documentation**
+
+- [ ] Écrire la fiche de l'élément et l'ajouter au sommaire
+  (`book/src/elements/<nom>.md`, `book/src/SUMMARY.md`).
+- [ ] Ajouter sa ligne au catalogue, et le type aux physiques qui l'acceptent
+  dans la table « Ce que chaque physique pose sur quels éléments »
+  (`book/src/elements/index.md`).
+- [ ] Ajouter son code gmsh à la table « Types d'éléments reconnus »
+  (`book/src/algorithmes/maillage-echanges.md`).
+- [ ] Déclarer l'élément dans `ELEMENTS` : règle de quadrature, et faces s'il
+  est 3-D (`script/elements_figures.py`).
+
+**Vérification**
+
+- [ ] Pour un volume : ajouter le type à la table `REFERENCE`, puis lancer les
+  tests MED (`tests/python/test_medcoupling.py`, `script/check_medcoupling.sh`).
+- [ ] Formater (`cargo fmt`, `ruff format .`), puis lancer toutes les
+  vérifications (`script/check_all.sh`).

@@ -727,3 +727,55 @@ et coût d'ajout constant du trait.
 - Le seul `match` sur toutes les variantes de la couche modèle est
   `as_kind()` ; `update_contact` ne distingue que `SubModel::Contact` du
   reste.
+
+## To-do : ajouter une physique
+
+Pour une physique de forme courante, sur un espace EF. `<nom>` est le nom de
+l'opérateur (`flux`), `<Nom>` celui de la struct et de la variante (`Flux`).
+
+**Code**
+
+- [ ] Créer le fichier de la physique et y définir la struct `<Nom>` et son
+  constructeur `new(...)` (`src/models/<nom>.rs`).
+- [ ] Implémenter `SubModelKind` pour `<Nom>` : ses variables, sa nature, son
+  affichage, ses layouts (`src/models/<nom>.rs`).
+- [ ] Implémenter ses capacités (`Domain`, `Behavior`) et les rendre par
+  `as_domain()` / `as_behavior()` (`src/models/<nom>.rs`).
+- [ ] Écrire ses tests (`src/models/<nom>.rs`).
+- [ ] Déclarer son opérateur avec `physics_operator!` (`via SubModel::<nom>`),
+  avec sa doc Rust et sa docstring Python (`src/models/<nom>.rs`).
+- [ ] Ajouter la variante `<Nom>` en fin de `enum SubModel` et importer le
+  module `<nom>` (`src/containers/model.rs`).
+- [ ] Brancher la variante dans `SubModel::as_kind()`
+  (`src/containers/model.rs`).
+- [ ] Écrire le constructeur `SubModel::<nom>(…)`, qui appelle `<Nom>::new`,
+  avec sa doc et son doctest (`src/containers/model.rs`).
+- [ ] Déclarer le module : `pub mod <nom>;` (`src/models/mod.rs`).
+- [ ] Exposer l'opérateur Rust : `pub use crate::models::<nom>::<nom>;`
+  (`src/ops/model/mod.rs`).
+- [ ] Enregistrer la fonction Python : `add_function` dans le `#[pymodule]`
+  (`src/lib.rs`).
+- [ ] Ré-exporter la fonction Python : import et entrée dans `__all__`
+  (`python/pyrucast/model.py`).
+- [ ] Régénérer le stub : `cargo run --bin stub_gen --features stub-gen`, venv
+  activé (`python/pyrucast/_pyrucast/__init__.pyi`).
+
+**Documentation**
+
+- [ ] Écrire la page de la physique et l'ajouter au sommaire
+  (`book/src/<page>.md`, `book/src/SUMMARY.md`).
+- [ ] Classer la physique dans les tables des tags et des types de modèle
+  (`book/src/physiques.md`).
+- [ ] Indiquer ses éléments dans la table « Ce que chaque physique pose sur
+  quels éléments » (`book/src/elements/index.md`).
+- [ ] Ranger `model.<nom>` dans un thème du sommaire des opérateurs
+  (`book/src/operateurs.md`).
+- [ ] Écrire un exemple Python à l'ancre `model-<nom>`
+  (`tests/python/test_doc_*.py`).
+- [ ] Ajouter sa ligne à la table `ops::model`
+  (`book/src/developper/correspondance-rust-python.md`).
+
+**Vérification**
+
+- [ ] Formater (`cargo fmt`, `ruff format .`), puis lancer toutes les
+  vérifications (`script/check_all.sh`).
