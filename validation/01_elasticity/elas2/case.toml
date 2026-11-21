@@ -4,6 +4,7 @@ castem_element = "DKT"
 castem_version = "97' customer version"
 source = "Test NAFEMS : ME6 : Modélisation des structures élastiques dans CASTEM 2000."
 deck = "elas2.dgibi"
+pyrucast = "`model.shell(fes, \"kirchhoff\")` (DKT), TRI3"
 tolerance = 6e-4
 tolerance_note = "deck criteria, |u_z(P3) + 1.14| / 1.14 ≤ 6e-4 and |u_x(P1)| ≤ 1e-18."
 
@@ -36,6 +37,12 @@ y (30 elements), giving 360 DKT triangles.
   (u_y = θ_x = θ_z = 0).
 - Load: F_z = −2500 at P3 (0, 70, 7), the top of the mid-length section
   (a quarter of the pinching load).
+"""
+
+notes = """
+The pyrucast mesh is the Cast3M one cell for cell, and both codes use DKT
+triangles; their deflections still differ (last column of the table). The
+deck's criterion, 6e-4 from the reference, is tighter than that difference.
 """
 
 [[quantity]]

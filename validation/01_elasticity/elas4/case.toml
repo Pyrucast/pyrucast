@@ -4,6 +4,7 @@ castem_element = "COQ4"
 castem_version = "97' customer version"
 source = "Test NAFEMS : ME8 : Modélisation des structures élastique dans CASTEM 2000."
 deck = "elas4.dgibi"
+pyrucast = "`model.shell(fes, \"kirchhoff\")` (DKQ), QUA4"
 tolerance = 0.05
 tolerance_note = "deck criterion, |σ_xx(A) + 108| / 108 ≤ 5 %."
 
@@ -39,13 +40,31 @@ notes = """
 The 2011 document gives the torque as 1200 mN and the loads as 600 N; the
 deck applies 1.2 MN·m with 600 kN per flange. The deck reads the axial
 stress as the SMYY component of the shell stresses averaged through the
-thickness (CALP 'MOYEN'), extrapolated to the nodes.
+thickness (CALP 'MOYEN'), extrapolated to the nodes and averaged between the
+two cells that share A. pyrucast reads N_xx / h in each of the two cells.
+The mesh is the Cast3M one, but the quadrangle shells differ: the tip
+deflection u_z, compared with no reference, is 4 % smaller in pyrucast's DKQ
+than in Cast3M's COQ4.
 """
 
 [[quantity]]
 key = "sxx_A"
-label = "σ_xx at A, mid-surface"
+label = "σ_xx at A, mid-surface, cell x < 2.5"
 unit = "MPa"
 reference = -108.0
 castem_2011 = -112.73
 castem_probe = "SMXXA2"
+
+[[quantity]]
+key = "sxx_A_after"
+label = "σ_xx at A, mid-surface, cell x > 2.5"
+unit = "MPa"
+reference = -108.0
+castem_2011 = -112.73
+castem_probe = "SMXXA2"
+
+[[quantity]]
+key = "uz_tip"
+label = "u_z at the tip (10, 0, 0), no reference"
+unit = "m"
+castem_probe = "EXTR DEP1 UZ P21"

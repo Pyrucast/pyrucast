@@ -4,6 +4,7 @@ castem_element = "QUA4"
 castem_version = "97' customer release"
 source = "Comparison with six others finite element codes."
 deck = "stru2.dgibi"
+pyrucast = "`model.elasticity(fes, \"plane_stress\", symmetry=\"orthotropic\")`, QUA4"
 tolerance = 0.05
 tolerance_note = """deck criterion, largest relative gap ≤ 5 % over u_x(A), u_x(D), \
 u_x(E), u_y(A), u_y(D) (the deck lists u_y(D) twice and leaves u_y(E) out)."""

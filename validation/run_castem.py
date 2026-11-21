@@ -66,6 +66,9 @@ def run(case):
             proc = subprocess.run(
                 [str(CASTEM), deck.name],
                 cwd=tmp,
+                # After an error Cast3M reads its next data from the terminal:
+                # an empty input ends the run instead of waiting.
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 timeout=TIMEOUT,
                 check=False,

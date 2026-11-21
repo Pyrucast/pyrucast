@@ -1,0 +1,58 @@
+<svg fill="none" stroke-width="1" width="800" height="600" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+<rect x="0" y="0" width="800" height="600" fill="#FFFFFF" stroke="none"/>
+<polygon fill="#B4C8E6" points="243,179 206,201 237,216 269,192 "/>
+<polyline stroke="#000000" points="243,179 206,201 237,216 269,192 243,179 "/>
+<polygon fill="#B4C8E6" points="269,192 237,216 271,229 298,203 "/>
+<polyline stroke="#000000" points="269,192 237,216 271,229 298,203 269,192 "/>
+<polygon fill="#B4C8E6" points="206,201 169,222 205,240 237,216 "/>
+<polyline stroke="#000000" points="206,201 169,222 205,240 237,216 206,201 "/>
+<polygon fill="#B4C8E6" points="298,203 271,229 308,240 328,212 "/>
+<polyline stroke="#000000" points="298,203 271,229 308,240 328,212 298,203 "/>
+<polygon fill="#B4C8E6" points="328,212 308,240 347,247 361,218 "/>
+<polyline stroke="#000000" points="328,212 308,240 347,247 361,218 328,212 "/>
+<polygon fill="#B4C8E6" points="237,216 205,240 245,255 271,229 "/>
+<polyline stroke="#000000" points="237,216 205,240 245,255 271,229 237,216 "/>
+<polygon fill="#B4C8E6" points="361,218 347,247 385,255 394,222 "/>
+<polyline stroke="#000000" points="361,218 347,247 385,255 394,222 361,218 "/>
+<polygon fill="#B4C8E6" points="394,222 385,255 423,262 428,223 "/>
+<polyline stroke="#000000" points="394,222 385,255 423,262 428,223 394,222 "/>
+<polygon fill="#B4C8E6" points="271,229 245,255 288,267 308,240 "/>
+<polyline stroke="#000000" points="271,229 245,255 288,267 308,240 271,229 "/>
+<polygon fill="#B4C8E6" points="428,223 423,262 469,283 478,252 "/>
+<polyline stroke="#000000" points="428,223 423,262 469,283 478,252 428,223 "/>
+<polygon fill="#B4C8E6" points="308,240 288,267 334,276 347,247 "/>
+<polyline stroke="#000000" points="308,240 288,267 334,276 347,247 308,240 "/>
+<polygon fill="#B4C8E6" points="347,247 334,276 375,289 385,255 "/>
+<polyline stroke="#000000" points="347,247 334,276 375,289 385,255 347,247 "/>
+<polygon fill="#B4C8E6" points="385,255 375,289 417,302 423,262 "/>
+<polyline stroke="#000000" points="385,255 375,289 417,302 423,262 385,255 "/>
+<polygon fill="#B4C8E6" points="478,252 469,283 514,304 528,281 "/>
+<polyline stroke="#000000" points="478,252 469,283 514,304 528,281 478,252 "/>
+<polygon fill="#B4C8E6" points="423,262 417,302 459,314 469,283 "/>
+<polyline stroke="#000000" points="423,262 417,302 459,314 469,283 423,262 "/>
+<polygon fill="#B4C8E6" points="528,281 514,304 558,329 579,309 "/>
+<polyline stroke="#000000" points="528,281 514,304 558,329 579,309 528,281 "/>
+<polygon fill="#B4C8E6" points="469,283 459,314 500,327 514,304 "/>
+<polyline stroke="#000000" points="469,283 459,314 500,327 514,304 469,283 "/>
+<polygon fill="#B4C8E6" points="514,304 500,327 537,348 558,329 "/>
+<polyline stroke="#000000" points="514,304 500,327 537,348 558,329 514,304 "/>
+<polygon fill="#B4C8E6" points="579,309 558,329 602,354 629,338 "/>
+<polyline stroke="#000000" points="579,309 558,329 602,354 629,338 579,309 "/>
+<polygon fill="#B4C8E6" points="558,329 537,348 574,369 602,354 "/>
+<polyline stroke="#000000" points="558,329 537,348 574,369 602,354 558,329 "/>
+<polyline stroke="#DC3C3C" stroke-width="2" points="56,503 32,517 "/>
+<text x="27" y="519" dy="0.76em" text-anchor="start" font-family="sans-serif" font-size="11.290322580645162" fill="#DC3C3C">
+X
+</text>
+<polyline stroke="#3CAA3C" stroke-width="2" points="56,503 80,517 "/>
+<text x="85" y="519" dy="0.76em" text-anchor="start" font-family="sans-serif" font-size="11.290322580645162" fill="#3CAA3C">
+Y
+</text>
+<polyline stroke="#3C5ADC" stroke-width="2" points="56,503 56,475 "/>
+<text x="56" y="470" dy="0.76em" text-anchor="start" font-family="sans-serif" font-size="11.290322580645162" fill="#3C5ADC">
+Z
+</text>
+<text x="400" y="580" dy="0.5ex" text-anchor="middle" font-family="sans-serif" font-size="14.516129032258064" fill="#141414">
+elas11 — QUA8 mesh
+</text>
+</svg>

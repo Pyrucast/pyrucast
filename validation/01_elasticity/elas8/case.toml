@@ -4,6 +4,7 @@ castem_element = "QUA8"
 castem_version = "97' customer releas"
 source = "Test NAFEMS : ME12 : Modélisation des structures élastiques dans CASTEM 2000."
 deck = "elas8.dgibi"
+pyrucast = "`model.elasticity(fes, \"plane_stress\")`, QUA8"
 tolerance = 0.01
 tolerance_note = "deck criterion, |σ_yy(D) − 92.7| / 92.7 ≤ 1 %."
 
@@ -32,6 +33,14 @@ straight edge has 4 elements.
 - Load: outward pressure of 10 MPa on the outer elliptic edge.
 """
 
+notes = """
+The pyrucast mesh is the Cast3M one node for node: the displacement u_y at B,
+compared with no reference, agrees to round-off, and so do the stresses at the
+Gauss points. The gap on σ_yy(D) comes from how each code reads a stress at a
+node: Cast3M extrapolates the Gauss values of the cell to its nodes, pyrucast
+evaluates the least-squares fit of the cell's Gauss values.
+"""
+
 [[quantity]]
 key = "syy_D"
 label = "σ_yy at D"
@@ -39,3 +48,9 @@ unit = "MPa"
 reference = 92.7
 castem_2011 = 93.548
 castem_probe = "SMYYD"
+
+[[quantity]]
+key = "uy_B"
+label = "u_y at B (0, 2.75), no reference"
+unit = "m"
+castem_probe = "EXTR DEP1 UY PB"

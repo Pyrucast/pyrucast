@@ -4,6 +4,7 @@ castem_element = "QUA8"
 castem_version = "97' customer releas"
 source = "Test NAFEMS : LE11 : Modélisation des structures élastiques dans CASTEM 2000."
 deck = "elas11.dgibi"
+pyrucast = "`model.elasticity(fes, \"axisymmetric\")` with a thermal strain, QUA8"
 tolerance = 0.02
 tolerance_note = "deck criterion, |σ_zz(A) + 105| / 105 ≤ 2 %."
 
@@ -34,6 +35,13 @@ Meridian plane (r, z), QUA8 elements (fine mesh of the deck, K = 2).
 notes = """
 The 2011 document gives the goal as σ_zz(A) = 105 MPa and the result table as
 σ_yy(A) = −105 MPa; the deck compares σ_zz with −105 MPa.
+
+The pyrucast mesh is the Cast3M one node for node. pyrucast heats every node
+to T = r + z; Cast3M's thermal stress operator replaces the temperature of a
+mid-node of a quadratic cell by the mean of its edge's corners, which differs
+from r + z on the mid-nodes of the arcs. Run with that same linearised
+temperature, pyrucast gives Cast3M's u_r(B) to round-off; the gap left in the
+table is that of the temperature field.
 """
 
 [[quantity]]
@@ -43,3 +51,9 @@ unit = "MPa"
 reference = -105.0
 castem_2011 = -103.34
 castem_probe = "SMZZA"
+
+[[quantity]]
+key = "ur_B"
+label = "u_r at B (1.4, 0), no reference"
+unit = "m"
+castem_probe = "EXTR DEP1 UR PB"
