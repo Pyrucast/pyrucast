@@ -237,7 +237,7 @@ thickness 0.02 m.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | u_r at B (µm) | 4.677 | 4.6685 (-0.182 %) | 4.66854 (-0.181 %) | not available |  |
 
@@ -296,10 +296,10 @@ The `.dgibi` file's criterion, 6e-4 from the reference, was set on Cast3M's own 
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| u_x at P1 (cm) | 0 | -2.1247e-19 (Δ = -2.1e-19) | 0 (Δ = 0) | 0 (Δ = 0) | Δ = 0.0e+00 |
-| u_z at P3 (cm) | -1.14 | -1.1394 (+0.0526 %) | -1.13943 (+0.0503 %) | -1.14175 (-0.153 %) | 2.0e-03 |
+| u_x at P1 (cm) | 0 | -2.1247e-19 (Δ = -2.1e-19) | 0 (Δ = 0) | 0 | Δ = 0 |
+| u_z at P3 (cm) | -1.14 | -1.1394 (+0.0526 %) | -1.13943 (+0.0503 %) | -1.14175 | -0.153 % |
 
 Acceptance: criteria of the `.dgibi` file, |u_z(P3) + 1.14| / 1.14 ≤ 6e-4 and |u_x(P1)| ≤ 1e-18.
 
@@ -453,9 +453,9 @@ layers are even and its diagonals all alike.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| u_z at P3 (cm) | -0.452 | -0.45214 (-0.031 %) | -0.452137 (-0.0303 %) | -0.45055 (+0.321 %) | 3.5e-03 |
+| u_z at P3 (cm) | -0.452 | -0.45214 (-0.031 %) | -0.452137 (-0.0303 %) | -0.45055 | +0.321 % |
 
 Acceptance: criterion of the `.dgibi` file, |u_z(P3) + 0.452| / 0.452 ≤ 4e-4.
 
@@ -614,10 +614,10 @@ pyrucast's DKQ than in Cast3M's COQ4.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| σ_xx at A, mid-surface (MPa) | -108 | -112.73 (-4.38 %) | -112.727 (-4.38 %) | -114.036 (-5.59 %) | 1.2e-02 |
-| u_z at the tip (10, 0, 0), no reference (m) | — | — | -0.0316979 | -0.0304768 | 3.9e-02 |
+| σ_xx at A, mid-surface (MPa) | -108 | -112.73 (-4.38 %) | -112.727 (-4.38 %) | -114.036 | -5.59 % |
+| u_z at the tip (10, 0, 0), no reference (m) | — | — | -0.0316979 | -0.0304768 |  |
 
 Acceptance: criterion of the `.dgibi` file, |σ_xx(A) + 108| / 108 ≤ 5 %.
 
@@ -765,7 +765,7 @@ COQ2 elements, 4 per segment on the cylinder near C, 4 and 5 on the dome.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | σ_zz at C, outer surface (MPa) | -319.9 | -312.29 (+2.38 %) | -312.208 (+2.4 %) | not available |  |
 
@@ -824,10 +824,10 @@ Gauss stresses to round-off.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| σ_yy at D (MPa) | 92.7 | 93.548 (+0.915 %) | 93.5476 (+0.914 %) | 99.9753 (+7.85 %) | 6.9e-02 |
-| u_y at B (0, 2.75), no reference (m) | — | — | 0.000545846 | 0.000542939 | 5.3e-03 |
+| σ_yy at D (MPa) | 92.7 | 93.548 (+0.915 %) | 93.5476 (+0.914 %) | 99.9753 | +7.85 % |
+| u_y at B (0, 2.75), no reference (m) | — | — | 0.000545846 | 0.000542939 |  |
 
 Acceptance: criterion of the `.dgibi` file, |σ_yy(D) − 92.7| / 92.7 ≤ 1 %.
 
@@ -1011,10 +1011,10 @@ pyrucast gives Cast3M's u_r(B) to round-off.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| σ_zz at A (MPa) | -105 | -103.34 (+1.58 %) | -103.436 (+1.49 %) | -105.102 (-0.0973 %) | 1.6e-02 |
-| u_r at B (1.4, 0), no reference (m) | — | — | 0.000766758 | 0.000765887 | 1.1e-03 |
+| σ_zz at A (MPa) | -105 | -103.34 (+1.58 %) | -103.436 (+1.49 %) | -105.102 | -0.0973 % |
+| u_r at B (1.4, 0), no reference (m) | — | — | 0.000766758 | 0.000765887 |  |
 
 Acceptance: criterion of the `.dgibi` file, |σ_zz(A) + 105| / 105 ≤ 2 %.
 
@@ -1184,7 +1184,7 @@ the `.dgibi` file's −4.23326e-3 m, the 2011 value is kept as printed.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | rotation θ_z at A (rad) | -0.003045 | -0.0031525 (-3.53 %) | -0.0031525 (-3.53 %) | not available |  |
 | reaction F_y at A (N) | 11674 | 11559 (-0.985 %) | 11558.9 (-0.986 %) | not available |  |
@@ -1233,14 +1233,14 @@ direction in the plane.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| u_x at A (1e-4 m) | 1.098 | 1.09961 (+0.147 %) | 1.09961 (+0.146 %) | 1.09961 (+0.146 %) | 1.3e-14 |
-| u_y at A (1e-4 m) | -1.309 | -1.31276 (-0.287 %) | -1.31276 (-0.288 %) | -1.31276 (-0.288 %) | 1.7e-14 |
-| u_x at D (1e-4 m) | 1.003 | 0.99508 (-0.79 %) | 0.995082 (-0.789 %) | 0.995082 (-0.789 %) | 8.0e-15 |
-| u_y at D (1e-4 m) | -0.7134 | -0.71706 (-0.513 %) | -0.717064 (-0.514 %) | -0.717064 (-0.514 %) | 2.3e-14 |
-| u_x at E (1e-4 m) | 0.4768 | 0.47668 (-0.0252 %) | 0.47668 (-0.0252 %) | 0.47668 (-0.0252 %) | 2.8e-15 |
-| u_y at E (1e-4 m) | -0.4965 | -0.49812 (-0.326 %) | -0.498122 (-0.327 %) | -0.498122 (-0.327 %) | 9.5e-15 |
+| u_x at A (1e-4 m) | 1.098 | 1.09961 (+0.147 %) | 1.09961 (+0.146 %) | 1.09961 | +0.146 % |
+| u_y at A (1e-4 m) | -1.309 | -1.31276 (-0.287 %) | -1.31276 (-0.288 %) | -1.31276 | -0.288 % |
+| u_x at D (1e-4 m) | 1.003 | 0.99508 (-0.79 %) | 0.995082 (-0.789 %) | 0.995082 | -0.789 % |
+| u_y at D (1e-4 m) | -0.7134 | -0.71706 (-0.513 %) | -0.717064 (-0.514 %) | -0.717064 | -0.514 % |
+| u_x at E (1e-4 m) | 0.4768 | 0.47668 (-0.0252 %) | 0.47668 (-0.0252 %) | 0.47668 | -0.0252 % |
+| u_y at E (1e-4 m) | -0.4965 | -0.49812 (-0.326 %) | -0.498122 (-0.327 %) | -0.498122 | -0.327 % |
 
 Acceptance: criterion of the `.dgibi` file, largest relative gap ≤ 5 % over u_x(A), u_x(D), u_x(E), u_y(A), u_y(D) (the `.dgibi` file lists u_y(D) twice and leaves u_y(E) out).
 
@@ -1394,7 +1394,7 @@ B (3, 0, 0), 20 pipe elements.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | u_x at B (m) | 0.37908 | 0.37871 (-0.0976 %) | 0.378708 (-0.0982 %) | not available |  |
 | u_y at B (m) | 0.24173 | 0.24174 (+0.00414 %) | 0.241744 (+0.0057 %) | not available |  |
@@ -1445,7 +1445,7 @@ point is lost); it is kept as printed.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | u_x at B (m) | 0.000822 | 82.2692 (+1e+07 %) | 0.000822692 (+0.0842 %) | not available |  |
 | u_y at B (m) | 0.000822 | 0.000822692 (+0.0842 %) | 0.000822692 (+0.0842 %) | not available |  |
@@ -1499,7 +1499,7 @@ Square 100 × 100, 10 × 10 ICQ4.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | u_y at (100, 100) | 1.499e-05 | — | 1.48594e-05 (-0.871 %) | not available |  |
 | largest mean stress (Pa) | -100000 | — | -99748.2 (+0.252 %) | not available |  |
@@ -1536,7 +1536,7 @@ Axisymmetric, meridian plane: the arc of centre (0, 10) from (0, 0) to
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | max |‖v‖² − J²| | 0 | — | 1.11022e-16 (Δ = 1.1e-16) | not available |  |
 | min ‖n‖² | 1 | — | 1 (+0 %) | not available |  |
@@ -1585,7 +1585,7 @@ COQ2 elements at a mesh density of 1 mm, thickness 1 mm.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | critical load multiplier λ | 41.123 | — | 41.1234 (+0.00094 %) | not available |  |
 
@@ -1632,7 +1632,7 @@ and length 100 mm, 4 COQ2 elements, thickness 1 mm.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | multiplier λ_1, dead pressure | 6.66667e-06 | — | 6.66667e-06 (-4.41e-06 %) | not available |  |
 | multiplier λ_2, follower pressure | 5e-06 | — | 5e-06 (-1.29e-05 %) | not available |  |
@@ -1691,10 +1691,10 @@ Half of the strip, width 12.5 mm (x from 0 to 12.5 mm), height 100 mm
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| elastic moment M1 (t = 0.02875) (kN·m) | 805 | 811.08 (+0.755 %) | 811.082 (+0.755 %) | 811.082 (+0.755 %) | 1.1e-15 |
-| plastic moment M2 (t = 0.05) (kN·m) | 1074 | 1085.2 (+1.04 %) | 1085.05 (+1.03 %) | 1085.05 (+1.03 %) | 4.7e-10 |
+| elastic moment M1 (t = 0.02875) (kN·m) | 805 | 811.08 (+0.755 %) | 811.082 (+0.755 %) | 811.082 | +0.755 % |
+| plastic moment M2 (t = 0.05) (kN·m) | 1074 | 1085.2 (+1.04 %) | 1085.05 (+1.03 %) | 1085.05 | +1.03 % |
 
 Acceptance: criterion of the `.dgibi` file, each relative gap ≤ 1.5 %.
 
@@ -1855,10 +1855,10 @@ times 100 and 358.9 of the `.dgibi` file.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| u_r at A, t = 100 (µm) | 0.4 | 0.39821 (-0.448 %) | 0.398212 (-0.447 %) | 0.398212 (-0.447 %) | 0.0e+00 |
-| u_r at A, t = 358.9 (µm) | 2.83 | 1085.2 (+3.82e+04 %) | 2.74066 (-3.16 %) | 2.74066 (-3.16 %) | 9.7e-16 |
+| u_r at A, t = 100 (µm) | 0.4 | 0.39821 (-0.448 %) | 0.398212 (-0.447 %) | 0.398212 | -0.447 % |
+| u_r at A, t = 358.9 (µm) | 2.83 | 1085.2 (+3.82e+04 %) | 2.74066 (-3.16 %) | 2.74066 | -3.16 % |
 
 Acceptance: criterion of the `.dgibi` file, largest relative gap of the two values < 3.5 %.
 
@@ -2010,20 +2010,20 @@ references are those of the `.dgibi` file (1.66e6).
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| σ_xx at T1 (Pa) | 7.5e+06 | 7.5e+06 (+0 %) | 7.5e+06 (+6.21e-14 %) | 7.5e+06 (+0 %) | 6.2e-16 |
-| σ_yy at T1 (Pa) | 2.5e+06 | 2.5e+06 (+0 %) | 2.5e+06 (+7.45e-14 %) | 2.5e+06 (+0 %) | 7.5e-16 |
-| σ_zz at T1 (Pa) | 2.5e+06 | 2.5e+06 (+0 %) | 2.5e+06 (+7.45e-14 %) | 2.5e+06 (+0 %) | 7.5e-16 |
-| σ_xx at T2 (Pa) | 1.166e+07 | 1.166e+07 (+0 %) | 1.16667e+07 (+0.0572 %) | 1.16667e+07 (+0.0572 %) | 3.2e-16 |
-| σ_yy at T2 (Pa) | 6.66e+06 | 6.66e+06 (+0 %) | 6.66667e+06 (+0.1 %) | 6.66667e+06 (+0.1 %) | 9.8e-16 |
-| σ_zz at T2 (Pa) | 6.66e+06 | 6.66e+06 (+0 %) | 6.66667e+06 (+0.1 %) | 6.66667e+06 (+0.1 %) | 9.8e-16 |
-| σ_xx at T3 (Pa) | 4.16e+06 | 4.16e+06 (+0 %) | 4.16667e+06 (+0.16 %) | 4.16667e+06 (+0.16 %) | 6.7e-16 |
-| σ_yy at T3 (Pa) | 4.16e+06 | 4.16e+06 (+0 %) | 4.16667e+06 (+0.16 %) | 4.16667e+06 (+0.16 %) | 1.2e-15 |
-| σ_zz at T3 (Pa) | 4.16e+06 | 4.16e+06 (+0 %) | 4.16667e+06 (+0.16 %) | 4.16667e+06 (+0.16 %) | 1.2e-15 |
-| σ_xx at T4 (Pa) | -3.33e+06 | -3.33e+06 (+0 %) | -3.33333e+06 (-0.1 %) | -3.33333e+06 (-0.1 %) | 7.0e-16 |
-| σ_yy at T4 (Pa) | 1.66e+06 | 1.6e+06 (-3.61 %) | 1.66667e+06 (+0.402 %) | 1.66667e+06 (+0.402 %) | 2.0e-15 |
-| σ_zz at T4 (Pa) | 1.66e+06 | 1.6e+06 (-3.61 %) | 1.66667e+06 (+0.402 %) | 1.66667e+06 (+0.402 %) | 2.0e-15 |
+| σ_xx at T1 (Pa) | 7.5e+06 | 7.5e+06 (+0 %) | 7.5e+06 (+6.21e-14 %) | 7.5e+06 | +0 % |
+| σ_yy at T1 (Pa) | 2.5e+06 | 2.5e+06 (+0 %) | 2.5e+06 (+7.45e-14 %) | 2.5e+06 | +0 % |
+| σ_zz at T1 (Pa) | 2.5e+06 | 2.5e+06 (+0 %) | 2.5e+06 (+7.45e-14 %) | 2.5e+06 | +0 % |
+| σ_xx at T2 (Pa) | 1.166e+07 | 1.166e+07 (+0 %) | 1.16667e+07 (+0.0572 %) | 1.16667e+07 | +0.0572 % |
+| σ_yy at T2 (Pa) | 6.66e+06 | 6.66e+06 (+0 %) | 6.66667e+06 (+0.1 %) | 6.66667e+06 | +0.1 % |
+| σ_zz at T2 (Pa) | 6.66e+06 | 6.66e+06 (+0 %) | 6.66667e+06 (+0.1 %) | 6.66667e+06 | +0.1 % |
+| σ_xx at T3 (Pa) | 4.16e+06 | 4.16e+06 (+0 %) | 4.16667e+06 (+0.16 %) | 4.16667e+06 | +0.16 % |
+| σ_yy at T3 (Pa) | 4.16e+06 | 4.16e+06 (+0 %) | 4.16667e+06 (+0.16 %) | 4.16667e+06 | +0.16 % |
+| σ_zz at T3 (Pa) | 4.16e+06 | 4.16e+06 (+0 %) | 4.16667e+06 (+0.16 %) | 4.16667e+06 | +0.16 % |
+| σ_xx at T4 (Pa) | -3.33e+06 | -3.33e+06 (+0 %) | -3.33333e+06 (-0.1 %) | -3.33333e+06 | -0.1 % |
+| σ_yy at T4 (Pa) | 1.66e+06 | 1.6e+06 (-3.61 %) | 1.66667e+06 (+0.402 %) | 1.66667e+06 | +0.402 % |
+| σ_zz at T4 (Pa) | 1.66e+06 | 1.6e+06 (-3.61 %) | 1.66667e+06 (+0.402 %) | 1.66667e+06 | +0.402 % |
 
 Acceptance: criterion of the `.dgibi` file, largest relative gap of the twelve stresses ≤ 0.5 %.
 
@@ -2186,10 +2186,10 @@ K / (2α + β). Cast3M's stops at the ultimate surface's apex, the reference.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| σ_xx at t = 2 | 1.87171 | 1.8717 (-0.000747 %) | 1.87171 (+0 %) | 2.15563 (+15.2 %) | 1.5e-01 |
-| σ_yy at t = 2 | 1.87171 | 1.8717 (-0.000747 %) | 1.87171 (+0 %) | 2.15563 (+15.2 %) | 1.5e-01 |
+| σ_xx at t = 2 | 1.87171 | 1.8717 (-0.000747 %) | 1.87171 (+0 %) | 2.15563 | +15.2 % |
+| σ_yy at t = 2 | 1.87171 | 1.8717 (-0.000747 %) | 1.87171 (+0 %) | 2.15563 | +15.2 % |
 
 Acceptance: criterion of the `.dgibi` file, each relative gap ≤ 1e-10 %.
 
@@ -2352,17 +2352,17 @@ differ by the error of that integration, which grows with the plastic zone.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| bending moment at t = 0.02875 (kN·m) | 805 | — | 806.806 (+0.224 %) | 805.38 (+0.0472 %) | 1.8e-03 |
-| bending moment at t = 0.05 (kN·m) | 1074 | — | 1076.57 (+0.239 %) | 1075.07 (+0.0998 %) | 1.4e-03 |
-| bending moment at t = 0.1 (kN·m) | 1174 | — | 1176.96 (+0.252 %) | 1175.17 (+0.0996 %) | 1.5e-03 |
-| bending moment at t = 0.15 (kN·m) | 1193 | — | 1195.34 (+0.196 %) | 1193.85 (+0.0709 %) | 1.2e-03 |
-| bending moment at t = 0.2 (kN·m) | 1199 | — | 1201.92 (+0.243 %) | 1200.21 (+0.101 %) | 1.4e-03 |
-| bending moment at t = 0.3 (kN·m) | 1204 | — | 1206.65 (+0.22 %) | 1204.71 (+0.0586 %) | 1.6e-03 |
-| bending moment at t = 0.4 (kN·m) | 1205 | — | 1208.42 (+0.283 %) | 1206.57 (+0.13 %) | 1.5e-03 |
-| bending moment at t = 0.5 (kN·m) | 1206 | — | 1209.53 (+0.293 %) | 1207.35 (+0.112 %) | 1.8e-03 |
-| bending moment at t = 1.0 (kN·m) | 1207.5 | — | 1210.37 (+0.238 %) | 1208.36 (+0.0711 %) | 1.7e-03 |
+| bending moment at t = 0.02875 (kN·m) | 805 | — | 806.806 (+0.224 %) | 805.38 | +0.0472 % |
+| bending moment at t = 0.05 (kN·m) | 1074 | — | 1076.57 (+0.239 %) | 1075.07 | +0.0998 % |
+| bending moment at t = 0.1 (kN·m) | 1174 | — | 1176.96 (+0.252 %) | 1175.17 | +0.0996 % |
+| bending moment at t = 0.15 (kN·m) | 1193 | — | 1195.34 (+0.196 %) | 1193.85 | +0.0709 % |
+| bending moment at t = 0.2 (kN·m) | 1199 | — | 1201.92 (+0.243 %) | 1200.21 | +0.101 % |
+| bending moment at t = 0.3 (kN·m) | 1204 | — | 1206.65 (+0.22 %) | 1204.71 | +0.0586 % |
+| bending moment at t = 0.4 (kN·m) | 1205 | — | 1208.42 (+0.283 %) | 1206.57 | +0.13 % |
+| bending moment at t = 0.5 (kN·m) | 1206 | — | 1209.53 (+0.293 %) | 1207.35 | +0.112 % |
+| bending moment at t = 1.0 (kN·m) | 1207.5 | — | 1210.37 (+0.238 %) | 1208.36 | +0.0711 % |
 
 Acceptance: criterion of the `.dgibi` file, largest relative gap of the nine moments ≤ 0.5 %.
 
@@ -2536,17 +2536,17 @@ reads the node in one cell, which shows it.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| bending moment at t = 0.029435 (1e4 N·m) | 90.57 | — | 90.8058 (+0.26 %) | 90.6201 (+0.0553 %) | 2.0e-03 |
-| bending moment at t = 0.1 (1e4 N·m) | 135.2 | — | 135.236 (+0.0269 %) | 134.726 (-0.351 %) | 3.8e-03 |
-| bending moment at t = 0.2 (1e4 N·m) | 138.4 | — | 139.666 (+0.915 %) | 138.716 (+0.228 %) | 6.8e-03 |
-| bending moment at t = 0.3 (1e4 N·m) | 139 | — | 141.016 (+1.45 %) | 139.619 (+0.445 %) | 9.9e-03 |
-| bending moment at t = 0.4 (1e4 N·m) | 139.2 | — | 141.921 (+1.95 %) | 140.09 (+0.639 %) | 1.3e-02 |
-| bending moment at t = 0.5 (1e4 N·m) | 139.3 | — | 142.712 (+2.45 %) | 140.424 (+0.807 %) | 1.6e-02 |
-| bending moment at t = 1.0 (1e4 N·m) | 139.4 | — | 146.289 (+4.94 %) | 141.784 (+1.71 %) | 3.1e-02 |
-| σ_xx at A (12.5, 50) mm, t = 1 (MPa) | 543.4 | — | 547.236 (+0.706 %) | 996.705 (+83.4 %) | 8.2e-01 |
-| σ_xx at the second node of the loaded edge (y = 46.875 mm), t = 1 (MPa) | 557.7 | — | 557.745 (+0.00805 %) | 118.706 (-78.7 %) | 7.9e-01 |
+| bending moment at t = 0.029435 (1e4 N·m) | 90.57 | — | 90.8058 (+0.26 %) | 90.6201 | +0.0553 % |
+| bending moment at t = 0.1 (1e4 N·m) | 135.2 | — | 135.236 (+0.0269 %) | 134.726 | -0.351 % |
+| bending moment at t = 0.2 (1e4 N·m) | 138.4 | — | 139.666 (+0.915 %) | 138.716 | +0.228 % |
+| bending moment at t = 0.3 (1e4 N·m) | 139 | — | 141.016 (+1.45 %) | 139.619 | +0.445 % |
+| bending moment at t = 0.4 (1e4 N·m) | 139.2 | — | 141.921 (+1.95 %) | 140.09 | +0.639 % |
+| bending moment at t = 0.5 (1e4 N·m) | 139.3 | — | 142.712 (+2.45 %) | 140.424 | +0.807 % |
+| bending moment at t = 1.0 (1e4 N·m) | 139.4 | — | 146.289 (+4.94 %) | 141.784 | +1.71 % |
+| σ_xx at A (12.5, 50) mm, t = 1 (MPa) | 543.4 | — | 547.236 (+0.706 %) | 996.705 | +83.4 % |
+| σ_xx at the second node of the loaded edge (y = 46.875 mm), t = 1 (MPa) | 557.7 | — | 557.745 (+0.00805 %) | 118.706 | -78.7 % |
 
 Acceptance: criterion of the `.dgibi` file, largest relative gap of the nine values ≤ 5 %.
 
@@ -2715,7 +2715,7 @@ h = L/10 = 1; DKT triangles, 20 elements along x and 2 across.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | reaction force at the last deflection (N) | 2.5e+06 | — | 2.69491e+06 (+7.8 %) | not available |  |
 
@@ -2785,9 +2785,9 @@ and the script leaves it out (its stress stays below 1e-6).
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| max |σ − σ_exact| / K over the curve | 0 | — | 2.646e-09 (Δ = 2.6e-09) | 0.684463 (Δ = 0.68) | Δ = 6.8e-01 |
+| max |σ − σ_exact| / K over the curve | 0 | — | 2.646e-09 (Δ = 2.6e-09) | 0.684463 | Δ = 0.68 |
 
 pyrucast OUTSIDE tolerance: curve_gap: |0.6844626967830254 - 0.0| > 5e-05
 
@@ -2961,7 +2961,7 @@ per time unit, up to t = 200.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | σ_xx at t = 200 | -6.4904 | — | -6.4904 (+7.84e-07 %) | not available |  |
 | plastic volume strain at t = 200 | -0.00719369 | — | -0.00719369 (+3.04e-06 %) | not available |  |
@@ -3009,7 +3009,7 @@ points, all with the same material.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | moment M_x at the last rotation ¹ | 3.85931e+09 | — | 3.85066e+09 (-0.224 %) | not available |  |
 
@@ -3052,7 +3052,7 @@ by 1, 0.8, 0.6, 0.4, 0.2 with the temperature; ν = 0.3.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | area under the σ(ε) curve ¹ | 32.9336 | — | 32.7558 (-0.54 %) | not available |  |
 
@@ -3095,7 +3095,7 @@ Post of beam elements clamped at A0 (0, 0, 0), section 0.0289 m².
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | largest moment M_x at A0 (N·m) | 21401 | — | 21399 (-0.00935 %) | not available |  |
 
@@ -3137,7 +3137,7 @@ for the concrete (with confinement).
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | largest force of the response | 0.0772465 | — | 0.0772514 (+0.00633 %) | not available |  |
 
@@ -3193,7 +3193,7 @@ formulas. pyrucast's `model.creep_norton` is the secondary creep
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | shear creep strain γ_p at t = 20 ¹ | 0.0016523 | — | 0.00165241 (+0.00636 %) | not available |  |
 | shear stress σ_xy at t = 20 (Pa) ¹ | 6.99943e+07 | — | 6.99858e+07 (-0.0121 %) | not available |  |
@@ -3259,13 +3259,13 @@ step-by-step driver does not offer.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| σ_zz at t = 100 s (MPa) ¹ | 230.848 | — | 230.848 (-1.1e-06 %) | 228.373 (-1.07 %) | 1.1e-02 |
-| σ_zz at t = 200 s (MPa) ¹ | -150.745 | — | -150.745 (-1.32e-06 %) | -150.555 (+0.126 %) | 1.3e-03 |
-| σ_zz at t = 300 s (MPa) ¹ | -236.323 | — | -236.323 (+6.64e-07 %) | -235.108 (+0.514 %) | 5.1e-03 |
-| σ_zz at t = 400 s (MPa) ¹ | 146.69 | — | 146.69 (+7.21e-07 %) | 145.287 (-0.957 %) | 9.6e-03 |
-| σ_zz at t = 600 s (MPa) ¹ | 239.084 | — | 239.084 (-1.28e-07 %) | 239.05 (-0.0142 %) | 1.4e-04 |
+| σ_zz at t = 100 s (MPa) ¹ | 230.848 | — | 230.848 (-1.1e-06 %) | 228.373 | -1.07 % |
+| σ_zz at t = 200 s (MPa) ¹ | -150.745 | — | -150.745 (-1.32e-06 %) | -150.555 | +0.126 % |
+| σ_zz at t = 300 s (MPa) ¹ | -236.323 | — | -236.323 (+6.64e-07 %) | -235.108 | +0.514 % |
+| σ_zz at t = 400 s (MPa) ¹ | 146.69 | — | 146.69 (+7.21e-07 %) | 145.287 | -0.957 % |
+| σ_zz at t = 600 s (MPa) ¹ | 239.084 | — | 239.084 (-1.28e-07 %) | 239.05 | -0.0142 % |
 
 ¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
@@ -3436,7 +3436,7 @@ Axisymmetric hollow cylinder, QUA8 elements.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | displacement at the last time (m) ¹ | 2.21794e-05 | — | 2.22274e-05 (+0.217 %) | not available |  |
 
@@ -3479,7 +3479,7 @@ CUB8 block.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | axial reaction of the upper face ¹ | 2.99625 | — | 2.99632 (+0.00233 %) | not available |  |
 
@@ -3523,7 +3523,7 @@ CUB8 bar.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | axial stress at the last time (Pa) ¹ | 1.3727e+08 | — | 1.37427e+08 (+0.114 %) | not available |  |
 | plastic strain at the last time ¹ | 0.00934641 | — | 0.00934559 (-0.00877 %) | not available |  |
@@ -3568,7 +3568,7 @@ CUB8 bar.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | largest gap of the stress (%) | 0 | — | 0.0358752 (Δ = 0.036) | not available |  |
 | largest gap of the plastic strain (%) | 0 | — | 0.000264593 (Δ = 0.00026) | not available |  |
@@ -3618,7 +3618,7 @@ and a damage of 0.2199.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | cumulated plastic strain, first computed time | 0.000546 | — | 0.00054653 (+0.0971 %) | not available |  |
 | cumulated plastic strain, second computed time | 0.0112694 | — | 0.0112694 (-0.000317 %) | not available |  |
@@ -3668,7 +3668,7 @@ and a damage of 0.2199.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | cumulated plastic strain, first computed time | 0.000546 | — | 0.00054642 (+0.0769 %) | not available |  |
 | cumulated plastic strain, second computed time | 0.0112694 | — | 0.011159 (-0.979 %) | not available |  |
@@ -3715,7 +3715,7 @@ Axisymmetric test piece of QUA8 elements.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | cumulated plastic strain at the last time (step 18) | 0.1143 | — | 0.114299 (-0.00121 %) | not available |  |
 | damage D at the last time (step 18) | 0.08131 | — | 0.0823298 (+1.25 %) | not available |  |
@@ -3758,7 +3758,7 @@ the set the run uses.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | damage D at the second compared time ¹ | 0.0124384 | — | 0.0124416 (+0.0257 %) | not available |  |
 | cumulated plastic strain at the second compared time ¹ | 0.0197372 | — | 0.0197379 (+0.00353 %) | not available |  |
@@ -3802,7 +3802,7 @@ Axisymmetric test piece of QUA8 elements.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | inelastic strain p at the last time | 0.00417896 | — | 0.00417891 (-0.00113 %) | not available |  |
 | inelastic strain v at the last time | 0.00314432 | — | 0.00314431 (-0.000172 %) | not available |  |
@@ -3848,7 +3848,7 @@ Axisymmetric, QUA8 elements; crack depth a = 0.05 m.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | K_I (MPa·m^½) | 1.0848 | 1.0855 (+0.0645 %) | 1.08378 (-0.0936 %) | not available |  |
 
@@ -3892,7 +3892,7 @@ QUA8 elements, plane strain; crack length a = 100 mm, width 200 mm, height
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | K_I (daN·mm^-3/2) | 130.15 | 125.88 (-3.28 %) | 125.858 (-3.3 %) | not available |  |
 
@@ -3930,7 +3930,7 @@ QUA8 elements, plane strain; crack length a = 100 mm, half-width b = 200 mm.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | K_I (daN·mm^-3/2) | 20.84 | 21.02 (+0.864 %) | 21.0193 (+0.86 %) | not available |  |
 
@@ -3968,7 +3968,7 @@ QUA8 elements, plane strain; crack length a = 100 mm, half-width b = 200 mm.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | K_I (daN·mm^-3/2) | 17.725 | 17.616 (-0.615 %) | 17.7836 (+0.331 %) | not available |  |
 
@@ -4006,7 +4006,7 @@ QUA8 elements, plane strain; crack length a = 100 mm, half-width b = 200 mm.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | K_I (daN·mm^-3/2) | 2.4215 | 2.4098 (-0.483 %) | 2.40961 (-0.491 %) | not available |  |
 
@@ -4048,7 +4048,7 @@ CU20 elements, 3D sector; crack radius 8 mm, cylinder radius 100 mm.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | K_I at the surface node (daN·mm^-3/2) | 607.41 | 638.47 (+5.11 %) | 633.089 (+4.23 %) | not available |  |
 | K_I at the middle node (daN·mm^-3/2) | 580.48 | 638.47 (+9.99 %) | 633.427 (+9.12 %) | not available |  |
@@ -4090,7 +4090,7 @@ and −71.4. The references here are those of the `.dgibi` file's formulas.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | K_I (units of the `.dgibi` file) ¹ | 2.4097 | — | 2.39347 (-0.674 %) | not available |  |
 | K_II (units of the `.dgibi` file) ¹ | -2.4097 | — | -2.27464 (+5.61 %) | not available |  |
@@ -4131,7 +4131,7 @@ TRI3 elements; half crack length 0.3, half width 1, thickness 0.001.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | K_I (N·m^-3/2) | 5.01e+06 | 5.08e+06 (+1.4 %) | 5.08721e+06 (+1.54 %) | not available |  |
 
@@ -4165,7 +4165,7 @@ QUA8 elements; the plate of rupt7 with a pressure of 10 on its two sides.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | K_I (daN·mm^-3/2) | 149.77 | 145.98 (-2.53 %) | 150.738 (+0.647 %) | not available |  |
 | K_II (daN·mm^-3/2) | -71.56 | -72.28 (-1.01 %) | -72.3822 (-1.15 %) | not available |  |
@@ -4210,7 +4210,7 @@ Cylinder of radius R = 1.05 m and height H = 1 m, total thickness 0.1 m
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | u_r at PA (m) | 6.41585e-06 | — | 6.16128e-06 (-3.97 %) | not available |  |
 
@@ -4251,7 +4251,7 @@ Square plate of side A = 127 mm, total thickness 5.08 mm (two layers at
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | deflection at O | 23.25 | — | 23.1257 (-0.535 %) | not available |  |
 
@@ -4295,7 +4295,7 @@ One CUB8 cube.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | σ_zz at B3, last time (MPa) | 2 | — | 2 (-2e-13 %) | not available |  |
 
@@ -4450,7 +4450,7 @@ CASTEM 2000 and agree with the INTERCLAY results.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | convergence of the hole (m) | -0.266 | -0.26586 (+0.0526 %) | -0.265486 (+0.193 %) | not available |  |
 | hoop stress at the wall (Pa) | -3.47e+06 | -3.46667e+06 (+0.096 %) | -3.46776e+06 (+0.0644 %) | not available |  |
@@ -4492,7 +4492,7 @@ Axisymmetric porous elements (QUAP).
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | largest gap of the σ_rr profile | 0 | — | 0.00016723 (Δ = 0.00017) | not available |  |
 | largest gap of the σ_θθ profile | 0 | — | 0.000130391 (Δ = 0.00013) | not available |  |
@@ -4534,7 +4534,7 @@ Porous elements (QUAP).
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | relative gap of the pore pressure | 0 | — | 0.00355572 (Δ = 0.0036) | not available |  |
 | relative gap of the vertical displacement profile | 0 | — | 0.00527552 (Δ = 0.0053) | not available |  |
@@ -4571,7 +4571,7 @@ the elastic data and the parameters of the Abouaf law are those of the
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | u_r at A2 (m) | -0.00125297 | -0.00125292 (+0.00399 %) | -0.0012528 (+0.0134 %) | not available |  |
 | u_z at A2 (m) | -0.00188229 | -0.00188222 (+0.00372 %) | -0.00188204 (+0.0132 %) | not available |  |
@@ -4622,7 +4622,7 @@ of its own.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | opening u_y at A1 (m) | 1.19048e-06 | — | 1.19048e-06 (-5.34e-14 %) | not available |  |
 
@@ -4681,10 +4681,10 @@ inwards, which turns the pull into a push.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| u_z at (0, 0, 0), continuous cubes, no reference (m) | — | — | 1.90476e-06 | 1.90476e-06 | 8.9e-16 |
-| u_z at (0, 0, 0), cubes joined by the joint (m) ¹ | 1.90476e-06 | — | 1.90479e-06 (+0.00125 %) | 1.90479e-06 (+0.00125 %) | 1.3e-11 |
+| u_z at (0, 0, 0), continuous cubes, no reference (m) | — | — | 1.90476e-06 | 1.90476e-06 |  |
+| u_z at (0, 0, 0), cubes joined by the joint (m) ¹ | 1.90476e-06 | — | 1.90479e-06 (+0.00125 %) | 1.90479e-06 | +0.00125 % |
 
 ¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
@@ -4863,7 +4863,7 @@ One JOI4 joint element.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | normal stress, temperature on the model | 1.05e+24 | — | 1.05e+24 (+0 %) | not available |  |
 | normal stress, temperature on the mesh | 1.05e+24 | — | 1.05e+24 (+0 %) | not available |  |
@@ -4907,7 +4907,7 @@ One JOI4 joint element of area A = 4, orthotropic axes at 55° from x.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | u_x of the upper face | 3.416e-07 | — | 3.41614e-07 (+0.00415 %) | not available |  |
 | u_y of the upper face | 4.875e-07 | — | 4.87451e-07 (-0.0101 %) | not available |  |
@@ -4947,7 +4947,7 @@ Cantilever beam of length L = 2 m, section A = 0.01 m², POUT elements.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | first frequency (Hz) | 17.71 | — | 17.7036 (-0.0363 %) | not available |  |
 | second frequency (Hz) | 110.98 | — | 110.707 (-0.246 %) | not available |  |
@@ -4987,7 +4987,7 @@ Annular cavity: L = 2 m, L₂ = 1.2 m, thickness 0.01 m.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | first frequency, harmonic 1 (Hz) | 0.489 | — | 0.489469 (+0.096 %) | not available |  |
 | first frequency, harmonic 3 (Hz) | 0.863 | — | 0.863807 (+0.0935 %) | not available |  |
@@ -5027,7 +5027,7 @@ base; modes of the harmonic m = 1.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | first frequency (Hz) | 18.88 | — | 18.6466 (-1.24 %) | not available |  |
 | second frequency (Hz) | 55.278 | — | 56.0832 (+1.46 %) | not available |  |
@@ -5067,7 +5067,7 @@ Beam of two halves of length 2 m each, POUT elements.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | first frequency, method 1 (Hz) | 0.65 | — | 0.650715 (+0.11 %) | not available |  |
 | first frequency, method 2 (Hz) | 0.65 | — | 0.650867 (+0.133 %) | not available |  |
@@ -5110,7 +5110,7 @@ critical velocity.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | critical (divergence) velocity (m/s) | 25 | — | 24.5 (-2 %) | not available |  |
 
@@ -5150,7 +5150,7 @@ ellipse.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | response along y (m) ¹ | 9.46402e-08 | — | 9.46402e-08 (-1.4e-14 %) | not available |  |
 | response along z (m) ¹ | -9.46402e-08 | — | -9.46402e-08 (+1.4e-14 %) | not available |  |
@@ -5192,10 +5192,10 @@ Free bar of length 140 along y, BARR elements.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| u_y at P1, t = 1.9125 | 10.8997 | — | 10.6602 (-2.2 %) | 10.6602 (-2.2 %) | 2.5e-13 |
-| u_y at P1, t = 2.0625 | 11.7323 | — | 11.2886 (-3.78 %) | 11.2886 (-3.78 %) | 3.1e-13 |
+| u_y at P1, t = 1.9125 | 10.8997 | — | 10.6602 (-2.2 %) | 10.6602 | -2.2 % |
+| u_y at P1, t = 2.0625 | 11.7323 | — | 11.2886 (-3.78 %) | 11.2886 | -3.78 % |
 
 Acceptance: criterion of the `.dgibi` file, both relative gaps < 5 %.
 
@@ -5323,11 +5323,11 @@ Axisymmetric, QUA4 elements.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| amplification at the first point (node 25) | 2 | — | 1.9308 (-3.46 %) | 1.9308 (-3.46 %) | 2.3e-13 |
-| amplification at the second point (node 62) | 2 | — | 2.05572 (+2.79 %) | 2.05572 (+2.79 %) | 2.5e-13 |
-| amplification at the third point (node 36) | 2 | — | 2.05491 (+2.75 %) | 2.05491 (+2.75 %) | 2.2e-13 |
+| amplification at the first point (node 25) | 2 | — | 1.9308 (-3.46 %) | 1.9308 | -3.46 % |
+| amplification at the second point (node 62) | 2 | — | 2.05572 (+2.79 %) | 2.05572 | +2.79 % |
+| amplification at the third point (node 36) | 2 | — | 2.05491 (+2.75 %) | 2.05491 | +2.75 % |
 
 Acceptance: criterion of the `.dgibi` file, each amplification within 5 % of 2.
 
@@ -5466,7 +5466,7 @@ amplitude varies in time; the response is computed on the modal basis.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | deflection at P2, t = 1.45 (m) | 0.23382 | — | 0.233614 (-0.0882 %) | not available |  |
 | deflection at P2, t = 1.9 (m) | -0.24283 | — | -0.2385 (+1.78 %) | not available |  |
@@ -5503,7 +5503,7 @@ against the time.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | largest gap of the `.dgibi` file's comparison | 0 | — | 0.00351229 (Δ = 0.0035) | not available |  |
 
@@ -5543,7 +5543,7 @@ the linkages are circle-plane with friction.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | rotation, first compared time ¹ | 16 | — | 16.0141 (+0.0883 %) | not available |  |
 | rotation, second compared time ¹ | 16 | — | 16 (+0.0002 %) | not available |  |
@@ -5585,7 +5585,7 @@ released, hits a plane; two linkage types are compared.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | impact force | 0.59178 | — | 0.231555 (-60.9 %) | not available |  |
 | u_x at t = 0.4 s | 0.13598 | — | 0.0532069 (-60.9 %) | not available |  |
@@ -5625,7 +5625,7 @@ compared.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | largest difference on u_x (m) | 0 | — | 0.000735971 (Δ = 0.00074) | not available |  |
 | largest difference on u_y (m) | 0 | — | 0.000870092 (Δ = 0.00087) | not available |  |
@@ -5696,7 +5696,7 @@ Hollow sphere of inner radius 1.8 m and outer radius 6 m, QUA8 elements.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | frequency 1 (Hz) | 369.91 | — | 368.617 (-0.35 %) | not available |  |
 | frequency 2 (Hz) | 838.03 | — | 834.919 (-0.371 %) | not available |  |
@@ -5745,7 +5745,7 @@ end.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | amplitude of the free end (m) | 0.2 | — | 0.199997 (-0.00153 %) | not available |  |
 | period (s) | 0.2648 | — | 0.266 (+0.453 %) | not available |  |
@@ -5787,7 +5787,7 @@ computed in large displacements.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | largest displacement of the free end ¹ | 5.8565 | — | 5.85754 (+0.0178 %) | not available |  |
 
@@ -5837,11 +5837,11 @@ differing inside.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| T at P3, configuration 1 (flux) (°C) ¹ | 0.571522 | — | 0.571519 (-0.000635 %) | 0.571519 (-0.000635 %) | 2.6e-14 |
-| T at P3, configuration 2 (source) (°C) ¹ | 1510.92 | — | 1505.3 (-0.372 %) | 1506.88 (-0.267 %) | 1.1e-03 |
-| T at P3, configuration 3 (convection) (°C) ¹ | 122.687 | — | 122.682 (-0.00413 %) | 122.687 (+0.000118 %) | 4.2e-05 |
+| T at P3, configuration 1 (flux) (°C) ¹ | 0.571522 | — | 0.571519 (-0.000635 %) | 0.571519 | -0.000635 % |
+| T at P3, configuration 2 (source) (°C) ¹ | 1510.92 | — | 1505.3 (-0.372 %) | 1506.88 | -0.267 % |
+| T at P3, configuration 3 (convection) (°C) ¹ | 122.687 | — | 122.682 (-0.00413 %) | 122.687 | +0.000118 % |
 
 ¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
@@ -6030,7 +6030,7 @@ the isotropic elements.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | largest relative gap of the temperature profiles | 0 | — | 0.0301414 (Δ = 0.03) | not available |  |
 
@@ -6079,10 +6079,10 @@ criterion.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| largest gap of T to the analytical profile | 0 | — | 3.88762e-07 (Δ = 3.9e-07) | 5.28512e-10 (Δ = 5.3e-10) | Δ = -3.9e-07 |
-| T at the insulated face x = 0 (°C) | 141.24 | — | 141.24 (-1.72e-05 %) | 141.24 (-1.97e-08 %) | 1.7e-07 |
+| largest gap of T to the analytical profile | 0 | — | 3.88762e-07 (Δ = 3.9e-07) | 5.28512e-10 | Δ = 5.3e-10 |
+| T at the insulated face x = 0 (°C) | 141.24 | — | 141.24 (-1.72e-05 %) | 141.24 | -1.97e-08 % |
 
 Acceptance: criterion of the `.dgibi` file, largest gap to the analytical profile ≤ 1e-5.
 
@@ -6253,14 +6253,14 @@ heated element held along y stretches by α·ΔT/(1 − ν) instead of
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| T at x = 0.08, t = 80 (°C) | 227.88 | — | 223.804 (-1.79 %) | 223.804 (-1.79 %) | 1.5e-15 |
-| T at x = 0.08, t = 100 (°C) | 251.85 | — | 248.66 (-1.27 %) | 248.66 (-1.27 %) | 2.2e-15 |
-| T at x = 0.08, t = 150 (°C) | 291.3 | — | 290.089 (-0.416 %) | 290.089 (-0.416 %) | 2.5e-15 |
-| u_x at x = 0.08, t = 80 | 3.04069e-05 | — | 3.00681e-05 (-1.11 %) | 3.00678e-05 (-1.12 %) | 1.0e-05 |
-| u_x at x = 0.08, t = 100 | 3.90251e-05 | — | 3.87249e-05 (-0.769 %) | 3.87246e-05 (-0.77 %) | 1.0e-05 |
-| u_x at x = 0.08, t = 150 | 5.76962e-05 | — | 5.82925e-05 (+1.03 %) | 5.82919e-05 (+1.03 %) | 1.0e-05 |
+| T at x = 0.08, t = 80 (°C) | 227.88 | — | 223.804 (-1.79 %) | 223.804 | -1.79 % |
+| T at x = 0.08, t = 100 (°C) | 251.85 | — | 248.66 (-1.27 %) | 248.66 | -1.27 % |
+| T at x = 0.08, t = 150 (°C) | 291.3 | — | 290.089 (-0.416 %) | 290.089 | -0.416 % |
+| u_x at x = 0.08, t = 80 | 3.04069e-05 | — | 3.00681e-05 (-1.11 %) | 3.00678e-05 | -1.12 % |
+| u_x at x = 0.08, t = 100 | 3.90251e-05 | — | 3.87249e-05 (-0.769 %) | 3.87246e-05 | -0.77 % |
+| u_x at x = 0.08, t = 150 | 5.76962e-05 | — | 5.82925e-05 (+1.03 %) | 5.82919e-05 | +1.03 % |
 
 Acceptance: criterion of the `.dgibi` file, gaps within 2 % over the second half of the computed times (t ≥ 80).
 
@@ -6416,7 +6416,7 @@ Axisymmetric, QUA4 elements.
 
 #### Results
 
-| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
+| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | σ_zz at A (MPa) | -309 | — | -308.911 (+0.0288 %) | not available |  |
 | plastic strain ε_zz at A | -0.004455 | — | -0.00445545 (-0.01 %) | not available |  |

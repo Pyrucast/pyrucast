@@ -285,7 +285,7 @@ def results(folder, case):
         "",
         (
             "| Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast "
-            "| pyrucast / Cast3M 2026 |"
+            "| pyrucast / reference |"
         ),
         "|---|---|---|---|---|---|",
     ]
@@ -297,12 +297,9 @@ def results(folder, case):
         mine = values.get(q["key"])
         other = castem_values.get(q["key"])
         versus = ""
-        if mine is not None and other is not None:
-            if other == 0 or ref == 0:
-                versus = f"Δ = {mine - other:.1e}"
-            else:
-                versus = f"{abs(mine - other) / abs(other):.1e}"
-        pyrucast = cell(mine, ref)
+        if mine is not None and ref is not None:
+            versus = gap_to(mine, ref)
+        pyrucast = "—" if mine is None else fmt(mine)
         if status(case, folder) == "gap":
             pyrucast = "not available"
         lines.append(
