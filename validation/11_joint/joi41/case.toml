@@ -40,14 +40,7 @@ are 0 by construction. The quantities compared here are what it meant to
 check: the vertical displacement of the upper corner (0, 0, 0) without and
 with the joint, the joint being stiff enough to change it by less than 1e-9.
 
-The continuous body is extruded upwards from its base: extruded downwards
-from its upper face, its cells come out mirrored and `skin` orients that face
-inwards, which turns the pull into a push.
 """
-
-improvements = [
-    "`extrude` against the normal of the source face gives mirrored HEX8 cells, whose facets `skin` then orients inwards; `orient` keeps them so (it makes neighbours consistent, not the handedness), `invert` puts them right",
-]
 
 [[quantity]]
 key = "uz_continuous"
