@@ -7013,13 +7013,24 @@ def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str, strain
     r"""
     Drucker-Prager pressure-sensitive plasticity, with non-associated flow.
     
-    `f = q + α·I₁ − k`, plastic potential `g = q + ψ·I₁`. Material `E`, `nu`,
-    `alpha` (friction), `k` (cohesion), `psi` (dilatancy).
+    Criterion `f = friction·I₁ + beta·q − k` and plastic potential
+    `g = psi·I₁ + delta·q`, with `I₁ = tr σ` and `q = √(3 J₂)`. Material `E`,
+    `nu`, `friction` (the cone's slope — `alpha` is the thermal expansion),
+    `k` (cohesion), `psi` (dilatancy); optional `beta` and `delta` (the
+    deviatoric weights of the criterion and of the potential, 1 by default),
+    `H` (hardening, `dk = H·dp`, 0 by default) and `friction_ult`, `beta_ult`,
+    `k_ult` (an ultimate surface, the initial one by default).
     
-    `ψ = α` recovers associated flow; `ψ < α` is the usual choice for soils and
-    rocks, whose measured dilatancy is far below what friction alone would imply.
-    A non-associated law has a **non-symmetric** tangent. Returns beyond the
-    cone's apex (`I₁ = k/α`) collapse onto the tip.
+    The hardening carries the surface from the initial one to the ultimate one:
+    `friction`, `beta` and `k` each move as `(1 − λ)·initial + λ·ultimate`, with
+    `λ = clamp(H·p / (k_ult − k), 0, 1)`. The surface stays put when
+    `H·(k_ult − k) ≤ 0` — in particular when `k_ult = k`, whatever `H`.
+    
+    `psi = friction` with `delta = beta` recovers associated flow;
+    `psi < friction` is the usual choice for soils and rocks, whose measured
+    dilatancy is far below what friction alone would imply. A non-associated law
+    has a **non-symmetric** tangent. Returns beyond the cone's apex
+    (`I₁ = k/friction`) collapse onto the tip.
     
     
     # Parameters

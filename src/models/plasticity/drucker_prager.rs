@@ -438,14 +438,26 @@ impl ReturnMapLawKind for DruckerPrager {
 
 crate::physics_operator! {
     /// [`model::drucker_prager`](crate::ops::model::drucker_prager()) — pressure-sensitive plasticity
-    /// with **non-associated** flow: `f = q + α·I₁ − k`, plastic potential
-    /// `g = q + ψ·I₁`. Material `E`, `nu`, `alpha` (friction), `k` (cohesion),
-    /// `psi` (dilatancy).
+    /// with **non-associated** flow: criterion `f = friction·I₁ + beta·q − k`,
+    /// plastic potential `g = psi·I₁ + delta·q`, with `I₁ = tr σ` and
+    /// `q = √(3 J₂)`. Material `E`, `nu`, `friction` (the cone's slope —
+    /// `alpha` is the thermal expansion), `k` (cohesion), `psi` (dilatancy);
+    /// optional `beta` and `delta` (the deviatoric weights of the criterion and
+    /// of the potential, 1 by default), `H` (hardening, `dk = H·dp`, 0 by
+    /// default) and `friction_ult`, `beta_ult`, `k_ult` (an ultimate surface,
+    /// the initial one by default).
     ///
-    /// `ψ = α` recovers associated flow; `ψ < α` is the usual choice for soils
-    /// and rocks, whose measured dilatancy is far below what friction alone
-    /// would imply. A non-associated law has a **non-symmetric** tangent.
-    /// Returns beyond the cone's apex (`I₁ = k/α`) collapse onto the tip.
+    /// The hardening carries the surface from the initial one to the ultimate
+    /// one: `friction`, `beta` and `k` each move as
+    /// `(1 − λ)·initial + λ·ultimate`, with `λ = clamp(H·p / (k_ult − k), 0, 1)`.
+    /// The surface stays put when `H·(k_ult − k) ≤ 0` — in particular when
+    /// `k_ult = k`, whatever `H`.
+    ///
+    /// `psi = friction` with `delta = beta` recovers associated flow;
+    /// `psi < friction` is the usual choice for soils and rocks, whose measured
+    /// dilatancy is far below what friction alone would imply. A
+    /// non-associated law has a **non-symmetric** tangent. Returns beyond the
+    /// cone's apex (`I₁ = k/friction`) collapse onto the tip.
     ///
     /// ```
     /// # use pyrucast::ops::element_field::StrainMeasure;
@@ -468,5 +480,5 @@ crate::physics_operator! {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn drucker_prager(fespace, kinematics: Kinematics) = crate::ops::model::plasticity, PlasticLaw::DruckerPrager;
-    python: "Drucker-Prager pressure-sensitive plasticity, with non-associated flow.\n\n`f = q + α·I₁ − k`, plastic potential `g = q + ψ·I₁`. Material `E`, `nu`,\n`alpha` (friction), `k` (cohesion), `psi` (dilatancy).\n\n`ψ = α` recovers associated flow; `ψ < α` is the usual choice for soils and\nrocks, whose measured dilatancy is far below what friction alone would imply.\nA non-associated law has a **non-symmetric** tangent. Returns beyond the\ncone's apex (`I₁ = k/α`) collapse onto the tip."
+    python: "Drucker-Prager pressure-sensitive plasticity, with non-associated flow.\n\nCriterion `f = friction·I₁ + beta·q − k` and plastic potential\n`g = psi·I₁ + delta·q`, with `I₁ = tr σ` and `q = √(3 J₂)`. Material `E`,\n`nu`, `friction` (the cone's slope — `alpha` is the thermal expansion),\n`k` (cohesion), `psi` (dilatancy); optional `beta` and `delta` (the\ndeviatoric weights of the criterion and of the potential, 1 by default),\n`H` (hardening, `dk = H·dp`, 0 by default) and `friction_ult`, `beta_ult`,\n`k_ult` (an ultimate surface, the initial one by default).\n\nThe hardening carries the surface from the initial one to the ultimate one:\n`friction`, `beta` and `k` each move as `(1 − λ)·initial + λ·ultimate`, with\n`λ = clamp(H·p / (k_ult − k), 0, 1)`. The surface stays put when\n`H·(k_ult − k) ≤ 0` — in particular when `k_ult = k`, whatever `H`.\n\n`psi = friction` with `delta = beta` recovers associated flow;\n`psi < friction` is the usual choice for soils and rocks, whose measured\ndilatancy is far below what friction alone would imply. A non-associated law\nhas a **non-symmetric** tangent. Returns beyond the cone's apex\n(`I₁ = k/friction`) collapse onto the tip."
 }
