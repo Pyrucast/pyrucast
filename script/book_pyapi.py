@@ -437,6 +437,9 @@ class Renderer:
     # ── blocks ──
 
     def table(self, entries: list[Entry], page: Page) -> str:
+        """A summary table, wrapped in the `pyapi-summary` block that gives
+        every such table the same column widths (`book/custom.css`). The blank
+        lines around the rows let Markdown read the table inside the block."""
         rows = ["| Prototype | Description |", "|---|---|"]
         for e in entries:
             scope = "" if e.module == ROOT_MODULE else f"{e.module}."
@@ -450,7 +453,7 @@ class Renderer:
                 url = ""
             summary = self.prose(e.summary, page, e).replace("|", "\\|")
             rows.append(f"| [{proto}]({url}) | {summary} |")
-        return "\n".join(rows)
+        return '<div class="pyapi-summary">\n\n' + "\n".join(rows) + "\n\n</div>"
 
     def entry(self, e: Entry, page: Page) -> str:
         parts = [

@@ -4,6 +4,48 @@
     --content-max-width: 1200px;
 }
 
+/* A raw HTML <pre> (the hand-drawn trees of introduction.md and objets.md)
+   has no <code> child, so it misses the sideways scroll of code blocks: the
+   whole page would scroll instead of the block alone. */
+.content main pre {
+    overflow-x: auto;
+}
+
+/* Same for a display equation wider than the column. MathJax draws up to
+   12px above or below the box of an equation: the 1em around it, a margin
+   by MathJax's default, becomes a padding so that the frame holds it. */
+.content main .MathJax_Display {
+    overflow-x: auto;
+    overflow-y: hidden;
+    margin-block: 0;
+    padding-block: 1em;
+}
+
+/* The Prototype | Description tables of the operator reference
+   (script/book_pyapi.py) share one ratio between their columns, instead of
+   widths sized on the content of each table. 45% for the prototype is the
+   ratio that wraps the fewest rows, measured on the operator summary. Below 40em of column, the table
+   keeps 40em and scrolls in its frame rather than squeeze its prototypes. */
+.pyapi-summary table {
+    table-layout: fixed;
+    width: 100%;
+    min-width: 40em;
+}
+.pyapi-summary th:first-child {
+    box-sizing: border-box;
+    width: 45%;
+}
+.pyapi-summary td:first-child {
+    overflow-wrap: anywhere;
+}
+
+/* A chapter title made of one long word
+   (`FiniteElementSpace/SubFiniteElementSpace`, `pyrucast.finite_element_space`)
+   breaks inside the word rather than make the sidebar scroll sideways. */
+.sidebar .chapter li a {
+    overflow-wrap: anywhere;
+}
+
 /* The previous/next arrows on each side of the page are fixed-position and
    need 330px of free width beside the text (mdBook's own breakpoints: 750px
    of text + 330px = 1080px, plus 300px with the sidebar open). Below that,
