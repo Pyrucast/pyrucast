@@ -1,0 +1,19 @@
+/* A wider text column than mdBook's default 750px, which leaves most of a
+   desktop screen empty. */
+:root {
+    --content-max-width: 1200px;
+}
+
+/* The previous/next arrows on each side of the page are fixed-position and
+   need 330px of free width beside the text (mdBook's own breakpoints: 750px
+   of text + 330px = 1080px, plus 300px with the sidebar open). Below that,
+   the arrows go to the foot of the page instead of covering the text. */
+@media only screen and (max-width: 1530px) {
+    .nav-wide-wrapper { display: none; }
+    .nav-wrapper { display: block; }
+}
+
+@media only screen and (max-width: 1830px) {
+    #mdbook-sidebar-toggle-anchor:checked ~ .page-wrapper .nav-wide-wrapper { display: none; }
+    #mdbook-sidebar-toggle-anchor:checked ~ .page-wrapper .nav-wrapper { display: block; }
+}

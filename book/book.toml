@@ -10,6 +10,7 @@ preferred-dark-theme = "ayu"
 mathjax-support = true
 smart-punctuation = true
 additional-js = ["mermaid.min.js", "mermaid-init.js"]
+additional-css = ["custom.css"]
 
 [build]
 # The operator reference is generated from these: rebuild when they change.
