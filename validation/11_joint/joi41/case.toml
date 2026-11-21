@@ -46,7 +46,7 @@ inwards, which turns the pull into a push.
 """
 
 improvements = [
-    "`extrude` against the normal of the source face gives mirrored HEX8 cells, whose facets `skin` then orients inwards",
+    "`extrude` against the normal of the source face gives mirrored HEX8 cells, whose facets `skin` then orients inwards; `orient` keeps them so (it makes neighbours consistent, not the handedness), `invert` puts them right",
 ]
 
 [[quantity]]

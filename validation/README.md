@@ -186,7 +186,7 @@ What writing the computed cases showed: an operator or an option pyrucast lacks 
 | `transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords) | [elas8](#elas8), [elas11](#elas11) | 2 |
 | graded lines and extrusions (Cast3M `DINI`/`DFIN`, mesh density) | [elas3](#elas3), [ther-perm](#ther-perm) | 2 |
 | Kirchhoff quadrangle shell (DKQ): 4 % stiffer than Cast3M's COQ4 on elas4, to look into | [elas4](#elas4) | 1 |
-| `extrude` against the normal of the source face gives mirrored HEX8 cells, whose facets `skin` then orients inwards | [joi41](#joi41) | 1 |
+| `extrude` against the normal of the source face gives mirrored HEX8 cells, whose facets `skin` then orients inwards; `orient` keeps them so (it makes neighbours consistent, not the handedness), `invert` puts them right | [joi41](#joi41) | 1 |
 | `mpc`: one coefficient per term for every relation; relations whose coefficients differ need one `mpc` each | [plas1](#plas1) | 1 |
 | an ellipse, or the projection of a line onto a plane (Cast3M `PROJ`) | [elas8](#elas8) | 1 |
 | local sub-stepping of rate-dependent laws at the Gauss points (stiff Norton exponents) | [chaboche2](#chaboche2) | 1 |
@@ -4677,7 +4677,7 @@ inwards, which turns the pull into a push.
 
 **Improvement points.**
 
-- `extrude` against the normal of the source face gives mirrored HEX8 cells, whose facets `skin` then orients inwards
+- `extrude` against the normal of the source face gives mirrored HEX8 cells, whose facets `skin` then orients inwards; `orient` keeps them so (it makes neighbours consistent, not the handedness), `invert` puts them right
 
 #### Results
 
