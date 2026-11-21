@@ -7,9 +7,9 @@ along x. Reference: the temperature and the displacement u_x at x = 0.08,
 from the analytical solution T = 500 − 480·erf((0.1 − x)/(2√(a·t))) /
 erf(0.1/(2√(a·t))), a = k/(ρ·c), and its integral times α.
 
-Mesh: the deck's row of 10 QUA8. The heat problem is solved with the linear
+Mesh: the `.dgibi` file's row of 10 QUA8. The heat problem is solved with the linear
 θ-scheme (θ = 1) every 5 s up to 150 s, the mechanics at each instant with
-the temperature reached, as the deck's step-by-step procedure does.
+the temperature reached, as the `.dgibi` file's step-by-step procedure does.
 
 Running::
 

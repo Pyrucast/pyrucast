@@ -3,10 +3,10 @@ calculation_type = "MECHANICS ELASTIC PLASTIC"
 castem_element = "POUT"
 castem_version = "97' customer version"
 source = ""
-deck = "plas13.dgibi"
+dgibi = "plas13.dgibi"
 gap = ["beam plasticity (global law)"]
 tolerance = 1e-3
-tolerance_note = "deck criterion, |M_max − 21 401| / 21 401 ≤ 1e-3."
+tolerance_note = "criterion of the `.dgibi` file, |M_max − 21 401| / 21 401 ≤ 1e-3."
 
 topic = """
 A reinforced-concrete post under a load of 2 t, modelled by beam elements
@@ -26,7 +26,7 @@ Post of beam elements clamped at A0 (0, 0, 0), section 0.0289 m².
 | ρ | 2516 kg/m³ |
 """
 
-notes = "The 2011 document prints no result table; the reference is the deck's."
+notes = "The 2011 document prints no result table; the reference is the `.dgibi` file's."
 
 [[quantity]]
 key = "Mx_max"

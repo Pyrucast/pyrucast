@@ -3,10 +3,10 @@ calculation_type = "MECHANICS 3D, NON LINEAR DYNAMICS"
 castem_element = "POUT, COQ3"
 castem_version = "97' customer version"
 source = ""
-deck = "dyna_nl3.dgibi"
+dgibi = "dyna_nl3.dgibi"
 gap = ["large-displacement beam and shell dynamics"]
 tolerance = 0.05
-tolerance_note = "deck criterion, |d_max − d_ref| / d_ref ≤ 5 %."
+tolerance_note = "criterion of the `.dgibi` file, |d_max − d_ref| / d_ref ≤ 5 %."
 
 topic = """
 A clamped-free beam under an axial follower compression slightly above the
@@ -26,7 +26,7 @@ model = """
 | I_o | 1e-5 |
 """
 
-notes = "The deck holds two references for its complete and its short run; the reference is that of the run used."
+notes = "The `.dgibi` file holds two references for its complete and its short run; the reference is that of the run used."
 
 [[quantity]]
 key = "d_max"

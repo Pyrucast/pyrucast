@@ -3,10 +3,10 @@ calculation_type = "MECHANICS ELASTICITY"
 castem_element = "TRI3, 3D"
 castem_version = "97' customer version"
 source = "Test NAFEMS : D.P.Rooke and D. J. Cartwright in Copendium of Intensity Factors HMSO (1976): rupt8 Modélisation des structures élastiques dans CASTEM 2000."
-deck = "rupt8.dgibi"
+dgibi = "rupt8.dgibi"
 gap = ["stress intensity factors (G-theta)"]
 tolerance = 0.05
-tolerance_note = "deck criterion, |K − K_th| / K_th < 5 %."
+tolerance_note = "criterion of the `.dgibi` file, |K − K_th| / K_th < 5 %."
 
 topic = """
 A central crack in a plate of finite width under uniform tension; a quarter
@@ -23,7 +23,7 @@ TRI3 elements; half crack length 0.3, half width 1, thickness 0.001.
 | E | 2e11 Pa |
 """
 
-notes = "The deck repeats the G-θ computation three times; the value is the last one."
+notes = "The `.dgibi` file repeats the G-θ computation three times; the value is the last one."
 
 [[quantity]]
 key = "K1"

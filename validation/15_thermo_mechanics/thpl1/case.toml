@@ -3,10 +3,10 @@ calculation_type = "KINEMATIC ELASTOPLASTIC MATERIAL"
 castem_element = "QUA4"
 castem_version = "97' customer version"
 source = "Test de la Commission V.P.C.S. Groupe Thermo-plasticite et Statique non-lineaire. Test numero SSNA01/90"
-deck = "thpl1.dgibi"
+dgibi = "thpl1.dgibi"
 gap = ["rate-independent kinematic hardening"]
 tolerance = 3e-4
-tolerance_note = "deck criterion, both relative gaps ≤ 0.03 %."
+tolerance_note = "criterion of the `.dgibi` file, both relative gaps ≤ 0.03 %."
 
 topic = """
 A cylindrical bar 100 mm long and 20 mm in diameter, held axially at both

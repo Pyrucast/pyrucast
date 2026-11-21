@@ -3,10 +3,10 @@ calculation_type = "ISOTROPIC VISCOPLASTIC MECHANICS"
 castem_element = "CUB8"
 castem_version = "97' customer version"
 source = ""
-deck = "guionnet_tra.dgibi"
+dgibi = "guionnet_tra.dgibi"
 gap = ["Guionnet viscoplastic law"]
 tolerance = 3e-4
-tolerance_note = "deck criterion, relative gap of the reaction ≤ 0.03 %."
+tolerance_note = "criterion of the `.dgibi` file, relative gap of the reaction ≤ 0.03 %."
 
 topic = """
 A block of a Guionnet viscoplastic material, held on its lower and upper
@@ -26,7 +26,7 @@ CUB8 block.
 | R0 | 25 |
 """
 
-notes = "The 2011 document prints no result table and gives ν = 0.33; the reference is the deck's."
+notes = "The 2011 document prints no result table and gives ν = 0.33; the reference is the `.dgibi` file's."
 
 [[quantity]]
 key = "reaction"

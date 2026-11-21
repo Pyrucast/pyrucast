@@ -3,7 +3,7 @@ calculation_type = "2D AXISYMMETRIC VECTOR POTENTIAL, Computation of magnetic fi
 castem_element = "TRI6, QUA8"
 castem_version = "97' customer version"
 source = "Analytical solution."
-deck = ""
+dgibi = ""
 gap = ["magnetostatics"]
 
 topic = """
@@ -16,4 +16,4 @@ model = """
 Coil of rectangular cross-section in an iron box; soft iron B(H) curve.
 """
 
-notes = "The 2011 document prints no result table, and Cast3M 2026 no longer ships this deck."
+notes = "The 2011 document prints no result table, and Cast3M 2026 no longer ships this `.dgibi` file."

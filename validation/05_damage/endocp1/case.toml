@@ -3,10 +3,10 @@ calculation_type = "DAMAGE MODEL FOR ELASTOPLASTIC MATERIAL"
 castem_element = "QUA8"
 castem_version = "97' customer version"
 source = "Analytical solution. Tests carried out by Mr STRUB (rapport DMT/91 .558)."
-deck = "endocp1.dgibi"
+dgibi = "endocp1.dgibi"
 gap = ["elastoplastic damage law (ENDOMMAGEABLE)"]
 tolerance = 0.05
-tolerance_note = "deck criterion, every relative gap ≤ 5 %."
+tolerance_note = "criterion of the `.dgibi` file, every relative gap ≤ 5 %."
 
 topic = """
 A test piece of an elastoplastic material with ductile damage, in plane stress, is
@@ -32,8 +32,8 @@ Test piece of QUA8 elements, plane stress.
 """
 
 notes = """
-The 2011 document prints no result table; the references are the deck's.
-The deck runs its short version by default (`complet = faux`): two computed
+The 2011 document prints no result table; the references are the `.dgibi` file's.
+The `.dgibi` file runs its short version by default (`complet = faux`): two computed
 times. Its complete version goes on to a cumulated plastic strain of 0.2427
 and a damage of 0.2199."""
 

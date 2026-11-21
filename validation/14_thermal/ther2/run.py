@@ -11,10 +11,10 @@ imposed temperature on the inner face:
    k = 8, T_i = 100).
 
 References: the analytical temperatures at the outer corner P3, evaluated by
-the Cast3M deck.
+the Cast3M `.dgibi` file.
 
-Meshes: case 1 is the deck's row of 10 QUA4. Cases 2 and 3 are free meshes in
-the deck, from boundary lines of 8, 6, 9, 4 and 8, 5, 9, 6 elements; here
+Meshes: case 1 is the `.dgibi` file's row of 10 QUA4. Cases 2 and 3 are free meshes in
+the `.dgibi` file, from boundary lines of 8, 6, 9, 4 and 8, 5, 9, 6 elements; here
 pyrucast paves the same boundary lines, so the inside differs from Cast3M's
 and case 2's odd boundary leaves one triangle.
 
@@ -61,7 +61,7 @@ def main(out: str | None = None) -> dict[str, float]:
     t1 = pc.solver.solve(pc.matrix.stiffness(model, materials), rhs)
     t_case_1 = t1.value(p3, "T")
 
-    # ── Cases 2 and 3: the free meshes of the deck's boundary lines ─────────
+    # ── Cases 2 and 3: the free meshes of the `.dgibi` file's boundary lines ─────────
     results = []
     for n_right, n_left in ((6, 4), (5, 6)):
         coords = pc.Coords.axisymmetric()

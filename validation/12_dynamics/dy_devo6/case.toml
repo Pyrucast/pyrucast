@@ -3,9 +3,9 @@ calculation_type = "MECHANICS DYNAMICS 3D, IMPACT, LINKAGE POINT-PLANE"
 castem_element = ""
 castem_version = "97' customer version"
 source = ""
-deck = "dy_devo6.dgibi"
+dgibi = "dy_devo6.dgibi"
 gap = ["modal-basis transient dynamics with linkages (DYNE)"]
-tolerance_note = "deck criterion, largest gap ≤ 0.005."
+tolerance_note = "criterion of the `.dgibi` file, largest gap ≤ 0.005."
 
 topic = """
 A heavy mass with a sinusoidal motion of two amplitudes hits a plane; the
@@ -28,7 +28,7 @@ model = """
 
 [[quantity]]
 key = "gap_max"
-label = "largest gap of the deck's comparison"
+label = "largest gap of the `.dgibi` file's comparison"
 unit = ""
 reference = 0.0
 abs_tolerance = 0.005

@@ -5,11 +5,11 @@ a conical part and a cylindrical part — is heated to T = r + z (°C), with
 α = 2.3e-4 /°C and the reference temperature 0; u_z = 0 on its two flat
 faces. Reference: the axial stress at A (1, 0) is σ_zz = −105 MPa.
 
-The QUA8 mesh has the deck's boundary lines: 2 elements across and 10 along
+The QUA8 mesh has the `.dgibi` file's boundary lines: 2 elements across and 10 along
 the meridian (4 on the arcs of 30°, 2 on the arc from 30° to 45°, 4 on the
 cone and on the inner straight part, 2 on the outer cylinder), filled by
-`transfinite` as the deck's mesher does. `transfinite` takes straight-sided
-SEG2 lines and puts the QUA8 mid-nodes on the chords; the deck's are on the
+`transfinite` as the `.dgibi` file's mesher does. `transfinite` takes straight-sided
+SEG2 lines and puts the QUA8 mid-nodes on the chords; the `.dgibi` file's are on the
 arcs.
 
 In pyrucast's axisymmetric coordinates x is r and y is z: the axial stress
@@ -42,7 +42,7 @@ def main(out: str | None = None) -> dict[str, float]:
     pg = coords.add_node([1.0, 1.39])
     ph = coords.add_node([0.7071, 1.79])
     pi = coords.add_node([1.0, 1.79])
-    # The four sides, counter-clockwise, as in the deck.
+    # The four sides, counter-clockwise, as in the `.dgibi` file.
     bottom = pc.mesh.line(pa, pb, 2)
     outer = pc.mesh.consolidate(
         pc.mesh.arc(pb, origin, pd, 4)

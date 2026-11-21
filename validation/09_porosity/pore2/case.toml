@@ -3,9 +3,9 @@ calculation_type = "ELASTOPLASTIC MECHANICS - DRUCKER-PRAGER MODEL IN POROSITY -
 castem_element = "QUAP"
 castem_version = "97' customer version"
 source = "Benchmark INTERCLAY 1.4 Basic Model"
-deck = "pore2.dgibi"
+dgibi = "pore2.dgibi"
 gap = ["porous media elements (QUAP)"]
-tolerance_note = "deck criteria, each largest gap ≤ 0.001."
+tolerance_note = "criteria of the `.dgibi` file, each largest gap ≤ 0.001."
 
 topic = """
 A porous elastoplastic thick cylinder (von Mises, associated flow) with
@@ -27,7 +27,7 @@ Axisymmetric porous elements (QUAP).
 | fluid compressibility K_f | 3000e6 Pa |
 """
 
-notes = "The 2011 document prints no result table; the compared quantities are the deck's normalised largest gaps."
+notes = "The 2011 document prints no result table; the compared quantities are the `.dgibi` file's normalised largest gaps."
 
 [[quantity]]
 key = "gap_srr"

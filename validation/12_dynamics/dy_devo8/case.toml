@@ -3,9 +3,9 @@ calculation_type = "MECHANICS DYNAMICS 3D, IMPACT, LINKAGE POINT-MOVING CIRCLE, 
 castem_element = ""
 castem_version = "97' customer version"
 source = ""
-deck = "dy_devo8.dgibi"
+dgibi = "dy_devo8.dgibi"
 gap = ["modal-basis transient dynamics with linkages (DYNE)"]
-tolerance_note = "deck criteria, largest differences below 0.0018 and 0.005 (x), 0.0012 and 0.004 (y)."
+tolerance_note = "criteria of the `.dgibi` file, largest differences below 0.0018 and 0.005 (x), 0.0012 and 0.004 (y)."
 
 topic = """
 A point hits a moving circle; the impact is computed with a point - moving

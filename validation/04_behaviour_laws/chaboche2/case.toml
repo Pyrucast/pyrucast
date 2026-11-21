@@ -3,9 +3,9 @@ calculation_type = "ISOTROPIC VISCOPLASTIC MECHANICS - 2D AXIS"
 castem_element = "QUA8 (COQ8 in the 2011 document)"
 castem_version = "97' customer version"
 source = ""
-deck = "chaboche2.dgibi"
+dgibi = "chaboche2.dgibi"
 pyrucast = "`model.viscoplasticity_chaboche(fes, \"axisymmetric\")` in `stepping.step_by_step`, QUA8"
-tolerance_note = """deck criterion, max |σ_CHABOCHE − σ_ONERA| / max |σ_ONERA| ≤ 1e-4 \
+tolerance_note = """criterion of the `.dgibi` file, max |σ_CHABOCHE − σ_ONERA| / max |σ_ONERA| ≤ 1e-4 \
 over the computed times."""
 
 topic = """
@@ -39,10 +39,10 @@ Axisymmetric, one QUA8 square [0, 1] × [0, 1] in (r, z), B-bar formulation.
 
 notes = """
 The 2011 document prints no result table and gives E = 7.34e10, ν = 0.33;
-the data above are the deck's. The deck uses the B-bar formulation, which
+the data above are the `.dgibi` file's. The `.dgibi` file uses the B-bar formulation, which
 changes nothing on a homogeneous strain; pyrucast has none.
 
-pyrucast integrates the law over the deck's steps of 10 s with one implicit
+pyrucast integrates the law over the `.dgibi` file's steps of 10 s with one implicit
 step each, and lands about 1 % from the reference with n = 24; with steps of
 1 s it comes within about 0.1 %. Cast3M reaches the converged values with the
 same 10 s steps: it divides them at the Gauss points, which pyrucast's

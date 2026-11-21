@@ -3,10 +3,10 @@ calculation_type = "MECHANICS ELASTICITY 3D"
 castem_element = "DKT"
 castem_version = "97' customer version"
 source = "Test NAFEMS : ME6 : Modélisation des structures élastiques dans CASTEM 2000."
-deck = "elas2.dgibi"
+dgibi = "elas2.dgibi"
 pyrucast = "`model.shell(fes, \"kirchhoff\")` (DKT), TRI3"
 tolerance = 6e-4
-tolerance_note = "deck criteria, |u_z(P3) + 1.14| / 1.14 ≤ 6e-4 and |u_x(P1)| ≤ 1e-18."
+tolerance_note = "criteria of the `.dgibi` file, |u_z(P3) + 1.14| / 1.14 ≤ 6e-4 and |u_x(P1)| ≤ 1e-18."
 
 topic = """
 A thin cylinder is clamped at one end and pinched by two diametrically
@@ -40,9 +40,9 @@ y (30 elements), giving 360 DKT triangles.
 """
 
 notes = """
-The nodes are the deck's; the triangles are not: `convert` cuts every
-quadrangle along the same diagonal, the deck's translation alternates it.
-The deck's criterion, 6e-4 from the reference, was set on Cast3M's own mesh.
+The nodes are the `.dgibi` file's; the triangles are not: `convert` cuts every
+quadrangle along the same diagonal, the `.dgibi` file's translation alternates it.
+The `.dgibi` file's criterion, 6e-4 from the reference, was set on Cast3M's own mesh.
 """
 
 improvements = [

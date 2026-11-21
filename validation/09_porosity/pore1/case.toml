@@ -3,10 +3,10 @@ calculation_type = "ELASTOPLASTIC MECHANICS - DRUCKER-PRAGER MODEL IN POROSITY -
 castem_element = "QUAP"
 castem_version = "97' customer version"
 source = "Benchmark INTERCLAY 1.1 Variante 2"
-deck = "pore1.dgibi"
+dgibi = "pore1.dgibi"
 gap = ["porous media elements (QUAP)"]
 tolerance = 0.05
-tolerance_note = "deck criteria on the two relative gaps."
+tolerance_note = "criteria of the `.dgibi` file on the two relative gaps."
 
 topic = """
 A porous elastoplastic thick cylinder (Drucker-Prager, non-associated flow);

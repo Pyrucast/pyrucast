@@ -3,10 +3,10 @@ calculation_type = "MECHANICS PLASTICITY 2D PLANE STRESSE"
 castem_element = "QUA4"
 castem_version = "97' customer version"
 source = "Test NAFEMS : Analytical-Solution : MP4 Modélisation des structures élastiques dans CASTEM 2000."
-deck = "plas5.dgibi"
+dgibi = "plas5.dgibi"
 pyrucast = "`model.drucker_prager(fes, \"plane_stress\")` in `stepping.step_by_step`, QUA4"
 tolerance = 1e-12
-tolerance_note = "deck criterion, each relative gap ≤ 1e-10 %."
+tolerance_note = "criterion of the `.dgibi` file, each relative gap ≤ 1e-10 %."
 
 topic = """
 A single plane-stress element is stretched equally in x and y by imposed
@@ -39,9 +39,9 @@ One QUA4, square of side 1.5.
 
 notes = """
 The 2011 document gives E = 2.5e11 Pa, ν = 0.25 and σ_y = 5e6 Pa, the data of
-plas4; the deck's data are those above.
+plas4; the `.dgibi` file's data are those above.
 
-The deck's ultimate cohesion K_L = 3.56 is below the initial one K = 4.1, with
+The `.dgibi` file's ultimate cohesion K_L = 3.56 is below the initial one K = 4.1, with
 H = 0. pyrucast reads the two surfaces as the ends of one interpolation
 driven by H·p (see `src/models/plasticity/drucker_prager.rs`): with H = 0 it
 stays on the initial surface, and its stress stops at that surface's apex,

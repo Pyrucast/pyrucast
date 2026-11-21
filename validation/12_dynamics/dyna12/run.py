@@ -6,7 +6,7 @@ raised in 0.0125, held until 1.0125 and released in 0.0125. It moves as a
 rigid body and vibrates along its axis. Reference (Przemieniecki): the
 displacement of P1 at t = 1.9125 and t = 2.0625.
 
-The motion is integrated by Newmark's average acceleration, as the deck's
+The motion is integrated by Newmark's average acceleration, as the `.dgibi` file's
 DYNAMIC procedure does, here with a step of 0.0125 that falls on the load's
 corners and on the two instants read.
 

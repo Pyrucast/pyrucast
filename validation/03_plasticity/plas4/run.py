@@ -8,7 +8,7 @@ Reference: σ_xx, σ_yy and σ_zz at t = 1, 2, 3, 4, the closed-form response of
 J2 perfect plasticity in uniaxial strain.
 
 The stress is homogeneous: it is read at the first Gauss point of the first
-cell, as in the deck.
+cell, as in the `.dgibi` file.
 
 Running::
 

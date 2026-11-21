@@ -3,10 +3,10 @@ calculation_type = "MECHANICS ELASTICITY 3D"
 castem_element = "TRI3"
 castem_version = "97' customer version"
 source = "Test NAFEMS : ME7 : Modélisation des structures élastiques dans CASTEM 2000."
-deck = "elas3.dgibi"
+dgibi = "elas3.dgibi"
 pyrucast = "`model.shell(fes, \"kirchhoff\")` (DKT), TRI3"
 tolerance = 4e-4
-tolerance_note = "deck criterion, |u_z(P3) + 0.452| / 0.452 ≤ 4e-4."
+tolerance_note = "criterion of the `.dgibi` file, |u_z(P3) + 0.452| / 0.452 ≤ 4e-4."
 
 topic = """
 The pinched cylinder of elas2 with free ends instead of a clamped one (and a
@@ -35,7 +35,7 @@ Quarter cylinder of radius 4.953 and half-length 5.175 (axis y), thickness
 """
 
 notes = """
-The deck places its 7 layers by its mesh density, slightly closer towards the
+The `.dgibi` file places its 7 layers by its mesh density, slightly closer towards the
 loaded section, and alternates the diagonals of its triangles; pyrucast's
 layers are even and its diagonals all alike.
 """

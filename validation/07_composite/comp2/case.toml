@@ -3,10 +3,10 @@ calculation_type = "MECHANICS COMPOSITE 3D"
 castem_element = "DKT"
 castem_version = "97' customer version"
 source = "Report CEA-DMT 89/186 :"
-deck = "comp2.dgibi"
+dgibi = "comp2.dgibi"
 gap = ["layered orthotropic shells (offset layers)"]
 tolerance = 0.01
-tolerance_note = "deck criterion, |w(O) − 23.25| / 23.25 ≤ 1 %."
+tolerance_note = "criterion of the `.dgibi` file, |w(O) − 23.25| / 23.25 ≤ 1 %."
 
 topic = """
 A square two-layer composite plate, its fibres at ±45° to the edges, simply

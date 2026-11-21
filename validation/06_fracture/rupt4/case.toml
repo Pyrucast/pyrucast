@@ -3,10 +3,10 @@ calculation_type = "MECHANICS ELASTIC"
 castem_element = "QUA8, plane strain"
 castem_version = "97' customer version"
 source = "Test NAFEMS : D.P.Rooke and D. J. Cartwright in Copendium of Intensity Factors HMSO (1976) : rupt4 Modélisation des structures élastiques dans CASTEM 2000."
-deck = "rupt4.dgibi"
+dgibi = "rupt4.dgibi"
 gap = ["stress intensity factors (G-theta)"]
 tolerance = 0.05
-tolerance_note = "deck criterion, |K − K_th| / K_th < 5 %."
+tolerance_note = "criterion of the `.dgibi` file, |K − K_th| / K_th < 5 %."
 
 topic = """
 Plane strain, linear elasticity: a central crack in a plate loaded by a uniform pressure on its lips (a quarter is modelled). The energy release rate G is

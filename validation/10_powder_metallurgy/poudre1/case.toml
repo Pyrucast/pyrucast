@@ -3,9 +3,9 @@ calculation_type = "POWDER COMPACTION - 2D MODE AXIS"
 castem_element = "QUA8"
 castem_version = "97' customer version"
 source = ""
-deck = "poudre1.dgibi"
+dgibi = "poudre1.dgibi"
 gap = ["Abouaf powder law"]
-tolerance_note = "deck criterion, sum of the relative gaps on u_r, u_z and the final density < 5 %."
+tolerance_note = "criterion of the `.dgibi` file, sum of the relative gaps on u_r, u_z and the final density < 5 %."
 
 topic = """
 A cylinder of powder is consolidated by a pressure, following the
@@ -17,7 +17,7 @@ goal = "Test the Abouaf model: the displacements of an isotropic densification."
 model = """
 Axisymmetric cylinder, QUA8 elements, consolidated by an external pressure;
 the elastic data and the parameters of the Abouaf law are those of the
-deck.
+`.dgibi` file.
 """
 
 [[quantity]]

@@ -3,10 +3,10 @@ calculation_type = "MECHANICS COMPOSITE 3D"
 castem_element = "DKT"
 castem_version = "97' customer version"
 source = "Report CEA-DMT 89/184 : Modélisation des composites de type multi-couches dans CASTEM 2000."
-deck = "comp1.dgibi"
+dgibi = "comp1.dgibi"
 gap = ["layered orthotropic shells (offset layers)"]
 tolerance = 0.05
-tolerance_note = "deck criterion, |u_r(PA) − u_ref| / u_ref ≤ 5 %."
+tolerance_note = "criterion of the `.dgibi` file, |u_r(PA) − u_ref| / u_ref ≤ 5 %."
 
 topic = """
 A two-layer composite cylinder, its fibres wound at ±45° about the z axis,

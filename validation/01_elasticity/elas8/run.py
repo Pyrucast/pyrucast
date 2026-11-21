@@ -5,13 +5,13 @@ x²/3.25² + y²/2.75² = 1, symmetric about x = 0 and y = 0, is pulled by a
 uniform outward pressure of 10 MPa on its outer edge. Reference:
 σ_yy = 92.7 MPa at the point D (2, 0).
 
-The QUA8 mesh has the deck's boundary lines: 6 elements along each ellipse
+The QUA8 mesh has the `.dgibi` file's boundary lines: 6 elements along each ellipse
 (a node at every 15° of the ellipse's parameter), 4 across, the straight
 sides cut at 1.583 on x = 0 and at 2.417 on y = 0, filled by `transfinite`
-as the deck's mesher does. pyrucast has no ellipse, nor the projection of a
-circle onto a plane that the deck uses to draw one: the nodes of the two
+as the `.dgibi` file's mesher does. pyrucast has no ellipse, nor the projection of a
+circle onto a plane that the `.dgibi` file uses to draw one: the nodes of the two
 elliptic lines are placed here. `transfinite` puts the QUA8 mid-nodes on the
-chords; the deck's are on the ellipses. The QUA4 patch and the outer line
+chords; the `.dgibi` file's are on the ellipses. The QUA4 patch and the outer line
 are made quadratic together, so that they share their mid-nodes.
 
 σ_yy at D is read in the only cell holding D, from that cell's Gauss points.

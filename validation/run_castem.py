@@ -1,10 +1,10 @@
-"""Run the Cast3M 2026 deck of every validation case and store the probed values.
+"""Run the Cast3M 2026 `.dgibi` file of every validation case and store the probed values.
 
-The deck named by `deck` in `case.toml` is copied from the Cast3M installation
+The `.dgibi` file named by `dgibi` in `case.toml` is copied from the Cast3M installation
 into a temporary folder. Before its first line holding `FIN;` (or `'FIN';`)
 alone, where Cast3M stops, or before the first line matching `castem_anchor`
 (a regular expression), one line per quantity prints the Gibiane expression `castem_probe` with 16 digits, and
-`reference_probe` when the reference is a formula the deck evaluates. The
+`reference_probe` when the reference is a formula the `.dgibi` file evaluates. The
 printed values are stored in `castem2026.json` (`values` and `references`).
 
 Needs Cast3M 2026: the launcher is `$CASTEM26`, or
@@ -12,7 +12,7 @@ Needs Cast3M 2026: the launcher is `$CASTEM26`, or
 
 Running::
 
-    python validation/run_castem.py            # every case with a deck
+    python validation/run_castem.py            # every case with a `.dgibi` file
     python validation/run_castem.py elas8 ...  # only these cases
 """
 
@@ -30,19 +30,19 @@ CASTEM = pathlib.Path(os.environ.get("CASTEM26", "/opt/CASTEM2026/bin/castem26")
 DGIBI = CASTEM.parent.parent / "dgibi"
 TIMEOUT = 3600
 PROBE = re.compile(r"^@@PROBE (\S+)=\s*(\S+)\s*$", re.MULTILINE)
-# Prefix of the probes of `reference_probe`: a reference the deck computes.
+# Prefix of the probes of `reference_probe`: a reference the `.dgibi` file computes.
 REF = "ref:"
 
 
-def probed_deck(case):
-    """The deck's text with the probe lines inserted."""
-    text = (DGIBI / case["deck"]).read_bytes().decode("latin-1")
+def probed_dgibi(case):
+    """The `.dgibi` file's text with the probe lines inserted."""
+    text = (DGIBI / case["dgibi"]).read_bytes().decode("latin-1")
     # Not `splitlines`: it would also cut at the byte 0x85 (U+0085 in latin-1).
     lines = text.split("\n")
     pattern = re.compile(case.get("castem_anchor", r"\s*'?FIN'?\s*;\s*"), re.IGNORECASE)
     matches = [i for i, line in enumerate(lines) if pattern.fullmatch(line)]
     if not matches:
-        raise ValueError(f"{case['deck']}: no line matches the anchor")
+        raise ValueError(f"{case['dgibi']}: no line matches the anchor")
     at = matches[0]
     probes = []
     for q in case["quantity"]:
@@ -58,13 +58,13 @@ def probed_deck(case):
 
 
 def run(case):
-    """Run the probed deck; returns the record stored in `castem2026.json`."""
+    """Run the probed `.dgibi` file; returns the record stored in `castem2026.json`."""
     with tempfile.TemporaryDirectory() as tmp:
-        deck = pathlib.Path(tmp) / case["deck"]
-        deck.write_bytes(probed_deck(case).encode("latin-1"))
+        dgibi = pathlib.Path(tmp) / case["dgibi"]
+        dgibi.write_bytes(probed_dgibi(case).encode("latin-1"))
         try:
             proc = subprocess.run(
-                [str(CASTEM), deck.name],
+                [str(CASTEM), dgibi.name],
                 cwd=tmp,
                 # After an error Cast3M reads its next data from the terminal:
                 # an empty input ends the run instead of waiting.
@@ -110,7 +110,7 @@ def main():
         case = tomllib.loads(path.read_text(encoding="utf-8"))
         if wanted and case["name"] not in wanted:
             continue
-        if not case.get("deck"):
+        if not case.get("dgibi"):
             continue
         if not any("castem_probe" in q for q in case.get("quantity", [])):
             continue

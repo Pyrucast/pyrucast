@@ -3,10 +3,10 @@ calculation_type = "MECHANICS DYNAMICS 2D FOURIER, FLUID-STRUCTURE INTERACTION"
 castem_element = "COQ2, LQUA4, RACO"
 castem_version = "97' customer version"
 source = "Report CEA 91/479 : Validation of CASTEM 2000 for fluid structure interaction problems."
-deck = "fsi4.dgibi"
+dgibi = "fsi4.dgibi"
 gap = ["fluid-structure interaction", "Fourier harmonic analysis", "eigenvalue solver", "axisymmetric shell element (COQ2)"]
 tolerance = 0.05
-tolerance_note = "deck criterion, each frequency within 5 %."
+tolerance_note = "criterion of the `.dgibi` file, each frequency within 5 %."
 
 topic = """
 Two concentric cylindrical shells separated by water, on springs at their

@@ -7,9 +7,9 @@ formulation and solution of non-linear heat transfer, Nuclear Engineering and \
 Design, v. 51 (1979), pp. 389-401. J. Joly, Cas tests non linéaires de \
 validation pour DELFINE, Note technique EMT.SMTS.TTMF 84/29. V. Arpaci, \
 Conduction Heat Transfer, Adison-Wesley, 1966, pp. 130-132."""
-deck = "ther-perm.dgibi"
+dgibi = "ther-perm.dgibi"
 pyrucast = "`model.heat_conduction(fes)` with k(T) in `material_laws`, `stepping.step_by_step`, QUA4"
-tolerance_note = "deck criterion, largest gap to the analytical profile ≤ 1e-5."
+tolerance_note = "criterion of the `.dgibi` file, largest gap to the analytical profile ≤ 1e-5."
 
 topic = """
 A non-linear steady state: an infinite wall with a volume heat source and an
@@ -31,9 +31,9 @@ model = """
 """
 
 notes = """
-The deck's 26 cells grow from L/100 to L/10 along x; pyrucast's are even.
+The `.dgibi` file's 26 cells grow from L/100 to L/10 along x; pyrucast's are even.
 The non-linear iterations are converged to 1e-8: at step_by_step's default
-precision (1e-4) the profile stays about 1e-4 away and misses the deck's
+precision (1e-4) the profile stays about 1e-4 away and misses the `.dgibi` file's
 criterion.
 """
 

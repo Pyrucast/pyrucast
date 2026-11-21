@@ -3,10 +3,10 @@ calculation_type = "MECHANICS ELASTICITY 2D AXI"
 castem_element = "COQ2"
 castem_version = "97' customer version"
 source = "Test NAFEMS : ME1 : Modélisation des structures élastiques dans CASTEM 2000."
-deck = "elas1.dgibi"
+dgibi = "elas1.dgibi"
 gap = ["axisymmetric shell element (COQ2)"]
 tolerance = 0.05
-tolerance_note = "deck criterion, |u_r − 4.677| / 4.677 < 5 %."
+tolerance_note = "criterion of the `.dgibi` file, |u_r − 4.677| / 4.677 < 5 %."
 
 topic = """
 A hemispherical cap is loaded by an internal pressure, by its own weight and
@@ -34,7 +34,7 @@ thickness 0.02 m.
 """
 
 notes = """
-The 2011 document gives ν = 0.28; the Cast3M 2026 deck uses ν = 0.3.
+The 2011 document gives ν = 0.28; the Cast3M 2026 `.dgibi` file uses ν = 0.3.
 """
 
 [[quantity]]

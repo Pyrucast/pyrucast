@@ -3,9 +3,9 @@ calculation_type = "ISOTROPIC ELASTOPLASTIC MECHANICS"
 castem_element = "CUB8"
 castem_version = "97' customer release"
 source = ""
-deck = "preston1.dgibi"
+dgibi = "preston1.dgibi"
 gap = ["Preston-Tonks-Wallace law"]
-tolerance_note = "deck criterion, every gap of the stress and of the plastic strain to the deck's integration ≤ 5e-2 %."
+tolerance_note = "criterion of the `.dgibi` file, every gap of the stress and of the plastic strain to the `.dgibi` file's integration ≤ 5e-2 %."
 
 topic = """
 A bar of a Preston-Tonks-Wallace elastoplastic material, held at its ends,
@@ -14,7 +14,7 @@ is pulled by an imposed displacement.
 
 goal = """
 Test the Preston-Tonks-Wallace model for a body-centred cubic structure
-against the uniaxial curve integrated by the deck.
+against the uniaxial curve integrated by the `.dgibi` file.
 """
 
 model = """
@@ -28,7 +28,7 @@ CUB8 bar.
 | τ | 0.025 |
 """
 
-notes = "The 2011 document prints no result table; the reference is the deck's integration."
+notes = "The 2011 document prints no result table; the reference is the `.dgibi` file's integration."
 
 [[quantity]]
 key = "stress_gap_max"

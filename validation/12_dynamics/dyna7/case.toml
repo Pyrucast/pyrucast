@@ -3,10 +3,10 @@ calculation_type = "MECHANICS DYNAMICS 2D FOURIER"
 castem_element = "LQUA4, LSU2"
 castem_version = "97' customer version"
 source = "Analytical solution."
-deck = "dyna7.dgibi"
+dgibi = "dyna7.dgibi"
 gap = ["Fourier harmonic analysis", "acoustic fluid elements with free surface", "eigenvalue solver"]
 tolerance = 0.01
-tolerance_note = "deck criterion, each of its 32 values within 1 %."
+tolerance_note = "criterion of the `.dgibi` file, each of its 32 values within 1 %."
 
 topic = """
 Sloshing modes of a thin layer of fluid in an annular rigid cavity, with

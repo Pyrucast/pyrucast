@@ -3,10 +3,10 @@ calculation_type = "MECHANICS DYNAMICS 2D AXISYMMETRICAL"
 castem_element = "QUA8"
 castem_version = "97' customer version"
 source = "Test NAFEMS number fv42."
-deck = "vibr2.dgibi"
+dgibi = "vibr2.dgibi"
 gap = ["eigenvalue solver"]
 tolerance = 0.02
-tolerance_note = "deck criterion, each frequency within 2 %."
+tolerance_note = "criterion of the `.dgibi` file, each frequency within 2 %."
 
 topic = """
 Uniform radial vibration of a thick hollow sphere. A sector is meshed in

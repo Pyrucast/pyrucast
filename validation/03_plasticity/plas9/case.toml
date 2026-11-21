@@ -3,7 +3,7 @@ calculation_type = "MECHANICS ELASTIC PLASTIC - DRUCKER-PRAGER'S MATERIAL"
 castem_element = "CUB8"
 castem_version = "97' customer version"
 source = ""
-deck = "plas9.dgibi"
+dgibi = "plas9.dgibi"
 pyrucast = "`model.drucker_prager(fes, \"full_3d\")` in `stepping.step_by_step`, HEX8"
 
 topic = """
@@ -39,16 +39,16 @@ negligible stiffness, CUB8 elements.
 """
 
 notes = """
-The 2011 document prints no result table; the reference is the deck's.
+The 2011 document prints no result table; the reference is the `.dgibi` file's.
 
-The deck gives the ultimate surface equal to the initial one (K_L = K) and
+The `.dgibi` file gives the ultimate surface equal to the initial one (K_L = K) and
 H < 0. pyrucast reads the two surfaces as the ends of one interpolation
 driven by H·p (see `src/models/plasticity/drucker_prager.rs`): with K_L = K
 the interpolation is frozen, H has no effect, and the stress stays on the
 plateau K / (α + β) instead of softening to zero. The gap measured is that
 plateau against the exact curve's zero.
 
-The deck adds, on the same cell, an elastic material of stiffness 2e-3 in
+The `.dgibi` file adds, on the same cell, an elastic material of stiffness 2e-3 in
 parallel; pyrucast refuses two laws carrying each their own E on one support,
 and the script leaves it out (its stress stays below 1e-6).
 """

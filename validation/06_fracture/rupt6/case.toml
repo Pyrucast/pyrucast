@@ -3,9 +3,9 @@ calculation_type = "MECHANICS ELASTIC"
 castem_element = "CU20, 3D"
 castem_version = "97' customer version"
 source = "Test NAFEMS : D.P.Rooke and D. J. Cartwright in Copendium of Intensity Factors HMSO (1976) : rupt6 Modélisation des structures élastiques dans CASTEM 2000."
-deck = "rupt6.dgibi"
+dgibi = "rupt6.dgibi"
 gap = ["stress intensity factors (G-theta)"]
-tolerance_note = "deck criterion of its SIF procedure, within 5.5 % at the surface node and 11 % at the middle node."
+tolerance_note = "criterion of the `.dgibi` file of its SIF procedure, within 5.5 % at the surface node and 11 % at the middle node."
 
 topic = """
 A circular plane crack inside an infinite cylinder under axial tension. By
@@ -26,7 +26,7 @@ CU20 elements, 3D sector; crack radius 8 mm, cylinder radius 100 mm.
 - Load: imposed axial displacement on the end face.
 """
 
-notes = "The Cast3M 2026 values are the G-θ ones; the deck checks them against 638.47."
+notes = "The Cast3M 2026 values are the G-θ ones; the `.dgibi` file checks them against 638.47."
 
 [[quantity]]
 key = "K1_top"

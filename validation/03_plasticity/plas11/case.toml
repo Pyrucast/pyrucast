@@ -3,10 +3,10 @@ calculation_type = "MECHANIC ELASTIC PLASTIC - GENERALISED PLANE STRAINS"
 castem_element = "QUA8, COQ2, POI1"
 castem_version = "97' customer version"
 source = ""
-deck = "plas11.dgibi"
+dgibi = "plas11.dgibi"
 gap = ["generalized plane strain", "axisymmetric shell element (COQ2)"]
 tolerance = 0.005
-tolerance_note = "deck criterion, |M − M_theory| / M_theory ≤ 0.5 %."
+tolerance_note = "criterion of the `.dgibi` file, |M − M_theory| / M_theory ≤ 0.5 %."
 
 topic = """
 A beam of rectangular cross-section is bent by an imposed rotation about x,

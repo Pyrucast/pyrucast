@@ -3,7 +3,7 @@ calculation_type = "ISOTROPIC ELASTIC MECHANIC"
 castem_element = "COQ2"
 castem_version = "97' customer release"
 source = ""
-deck = "vsur1.dgibi"
+dgibi = "vsur1.dgibi"
 gap = ["axisymmetric shell element (COQ2)", "surface vector operator (VSUR)"]
 
 topic = """
@@ -21,7 +21,7 @@ Axisymmetric, meridian plane: the arc of centre (0, 10) from (0, 0) to
 (10, 10), 10 COQ2 elements. No material, no load.
 """
 
-notes = "The 2011 document prints no result table; the references are the deck's."
+notes = "The 2011 document prints no result table; the references are the `.dgibi` file's."
 
 [[quantity]]
 key = "norm_minus_jacobian"

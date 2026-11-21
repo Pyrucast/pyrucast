@@ -3,10 +3,10 @@ calculation_type = "DAMAGE MODEL FOR VISCOPLASTIC MATERIAL"
 castem_element = "QUA8"
 castem_version = "97' customer version"
 source = ""
-deck = "ddi.dgibi"
+dgibi = "ddi.dgibi"
 gap = ["two-inelastic-strain damage law (DDI)"]
 tolerance = 0.001
-tolerance_note = "deck criterion, every relative gap ≤ 0.1 %."
+tolerance_note = "criterion of the `.dgibi` file, every relative gap ≤ 0.1 %."
 
 topic = """
 A cylindrical test piece of a viscoplastic material with damage and two
@@ -25,7 +25,7 @@ Axisymmetric test piece of QUA8 elements.
 | ν | 0.36 |
 """
 
-notes = "The 2011 document prints no result table; the references are the deck's."
+notes = "The 2011 document prints no result table; the references are the `.dgibi` file's."
 
 [[quantity]]
 key = "p_end"

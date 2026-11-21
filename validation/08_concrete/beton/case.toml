@@ -3,9 +3,9 @@ calculation_type = "ELASTIC PLASTIC MECHANICS - CONCRETE"
 castem_element = "CUB8"
 castem_version = "97' customer version"
 source = "NAH (93/01/19)"
-deck = "beton.dgibi"
+dgibi = "beton.dgibi"
 gap = ["concrete plasticity law (BETON)"]
-tolerance_note = "deck criterion, |σ_zz − 2| < 1e-6."
+tolerance_note = "criterion of the `.dgibi` file, |σ_zz − 2| < 1e-6."
 
 topic = """
 A concrete cube, held on its base, is pulled by an imposed displacement
@@ -26,7 +26,7 @@ One CUB8 cube.
 | tensile strength LTR1 | 4 MPa |
 """
 
-notes = "The 2011 document prints no result table; the reference is the deck's."
+notes = "The 2011 document prints no result table; the reference is the `.dgibi` file's."
 
 [[quantity]]
 key = "szz_B3"

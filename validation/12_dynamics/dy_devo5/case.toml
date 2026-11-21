@@ -3,7 +3,7 @@ calculation_type = "MECHANICS DYNAMICS 3D, TRANSIENT RESPONSE"
 castem_element = "POUT"
 castem_version = "97' customer version"
 source = "Walter C. Hury and Moshe F. Rubinstein : Dynamics of structures (Englewood Cliffs : Prentice-Hall, Inc., 1964) p.294."
-deck = "dy_devo5.dgibi"
+dgibi = "dy_devo5.dgibi"
 gap = ["eigenvalue solver", "modal-basis transient dynamics with linkages (DYNE)"]
 
 topic = """

@@ -8,9 +8,9 @@ Each case keeps the original description sheet, cites the same source and
 compares with the same reference value. Four values are shown side by side:
 
 - **Reference**: the analytical or benchmark value of the original document
-  (or of the Cast3M deck when the document prints none);
+  (or of the Cast3M `.dgibi` file when the document prints none);
 - **Cast3M 2011**: the value printed in the 2011 document, as printed;
-- **Cast3M 2026**: the value obtained by running the case's deck shipped with
+- **Cast3M 2026**: the value obtained by running the case's `.dgibi` file shipped with
   Cast3M 2026 (`dgibi/<case>.dgibi`), unmodified apart from the lines that
   print the compared quantities;
 - **pyrucast**: the value computed by the case's `run.py`.
@@ -32,7 +32,7 @@ python validation/make_document.py    # this document
 
 ## Summary
 
-86 cases: 19 computed by pyrucast, 66 not computable yet, 1 pending.
+86 cases: 20 computed by pyrucast, 66 not computable yet, 0 pending.
 
 | Chapter | Case | Status | Largest gap to the reference | Largest gap pyrucast / Cast3M 2026 |
 |---|---|---|---|---|
@@ -95,7 +95,7 @@ python validation/make_document.py    # this document
 | Porosity | [pore3](#pore3) | gap | missing: porous media elements (QUAP) | |
 | Metallurgy of powders | [poudre1](#poudre1) | gap | missing: Abouaf powder law | |
 | Joint | [joi22](#joi22) | gap | missing: joint element on its own, with normal and shear stiffnesses in its own frame (JOI2, JOI4) | |
-| Joint | [joi41](#joi41) | pending | | |
+| Joint | [joi41](#joi41) | run, within tolerance | 0.00125 % | 1.3e-11 |
 | Joint | [joi44](#joi44) | gap | missing: joint elements with thermal expansion | |
 | Joint | [joi45](#joi45) | gap | missing: orthotropic joint with material axes | |
 | Dynamics | [dyna6](#dyna6) | gap | missing: eigenvalue solver | |
@@ -171,7 +171,7 @@ Features pyrucast lacks for the cases it cannot compute yet, by number of cases 
 
 ## Improvement points
 
-What writing the computed cases showed: an operator or an option pyrucast lacks to state the case as the deck does, or a difference with Cast3M to look into. The scripts use pyrucast as it is; each point is detailed in the case's notes.
+What writing the computed cases showed: an operator or an option pyrucast lacks to state the case as the `.dgibi` file does, or a difference with Cast3M to look into. The scripts use pyrucast as it is; each point is detailed in the case's notes.
 
 | Point | Cases | Count |
 |---|---|---|
@@ -186,6 +186,7 @@ What writing the computed cases showed: an operator or an option pyrucast lacks 
 | `transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords) | [elas8](#elas8), [elas11](#elas11) | 2 |
 | graded lines and extrusions (Cast3M `DINI`/`DFIN`, mesh density) | [elas3](#elas3), [ther-perm](#ther-perm) | 2 |
 | Kirchhoff quadrangle shell (DKQ): 4 % stiffer than Cast3M's COQ4 on elas4, to look into | [elas4](#elas4) | 1 |
+| `extrude` against the normal of the source face gives mirrored HEX8 cells, whose facets `skin` then orients inwards | [joi41](#joi41) | 1 |
 | `mpc`: one coefficient per term for every relation; relations whose coefficients differ need one `mpc` each | [plas1](#plas1) | 1 |
 | an ellipse, or the projection of a line onto a plane (Cast3M `PROJ`) | [elas8](#elas8) | 1 |
 | local sub-stepping of rate-dependent laws at the Gauss points (stiff Norton exponents) | [chaboche2](#chaboche2) | 1 |
@@ -206,7 +207,7 @@ What writing the computed cases showed: an operator or an option pyrucast lacks 
 | pyrucast model | not available — missing: axisymmetric shell element (COQ2) |
 | Reference | Test NAFEMS : ME1 : Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/elas1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/elas1.dgibi` |
 | Folder | [`01_elasticity/elas1/`](01_elasticity/elas1/) |
 
 **Topic.** A hemispherical cap is loaded by an internal pressure, by its own weight and
@@ -232,7 +233,7 @@ thickness 0.02 m.
   1 m/s² along −z; radial line load of 1000 N/m on the edge B (nodal force
   2π × 1000 N).
 
-**Notes.** The 2011 document gives ν = 0.28; the Cast3M 2026 deck uses ν = 0.3.
+**Notes.** The 2011 document gives ν = 0.28; the Cast3M 2026 `.dgibi` file uses ν = 0.3.
 
 #### Results
 
@@ -240,7 +241,7 @@ thickness 0.02 m.
 |---|---|---|---|---|---|
 | u_r at B (µm) | 4.677 | 4.6685 (-0.182 %) | 4.66854 (-0.181 %) | not available |  |
 
-Acceptance: deck criterion, |u_r − 4.677| / 4.677 < 5 %.
+Acceptance: criterion of the `.dgibi` file, |u_r − 4.677| / 4.677 < 5 %.
 
 ### elas2
 
@@ -254,7 +255,7 @@ Acceptance: deck criterion, |u_r − 4.677| / 4.677 < 5 %.
 | pyrucast model | `model.shell(fes, "kirchhoff")` (DKT), TRI3 |
 | Reference | Test NAFEMS : ME6 : Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/elas2.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/elas2.dgibi` |
 | Folder | [`01_elasticity/elas2/`](01_elasticity/elas2/) |
 
 **Topic.** A thin cylinder is clamped at one end and pinched by two diametrically
@@ -284,9 +285,9 @@ y (30 elements), giving 360 DKT triangles.
 - Load: F_z = −2500 at P3 (0, 70, 7), the top of the mid-length section
   (a quarter of the pinching load).
 
-**Notes.** The nodes are the deck's; the triangles are not: `convert` cuts every
-quadrangle along the same diagonal, the deck's translation alternates it.
-The deck's criterion, 6e-4 from the reference, was set on Cast3M's own mesh.
+**Notes.** The nodes are the `.dgibi` file's; the triangles are not: `convert` cuts every
+quadrangle along the same diagonal, the `.dgibi` file's translation alternates it.
+The `.dgibi` file's criterion, 6e-4 from the reference, was set on Cast3M's own mesh.
 
 **Improvement points.**
 
@@ -300,7 +301,7 @@ The deck's criterion, 6e-4 from the reference, was set on Cast3M's own mesh.
 | u_x at P1 (cm) | 0 | -2.1247e-19 (Δ = -2.1e-19) | 0 (Δ = 0) | 0 (Δ = 0) | Δ = 0.0e+00 |
 | u_z at P3 (cm) | -1.14 | -1.1394 (+0.0526 %) | -1.13943 (+0.0503 %) | -1.14175 (-0.153 %) | 2.0e-03 |
 
-Acceptance: deck criteria, |u_z(P3) + 1.14| / 1.14 ≤ 6e-4 and |u_x(P1)| ≤ 1e-18.
+Acceptance: criteria of the `.dgibi` file, |u_z(P3) + 1.14| / 1.14 ≤ 6e-4 and |u_x(P1)| ≤ 1e-18.
 
 pyrucast OUTSIDE tolerance: uz_P3: -1.1417491751788946 vs -1.14, beyond 0.060000%
 
@@ -322,10 +323,10 @@ mid-length by two opposite point loads. One eighth is modelled: a quarter of
 the circumference over half the length, with symmetry conditions on the cut
 edges. Reference: u_z = −1.14 under the load, u_x = 0 at the clamped point P1.
 
-Mesh: the deck's nodes, the quarter arc (6 elements, every 15°) extruded by
+Mesh: the `.dgibi` file's nodes, the quarter arc (6 elements, every 15°) extruded by
 70 along y in 30 layers, each quadrangle cut into two triangles by
 `convert`. `convert` cuts every quadrangle along the same diagonal; the
-deck's translation in TRI3 alternates it from one quadrangle to the next
+`.dgibi` file's translation in TRI3 alternates it from one quadrangle to the next
 along the arc.
 
 Running::
@@ -413,7 +414,7 @@ if __name__ == "__main__":
 | pyrucast model | `model.shell(fes, "kirchhoff")` (DKT), TRI3 |
 | Reference | Test NAFEMS : ME7 : Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/elas3.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/elas3.dgibi` |
 | Folder | [`01_elasticity/elas3/`](01_elasticity/elas3/) |
 
 **Topic.** The pinched cylinder of elas2 with free ends instead of a clamped one (and a
@@ -440,7 +441,7 @@ Quarter cylinder of radius 4.953 and half-length 5.175 (axis y), thickness
 - Load: F_z = −100 at P3 (0, 5.175, 4.953), the top of the mid-length
   section.
 
-**Notes.** The deck places its 7 layers by its mesh density, slightly closer towards the
+**Notes.** The `.dgibi` file places its 7 layers by its mesh density, slightly closer towards the
 loaded section, and alternates the diagonals of its triangles; pyrucast's
 layers are even and its diagonals all alike.
 
@@ -456,7 +457,7 @@ layers are even and its diagonals all alike.
 |---|---|---|---|---|---|
 | u_z at P3 (cm) | -0.452 | -0.45214 (-0.031 %) | -0.452137 (-0.0303 %) | -0.45055 (+0.321 %) | 3.5e-03 |
 
-Acceptance: deck criterion, |u_z(P3) + 0.452| / 0.452 ≤ 4e-4.
+Acceptance: criterion of the `.dgibi` file, |u_z(P3) + 0.452| / 0.452 ≤ 4e-4.
 
 pyrucast OUTSIDE tolerance: uz_P3: -0.4505498830241352 vs -0.452, beyond 0.040000%
 
@@ -479,11 +480,11 @@ modelled: a quarter of the circumference over half the length, with symmetry
 conditions on the cut edges. Reference: u_z = −0.452 under the load.
 
 Mesh: the quarter arc (10 elements, every 9°) extruded along y in 7
-layers, each quadrangle cut into two triangles by `convert`, as in the deck,
-with two differences: the deck lets its mesh density (0.75) place the
+layers, each quadrangle cut into two triangles by `convert`, as in the `.dgibi` file,
+with two differences: the `.dgibi` file lets its mesh density (0.75) place the
 layers, slightly closer towards the loaded section, where `extrude` spaces
 them evenly; and `convert` cuts every quadrangle along the same diagonal,
-where the deck alternates it along the arc.
+where the `.dgibi` file alternates it along the arc.
 
 Running::
 
@@ -570,7 +571,7 @@ if __name__ == "__main__":
 | pyrucast model | `model.shell(fes, "kirchhoff")` (DKQ), QUA4 |
 | Reference | Test NAFEMS : ME8 : Modélisation des structures élastique dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/elas4.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/elas4.dgibi` |
 | Folder | [`01_elasticity/elas4/`](01_elasticity/elas4/) |
 
 **Topic.** A cantilever with a Z-shaped cross-section (NAFEMS LE5) is loaded in torsion
@@ -598,7 +599,7 @@ COQ4 quadrilaterals.
   −300 kN at its middle; on the upper flange the opposite.
 
 **Notes.** The 2011 document gives the torque as 1200 mN and the loads as 600 N; the
-deck applies 1.2 MN·m with 600 kN per flange. The deck reads the axial
+`.dgibi` file applies 1.2 MN·m with 600 kN per flange. The `.dgibi` file reads the axial
 stress as the SMYY component of the shell stresses averaged through the
 thickness (CALP 'MOYEN'), extrapolated to the nodes and averaged between the
 two cells that share A; pyrucast reads N_yy / h in one of them. On the same
@@ -618,7 +619,7 @@ pyrucast's DKQ than in Cast3M's COQ4.
 | σ_xx at A, mid-surface (MPa) | -108 | -112.73 (-4.38 %) | -112.727 (-4.38 %) | -114.036 (-5.59 %) | 1.2e-02 |
 | u_z at the tip (10, 0, 0), no reference (m) | — | — | -0.0316979 | -0.0304768 | 3.9e-02 |
 
-Acceptance: deck criterion, |σ_xx(A) + 108| / 108 ≤ 5 %.
+Acceptance: criterion of the `.dgibi` file, |σ_xx(A) + 108| / 108 ≤ 5 %.
 
 pyrucast OUTSIDE tolerance: sxx_A: -114.03623937937851 vs -108.0, beyond 5.000000%
 
@@ -640,10 +641,10 @@ Problem: a cantilever 10 m long whose cross-section is a Z (two flanges of
 opposite forces of 600 kN spread over the flanges (1.2 MN·m). Reference: the
 axial stress on the mid-surface at A (2.5, 0, 0) is σ_xx = −108 MPa.
 
-The mesh is the Cast3M deck's: the section line (2 elements per segment)
+The mesh is the Cast3M `.dgibi` file's: the section line (2 elements per segment)
 extruded along x in 16 layers, 96 QUA4. Each cell's first edge runs along
 the section line, so the local y axis of the shell is the beam's axis and
-the axial stress on the mid-surface is N_yy / h, as the deck reads SMYY. A
+the axial stress on the mid-surface is N_yy / h, as the `.dgibi` file reads SMYY. A
 lies on the edge of the first flange, between two cells; `project` reads it
 in one of them, from that cell's Gauss points.
 
@@ -687,7 +688,7 @@ def main(out: str | None = None) -> dict[str, float]:
 
     shell = pc.model.shell(pc.FiniteElementSpace(surface), "kirchhoff")
     model = shell
-    for variable in ("u_x", "u_y", "u_z"):  # displacements only, as the deck
+    for variable in ("u_x", "u_y", "u_z"):  # displacements only, as the `.dgibi` file
         model = model | pc.model.dirichlet(clamped, shell, variable)
     materials = pc.element_field.material_field(
         model, [("E", E), ("nu", NU), ("h", THICKNESS)]
@@ -736,7 +737,7 @@ if __name__ == "__main__":
 | pyrucast model | not available — missing: axisymmetric shell element (COQ2) |
 | Reference | Test NAFEMS : ME11 : Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer releas |
-| Cast3M 2026 deck | `dgibi/elas7.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/elas7.dgibi` |
 | Folder | [`01_elasticity/elas7/`](01_elasticity/elas7/) |
 
 **Topic.** A branched shell of revolution under an internal pressure of 1 MPa (NAFEMS
@@ -768,7 +769,7 @@ COQ2 elements, 4 per segment on the cylinder near C, 4 and 5 on the dome.
 |---|---|---|---|---|---|
 | σ_zz at C, outer surface (MPa) | -319.9 | -312.29 (+2.38 %) | -312.208 (+2.4 %) | not available |  |
 
-Acceptance: deck criterion, |σ_zz(C) + 319.9| / 319.9 ≤ 2.5 %.
+Acceptance: criterion of the `.dgibi` file, |σ_zz(C) + 319.9| / 319.9 ≤ 2.5 %.
 
 ### elas8
 
@@ -782,7 +783,7 @@ Acceptance: deck criterion, |σ_zz(C) + 319.9| / 319.9 ≤ 2.5 %.
 | pyrucast model | `model.elasticity(fes, "plane_stress")`, QUA8 |
 | Reference | Test NAFEMS : ME12 : Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer releas |
-| Cast3M 2026 deck | `dgibi/elas8.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/elas8.dgibi` |
 | Folder | [`01_elasticity/elas8/`](01_elasticity/elas8/) |
 
 **Topic.** An elliptic membrane (NAFEMS LE1) is loaded by a uniform outward pressure on
@@ -806,9 +807,9 @@ straight edge has 4 elements.
 - Boundary conditions: symmetry about x = 0 (u_x = 0) and y = 0 (u_y = 0).
 - Load: outward pressure of 10 MPa on the outer elliptic edge.
 
-**Notes.** The boundary nodes are the deck's. Inside, `transfinite` places the corner
-nodes as the deck does, but puts the QUA8 mid-nodes of the elliptic edges on
-the chords, where the deck puts them on the ellipses; σ_yy at D, where the
+**Notes.** The boundary nodes are the `.dgibi` file's. Inside, `transfinite` places the corner
+nodes as the `.dgibi` file does, but puts the QUA8 mid-nodes of the elliptic edges on
+the chords, where the `.dgibi` file puts them on the ellipses; σ_yy at D, where the
 inner ellipse is the most curved, is sensitive to it. Cast3M also reads the
 stress at a node differently: it extrapolates the Gauss values of the cell to
 its nodes, pyrucast evaluates their least-squares fit. With mid-nodes placed
@@ -828,7 +829,7 @@ Gauss stresses to round-off.
 | σ_yy at D (MPa) | 92.7 | 93.548 (+0.915 %) | 93.5476 (+0.914 %) | 99.9753 (+7.85 %) | 6.9e-02 |
 | u_y at B (0, 2.75), no reference (m) | — | — | 0.000545846 | 0.000542939 | 5.3e-03 |
 
-Acceptance: deck criterion, |σ_yy(D) − 92.7| / 92.7 ≤ 1 %.
+Acceptance: criterion of the `.dgibi` file, |σ_yy(D) − 92.7| / 92.7 ≤ 1 %.
 
 pyrucast OUTSIDE tolerance: syy_D: 99.97533666117648 vs 92.7, beyond 1.000000%
 
@@ -850,13 +851,13 @@ x²/3.25² + y²/2.75² = 1, symmetric about x = 0 and y = 0, is pulled by a
 uniform outward pressure of 10 MPa on its outer edge. Reference:
 σ_yy = 92.7 MPa at the point D (2, 0).
 
-The QUA8 mesh has the deck's boundary lines: 6 elements along each ellipse
+The QUA8 mesh has the `.dgibi` file's boundary lines: 6 elements along each ellipse
 (a node at every 15° of the ellipse's parameter), 4 across, the straight
 sides cut at 1.583 on x = 0 and at 2.417 on y = 0, filled by `transfinite`
-as the deck's mesher does. pyrucast has no ellipse, nor the projection of a
-circle onto a plane that the deck uses to draw one: the nodes of the two
+as the `.dgibi` file's mesher does. pyrucast has no ellipse, nor the projection of a
+circle onto a plane that the `.dgibi` file uses to draw one: the nodes of the two
 elliptic lines are placed here. `transfinite` puts the QUA8 mid-nodes on the
-chords; the deck's are on the ellipses. The QUA4 patch and the outer line
+chords; the `.dgibi` file's are on the ellipses. The QUA4 patch and the outer line
 are made quadratic together, so that they share their mid-nodes.
 
 σ_yy at D is read in the only cell holding D, from that cell's Gauss points.
@@ -970,7 +971,7 @@ if __name__ == "__main__":
 | pyrucast model | `model.elasticity(fes, "axisymmetric")` with a thermal strain, QUA8 |
 | Reference | Test NAFEMS : LE11 : Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer releas |
-| Cast3M 2026 deck | `dgibi/elas11.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/elas11.dgibi` |
 | Folder | [`01_elasticity/elas11/`](01_elasticity/elas11/) |
 
 **Topic.** A thick solid of revolution made of a cylinder, a cone and a sphere (NAFEMS
@@ -982,7 +983,7 @@ and the height, T = r + z. The problem is axisymmetric.
 
 **Model description.**
 
-Meridian plane (r, z), QUA8 elements (fine mesh of the deck, K = 2).
+Meridian plane (r, z), QUA8 elements (fine mesh of the `.dgibi` file, K = 2).
 
 | Data | Value |
 |---|---|
@@ -994,13 +995,13 @@ Meridian plane (r, z), QUA8 elements (fine mesh of the deck, K = 2).
 - Load: temperature T = r + z (°C).
 
 **Notes.** The 2011 document gives the goal as σ_zz(A) = 105 MPa and the result table as
-σ_yy(A) = −105 MPa; the deck compares σ_zz with −105 MPa.
+σ_yy(A) = −105 MPa; the `.dgibi` file compares σ_zz with −105 MPa.
 
 `transfinite` puts the QUA8 mid-nodes of the arcs on the chords, where the
-deck puts them on the arcs. Cast3M's thermal stress operator also replaces
+`.dgibi` file puts them on the arcs. Cast3M's thermal stress operator also replaces
 the temperature of a mid-node of a quadratic cell by the mean of its edge's
 corners, which differs from r + z on the arcs' mid-nodes; pyrucast heats every
-node to r + z. With the deck's mid-nodes and its averaged temperatures,
+node to r + z. With the `.dgibi` file's mid-nodes and its averaged temperatures,
 pyrucast gives Cast3M's u_r(B) to round-off.
 
 **Improvement points.**
@@ -1015,7 +1016,7 @@ pyrucast gives Cast3M's u_r(B) to round-off.
 | σ_zz at A (MPa) | -105 | -103.34 (+1.58 %) | -103.436 (+1.49 %) | -105.102 (-0.0973 %) | 1.6e-02 |
 | u_r at B (1.4, 0), no reference (m) | — | — | 0.000766758 | 0.000765887 | 1.1e-03 |
 
-Acceptance: deck criterion, |σ_zz(A) + 105| / 105 ≤ 2 %.
+Acceptance: criterion of the `.dgibi` file, |σ_zz(A) + 105| / 105 ≤ 2 %.
 
 pyrucast: the 1 checked quantities are within tolerance.
 
@@ -1037,11 +1038,11 @@ a conical part and a cylindrical part — is heated to T = r + z (°C), with
 α = 2.3e-4 /°C and the reference temperature 0; u_z = 0 on its two flat
 faces. Reference: the axial stress at A (1, 0) is σ_zz = −105 MPa.
 
-The QUA8 mesh has the deck's boundary lines: 2 elements across and 10 along
+The QUA8 mesh has the `.dgibi` file's boundary lines: 2 elements across and 10 along
 the meridian (4 on the arcs of 30°, 2 on the arc from 30° to 45°, 4 on the
 cone and on the inner straight part, 2 on the outer cylinder), filled by
-`transfinite` as the deck's mesher does. `transfinite` takes straight-sided
-SEG2 lines and puts the QUA8 mid-nodes on the chords; the deck's are on the
+`transfinite` as the `.dgibi` file's mesher does. `transfinite` takes straight-sided
+SEG2 lines and puts the QUA8 mid-nodes on the chords; the `.dgibi` file's are on the
 arcs.
 
 In pyrucast's axisymmetric coordinates x is r and y is z: the axial stress
@@ -1074,7 +1075,7 @@ def main(out: str | None = None) -> dict[str, float]:
     pg = coords.add_node([1.0, 1.39])
     ph = coords.add_node([0.7071, 1.79])
     pi = coords.add_node([1.0, 1.79])
-    # The four sides, counter-clockwise, as in the deck.
+    # The four sides, counter-clockwise, as in the `.dgibi` file.
     bottom = pc.mesh.line(pa, pb, 2)
     outer = pc.mesh.consolidate(
         pc.mesh.arc(pb, origin, pd, 4)
@@ -1151,7 +1152,7 @@ if __name__ == "__main__":
 | pyrucast model | not available — missing: spring supports (APPU) |
 | Reference | Test VPCS : SSLL16/89 : Modélisation des structures élastiques dans CASTEM 2000. M. Courtand P. Lebelle Formulaire du béton armé T.2 Paris Eyrolles 1976. |
 | Cast3M version of the 2011 document | 97' customer releas |
-| Cast3M 2026 deck | `dgibi/elas13.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/elas13.dgibi` |
 | Folder | [`01_elasticity/elas13/`](01_elasticity/elas13/) |
 
 **Topic.** A beam with pinned ends rests on an elastic foundation and carries a point
@@ -1179,7 +1180,7 @@ the nodes.
 
 **Notes.** The 2011 document prints the deflection reference as −4.233E3 m and the
 Cast3M value as −4.38085E3 m (exponent sign lost); the reference used here is
-the deck's −4.23326e-3 m, the 2011 value is kept as printed.
+the `.dgibi` file's −4.23326e-3 m, the 2011 value is kept as printed.
 
 #### Results
 
@@ -1190,7 +1191,7 @@ the deck's −4.23326e-3 m, the 2011 value is kept as printed.
 | deflection u_y at D (m) | -0.00423326 | -4380.85 (-1.03e+08 %) | -0.00438085 (-3.49 %) | not available |  |
 | bending moment at D (N·m) | 33840 | 33407 (-1.28 %) | 33407.2 (-1.28 %) | not available |  |
 
-Acceptance: deck criterion, largest relative gap of the four values ≤ 5 %.
+Acceptance: criterion of the `.dgibi` file, largest relative gap of the four values ≤ 5 %.
 
 ### stru2
 
@@ -1204,7 +1205,7 @@ Acceptance: deck criterion, largest relative gap of the four values ≤ 5 %.
 | pyrucast model | `model.elasticity(fes, "plane_stress", symmetry="orthotropic")`, QUA4 |
 | Reference | Comparison with six others finite element codes. |
 | Cast3M version of the 2011 document | 97' customer release |
-| Cast3M 2026 deck | `dgibi/stru2.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/stru2.dgibi` |
 | Folder | [`01_elasticity/stru2/`](01_elasticity/stru2/) |
 
 **Topic.** An orthotropic square plate, in plane stress, is clamped on one side and
@@ -1228,7 +1229,7 @@ direction in the plane.
 - Boundary condition: one side clamped.
 - Load: total force 1e6 N on the opposite side.
 
-**Notes.** The 2011 document gives E_1 = 2.15737e10 Pa; the deck uses 2.5737e10 Pa.
+**Notes.** The 2011 document gives E_1 = 2.15737e10 Pa; the `.dgibi` file uses 2.5737e10 Pa.
 
 #### Results
 
@@ -1241,7 +1242,7 @@ direction in the plane.
 | u_x at E (1e-4 m) | 0.4768 | 0.47668 (-0.0252 %) | 0.47668 (-0.0252 %) | 0.47668 (-0.0252 %) | 2.8e-15 |
 | u_y at E (1e-4 m) | -0.4965 | -0.49812 (-0.326 %) | -0.498122 (-0.327 %) | -0.498122 (-0.327 %) | 9.5e-15 |
 
-Acceptance: deck criterion, largest relative gap ≤ 5 % over u_x(A), u_x(D), u_x(E), u_y(A), u_y(D) (the deck lists u_y(D) twice and leaves u_y(E) out).
+Acceptance: criterion of the `.dgibi` file, largest relative gap ≤ 5 % over u_x(A), u_x(D), u_x(E), u_y(A), u_y(D) (the `.dgibi` file lists u_y(D) twice and leaves u_y(E) out).
 
 pyrucast: the 6 checked quantities are within tolerance.
 
@@ -1264,8 +1265,8 @@ and pulled along x by a total force of 1e6 N spread evenly over its side
 x = 0.5. Reference (comparison with six other codes): the displacements of
 the corners A (0.5, 0.5), D (0.5, −0.5) and of the centre E.
 
-Mesh: 10 × 10 QUA4, the deck's (a regular grid). The force spread evenly is
-a uniform line load of 1e6 N/m, whose consistent nodal forces are the deck's.
+Mesh: 10 × 10 QUA4, the `.dgibi` file's (a regular grid). The force spread evenly is
+a uniform line load of 1e6 N/m, whose consistent nodal forces are the `.dgibi` file's.
 
 Running::
 
@@ -1366,7 +1367,7 @@ if __name__ == "__main__":
 | pyrucast model | not available — missing: pipe element (TUYA) |
 | Reference | Guide VPCS, Test SSLL 06/90. Solution analytique; JS Prezemieniecki; Theory of matrix structural analysis, New York, MCGraw-Hill, 1968. |
 | Cast3M version of the 2011 document | 97' customer release |
-| Cast3M 2026 deck | `dgibi/stru4.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/stru4.dgibi` |
 | Folder | [`01_elasticity/stru4/`](01_elasticity/stru4/) |
 
 **Topic.** A curved tube, clamped at one end, is bent in its plane by a force and a
@@ -1399,7 +1400,7 @@ B (3, 0, 0), 20 pipe elements.
 | u_y at B (m) | 0.24173 | 0.24174 (+0.00414 %) | 0.241744 (+0.0057 %) | not available |  |
 | rotation θ_z at B (rad) | 0.16539 | 0.16533 (-0.0363 %) | 0.165325 (-0.0391 %) | not available |  |
 
-Acceptance: deck criterion, largest relative gap of the three values < 5 %.
+Acceptance: criterion of the `.dgibi` file, largest relative gap of the three values < 5 %.
 
 ### elas20
 
@@ -1413,7 +1414,7 @@ Acceptance: deck criterion, largest relative gap of the three values < 5 %.
 | pyrucast model | not available — missing: pipe element (TUYA) |
 | Reference | Test VPCS : SSLL08/90 : Modélisation des structures élastiques dans CASTEM 2000. J. S. Przemieniecki, theory of matrix structural analysis (New-York : Mcgraw-Hill Book Company, 1968) pp 155. |
 | Cast3M version of the 2011 document | 97' customer releas |
-| Cast3M 2026 deck | `dgibi/elas20.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/elas20.dgibi` |
 | Folder | [`01_elasticity/elas20/`](01_elasticity/elas20/) |
 
 **Topic.** A pipe made of two straight parts joined by an elbow is loaded by an
@@ -1452,7 +1453,7 @@ point is lost); it is kept as printed.
 | u_y at B' (m) | 0.000822 | 0.000822692 (+0.0842 %) | 0.000822692 (+0.0842 %) | not available |  |
 | u_y at A' (m) | 0.000685 | 0.000685148 (+0.0216 %) | 0.000685148 (+0.0216 %) | not available |  |
 
-Acceptance: deck criterion, largest relative gap of the five values ≤ 5 %.
+Acceptance: criterion of the `.dgibi` file, largest relative gap of the five values ≤ 5 %.
 
 ### testICQ4
 
@@ -1466,7 +1467,7 @@ Acceptance: deck criterion, largest relative gap of the five values ≤ 5 %.
 | pyrucast model | not available — missing: incompatible-mode element (ICQ4) |
 | Reference | Rapport DMT sur les elements ICQ4. |
 | Cast3M version of the 2011 document | 97' customer release |
-| Cast3M 2026 deck | `dgibi/testICQ4.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/testICQ4.dgibi` |
 | Folder | [`01_elasticity/testICQ4/`](01_elasticity/testICQ4/) |
 
 **Topic.** A square plate of a nearly incompressible material (ν = 0.499), in plane
@@ -1494,7 +1495,7 @@ Square 100 × 100, 10 × 10 ICQ4.
 - Reference: u_y(100, 100) = 2·x·y / (2μ) · 1e5 · β with μ = 1e11 / (1 + ν),
   i.e. 1.499e-5; mean stress −α·1e5 Pa.
 
-**Notes.** The 2011 document prints no result table; the references are the deck's.
+**Notes.** The 2011 document prints no result table; the references are the `.dgibi` file's.
 
 #### Results
 
@@ -1503,7 +1504,7 @@ Square 100 × 100, 10 × 10 ICQ4.
 | u_y at (100, 100) | 1.499e-05 | — | 1.48594e-05 (-0.871 %) | not available |  |
 | largest mean stress (Pa) | -100000 | — | -99748.2 (+0.252 %) | not available |  |
 
-Acceptance: deck criteria, each relative gap < 1 %.
+Acceptance: criteria of the `.dgibi` file, each relative gap < 1 %.
 
 ### vsur1
 
@@ -1517,7 +1518,7 @@ Acceptance: deck criteria, each relative gap < 1 %.
 | pyrucast model | not available — missing: axisymmetric shell element (COQ2); surface vector operator (VSUR) |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer release |
-| Cast3M 2026 deck | `dgibi/vsur1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/vsur1.dgibi` |
 | Folder | [`01_elasticity/vsur1/`](01_elasticity/vsur1/) |
 
 **Topic.** Check of the operator that builds, on axisymmetric shell elements, the field
@@ -1531,7 +1532,7 @@ must equal the jacobian, and the normals must have unit length.
 Axisymmetric, meridian plane: the arc of centre (0, 10) from (0, 0) to
 (10, 10), 10 COQ2 elements. No material, no load.
 
-**Notes.** The 2011 document prints no result table; the references are the deck's.
+**Notes.** The 2011 document prints no result table; the references are the `.dgibi` file's.
 
 #### Results
 
@@ -1555,7 +1556,7 @@ Axisymmetric, meridian plane: the arc of centre (0, 10) from (0, 0) to
 | pyrucast model | not available — missing: eigenvalue solver; axisymmetric shell element (COQ2) |
 | Reference | Analytical solution. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/flam1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/flam1.dgibi` |
 | Folder | [`02_buckling/flam1/`](02_buckling/flam1/) |
 
 **Topic.** Euler buckling of a strip clamped at one end and compressed by an axial force
@@ -1580,7 +1581,7 @@ COQ2 elements at a mesh density of 1 mm, thickness 1 mm.
 - Solution: linear stress state, geometric stiffness, then the first
   eigenvalue of the buckling problem between 0.001 and 100.
 
-**Notes.** The 2011 document prints no result table; the reference is the deck's.
+**Notes.** The 2011 document prints no result table; the reference is the `.dgibi` file's.
 
 #### Results
 
@@ -1588,7 +1589,7 @@ COQ2 elements at a mesh density of 1 mm, thickness 1 mm.
 |---|---|---|---|---|---|
 | critical load multiplier λ | 41.123 | — | 41.1234 (+0.00094 %) | not available |  |
 
-Acceptance: deck criterion, |λ − 41.123| / 41.123 < 1e-3 %.
+Acceptance: criterion of the `.dgibi` file, |λ − 41.123| / 41.123 < 1e-3 %.
 
 ### four1
 
@@ -1602,7 +1603,7 @@ Acceptance: deck criterion, |λ − 41.123| / 41.123 < 1e-3 %.
 | pyrucast model | not available — missing: Fourier harmonic analysis; eigenvalue solver; axisymmetric shell element (COQ2) |
 | Reference | Analytic solution. |
 | Cast3M version of the 2011 document | 97' customer release |
-| Cast3M 2026 deck | `dgibi/four1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/four1.dgibi` |
 | Folder | [`02_buckling/four1/`](02_buckling/four1/) |
 
 **Topic.** An infinitely long cylinder under external pressure. The prestress of the
@@ -1627,7 +1628,7 @@ and length 100 mm, 4 COQ2 elements, thickness 1 mm.
 - Boundary conditions: symmetry of both ends.
 - Reference: λ_1 = 2e-5 / 3, λ_2 = 5e-6.
 
-**Notes.** The 2011 document prints no result table; the references are the deck's.
+**Notes.** The 2011 document prints no result table; the references are the `.dgibi` file's.
 
 #### Results
 
@@ -1636,7 +1637,7 @@ and length 100 mm, 4 COQ2 elements, thickness 1 mm.
 | multiplier λ_1, dead pressure | 6.66667e-06 | — | 6.66667e-06 (-4.41e-06 %) | not available |  |
 | multiplier λ_2, follower pressure | 5e-06 | — | 5e-06 (-1.29e-05 %) | not available |  |
 
-Acceptance: deck criterion, largest relative gap of the two multipliers < 2e-5 %.
+Acceptance: criterion of the `.dgibi` file, largest relative gap of the two multipliers < 2e-5 %.
 
 ## Plasticity
 
@@ -1652,7 +1653,7 @@ Acceptance: deck criterion, largest relative gap of the two multipliers < 2e-5 %
 | pyrucast model | `model.plasticity_perfect(fes, "plane_stress")` with `mpc` relations, in `stepping.step_by_step`, QUA4 |
 | Reference | Test NAFEMS : Analytical-Solution : MP1 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/plas1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/plas1.dgibi` |
 | Folder | [`03_plasticity/plas1/`](03_plasticity/plas1/) |
 
 **Topic.** A rectangular strip in plane stress is bent by imposed rotations of its end
@@ -1681,7 +1682,7 @@ Half of the strip, width 12.5 mm (x from 0 to 12.5 mm), height 100 mm
 - Moment: M = 2 × Σ y_i F_x,i over the nodes of the upper half of the loaded
   edge, in kN·m.
 
-**Notes.** The 2011 document gives ν = 0.28 and names the element COQ4; the deck uses
+**Notes.** The 2011 document gives ν = 0.28 and names the element COQ4; the `.dgibi` file uses
 ν = 0.3 and QUA4.
 
 **Improvement points.**
@@ -1695,7 +1696,7 @@ Half of the strip, width 12.5 mm (x from 0 to 12.5 mm), height 100 mm
 | elastic moment M1 (t = 0.02875) (kN·m) | 805 | 811.08 (+0.755 %) | 811.082 (+0.755 %) | 811.082 (+0.755 %) | 1.1e-15 |
 | plastic moment M2 (t = 0.05) (kN·m) | 1074 | 1085.2 (+1.04 %) | 1085.05 (+1.03 %) | 1085.05 (+1.03 %) | 4.7e-10 |
 
-Acceptance: deck criterion, each relative gap ≤ 1.5 %.
+Acceptance: criterion of the `.dgibi` file, each relative gap ≤ 1.5 %.
 
 pyrucast: the 2 checked quantities are within tolerance.
 
@@ -1718,9 +1719,9 @@ modelled (12.5 mm wide, u_x = 0 on the symmetry edge x = 0). At t = 0.02875
 the strip is still elastic; at t = 0.05 it is plastic over most of its
 height. Reference: M1 = 805 kN·m and M2 = 1074 kN·m.
 
-Mesh: the deck's, one QUA4 across and 8 along y. `mpc` takes one
+Mesh: the `.dgibi` file's, one QUA4 across and 8 along y. `mpc` takes one
 coefficient per term for all its relations: the seven relations, whose
-coefficients differ, are seven `mpc`. The moment is the deck's:
+coefficients differ, are seven `mpc`. The moment is the `.dgibi` file's:
 the moment of the support forces on the end section, 2·Σ y·F_x over its
 upper half, in kN·m.
 
@@ -1823,7 +1824,7 @@ if __name__ == "__main__":
 | pyrucast model | `model.plasticity_perfect(fes, "axisymmetric")` in `stepping.step_by_step`, QUA4 |
 | Reference | Test NAFEMS : Analytical-Solution : MP2 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/plas2.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/plas2.dgibi` |
 | Folder | [`03_plasticity/plas2/`](03_plasticity/plas2/) |
 
 **Topic.** A thick hollow sphere is loaded by an internal pressure that grows with time,
@@ -1850,7 +1851,7 @@ the thickness (5 from 1 to 1.1 mm, 9 from 1.1 to 2 mm), 16 along each arc.
 
 **Notes.** The 2011 document prints the Cast3M value at the second time as 1085.2 µm (the
 value of plas1); it is kept as printed. Its time labels t0 and t1000 are the
-times 100 and 358.9 of the deck.
+times 100 and 358.9 of the `.dgibi` file.
 
 #### Results
 
@@ -1859,7 +1860,7 @@ times 100 and 358.9 of the deck.
 | u_r at A, t = 100 (µm) | 0.4 | 0.39821 (-0.448 %) | 0.398212 (-0.447 %) | 0.398212 (-0.447 %) | 0.0e+00 |
 | u_r at A, t = 358.9 (µm) | 2.83 | 1085.2 (+3.82e+04 %) | 2.74066 (-3.16 %) | 2.74066 (-3.16 %) | 9.7e-16 |
 
-Acceptance: deck criterion, largest relative gap of the two values < 3.5 %.
+Acceptance: criterion of the `.dgibi` file, largest relative gap of the two values < 3.5 %.
 
 pyrucast: the 2 checked quantities are within tolerance.
 
@@ -1882,9 +1883,9 @@ P = 1e6·t Pa. At t = 100 (P = 100 MPa) it is elastic; at t = 358.9 it is
 plastic through most of its wall. Reference: the radial displacement of the
 inner point A, 0.4 µm and 2.83 µm.
 
-Mesh: the deck's quarter of the meridian section, 14 × 16 QUA4: 14 elements
+Mesh: the `.dgibi` file's quarter of the meridian section, 14 × 16 QUA4: 14 elements
 through the wall (5 from 1 to 1.1 mm, 9 from 1.1 to 2 mm), 16 along each arc
-(every 5.625°), filled by `transfinite` as the deck's mesher does.
+(every 5.625°), filled by `transfinite` as the `.dgibi` file's mesher does.
 
 Running::
 
@@ -1911,7 +1912,7 @@ def main(out: str | None = None) -> dict[str, float]:
     c = coords.add_node([0.0, R_OUT])
     y = coords.add_node([0.0, R_MID])
     d = coords.add_node([0.0, R_IN])
-    # The four sides of the section, counter-clockwise, as in the deck.
+    # The four sides of the section, counter-clockwise, as in the `.dgibi` file.
     bottom = pc.mesh.consolidate(
         pc.mesh.line(a, x, N_THIN) | pc.mesh.line(x, b, N_THICK)
     )
@@ -1979,7 +1980,7 @@ if __name__ == "__main__":
 | pyrucast model | `model.plasticity_perfect(fes, "full_3d")` in `stepping.step_by_step`, HEX8 |
 | Reference | Test NAFEMS : Analytical-Solution : MP4 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/plas4.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/plas4.dgibi` |
 | Folder | [`03_plasticity/plas4/`](03_plasticity/plas4/) |
 
 **Topic.** A block of two cubic elements is loaded in uniaxial strain: u_y = u_z = 0
@@ -2005,7 +2006,7 @@ Two HEX8 of size 0.5 × 1 × 1 along x, from x = 0 to x = 1.
 - Computed times: 1, 2, 3, 4.
 
 **Notes.** The 2011 document prints the Cast3M σ_yy and σ_zz at T4 as 1.6E6; the
-references are those of the deck (1.66e6).
+references are those of the `.dgibi` file (1.66e6).
 
 #### Results
 
@@ -2024,7 +2025,7 @@ references are those of the deck (1.66e6).
 | σ_yy at T4 (Pa) | 1.66e+06 | 1.6e+06 (-3.61 %) | 1.66667e+06 (+0.402 %) | 1.66667e+06 (+0.402 %) | 2.0e-15 |
 | σ_zz at T4 (Pa) | 1.66e+06 | 1.6e+06 (-3.61 %) | 1.66667e+06 (+0.402 %) | 1.66667e+06 (+0.402 %) | 2.0e-15 |
 
-Acceptance: deck criterion, largest relative gap of the twelve stresses ≤ 0.5 %.
+Acceptance: criterion of the `.dgibi` file, largest relative gap of the twelve stresses ≤ 0.5 %.
 
 pyrucast: the 12 checked quantities are within tolerance.
 
@@ -2047,7 +2048,7 @@ Reference: σ_xx, σ_yy and σ_zz at t = 1, 2, 3, 4, the closed-form response of
 J2 perfect plasticity in uniaxial strain.
 
 The stress is homogeneous: it is read at the first Gauss point of the first
-cell, as in the deck.
+cell, as in the `.dgibi` file.
 
 Running::
 
@@ -2141,7 +2142,7 @@ if __name__ == "__main__":
 | pyrucast model | `model.drucker_prager(fes, "plane_stress")` in `stepping.step_by_step`, QUA4 |
 | Reference | Test NAFEMS : Analytical-Solution : MP4 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/plas5.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/plas5.dgibi` |
 | Folder | [`03_plasticity/plas5/`](03_plasticity/plas5/) |
 
 **Topic.** A single plane-stress element is stretched equally in x and y by imposed
@@ -2170,9 +2171,9 @@ One QUA4, square of side 1.5.
 - Reference: σ_xx = σ_yy = K_L / (2η + μ) = 3.56 / 1.902.
 
 **Notes.** The 2011 document gives E = 2.5e11 Pa, ν = 0.25 and σ_y = 5e6 Pa, the data of
-plas4; the deck's data are those above.
+plas4; the `.dgibi` file's data are those above.
 
-The deck's ultimate cohesion K_L = 3.56 is below the initial one K = 4.1, with
+The `.dgibi` file's ultimate cohesion K_L = 3.56 is below the initial one K = 4.1, with
 H = 0. pyrucast reads the two surfaces as the ends of one interpolation
 driven by H·p (see `src/models/plasticity/drucker_prager.rs`): with H = 0 it
 stays on the initial surface, and its stress stops at that surface's apex,
@@ -2190,7 +2191,7 @@ K / (2α + β). Cast3M's stops at the ultimate surface's apex, the reference.
 | σ_xx at t = 2 | 1.87171 | 1.8717 (-0.000747 %) | 1.87171 (+0 %) | 2.15563 (+15.2 %) | 1.5e-01 |
 | σ_yy at t = 2 | 1.87171 | 1.8717 (-0.000747 %) | 1.87171 (+0 %) | 2.15563 (+15.2 %) | 1.5e-01 |
 
-Acceptance: deck criterion, each relative gap ≤ 1e-10 %.
+Acceptance: criterion of the `.dgibi` file, each relative gap ≤ 1e-10 %.
 
 pyrucast OUTSIDE tolerance: sxx: 2.155625657202943 vs 1.871713985278654, beyond 0.000000%
 
@@ -2209,7 +2210,7 @@ pyrucast OUTSIDE tolerance: syy: 2.155625657202943 vs 1.871713985278654, beyond 
 
 Problem: one square QUA4 of side 1.5, held by u_x = 0 on x = 0 and u_y = 0
 on y = 0, is pulled by u_x = u_y = 1.5e-4·t on its two other sides, up to
-t = 2. The material is the deck's two-surface Drucker-Prager: an initial
+t = 2. The material is the `.dgibi` file's two-surface Drucker-Prager: an initial
 surface α·I₁ + β·q = K and an ultimate one η·I₁ + μ·q = K_L, with H = 0.
 Reference: the equibiaxial stress at the apex of the ultimate surface,
 σ_xx = σ_yy = K_L / (2η + μ).
@@ -2307,7 +2308,7 @@ if __name__ == "__main__":
 | pyrucast model | `model.plasticity_perfect(fes, "plane_stress")` in `stepping.step_by_step`, QUA4 |
 | Reference | R. Hill, Mathematical theory of plasticity, Oxford, Oxford Clavendon Press, 1950. Test V.P.C.S. numero SSNP11/89 |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/plas6.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/plas6.dgibi` |
 | Folder | [`03_plasticity/plas6/`](03_plasticity/plas6/) |
 
 **Topic.** A rectangle in plane stress is bent by a linear distribution of imposed
@@ -2336,9 +2337,9 @@ Rectangle of width 12.5 mm (x) and height 100 mm (y, from −50 to 50 mm),
   extrapolated to the 33 nodes of that side and integrated by the trapezoid
   rule, in kN·m.
 
-**Notes.** The 2011 document gives E = 2e11 Pa and states no goal; the deck uses
+**Notes.** The 2011 document gives E = 2e11 Pa and states no goal; the `.dgibi` file uses
 E = 2.1e11 Pa. The document prints no result table; the references are the
-deck's.
+`.dgibi` file's.
 
 The pyrucast moment is that of the support forces on the loaded side,
 Σ y·F_x, exact by equilibrium; Cast3M's integrates y·σ_xx along the side with
@@ -2363,7 +2364,7 @@ differ by the error of that integration, which grows with the plastic zone.
 | bending moment at t = 0.5 (kN·m) | 1206 | — | 1209.53 (+0.293 %) | 1207.35 (+0.112 %) | 1.8e-03 |
 | bending moment at t = 1.0 (kN·m) | 1207.5 | — | 1210.37 (+0.238 %) | 1208.36 (+0.0711 %) | 1.7e-03 |
 
-Acceptance: deck criterion, largest relative gap of the nine moments ≤ 0.5 %.
+Acceptance: criterion of the `.dgibi` file, largest relative gap of the nine moments ≤ 0.5 %.
 
 pyrucast: the 9 checked quantities are within tolerance.
 
@@ -2385,10 +2386,10 @@ a symmetry plane (u_x = 0) and the origin is held along y. Reference: the
 bending moment of R. Hill's solution at nine load levels, up to the fully
 plastic moment.
 
-Mesh: the deck's regular grid of 32 × 4 QUA4.
+Mesh: the `.dgibi` file's regular grid of 32 × 4 QUA4.
 
 The moment is taken from the support forces on the loaded side, Σ y·F_x, in
-kN·m: exact by equilibrium. The deck integrates y·σ_xx along that side, with
+kN·m: exact by equilibrium. The `.dgibi` file integrates y·σ_xx along that side, with
 σ_xx extrapolated to the nodes and averaged between cells; the two estimates
 differ by the error of that integration.
 
@@ -2484,7 +2485,7 @@ if __name__ == "__main__":
 | pyrucast model | `model.plasticity_perfect(fes, "plane_strain")` in `stepping.step_by_step`, QUA4 |
 | Reference | R. Hill, Mathematical theory of plasticity, Oxford, Oxford Clavendon Press, 1950. Test V.P.C.S. numero SSNP11/89 |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/plas7.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/plas7.dgibi` |
 | Folder | [`03_plasticity/plas7/`](03_plasticity/plas7/) |
 
 **Topic.** The bending test of plas6 in plane strain: a rectangle is bent by a linear
@@ -2511,9 +2512,9 @@ Rectangle of width 12.5 mm (x) and height 100 mm (y, from −50 to 50 mm),
 - Moment: 1e-4 · ∫ y σ_xx dy along the loaded side, with σ_xx extrapolated
   to its nodes and integrated by the trapezoid rule, in 1e4 N·m.
 
-**Notes.** The 2011 document names the element QUA44 and gives E = 2e11 Pa; the deck
+**Notes.** The 2011 document names the element QUA44 and gives E = 2e11 Pa; the `.dgibi` file
 uses QUA4 and E = 2.1e11 Pa. The document prints no result table; the
-references are the deck's.
+references are the `.dgibi` file's.
 
 The pyrucast moment is that of the support forces on the loaded side,
 Σ y·F_x, exact by equilibrium; Cast3M's integrates y·σ_xx along the side with
@@ -2547,7 +2548,7 @@ reads the node in one cell, which shows it.
 | σ_xx at A (12.5, 50) mm, t = 1 (MPa) | 543.4 | — | 547.236 (+0.706 %) | 996.705 (+83.4 %) | 8.2e-01 |
 | σ_xx at the second node of the loaded edge (y = 46.875 mm), t = 1 (MPa) | 557.7 | — | 557.745 (+0.00805 %) | 118.706 (-78.7 %) | 7.9e-01 |
 
-Acceptance: deck criterion, largest relative gap of the nine values ≤ 5 %.
+Acceptance: criterion of the `.dgibi` file, largest relative gap of the nine values ≤ 5 %.
 
 pyrucast OUTSIDE tolerance: sxx_A: 996.7051027453901 vs 543.4, beyond 5.000000%
 
@@ -2571,10 +2572,10 @@ a symmetry plane (u_x = 0) and the origin is held along y. Reference: the
 bending moment of R. Hill's solution at seven load levels, up to the fully
 plastic moment, and σ_xx at two nodes of the loaded side at the last one.
 
-Mesh: the deck's regular grid of 32 × 4 QUA4.
+Mesh: the `.dgibi` file's regular grid of 32 × 4 QUA4.
 
 The moment is taken from the support forces on the loaded side, Σ y·F_x, in
-the deck's unit of 1e4 N·m: exact by equilibrium. The deck integrates y·σ_xx along that side, with
+the `.dgibi` file's unit of 1e4 N·m: exact by equilibrium. The `.dgibi` file integrates y·σ_xx along that side, with
 σ_xx extrapolated to the nodes and averaged between cells; the two estimates
 differ by the error of that integration. The stresses are read by `project`
 in one cell holding the node, from its Gauss points.
@@ -2594,7 +2595,7 @@ N_HEIGHT, N_WIDTH = 32, 4
 ROTATION = 1e-3  # u_x at y = 50 mm per unit time
 TIMES = [0.0, 0.029435, 0.1, 0.2, 0.3, 0.4, 0.5, 1.0]
 KINEMATICS = "plane_strain"
-MOMENT_UNIT = 1e4  # N·m, the deck's
+MOMENT_UNIT = 1e4  # N·m, the `.dgibi` file's
 
 
 def main(out: str | None = None) -> dict[str, float]:
@@ -2685,7 +2686,7 @@ if __name__ == "__main__":
 | pyrucast model | not available — missing: plasticity in plate elements |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/plas8.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/plas8.dgibi` |
 | Folder | [`03_plasticity/plas8/`](03_plasticity/plas8/) |
 
 **Topic.** A plate strip, clamped at one end, is bent by an imposed deflection of its
@@ -2718,7 +2719,7 @@ h = L/10 = 1; DKT triangles, 20 elements along x and 2 across.
 |---|---|---|---|---|---|
 | reaction force at the last deflection (N) | 2.5e+06 | — | 2.69491e+06 (+7.8 %) | not available |  |
 
-Acceptance: deck criterion (complete run), |F − F_u| / F_u ≤ 8.5 %.
+Acceptance: criterion of the `.dgibi` file (complete run), |F − F_u| / F_u ≤ 8.5 %.
 
 ### plas9
 
@@ -2732,7 +2733,7 @@ Acceptance: deck criterion (complete run), |F − F_u| / F_u ≤ 8.5 %.
 | pyrucast model | `model.drucker_prager(fes, "full_3d")` in `stepping.step_by_step`, HEX8 |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/plas9.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/plas9.dgibi` |
 | Folder | [`03_plasticity/plas9/`](03_plasticity/plas9/) |
 
 **Topic.** A parallelepiped of a Drucker-Prager material with negative hardening is
@@ -2763,16 +2764,16 @@ negligible stiffness, CUB8 elements.
   m = √(2α² + β²) / (α + β).
 - Compared quantity: max |σ − σ_exact| / K over the computed times.
 
-**Notes.** The 2011 document prints no result table; the reference is the deck's.
+**Notes.** The 2011 document prints no result table; the reference is the `.dgibi` file's.
 
-The deck gives the ultimate surface equal to the initial one (K_L = K) and
+The `.dgibi` file gives the ultimate surface equal to the initial one (K_L = K) and
 H < 0. pyrucast reads the two surfaces as the ends of one interpolation
 driven by H·p (see `src/models/plasticity/drucker_prager.rs`): with K_L = K
 the interpolation is frozen, H has no effect, and the stress stays on the
 plateau K / (α + β) instead of softening to zero. The gap measured is that
 plateau against the exact curve's zero.
 
-The deck adds, on the same cell, an elastic material of stiffness 2e-3 in
+The `.dgibi` file adds, on the same cell, an elastic material of stiffness 2e-3 in
 parallel; pyrucast refuses two laws carrying each their own E on one support,
 and the script leaves it out (its stress stays below 1e-6).
 
@@ -2811,9 +2812,9 @@ Reference: the exact uniaxial curve,
     σ = (K + H·m·ε) / ((α + β) + H·m/E)      after, floored at 0,
 
 with m = √(2α² + β²) / (α + β). Compared: max |σ − σ_exact| / K over the
-computed times (the deck's test).
+computed times (the `.dgibi` file's test).
 
-The deck adds, on the same cell, an elastic material of stiffness 2e-3 in
+The `.dgibi` file adds, on the same cell, an elastic material of stiffness 2e-3 in
 parallel. pyrucast refuses two laws carrying each their own E on one support;
 that material's stress stays below 2e-3 × 6e-4 ≈ 1e-6, under what the test
 reads (5e-5·K), so it is left out.
@@ -2929,7 +2930,7 @@ if __name__ == "__main__":
 | pyrucast model | not available — missing: Cam-Clay law |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/plas10.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/plas10.dgibi` |
 | Folder | [`03_plasticity/plas10/`](03_plasticity/plas10/) |
 
 **Topic.** A parallelepiped of a Cam-Clay material is compressed hydrostatically by
@@ -2956,7 +2957,7 @@ per time unit, up to t = 200.
 - Exact solution at t = 200: σ_xx = −(p₀ + c)·exp(−300·u·(1 + e)/λ) + c and
   plastic volume strain 300·u·(λ − κ)/λ, with u = −2.664328e-5.
 
-**Notes.** The 2011 document prints no result table; the references are the deck's formulas.
+**Notes.** The 2011 document prints no result table; the references are the `.dgibi` file's formulas.
 
 #### Results
 
@@ -2965,7 +2966,7 @@ per time unit, up to t = 200.
 | σ_xx at t = 200 | -6.4904 | — | -6.4904 (+7.84e-07 %) | not available |  |
 | plastic volume strain at t = 200 | -0.00719369 | — | -0.00719369 (+3.04e-06 %) | not available |  |
 
-Acceptance: deck criteria, both relative gaps ≤ 1e-6.
+Acceptance: criteria of the `.dgibi` file, both relative gaps ≤ 1e-6.
 
 ### plas11
 
@@ -2979,7 +2980,7 @@ Acceptance: deck criteria, both relative gaps ≤ 1e-6.
 | pyrucast model | not available — missing: generalized plane strain; axisymmetric shell element (COQ2) |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/plas11.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/plas11.dgibi` |
 | Folder | [`03_plasticity/plas11/`](03_plasticity/plas11/) |
 
 **Topic.** A beam of rectangular cross-section is bent by an imposed rotation about x,
@@ -3012,9 +3013,9 @@ points, all with the same material.
 |---|---|---|---|---|---|
 | moment M_x at the last rotation ¹ | 3.85931e+09 | — | 3.85066e+09 (-0.224 %) | not available |  |
 
-¹ Reference computed by the Cast3M 2026 deck from its analytical formula.
+¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
-Acceptance: deck criterion, |M − M_theory| / M_theory ≤ 0.5 %.
+Acceptance: criterion of the `.dgibi` file, |M − M_theory| / M_theory ≤ 0.5 %.
 
 ### plas12
 
@@ -3028,7 +3029,7 @@ Acceptance: deck criterion, |M − M_theory| / M_theory ≤ 0.5 %.
 | pyrucast model | not available — missing: pipe element (TUYA) |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/plas12.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/plas12.dgibi` |
 | Folder | [`03_plasticity/plas12/`](03_plasticity/plas12/) |
 
 **Topic.** A pipe clamped at both ends undergoes a thermal shock. Young's modulus, the
@@ -3055,9 +3056,9 @@ by 1, 0.8, 0.6, 0.4, 0.2 with the temperature; ν = 0.3.
 |---|---|---|---|---|---|
 | area under the σ(ε) curve ¹ | 32.9336 | — | 32.7558 (-0.54 %) | not available |  |
 
-¹ Reference computed by the Cast3M 2026 deck from its analytical formula.
+¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
-Acceptance: deck criterion, relative gap of the areas under the two curves ≤ 5.5e-3.
+Acceptance: criterion of the `.dgibi` file, relative gap of the areas under the two curves ≤ 5.5e-3.
 
 ### plas13
 
@@ -3071,7 +3072,7 @@ Acceptance: deck criterion, relative gap of the areas under the two curves ≤ 5
 | pyrucast model | not available — missing: beam plasticity (global law) |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/plas13.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/plas13.dgibi` |
 | Folder | [`03_plasticity/plas13/`](03_plasticity/plas13/) |
 
 **Topic.** A reinforced-concrete post under a load of 2 t, modelled by beam elements
@@ -3090,7 +3091,7 @@ Post of beam elements clamped at A0 (0, 0, 0), section 0.0289 m².
 | ν | 0.2 |
 | ρ | 2516 kg/m³ |
 
-**Notes.** The 2011 document prints no result table; the reference is the deck's.
+**Notes.** The 2011 document prints no result table; the reference is the `.dgibi` file's.
 
 #### Results
 
@@ -3098,7 +3099,7 @@ Post of beam elements clamped at A0 (0, 0, 0), section 0.0289 m².
 |---|---|---|---|---|---|
 | largest moment M_x at A0 (N·m) | 21401 | — | 21399 (-0.00935 %) | not available |  |
 
-Acceptance: deck criterion, |M_max − 21 401| / 21 401 ≤ 1e-3.
+Acceptance: criterion of the `.dgibi` file, |M_max − 21 401| / 21 401 ≤ 1e-3.
 
 ### plas14
 
@@ -3112,7 +3113,7 @@ Acceptance: deck criterion, |M_max − 21 401| / 21 401 ≤ 1e-3.
 | pyrucast model | not available — missing: multi-fibre beam sections |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/plas14.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/plas14.dgibi` |
 | Folder | [`03_plasticity/plas14/`](03_plasticity/plas14/) |
 
 **Topic.** A concrete section of 0.25 × 0.25 m (core 0.20 × 0.20 m) with four 20 mm
@@ -3132,7 +3133,7 @@ for the concrete (with confinement).
 | ultimate strain | 0.09 |
 | ultimate stress | 760 |
 
-**Notes.** The 2011 document prints no result table and no goal; the reference is the deck's.
+**Notes.** The 2011 document prints no result table and no goal; the reference is the `.dgibi` file's.
 
 #### Results
 
@@ -3140,7 +3141,7 @@ for the concrete (with confinement).
 |---|---|---|---|---|---|
 | largest force of the response | 0.0772465 | — | 0.0772514 (+0.00633 %) | not available |  |
 
-Acceptance: deck criterion, |F_max − 7.72465e-2| ≤ 4e-2.
+Acceptance: criterion of the `.dgibi` file, |F_max − 7.72465e-2| ≤ 4e-2.
 
 ## Behaviour laws
 
@@ -3156,7 +3157,7 @@ Acceptance: deck criterion, |F_max − 7.72465e-2| ≤ 4e-2.
 | pyrucast model | not available — missing: Norton creep with a time-hardening exponent (Cast3M AF3) |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/norton_cis1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/norton_cis1.dgibi` |
 | Folder | [`04_behaviour_laws/norton_cis1/`](04_behaviour_laws/norton_cis1/) |
 
 **Topic.** A square of a Norton creep material, in plane strain, is loaded in pure shear
@@ -3186,9 +3187,9 @@ One QUA4 square; u_y = 0 at every node, u_x = 0 on the lower side.
 - Analytical solution: γ_p = √3·A·(√3·τ)^n·t^m and
   τ_xy = G·(γ − γ_p) with G = E / (2(1 + ν)).
 
-**Notes.** The 2011 document prints no result table; the references are the deck's
+**Notes.** The 2011 document prints no result table; the references are the `.dgibi` file's
 formulas. pyrucast's `model.creep_norton` is the secondary creep
-ṗ = (q/K)^n: it has no time exponent, and the deck's is m = 1.2.
+ṗ = (q/K)^n: it has no time exponent, and the `.dgibi` file's is m = 1.2.
 
 #### Results
 
@@ -3197,9 +3198,9 @@ formulas. pyrucast's `model.creep_norton` is the secondary creep
 | shear creep strain γ_p at t = 20 ¹ | 0.0016523 | — | 0.00165241 (+0.00636 %) | not available |  |
 | shear stress σ_xy at t = 20 (Pa) ¹ | 6.99943e+07 | — | 6.99858e+07 (-0.0121 %) | not available |  |
 
-¹ Reference computed by the Cast3M 2026 deck from its analytical formula.
+¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
-Acceptance: deck criterion, at every computed time the creep strain and the shear stress within 0.25 % of the analytical values.
+Acceptance: criterion of the `.dgibi` file, at every computed time the creep strain and the shear stress within 0.25 % of the analytical values.
 
 ### chaboche2
 
@@ -3213,7 +3214,7 @@ Acceptance: deck criterion, at every computed time the creep strain and the shea
 | pyrucast model | `model.viscoplasticity_chaboche(fes, "axisymmetric")` in `stepping.step_by_step`, QUA8 |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/chaboche2.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/chaboche2.dgibi` |
 | Folder | [`04_behaviour_laws/chaboche2/`](04_behaviour_laws/chaboche2/) |
 
 **Topic.** A cylinder of a unified viscoplastic Chaboche material (Norton flow, one
@@ -3242,10 +3243,10 @@ Axisymmetric, one QUA8 square [0, 1] × [0, 1] in (r, z), B-bar formulation.
 - Reference: the same computation with the ONERA model and equivalent data.
 
 **Notes.** The 2011 document prints no result table and gives E = 7.34e10, ν = 0.33;
-the data above are the deck's. The deck uses the B-bar formulation, which
+the data above are the `.dgibi` file's. The `.dgibi` file uses the B-bar formulation, which
 changes nothing on a homogeneous strain; pyrucast has none.
 
-pyrucast integrates the law over the deck's steps of 10 s with one implicit
+pyrucast integrates the law over the `.dgibi` file's steps of 10 s with one implicit
 step each, and lands about 1 % from the reference with n = 24; with steps of
 1 s it comes within about 0.1 %. Cast3M reaches the converged values with the
 same 10 s steps: it divides them at the Gauss points, which pyrucast's
@@ -3266,9 +3267,9 @@ step-by-step driver does not offer.
 | σ_zz at t = 400 s (MPa) ¹ | 146.69 | — | 146.69 (+7.21e-07 %) | 145.287 (-0.957 %) | 9.6e-03 |
 | σ_zz at t = 600 s (MPa) ¹ | 239.084 | — | 239.084 (-1.28e-07 %) | 239.05 (-0.0142 %) | 1.4e-04 |
 
-¹ Reference computed by the Cast3M 2026 deck from its analytical formula.
+¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
-Acceptance: deck criterion, max |σ_CHABOCHE − σ_ONERA| / max |σ_ONERA| ≤ 1e-4 over the computed times.
+Acceptance: criterion of the `.dgibi` file, max |σ_CHABOCHE − σ_ONERA| / max |σ_ONERA| ≤ 1e-4 over the computed times.
 
 #### pyrucast figures
 
@@ -3292,7 +3293,7 @@ Cast3M's ONERA model and equivalent data, read at t = 100, 200, 300, 400 and
 
 The Cast3M data map to pyrucast's as SIGY → k, K → K, N → n, A·C → C_1,
 C → gamma_1, B → b, Q → Q. The strain is homogeneous: the stress is read at
-the first Gauss point, every 10 s as the deck computes. The deck's B-bar
+the first Gauss point, every 10 s as the `.dgibi` file computes. The `.dgibi` file's B-bar
 formulation changes nothing on a homogeneous strain; pyrucast has none.
 
 Running::
@@ -3402,7 +3403,7 @@ if __name__ == "__main__":
 | pyrucast model | not available — missing: Ohno viscoplastic law |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/ohno2.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/ohno2.dgibi` |
 | Folder | [`04_behaviour_laws/ohno2/`](04_behaviour_laws/ohno2/) |
 
 **Topic.** A hollow cylinder of an Ohno viscoplastic material (a modified Chaboche
@@ -3410,7 +3411,7 @@ model), clamped at its base, is loaded by an outward radial force on its
 upper face.
 
 **Goal.** Test the Ohno model: the displacement history must equal the one of an
-equivalent second computation run by the deck.
+equivalent second computation run by the `.dgibi` file.
 
 **Model description.**
 
@@ -3421,7 +3422,7 @@ Axisymmetric hollow cylinder, QUA8 elements.
 | E | 7.34e10 Pa |
 | ν | 0.33 |
 
-**Notes.** The 2011 document prints no result table; the reference is the deck's second computation.
+**Notes.** The 2011 document prints no result table; the reference is the `.dgibi` file's second computation.
 
 #### Results
 
@@ -3429,9 +3430,9 @@ Axisymmetric hollow cylinder, QUA8 elements.
 |---|---|---|---|---|---|
 | displacement at the last time (m) ¹ | 2.21794e-05 | — | 2.22274e-05 (+0.217 %) | not available |  |
 
-¹ Reference computed by the Cast3M 2026 deck from its analytical formula.
+¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
-Acceptance: deck criterion, every displacement of the history within 0.3 % of the reference computation.
+Acceptance: criterion of the `.dgibi` file, every displacement of the history within 0.3 % of the reference computation.
 
 ### guionnet_tra
 
@@ -3445,7 +3446,7 @@ Acceptance: deck criterion, every displacement of the history within 0.3 % of th
 | pyrucast model | not available — missing: Guionnet viscoplastic law |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/guionnet_tra.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/guionnet_tra.dgibi` |
 | Folder | [`04_behaviour_laws/guionnet_tra/`](04_behaviour_laws/guionnet_tra/) |
 
 **Topic.** A block of a Guionnet viscoplastic material, held on its lower and upper
@@ -3464,7 +3465,7 @@ CUB8 block.
 | Norton n, K | 24, 200 |
 | R0 | 25 |
 
-**Notes.** The 2011 document prints no result table and gives ν = 0.33; the reference is the deck's.
+**Notes.** The 2011 document prints no result table and gives ν = 0.33; the reference is the `.dgibi` file's.
 
 #### Results
 
@@ -3472,9 +3473,9 @@ CUB8 block.
 |---|---|---|---|---|---|
 | axial reaction of the upper face ¹ | 2.99625 | — | 2.99632 (+0.00233 %) | not available |  |
 
-¹ Reference computed by the Cast3M 2026 deck from its analytical formula.
+¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
-Acceptance: deck criterion, relative gap of the reaction ≤ 0.03 %.
+Acceptance: criterion of the `.dgibi` file, relative gap of the reaction ≤ 0.03 %.
 
 ### zeril1
 
@@ -3488,14 +3489,14 @@ Acceptance: deck criterion, relative gap of the reaction ≤ 0.03 %.
 | pyrucast model | not available — missing: Zerilli-Armstrong law |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/zeril1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/zeril1.dgibi` |
 | Folder | [`04_behaviour_laws/zeril1/`](04_behaviour_laws/zeril1/) |
 
 **Topic.** A bar of a Zerilli-Armstrong elastoplastic material (body-centred cubic
 form), held at its ends, is pulled by an imposed displacement.
 
 **Goal.** Test the Zerilli-Armstrong model for a body-centred cubic structure against
-the uniaxial curve integrated by the deck.
+the uniaxial curve integrated by the `.dgibi` file.
 
 **Model description.**
 
@@ -3508,7 +3509,7 @@ CUB8 bar.
 | ρ | 7.8e3 kg/m³ |
 | α | 1e-5 /°C |
 
-**Notes.** The 2011 document prints no result table; the references are the deck's integration at the last time.
+**Notes.** The 2011 document prints no result table; the references are the `.dgibi` file's integration at the last time.
 
 #### Results
 
@@ -3517,9 +3518,9 @@ CUB8 bar.
 | axial stress at the last time (Pa) ¹ | 1.3727e+08 | — | 1.37427e+08 (+0.114 %) | not available |  |
 | plastic strain at the last time ¹ | 0.00934641 | — | 0.00934559 (-0.00877 %) | not available |  |
 
-¹ Reference computed by the Cast3M 2026 deck from its analytical formula.
+¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
-Acceptance: deck criterion, plastic strain and stress within 1 % of the deck's integration at every time.
+Acceptance: criterion of the `.dgibi` file, plastic strain and stress within 1 % of the `.dgibi` file's integration at every time.
 
 ### preston1
 
@@ -3533,14 +3534,14 @@ Acceptance: deck criterion, plastic strain and stress within 1 % of the deck's i
 | pyrucast model | not available — missing: Preston-Tonks-Wallace law |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer release |
-| Cast3M 2026 deck | `dgibi/preston1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/preston1.dgibi` |
 | Folder | [`04_behaviour_laws/preston1/`](04_behaviour_laws/preston1/) |
 
 **Topic.** A bar of a Preston-Tonks-Wallace elastoplastic material, held at its ends,
 is pulled by an imposed displacement.
 
 **Goal.** Test the Preston-Tonks-Wallace model for a body-centred cubic structure
-against the uniaxial curve integrated by the deck.
+against the uniaxial curve integrated by the `.dgibi` file.
 
 **Model description.**
 
@@ -3553,7 +3554,7 @@ CUB8 bar.
 | ρ | 7.8e3 kg/m³ |
 | τ | 0.025 |
 
-**Notes.** The 2011 document prints no result table; the reference is the deck's integration.
+**Notes.** The 2011 document prints no result table; the reference is the `.dgibi` file's integration.
 
 #### Results
 
@@ -3562,7 +3563,7 @@ CUB8 bar.
 | largest gap of the stress (%) | 0 | — | 0.0358752 (Δ = 0.036) | not available |  |
 | largest gap of the plastic strain (%) | 0 | — | 0.000264593 (Δ = 0.00026) | not available |  |
 
-Acceptance: deck criterion, every gap of the stress and of the plastic strain to the deck's integration ≤ 5e-2 %.
+Acceptance: criterion of the `.dgibi` file, every gap of the stress and of the plastic strain to the `.dgibi` file's integration ≤ 5e-2 %.
 
 ## Damage elastoplastic models
 
@@ -3578,7 +3579,7 @@ Acceptance: deck criterion, every gap of the stress and of the plastic strain to
 | pyrucast model | not available — missing: elastoplastic damage law (ENDOMMAGEABLE) |
 | Reference | Analytical solution. Tests carried out by Mr STRUB (rapport DMT/91 .558). |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/endocp1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/endocp1.dgibi` |
 | Folder | [`05_damage/endocp1/`](05_damage/endocp1/) |
 
 **Topic.** A test piece of an elastoplastic material with ductile damage, in plane stress, is
@@ -3600,8 +3601,8 @@ Test piece of QUA8 elements, plane stress.
 - Tensile curve given point by point; damage law of the ENDOMMAGEABLE model.
 - Load: imposed axial displacement increasing with time.
 
-**Notes.** The 2011 document prints no result table; the references are the deck's.
-The deck runs its short version by default (`complet = faux`): two computed
+**Notes.** The 2011 document prints no result table; the references are the `.dgibi` file's.
+The `.dgibi` file runs its short version by default (`complet = faux`): two computed
 times. Its complete version goes on to a cumulated plastic strain of 0.2427
 and a damage of 0.2199.
 
@@ -3614,7 +3615,7 @@ and a damage of 0.2199.
 | axial stress (SMYY), first computed time (Pa) | 3.543e+08 | — | 3.54328e+08 (+0.00796 %) | not available |  |
 | axial stress (SMYY), second computed time (Pa) | 4.07984e+08 | — | 4.07984e+08 (-0.000116 %) | not available |  |
 
-Acceptance: deck criterion, every relative gap ≤ 5 %.
+Acceptance: criterion of the `.dgibi` file, every relative gap ≤ 5 %.
 
 ### endoaxi1
 
@@ -3628,7 +3629,7 @@ Acceptance: deck criterion, every relative gap ≤ 5 %.
 | pyrucast model | not available — missing: elastoplastic damage law (ENDOMMAGEABLE) |
 | Reference | Analytical solution. Tests carried out by Mr STRUB (rapport DMT/91 .558). |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/endoaxi1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/endoaxi1.dgibi` |
 | Folder | [`05_damage/endoaxi1/`](05_damage/endoaxi1/) |
 
 **Topic.** A test piece of an elastoplastic material with ductile damage, in axisymmetric, is
@@ -3650,8 +3651,8 @@ Test piece of QUA8 elements, axisymmetric.
 - Tensile curve given point by point; damage law of the ENDOMMAGEABLE model.
 - Load: imposed axial displacement increasing with time.
 
-**Notes.** The 2011 document prints no result table; the references are the deck's.
-The deck runs its short version by default (`complet = faux`): two computed
+**Notes.** The 2011 document prints no result table; the references are the `.dgibi` file's.
+The `.dgibi` file runs its short version by default (`complet = faux`): two computed
 times. Its complete version goes on to a cumulated plastic strain of 0.2427
 and a damage of 0.2199.
 
@@ -3664,7 +3665,7 @@ and a damage of 0.2199.
 | axial stress (SMZZ), first computed time (Pa) | 3.543e+08 | — | 3.54327e+08 (+0.00772 %) | not available |  |
 | axial stress (SMZZ), second computed time (Pa) | 4.07984e+08 | — | 4.07675e+08 (-0.0757 %) | not available |  |
 
-Acceptance: deck criterion, every relative gap ≤ 5 %.
+Acceptance: criterion of the `.dgibi` file, every relative gap ≤ 5 %.
 
 ### endoaxi2
 
@@ -3678,7 +3679,7 @@ Acceptance: deck criterion, every relative gap ≤ 5 %.
 | pyrucast model | not available — missing: elastoplastic damage law (ENDOMMAGEABLE) |
 | Reference | Analytical solution. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/endoaxi2.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/endoaxi2.dgibi` |
 | Folder | [`05_damage/endoaxi2/`](05_damage/endoaxi2/) |
 
 **Topic.** An axisymmetric test piece of an elastoplastic material with ductile damage
@@ -3700,7 +3701,7 @@ Axisymmetric test piece of QUA8 elements.
 - Tensile curves and thermal expansion tabulated against the temperature.
 - Load: imposed axial displacement and temperature history.
 
-**Notes.** The 2011 document prints no result table; the references are the deck's.
+**Notes.** The 2011 document prints no result table; the references are the `.dgibi` file's.
 
 #### Results
 
@@ -3710,7 +3711,7 @@ Axisymmetric test piece of QUA8 elements.
 | damage D at the last time (step 18) | 0.08131 | — | 0.0823298 (+1.25 %) | not available |  |
 | σ_zz at the last time (step 18) (Pa) | 3.892e+08 | — | 3.88185e+08 (-0.261 %) | not available |  |
 
-Acceptance: deck criterion, every relative gap ≤ 5 %.
+Acceptance: criterion of the `.dgibi` file, every relative gap ≤ 5 %.
 
 ### endoaxi3
 
@@ -3724,7 +3725,7 @@ Acceptance: deck criterion, every relative gap ≤ 5 %.
 | pyrucast model | not available — missing: elastoplastic damage law (ENDOMMAGEABLE) |
 | Reference | Analytical solution. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/endoaxi3.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/endoaxi3.dgibi` |
 | Folder | [`05_damage/endoaxi3/`](05_damage/endoaxi3/) |
 
 **Topic.** An axisymmetric test piece of an elastoplastic material with ductile damage
@@ -3741,7 +3742,7 @@ algorithm: cumulated plastic strain, damage variable D and axial stress.
 Axisymmetric test piece of QUA8 elements, E = 74 020e6 Pa, tensile curves
 tabulated against the temperature.
 
-**Notes.** The 2011 document prints no result table. The deck holds two sets of
+**Notes.** The 2011 document prints no result table. The `.dgibi` file holds two sets of
 references, for its complete and its short run; the references are those of
 the set the run uses.
 
@@ -3753,9 +3754,9 @@ the set the run uses.
 | cumulated plastic strain at the second compared time ¹ | 0.0197372 | — | 0.0197379 (+0.00353 %) | not available |  |
 | σ_zz at the second compared time (Pa) ¹ | -3.57838e+08 | — | -3.57792e+08 (+0.0128 %) | not available |  |
 
-¹ Reference computed by the Cast3M 2026 deck from its analytical formula.
+¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
-Acceptance: deck criterion, every relative gap ≤ 5 %.
+Acceptance: criterion of the `.dgibi` file, every relative gap ≤ 5 %.
 
 ### ddi
 
@@ -3769,7 +3770,7 @@ Acceptance: deck criterion, every relative gap ≤ 5 %.
 | pyrucast model | not available — missing: two-inelastic-strain damage law (DDI) |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/ddi.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/ddi.dgibi` |
 | Folder | [`05_damage/ddi/`](05_damage/ddi/) |
 
 **Topic.** A cylindrical test piece of a viscoplastic material with damage and two
@@ -3787,7 +3788,7 @@ Axisymmetric test piece of QUA8 elements.
 | E | 8.2e10 Pa |
 | ν | 0.36 |
 
-**Notes.** The 2011 document prints no result table; the references are the deck's.
+**Notes.** The 2011 document prints no result table; the references are the `.dgibi` file's.
 
 #### Results
 
@@ -3797,7 +3798,7 @@ Axisymmetric test piece of QUA8 elements.
 | inelastic strain v at the last time | 0.00314432 | — | 0.00314431 (-0.000172 %) | not available |  |
 | σ_zz at the last time (Pa) | 2.19491e+08 | — | 2.19496e+08 (+0.00212 %) | not available |  |
 
-Acceptance: deck criterion, every relative gap ≤ 0.1 %.
+Acceptance: criterion of the `.dgibi` file, every relative gap ≤ 0.1 %.
 
 ## Fracture mechanics
 
@@ -3813,7 +3814,7 @@ Acceptance: deck criterion, every relative gap ≤ 0.1 %.
 | pyrucast model | not available — missing: stress intensity factors (G-theta) |
 | Reference | Test NAFEMS : Ductile Fracture Handbook, A. ZAHOOR, EPRI, 1990 : rupt1 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/rupt1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/rupt1.dgibi` |
 | Folder | [`06_fracture/rupt1/`](06_fracture/rupt1/) |
 
 **Topic.** A cylinder with a circumferential crack, in linear elasticity and
@@ -3829,7 +3830,7 @@ Axisymmetric, QUA8 elements; crack depth a = 0.05 m.
 
 | Data | Value |
 |---|---|
-| E | 2.1e11 Pa (2e11 Pa in the deck) |
+| E | 2.1e11 Pa (2e11 Pa in the `.dgibi` file) |
 | ν | 0.3 |
 | a | 0.05 m |
 
@@ -3841,7 +3842,7 @@ Axisymmetric, QUA8 elements; crack depth a = 0.05 m.
 |---|---|---|---|---|---|
 | K_I (MPa·m^½) | 1.0848 | 1.0855 (+0.0645 %) | 1.08378 (-0.0936 %) | not available |  |
 
-Acceptance: deck criterion, |K − K_Zahoor| / K_Zahoor < 1 %.
+Acceptance: criterion of the `.dgibi` file, |K − K_Zahoor| / K_Zahoor < 1 %.
 
 ### rupt2
 
@@ -3855,7 +3856,7 @@ Acceptance: deck criterion, |K − K_Zahoor| / K_Zahoor < 1 %.
 | pyrucast model | not available — missing: stress intensity factors (G-theta) |
 | Reference | Test NAFEMS : The use of J-integral in thermal stress crack problems International Journal of Fracture: rupt2 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/rupt2.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/rupt2.dgibi` |
 | Folder | [`06_fracture/rupt2/`](06_fracture/rupt2/) |
 
 **Topic.** An edge-cracked strip with constrained ends is loaded by a temperature that
@@ -3885,7 +3886,7 @@ QUA8 elements, plane strain; crack length a = 100 mm, width 200 mm, height
 |---|---|---|---|---|---|
 | K_I (daN·mm^-3/2) | 130.15 | 125.88 (-3.28 %) | 125.858 (-3.3 %) | not available |  |
 
-Acceptance: deck criterion, shape factor F = K(1 − ν)/(E·α·T₀·w·√(πa)) within 5 % of 0.514.
+Acceptance: criterion of the `.dgibi` file, shape factor F = K(1 − ν)/(E·α·T₀·w·√(πa)) within 5 % of 0.514.
 
 ### rupt3
 
@@ -3899,7 +3900,7 @@ Acceptance: deck criterion, shape factor F = K(1 − ν)/(E·α·T₀·w·√(π
 | pyrucast model | not available — missing: stress intensity factors (G-theta) |
 | Reference | Test NAFEMS : D.P.Rooke and D. J. Cartwright in Copendium of Intensity Factors HMSO (1976): rupt3 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/rupt3.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/rupt3.dgibi` |
 | Folder | [`06_fracture/rupt3/`](06_fracture/rupt3/) |
 
 **Topic.** Plane strain, linear elasticity: a central crack in a plate under uniform tension (a quarter is modelled). The energy release rate G is
@@ -3923,7 +3924,7 @@ QUA8 elements, plane strain; crack length a = 100 mm, half-width b = 200 mm.
 |---|---|---|---|---|---|
 | K_I (daN·mm^-3/2) | 20.84 | 21.02 (+0.864 %) | 21.0193 (+0.86 %) | not available |  |
 
-Acceptance: deck criterion, |K − K_th| / K_th < 5 %.
+Acceptance: criterion of the `.dgibi` file, |K − K_th| / K_th < 5 %.
 
 ### rupt4
 
@@ -3937,7 +3938,7 @@ Acceptance: deck criterion, |K − K_th| / K_th < 5 %.
 | pyrucast model | not available — missing: stress intensity factors (G-theta) |
 | Reference | Test NAFEMS : D.P.Rooke and D. J. Cartwright in Copendium of Intensity Factors HMSO (1976) : rupt4 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/rupt4.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/rupt4.dgibi` |
 | Folder | [`06_fracture/rupt4/`](06_fracture/rupt4/) |
 
 **Topic.** Plane strain, linear elasticity: a central crack in a plate loaded by a uniform pressure on its lips (a quarter is modelled). The energy release rate G is
@@ -3961,7 +3962,7 @@ QUA8 elements, plane strain; crack length a = 100 mm, half-width b = 200 mm.
 |---|---|---|---|---|---|
 | K_I (daN·mm^-3/2) | 17.725 | 17.616 (-0.615 %) | 17.7836 (+0.331 %) | not available |  |
 
-Acceptance: deck criterion, |K − K_th| / K_th < 5 %.
+Acceptance: criterion of the `.dgibi` file, |K − K_th| / K_th < 5 %.
 
 ### rupt5
 
@@ -3975,7 +3976,7 @@ Acceptance: deck criterion, |K − K_th| / K_th < 5 %.
 | pyrucast model | not available — missing: stress intensity factors (G-theta) |
 | Reference | Test NAFEMS : D.P.Rooke and D. J. Cartwright in Copendium of Intensity Factors HMSO (1976) : rupt5 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/rupt5.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/rupt5.dgibi` |
 | Folder | [`06_fracture/rupt5/`](06_fracture/rupt5/) |
 
 **Topic.** Plane strain, linear elasticity: a central crack in a tube under uniform internal pressure (a quarter is modelled). The energy release rate G is
@@ -3999,7 +4000,7 @@ QUA8 elements, plane strain; crack length a = 100 mm, half-width b = 200 mm.
 |---|---|---|---|---|---|
 | K_I (daN·mm^-3/2) | 2.4215 | 2.4098 (-0.483 %) | 2.40961 (-0.491 %) | not available |  |
 
-Acceptance: deck criterion, |K − K_th| / K_th < 5 %.
+Acceptance: criterion of the `.dgibi` file, |K − K_th| / K_th < 5 %.
 
 ### rupt6
 
@@ -4013,7 +4014,7 @@ Acceptance: deck criterion, |K − K_th| / K_th < 5 %.
 | pyrucast model | not available — missing: stress intensity factors (G-theta) |
 | Reference | Test NAFEMS : D.P.Rooke and D. J. Cartwright in Copendium of Intensity Factors HMSO (1976) : rupt6 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/rupt6.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/rupt6.dgibi` |
 | Folder | [`06_fracture/rupt6/`](06_fracture/rupt6/) |
 
 **Topic.** A circular plane crack inside an infinite cylinder under axial tension. By
@@ -4033,7 +4034,7 @@ CU20 elements, 3D sector; crack radius 8 mm, cylinder radius 100 mm.
 
 - Load: imposed axial displacement on the end face.
 
-**Notes.** The Cast3M 2026 values are the G-θ ones; the deck checks them against 638.47.
+**Notes.** The Cast3M 2026 values are the G-θ ones; the `.dgibi` file checks them against 638.47.
 
 #### Results
 
@@ -4042,7 +4043,7 @@ CU20 elements, 3D sector; crack radius 8 mm, cylinder radius 100 mm.
 | K_I at the surface node (daN·mm^-3/2) | 607.41 | 638.47 (+5.11 %) | 633.089 (+4.23 %) | not available |  |
 | K_I at the middle node (daN·mm^-3/2) | 580.48 | 638.47 (+9.99 %) | 633.427 (+9.12 %) | not available |  |
 
-Acceptance: deck criterion of its SIF procedure, within 5.5 % at the surface node and 11 % at the middle node.
+Acceptance: criterion of the `.dgibi` file of its SIF procedure, within 5.5 % at the surface node and 11 % at the middle node.
 
 ### rupt7
 
@@ -4056,7 +4057,7 @@ Acceptance: deck criterion of its SIF procedure, within 5.5 % at the surface nod
 | pyrucast model | not available — missing: stress intensity factors (G-theta) |
 | Reference | Test NAFEMS : D.P.Rooke and D. J. Cartwright in Copendium of Intensity Factors HMSO (1976): rupt7 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/rupt7.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/rupt7.dgibi` |
 | Folder | [`06_fracture/rupt7/`](06_fracture/rupt7/) |
 
 **Topic.** A finite plate with an oblique edge crack (45°) under uniform tension. The
@@ -4071,22 +4072,22 @@ QUA8 elements; plate 0.125 × 0.125, crack length a = 0.05 at 45°, tension
 σ = 10.
 
 - Reference: K₀ = σ·√(πa)·cos α, K_I = K₀·cos α·1.216,
-  K_II = −K₀·sin α·1.216, evaluated by the deck.
+  K_II = −K₀·sin α·1.216, evaluated by the `.dgibi` file.
 
-**Notes.** The Cast3M 2026 deck uses another unit system than the 2011 document, whose
+**Notes.** The Cast3M 2026 `.dgibi` file uses another unit system than the 2011 document, whose
 values are K_I = 151.2 and K_II = −71.56 daN·mm^-3/2 for the references 150.37
-and −71.4. The references here are those of the deck's formulas.
+and −71.4. The references here are those of the `.dgibi` file's formulas.
 
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| K_I (deck units) ¹ | 2.4097 | — | 2.39347 (-0.674 %) | not available |  |
-| K_II (deck units) ¹ | -2.4097 | — | -2.27464 (+5.61 %) | not available |  |
+| K_I (units of the `.dgibi` file) ¹ | 2.4097 | — | 2.39347 (-0.674 %) | not available |  |
+| K_II (units of the `.dgibi` file) ¹ | -2.4097 | — | -2.27464 (+5.61 %) | not available |  |
 
-¹ Reference computed by the Cast3M 2026 deck from its analytical formula.
+¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
-Acceptance: deck criterion on the G-θ values, |K_I| within 1 % and |K_II| within 6 % of the reference.
+Acceptance: criterion of the `.dgibi` file on the G-θ values, |K_I| within 1 % and |K_II| within 6 % of the reference.
 
 ### rupt8
 
@@ -4100,7 +4101,7 @@ Acceptance: deck criterion on the G-θ values, |K_I| within 1 % and |K_II| withi
 | pyrucast model | not available — missing: stress intensity factors (G-theta) |
 | Reference | Test NAFEMS : D.P.Rooke and D. J. Cartwright in Copendium of Intensity Factors HMSO (1976): rupt8 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/rupt8.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/rupt8.dgibi` |
 | Folder | [`06_fracture/rupt8/`](06_fracture/rupt8/) |
 
 **Topic.** A central crack in a plate of finite width under uniform tension; a quarter
@@ -4116,7 +4117,7 @@ TRI3 elements; half crack length 0.3, half width 1, thickness 0.001.
 |---|---|
 | E | 2e11 Pa |
 
-**Notes.** The deck repeats the G-θ computation three times; the value is the last one.
+**Notes.** The `.dgibi` file repeats the G-θ computation three times; the value is the last one.
 
 #### Results
 
@@ -4124,7 +4125,7 @@ TRI3 elements; half crack length 0.3, half width 1, thickness 0.001.
 |---|---|---|---|---|---|
 | K_I (N·m^-3/2) | 5.01e+06 | 5.08e+06 (+1.4 %) | 5.08721e+06 (+1.54 %) | not available |  |
 
-Acceptance: deck criterion, |K − K_th| / K_th < 5 %.
+Acceptance: criterion of the `.dgibi` file, |K − K_th| / K_th < 5 %.
 
 ### rupt9
 
@@ -4138,7 +4139,7 @@ Acceptance: deck criterion, |K − K_th| / K_th < 5 %.
 | pyrucast model | not available — missing: stress intensity factors (G-theta) |
 | Reference | Test NAFEMS : D.P.Rooke and D. J. Cartwright in Copendium of Intensity Factors HMSO (1976): rupt7 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/rupt9.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/rupt9.dgibi` |
 | Folder | [`06_fracture/rupt9/`](06_fracture/rupt9/) |
 
 **Topic.** The oblique edge crack of rupt7, loaded by a pressure on the plate's sides;
@@ -4150,7 +4151,7 @@ K_I and K_II are computed by the G-θ method.
 
 QUA8 elements; the plate of rupt7 with a pressure of 10 on its two sides.
 
-**Notes.** The deck compares with 150.37 and −71.4 (the references of rupt7); the 2011 document gives 149.77 and −71.56.
+**Notes.** The `.dgibi` file compares with 150.37 and −71.4 (the references of rupt7); the 2011 document gives 149.77 and −71.56.
 
 #### Results
 
@@ -4159,7 +4160,7 @@ QUA8 elements; the plate of rupt7 with a pressure of 10 on its two sides.
 | K_I (daN·mm^-3/2) | 149.77 | 145.98 (-2.53 %) | 150.738 (+0.647 %) | not available |  |
 | K_II (daN·mm^-3/2) | -71.56 | -72.28 (-1.01 %) | -72.3822 (-1.15 %) | not available |  |
 
-Acceptance: deck criterion, each factor within 2 % of 150.37 and −71.4.
+Acceptance: criterion of the `.dgibi` file, each factor within 2 % of 150.37 and −71.4.
 
 ## Composite
 
@@ -4175,7 +4176,7 @@ Acceptance: deck criterion, each factor within 2 % of 150.37 and −71.4.
 | pyrucast model | not available — missing: layered orthotropic shells (offset layers) |
 | Reference | Report CEA-DMT 89/184 : Modélisation des composites de type multi-couches dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/comp1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/comp1.dgibi` |
 | Folder | [`07_composite/comp1/`](07_composite/comp1/) |
 
 **Topic.** A two-layer composite cylinder, its fibres wound at ±45° about the z axis,
@@ -4203,7 +4204,7 @@ Cylinder of radius R = 1.05 m and height H = 1 m, total thickness 0.1 m
 |---|---|---|---|---|---|
 | u_r at PA (m) | 6.41585e-06 | — | 6.16128e-06 (-3.97 %) | not available |  |
 
-Acceptance: deck criterion, |u_r(PA) − u_ref| / u_ref ≤ 5 %.
+Acceptance: criterion of the `.dgibi` file, |u_r(PA) − u_ref| / u_ref ≤ 5 %.
 
 ### comp2
 
@@ -4217,7 +4218,7 @@ Acceptance: deck criterion, |u_r(PA) − u_ref| / u_ref ≤ 5 %.
 | pyrucast model | not available — missing: layered orthotropic shells (offset layers) |
 | Reference | Report CEA-DMT 89/186 : |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/comp2.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/comp2.dgibi` |
 | Folder | [`07_composite/comp2/`](07_composite/comp2/) |
 
 **Topic.** A square two-layer composite plate, its fibres at ±45° to the edges, simply
@@ -4244,7 +4245,7 @@ Square plate of side A = 127 mm, total thickness 5.08 mm (two layers at
 |---|---|---|---|---|---|
 | deflection at O | 23.25 | — | 23.1257 (-0.535 %) | not available |  |
 
-Acceptance: deck criterion, |w(O) − 23.25| / 23.25 ≤ 1 %.
+Acceptance: criterion of the `.dgibi` file, |w(O) − 23.25| / 23.25 ≤ 1 %.
 
 ## Concrete
 
@@ -4260,7 +4261,7 @@ Acceptance: deck criterion, |w(O) − 23.25| / 23.25 ≤ 1 %.
 | pyrucast model | not available — missing: concrete plasticity law (BETON) |
 | Reference | NAH (93/01/19) |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/beton.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/beton.dgibi` |
 | Folder | [`08_concrete/beton/`](08_concrete/beton/) |
 
 **Topic.** A concrete cube, held on its base, is pulled by an imposed displacement
@@ -4280,7 +4281,7 @@ One CUB8 cube.
 | α | 1e-5 /°C |
 | tensile strength LTR1 | 4 MPa |
 
-**Notes.** The 2011 document prints no result table; the reference is the deck's.
+**Notes.** The 2011 document prints no result table; the reference is the `.dgibi` file's.
 
 #### Results
 
@@ -4288,7 +4289,7 @@ One CUB8 cube.
 |---|---|---|---|---|---|
 | σ_zz at B3, last time (MPa) | 2 | — | 2 (-2e-13 %) | not available |  |
 
-Acceptance: deck criterion, |σ_zz − 2| < 1e-6.
+Acceptance: criterion of the `.dgibi` file, |σ_zz − 2| < 1e-6.
 
 ### precont1
 
@@ -4302,7 +4303,7 @@ Acceptance: deck criterion, |σ_zz − 2| < 1e-6.
 | pyrucast model | not available — missing: prestressing cables (KABL, PREC) |
 | Reference | J.S. Fleuret 08/96 |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | not shipped with Cast3M 2026 |
+| Cast3M 2026 `.dgibi` file | not shipped with Cast3M 2026 |
 | Folder | [`08_concrete/precont1/`](08_concrete/precont1/) |
 
 **Topic.** Calculation with passive reinforcement. A reinforced concrete beam, its tendons modelled by bar elements
@@ -4321,7 +4322,7 @@ Plane QUA4 beam with BARR tendons.
 | ν | 0 | |
 | section | | 0.02 m² |
 
-**Notes.** The 2011 document prints no result table, and Cast3M 2026 no longer ships this deck.
+**Notes.** The 2011 document prints no result table, and Cast3M 2026 no longer ships this `.dgibi` file.
 
 #### Results
 
@@ -4339,7 +4340,7 @@ No compared quantity.
 | pyrucast model | not available — missing: prestressing cables (KABL, PREC) |
 | Reference | J.S. Fleuret 08/96 |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | not shipped with Cast3M 2026 |
+| Cast3M 2026 `.dgibi` file | not shipped with Cast3M 2026 |
 | Folder | [`08_concrete/precont2/`](08_concrete/precont2/) |
 
 **Topic.** Calculation with active reinforcement. A reinforced concrete beam, its tendons modelled by bar elements
@@ -4358,7 +4359,7 @@ Plane QUA4 beam with BARR tendons.
 | ν | 0 | |
 | section | | 0.02 m² |
 
-**Notes.** The 2011 document prints no result table, and Cast3M 2026 no longer ships this deck.
+**Notes.** The 2011 document prints no result table, and Cast3M 2026 no longer ships this `.dgibi` file.
 
 #### Results
 
@@ -4376,7 +4377,7 @@ No compared quantity.
 | pyrucast model | not available — missing: prestressing cables (KABL, PREC) |
 | Reference | J.S. Fleuret 07/96 |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | not shipped with Cast3M 2026 |
+| Cast3M 2026 `.dgibi` file | not shipped with Cast3M 2026 |
 | Folder | [`08_concrete/precont3/`](08_concrete/precont3/) |
 
 **Topic.** Calculation with active reinforcement and several losses of prestress. A reinforced concrete beam, its tendons modelled by bar elements
@@ -4395,7 +4396,7 @@ Plane QUA4 beam with BARR tendons.
 | ν | 0 | |
 | section | | 0.02 m² |
 
-**Notes.** The 2011 document prints no result table, and Cast3M 2026 no longer ships this deck.
+**Notes.** The 2011 document prints no result table, and Cast3M 2026 no longer ships this `.dgibi` file.
 
 #### Results
 
@@ -4415,7 +4416,7 @@ No compared quantity.
 | pyrucast model | not available — missing: porous media elements (QUAP) |
 | Reference | Benchmark INTERCLAY 1.1 Variante 2 |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/pore1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/pore1.dgibi` |
 | Folder | [`09_porosity/pore1/`](09_porosity/pore1/) |
 
 **Topic.** A porous elastoplastic thick cylinder (Drucker-Prager, non-associated flow);
@@ -4444,7 +4445,7 @@ CASTEM 2000 and agree with the INTERCLAY results.
 | convergence of the hole (m) | -0.266 | -0.26586 (+0.0526 %) | -0.265486 (+0.193 %) | not available |  |
 | hoop stress at the wall (Pa) | -3.47e+06 | -3.46667e+06 (+0.096 %) | -3.46776e+06 (+0.0644 %) | not available |  |
 
-Acceptance: deck criteria on the two relative gaps.
+Acceptance: criteria of the `.dgibi` file on the two relative gaps.
 
 ### pore2
 
@@ -4458,7 +4459,7 @@ Acceptance: deck criteria on the two relative gaps.
 | pyrucast model | not available — missing: porous media elements (QUAP) |
 | Reference | Benchmark INTERCLAY 1.4 Basic Model |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/pore2.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/pore2.dgibi` |
 | Folder | [`09_porosity/pore2/`](09_porosity/pore2/) |
 
 **Topic.** A porous elastoplastic thick cylinder (von Mises, associated flow) with
@@ -4477,7 +4478,7 @@ Axisymmetric porous elements (QUAP).
 | E | 200.13e6 Pa |
 | fluid compressibility K_f | 3000e6 Pa |
 
-**Notes.** The 2011 document prints no result table; the compared quantities are the deck's normalised largest gaps.
+**Notes.** The 2011 document prints no result table; the compared quantities are the `.dgibi` file's normalised largest gaps.
 
 #### Results
 
@@ -4487,7 +4488,7 @@ Axisymmetric porous elements (QUAP).
 | largest gap of the σ_θθ profile | 0 | — | 0.000130391 (Δ = 0.00013) | not available |  |
 | largest gap of the pore pressure profile | 0 | — | 0.00023888 (Δ = 0.00024) | not available |  |
 
-Acceptance: deck criteria, each largest gap ≤ 0.001.
+Acceptance: criteria of the `.dgibi` file, each largest gap ≤ 0.001.
 
 ### pore3
 
@@ -4501,7 +4502,7 @@ Acceptance: deck criteria, each largest gap ≤ 0.001.
 | pyrucast model | not available — missing: porous media elements (QUAP) |
 | Reference | Problem of Terzaghi |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/pore3.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/pore3.dgibi` |
 | Folder | [`09_porosity/pore3/`](09_porosity/pore3/) |
 
 **Topic.** One-dimensional consolidation (Terzaghi): a porous elastic column is loaded
@@ -4519,7 +4520,7 @@ Porous elements (QUAP).
 | E | 7000e6 Pa |
 | ν | 0.4 |
 
-**Notes.** The 2011 document prints no result table; the compared quantities are the deck's relative gaps.
+**Notes.** The 2011 document prints no result table; the compared quantities are the `.dgibi` file's relative gaps.
 
 #### Results
 
@@ -4528,7 +4529,7 @@ Porous elements (QUAP).
 | relative gap of the pore pressure | 0 | — | 0.00355572 (Δ = 0.0036) | not available |  |
 | relative gap of the vertical displacement profile | 0 | — | 0.00527552 (Δ = 0.0053) | not available |  |
 
-Acceptance: deck criteria, both relative gaps ≤ 0.1.
+Acceptance: criteria of the `.dgibi` file, both relative gaps ≤ 0.1.
 
 ## Metallurgy of powders
 
@@ -4544,7 +4545,7 @@ Acceptance: deck criteria, both relative gaps ≤ 0.1.
 | pyrucast model | not available — missing: Abouaf powder law |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/poudre1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/poudre1.dgibi` |
 | Folder | [`10_powder_metallurgy/poudre1/`](10_powder_metallurgy/poudre1/) |
 
 **Topic.** A cylinder of powder is consolidated by a pressure, following the
@@ -4556,7 +4557,7 @@ viscoplastic model of Abouaf (POUDRE_A); the densification is isotropic.
 
 Axisymmetric cylinder, QUA8 elements, consolidated by an external pressure;
 the elastic data and the parameters of the Abouaf law are those of the
-deck.
+`.dgibi` file.
 
 #### Results
 
@@ -4565,7 +4566,7 @@ deck.
 | u_r at A2 (m) | -0.00125297 | -0.00125292 (+0.00399 %) | -0.0012528 (+0.0134 %) | not available |  |
 | u_z at A2 (m) | -0.00188229 | -0.00188222 (+0.00372 %) | -0.00188204 (+0.0132 %) | not available |  |
 
-Acceptance: deck criterion, sum of the relative gaps on u_r, u_z and the final density < 5 %.
+Acceptance: criterion of the `.dgibi` file, sum of the relative gaps on u_r, u_z and the final density < 5 %.
 
 ## Joint
 
@@ -4581,7 +4582,7 @@ Acceptance: deck criterion, sum of the relative gaps on u_r, u_z and the final d
 | pyrucast model | not available — missing: joint element on its own, with normal and shear stiffnesses in its own frame (JOI2, JOI4) |
 | Reference | Analytical solution (principle of virtual work). |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/joi22.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/joi22.dgibi` |
 | Folder | [`11_joint/joi22/`](11_joint/joi22/) |
 
 **Topic.** A plane joint element is pulled by a force normal to its plane, applied on
@@ -4604,7 +4605,7 @@ Plane stress. One JOI2 element between two coincident lines from (0, 0) to
 - Load: F_y = 1e5 N spread over the upper line.
 - Reference: δ = F / (k_n·L·l) = 1e5 / (4.2e10 × 2 × 1).
 
-**Notes.** The deck models the joint alone, between two lines and with no solid around
+**Notes.** The `.dgibi` file models the joint alone, between two lines and with no solid around
 it. pyrucast's `model.interface_transfer` couples two faces of an existing
 elasticity model, per global displacement component: it has no joint element
 of its own.
@@ -4615,7 +4616,7 @@ of its own.
 |---|---|---|---|---|---|
 | opening u_y at A1 (m) | 1.19048e-06 | — | 1.19048e-06 (-5.34e-14 %) | not available |  |
 
-Acceptance: deck criterion, |δ − δ_th| / δ_th ≤ 1e-4.
+Acceptance: criterion of the `.dgibi` file, |δ − δ_th| / δ_th ≤ 1e-4.
 
 ### joi41
 
@@ -4626,10 +4627,10 @@ Acceptance: deck criterion, |δ − δ_th| / δ_th ≤ 1e-4.
 | Test name | joi41 |
 | Calculation type | ISOTROPIC ELASTIC MECHANICS |
 | Finite element type (Cast3M) | QUA4, CUB8, JOI4 |
-| pyrucast model |  |
+| pyrucast model | `model.elasticity(fes, "full_3d")`, the joint as `model.interface_transfer` between the two cubes' faces, HEX8 |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/joi41.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/joi41.dgibi` |
 | Folder | [`11_joint/joi41/`](11_joint/joi41/) |
 
 **Topic.** Two stacked cubes under a pressure on the upper face, computed twice: as a
@@ -4640,25 +4641,181 @@ stresses: with a very stiff joint, the two computations must agree.
 
 **Model description.**
 
-Two CUB8 cubes; JOI4 joint of stiffness k_s = k_n = 4.2e15 between them.
+Two CUB8 cubes of side 2, one above the other (z from −4 to 0); JOI4 joint
+of stiffness k_s = k_n = 4.2e15 between them.
 
 | Data | Value |
 |---|---|
 | E | 2.1e11 Pa |
 | ν | 0.3 |
 
-- Load: pressure 1e5 Pa on the upper face.
+- Boundary conditions on the base z = −4: the corner (2, 2) held, the edge
+  x = 2 held along x and z, the edge y = 2 along y and z, the corner (0, 0)
+  along z.
+- Load: a pull of 1e5 Pa on the upper face z = 0 (the `.dgibi` file's pressure −1e5).
 
-**Notes.** The 2011 document prints no result table; the compared quantities are the deck's.
+**Notes.** The 2011 document prints no result table. The `.dgibi` file's own test is vacuous: it
+subtracts from the first computation's displacements those of the same
+computation (`desuav = deps`, `deinav = depi`), so its largest differences
+are 0 by construction. The quantities compared here are what it meant to
+check: the vertical displacement of the upper corner (0, 0, 0) without and
+with the joint, the joint being stiff enough to change it by less than 1e-9.
+
+The continuous body is extruded upwards from its base: extruded downwards
+from its upper face, its cells come out mirrored and `skin` orients that face
+inwards, which turns the pull into a push.
+
+**Improvement points.**
+
+- `extrude` against the normal of the source face gives mirrored HEX8 cells, whose facets `skin` then orients inwards
 
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| largest displacement difference, upper cube (m) | 0 | — | 0 (Δ = 0) | — |  |
-| largest displacement difference, lower cube (m) | 0 | — | 0 (Δ = 0) | — |  |
+| u_z at (0, 0, 0), continuous cubes, no reference (m) | — | — | 1.90476e-06 | 1.90476e-06 | 8.9e-16 |
+| u_z at (0, 0, 0), cubes joined by the joint (m) ¹ | 1.90476e-06 | — | 1.90479e-06 (+0.00125 %) | 1.90479e-06 (+0.00125 %) | 1.3e-11 |
 
-Acceptance: deck criterion, both largest differences ≤ 1e-9.
+¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
+
+Acceptance: the `.dgibi` file's bound, 1e-9, on the difference between the two computations.
+
+pyrucast: the 1 checked quantities are within tolerance.
+
+#### pyrucast figures
+
+![mesh](11_joint/joi41/mesh.svg)
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""joi41 — two stacked cubes, continuous and joined by a stiff joint, HEX8.
+
+Problem: two cubes of side 2, one above the other (z from −4 to 0), E =
+2.1e11, ν = 0.3, are pulled by 1e5 Pa on their upper face; on their base
+z = −4, the corner (2, 2) is held, the edge x = 2 along x and z, the edge
+y = 2 along y and z, the corner (0, 0) along z. They are computed twice:
+as one continuous body, and as two bodies joined at z = −2 by a joint of
+stiffness k_s = k_n = 4.2e15 per unit area. Reference: the second
+computation gives the first one's displacement, within 1e-9.
+
+The joint is `model.interface_transfer` between the two facing squares,
+whose `h_u_x`, `h_u_y` (tangential, k_s) and `h_u_z` (normal, k_n) are its
+stiffnesses: the joint plane is z = constant, so the global components are
+its own.
+
+Running::
+
+    python validation/11_joint/joi41/run.py
+"""
+
+import os
+
+import pyrucast as pc
+
+E, NU = 2.1e11, 0.3
+SIDE = 2.0
+K_S, K_N = 4.2e15, 4.2e15
+PULL = 1e5  # Pa, on the upper face
+
+
+def square(coords, z):
+    """A QUA4 square of side SIDE at height z, counter-clockwise seen from +z."""
+    mesh = pc.Mesh(coords, "QUA4")
+    mesh.unit().add_cell(
+        [
+            coords.add_node([0.0, 0.0, z]),
+            coords.add_node([SIDE, 0.0, z]),
+            coords.add_node([SIDE, SIDE, z]),
+            coords.add_node([0.0, SIDE, z]),
+        ]
+    )
+    return mesh
+
+
+def solve(coords, cubes, joint, extra_model):
+    """u for the cubes, held and pulled as in the `.dgibi` file."""
+    fes = pc.FiniteElementSpace(cubes)
+    elasticity = pc.model.elasticity(fes, "full_3d")
+    corner = pc.mesh.poi1_from_nodes([cubes.nearest_node([SIDE, SIDE, -2.0 * SIDE])])
+    edge_x = pc.mesh.points_on_line(
+        cubes, [SIDE, 0.0, -2.0 * SIDE], [SIDE, SIDE, -2.0 * SIDE]
+    )
+    edge_y = pc.mesh.points_on_line(
+        cubes, [SIDE, SIDE, -2.0 * SIDE], [0.0, SIDE, -2.0 * SIDE]
+    )
+    origin = pc.mesh.poi1_from_nodes([cubes.nearest_node([0.0, 0.0, -2.0 * SIDE])])
+    # The blocked nodes of each unknown, each node once (`consolidate`).
+    model = (
+        elasticity
+        | pc.model.dirichlet(pc.mesh.consolidate(corner | edge_x), elasticity, "u_x")
+        | pc.model.dirichlet(pc.mesh.consolidate(corner | edge_y), elasticity, "u_y")
+        | pc.model.dirichlet(
+            pc.mesh.consolidate(corner | edge_x | edge_y | origin), elasticity, "u_z"
+        )
+    )
+    if joint is not None:
+        model = model | extra_model(elasticity)
+    top = pc.mesh.elements_on(
+        pc.mesh.skin(cubes),
+        pc.mesh.points_on_plane(cubes, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]),
+    )
+    # A pull on the outward-oriented upper face: φ_n = +p.
+    pull = pc.model.flux(pc.FiniteElementSpace(top), elasticity, "n")
+    model = model | pull
+    materials = pc.element_field.material_field(
+        model,
+        [
+            ("E", E),
+            ("nu", NU),
+            ("phi_n", PULL),
+            ("h_u_x", K_S),
+            ("h_u_y", K_S),
+            ("h_u_z", K_N),
+        ],
+    )
+    forces = pc.node_field.external_forces(model, materials)
+    return pc.solver.solve(pc.matrix.stiffness(model, materials), forces)
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    # ── One continuous body: two layers of HEX8 from z = −4 up to z = 0 ─────
+    coords = pc.Coords(3)
+    continuous = pc.mesh.extrude(square(coords, -2.0 * SIDE), [0.0, 0.0, 2.0 * SIDE], 2)
+    u = solve(coords, continuous, None, None)
+    uz_continuous = u.value(continuous.nearest_node([0.0, 0.0, 0.0]), "u_z")
+
+    # ── Two bodies, each extruded from its own square at z = −2 ─────────────
+    coords = pc.Coords(3)
+    face_lower = square(coords, -SIDE)
+    face_upper = square(coords, -SIDE)
+    lower = pc.mesh.extrude(face_lower, [0.0, 0.0, -SIDE], 1)
+    upper = pc.mesh.extrude(face_upper, [0.0, 0.0, SIDE], 1)
+    cubes = lower | upper
+
+    def joint(elasticity):
+        return pc.model.interface_transfer(
+            pc.FiniteElementSpace(face_upper),
+            pc.FiniteElementSpace(face_lower),
+            elasticity,
+            ["u_x", "u_y", "u_z"],
+        )
+
+    u = solve(coords, cubes, True, joint)
+    uz_joint = u.value(upper.nearest_node([0.0, 0.0, 0.0]), "u_z")
+
+    if out:
+        cubes.plot(title="joi41 — two cubes", save=os.path.join(out, "mesh.svg"))
+    return {"uz_continuous": uz_continuous, "uz_joint": uz_joint}
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ### joi44
 
@@ -4672,7 +4829,7 @@ Acceptance: deck criterion, both largest differences ≤ 1e-9.
 | pyrucast model | not available — missing: joint elements with thermal expansion |
 | Reference | Analytical solution. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/joi44.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/joi44.dgibi` |
 | Folder | [`11_joint/joi44/`](11_joint/joi44/) |
 
 **Topic.** A 3D joint, clamped on its lower face and free on its upper one, is loaded
@@ -4701,7 +4858,7 @@ One JOI4 joint element.
 | normal stress, temperature on the model | 1.05e+24 | — | 1.05e+24 (+0 %) | not available |  |
 | normal stress, temperature on the mesh | 1.05e+24 | — | 1.05e+24 (+0 %) | not available |  |
 
-Acceptance: deck criterion, both relative gaps ≤ 1e-4.
+Acceptance: criterion of the `.dgibi` file, both relative gaps ≤ 1e-4.
 
 ### joi45
 
@@ -4715,7 +4872,7 @@ Acceptance: deck criterion, both relative gaps ≤ 1e-4.
 | pyrucast model | not available — missing: orthotropic joint with material axes |
 | Reference | Analytical solution. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/joi45.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/joi45.dgibi` |
 | Folder | [`11_joint/joi45/`](11_joint/joi45/) |
 
 **Topic.** A 3D joint, clamped on its lower face, carries a shear load on its upper
@@ -4745,7 +4902,7 @@ One JOI4 joint element of area A = 4, orthotropic axes at 55° from x.
 | u_x of the upper face | 3.416e-07 | — | 3.41614e-07 (+0.00415 %) | not available |  |
 | u_y of the upper face | 4.875e-07 | — | 4.87451e-07 (-0.0101 %) | not available |  |
 
-Acceptance: deck criterion, both relative gaps ≤ 1e-3.
+Acceptance: criterion of the `.dgibi` file, both relative gaps ≤ 1e-3.
 
 ## Dynamics
 
@@ -4761,7 +4918,7 @@ Acceptance: deck criterion, both relative gaps ≤ 1e-3.
 | pyrucast model | not available — missing: eigenvalue solver |
 | Reference | Analytical solution : Timoshenko. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/dyna6.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/dyna6.dgibi` |
 | Folder | [`12_dynamics/dyna6/`](12_dynamics/dyna6/) |
 
 **Topic.** Bending modes of a cantilever beam. The eigenvalue operator is run in its
@@ -4785,7 +4942,7 @@ Cantilever beam of length L = 2 m, section A = 0.01 m², POUT elements.
 | first frequency (Hz) | 17.71 | — | 17.7036 (-0.0363 %) | not available |  |
 | second frequency (Hz) | 110.98 | — | 110.707 (-0.246 %) | not available |  |
 
-Acceptance: deck criterion, each frequency within 1 % for the four eigenvalue methods.
+Acceptance: criterion of the `.dgibi` file, each frequency within 1 % for the four eigenvalue methods.
 
 ### dyna7
 
@@ -4799,7 +4956,7 @@ Acceptance: deck criterion, each frequency within 1 % for the four eigenvalue me
 | pyrucast model | not available — missing: Fourier harmonic analysis; acoustic fluid elements with free surface; eigenvalue solver |
 | Reference | Analytical solution. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/dyna7.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/dyna7.dgibi` |
 | Folder | [`12_dynamics/dyna7/`](12_dynamics/dyna7/) |
 
 **Topic.** Sloshing modes of a thin layer of fluid in an annular rigid cavity, with
@@ -4825,7 +4982,7 @@ Annular cavity: L = 2 m, L₂ = 1.2 m, thickness 0.01 m.
 | first frequency, harmonic 1 (Hz) | 0.489 | — | 0.489469 (+0.096 %) | not available |  |
 | first frequency, harmonic 3 (Hz) | 0.863 | — | 0.863807 (+0.0935 %) | not available |  |
 
-Acceptance: deck criterion, each of its 32 values within 1 %.
+Acceptance: criterion of the `.dgibi` file, each of its 32 values within 1 %.
 
 ### fsi4
 
@@ -4839,7 +4996,7 @@ Acceptance: deck criterion, each of its 32 values within 1 %.
 | pyrucast model | not available — missing: fluid-structure interaction; Fourier harmonic analysis; eigenvalue solver; axisymmetric shell element (COQ2) |
 | Reference | Report CEA 91/479 : Validation of CASTEM 2000 for fluid structure interaction problems. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/fsi4.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/fsi4.dgibi` |
 | Folder | [`12_dynamics/fsi4/`](12_dynamics/fsi4/) |
 
 **Topic.** Two concentric cylindrical shells separated by water, on springs at their
@@ -4865,7 +5022,7 @@ base; modes of the harmonic m = 1.
 | first frequency (Hz) | 18.88 | — | 18.6466 (-1.24 %) | not available |  |
 | second frequency (Hz) | 55.278 | — | 56.0832 (+1.46 %) | not available |  |
 
-Acceptance: deck criterion, each frequency within 5 %.
+Acceptance: criterion of the `.dgibi` file, each frequency within 5 %.
 
 ### dyna5
 
@@ -4879,7 +5036,7 @@ Acceptance: deck criterion, each frequency within 5 %.
 | pyrucast model | not available — missing: eigenvalue solver; modal sub-structuring |
 | Reference | Analytical solution. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/dyna5.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/dyna5.dgibi` |
 | Folder | [`12_dynamics/dyna5/`](12_dynamics/dyna5/) |
 
 **Topic.** The first frequency of a clamped-clamped beam computed by sub-structuring:
@@ -4906,7 +5063,7 @@ Beam of two halves of length 2 m each, POUT elements.
 | first frequency, method 2 (Hz) | 0.65 | — | 0.650867 (+0.133 %) | not available |  |
 | first frequency, method 3 (Hz) | 0.65 | — | 0.650791 (+0.122 %) | not available |  |
 
-Acceptance: deck criterion, each of the three frequencies within 5 %.
+Acceptance: criterion of the `.dgibi` file, each of the three frequencies within 5 %.
 
 ### vibr6
 
@@ -4920,7 +5077,7 @@ Acceptance: deck criterion, each of the three frequencies within 5 %.
 | pyrucast model | not available — missing: complex eigenmodes under axial flow; pipe element (TUYA) |
 | Reference | Model of Paidoussis & Ortoja-Starzewski. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/vibr6.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/vibr6.dgibi` |
 | Folder | [`12_dynamics/vibr6/`](12_dynamics/vibr6/) |
 
 **Topic.** Complex modes of a pinned-pinned rod in an external axial flow, computed for
@@ -4947,7 +5104,7 @@ critical velocity.
 |---|---|---|---|---|---|
 | critical (divergence) velocity (m/s) | 25 | — | 24.5 (-2 %) | not available |  |
 
-Acceptance: deck criterion, critical velocity within 5 % of 25 m/s.
+Acceptance: criterion of the `.dgibi` file, critical velocity within 5 % of 25 m/s.
 
 ### vibr10
 
@@ -4961,7 +5118,7 @@ Acceptance: deck criterion, critical velocity within 5 % of 25 m/s.
 | pyrucast model | not available — missing: harmonic response with rotating unbalance |
 | Reference | Analytical solution. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/vibr10.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/vibr10.dgibi` |
 | Folder | [`12_dynamics/vibr10/`](12_dynamics/vibr10/) |
 
 **Topic.** A point of mass M1 on a stiffness K1 is excited by a rotating unbalance:
@@ -4988,9 +5145,9 @@ ellipse.
 | response along y (m) ¹ | 9.46402e-08 | — | 9.46402e-08 (-1.4e-14 %) | not available |  |
 | response along z (m) ¹ | -9.46402e-08 | — | -9.46402e-08 (+1.4e-14 %) | not available |  |
 
-¹ Reference computed by the Cast3M 2026 deck from its analytical formula.
+¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
-Acceptance: deck criterion, both semi-axes within 0.1 %.
+Acceptance: criterion of the `.dgibi` file, both semi-axes within 0.1 %.
 
 ### dyna12
 
@@ -5004,7 +5161,7 @@ Acceptance: deck criterion, both semi-axes within 0.1 %.
 | pyrucast model | `model.truss` in `stepping.step_by_step(dynamics=True)` (Newmark), SEG2 |
 | Reference | J. S. Przemieniecki : Theory of matrix structural analyses (New York : McGraw-Hill Book Co., 1968) p340. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/dyna12.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/dyna12.dgibi` |
 | Folder | [`12_dynamics/dyna12/`](12_dynamics/dyna12/) |
 
 **Topic.** Transient response of a free launcher to an axial thrust applied during a
@@ -5030,7 +5187,7 @@ Free bar of length 140 along y, BARR elements.
 | u_y at P1, t = 1.9125 | 10.8997 | — | 10.6602 (-2.2 %) | 10.6602 (-2.2 %) | 2.5e-13 |
 | u_y at P1, t = 2.0625 | 11.7323 | — | 11.2886 (-3.78 %) | 11.2886 (-3.78 %) | 3.1e-13 |
 
-Acceptance: deck criterion, both relative gaps < 5 %.
+Acceptance: criterion of the `.dgibi` file, both relative gaps < 5 %.
 
 pyrucast: the 2 checked quantities are within tolerance.
 
@@ -5051,7 +5208,7 @@ raised in 0.0125, held until 1.0125 and released in 0.0125. It moves as a
 rigid body and vibrates along its axis. Reference (Przemieniecki): the
 displacement of P1 at t = 1.9125 and t = 2.0625.
 
-The motion is integrated by Newmark's average acceleration, as the deck's
+The motion is integrated by Newmark's average acceleration, as the `.dgibi` file's
 DYNAMIC procedure does, here with a step of 0.0125 that falls on the load's
 corners and on the two instants read.
 
@@ -5132,7 +5289,7 @@ if __name__ == "__main__":
 | pyrucast model | `model.elasticity(fes, "axisymmetric")` in `stepping.step_by_step(dynamics=True)` (Newmark), QUA4 |
 | Reference | S. H.Crandall, N. C. Dahl and T. J. Lardner : An introduction to the mechanics of solids, 2nd ed. (New York : McGraw-Hill Book Company, 1972) pp. 293-297. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/dyna11.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/dyna11.dgibi` |
 | Folder | [`12_dynamics/dyna11/`](12_dynamics/dyna11/) |
 
 **Topic.** A thick-walled cylinder is suddenly loaded by an internal pressure. Without
@@ -5162,7 +5319,7 @@ Axisymmetric, QUA4 elements.
 | amplification at the second point (node 62) | 2 | — | 2.05572 (+2.79 %) | 2.05572 (+2.79 %) | 2.5e-13 |
 | amplification at the third point (node 36) | 2 | — | 2.05491 (+2.75 %) | 2.05491 (+2.75 %) | 2.2e-13 |
 
-Acceptance: deck criterion, each amplification within 5 % of 2.
+Acceptance: criterion of the `.dgibi` file, each amplification within 5 % of 2.
 
 pyrucast: the 3 checked quantities are within tolerance.
 
@@ -5182,10 +5339,10 @@ its two ends, receives at t = 5e-6 (raised from t = 4e-6) an internal
 pressure of 10, then held. E = 30e6, ν = 0, ρ = 0.28 × 0.002588. Without
 damping, the largest radial displacement of a point is twice its static
 value. Reference: that ratio, 2, at three points of the mid-height section,
-r = 6, 9 and 11; the static displacements are the deck's.
+r = 6, 9 and 11; the static displacements are the `.dgibi` file's.
 
-Mesh: the deck's regular grid of 6 × 8 QUA4. The motion is integrated by
-Newmark's average acceleration every 1e-6 up to 2e-4, as the deck's DYNAMIC
+Mesh: the `.dgibi` file's regular grid of 6 × 8 QUA4. The motion is integrated by
+Newmark's average acceleration every 1e-6 up to 2e-4, as the `.dgibi` file's DYNAMIC
 procedure does.
 
 Running::
@@ -5280,7 +5437,7 @@ if __name__ == "__main__":
 | pyrucast model | not available — missing: eigenvalue solver; modal-basis transient dynamics with linkages (DYNE) |
 | Reference | Walter C. Hury and Moshe F. Rubinstein : Dynamics of structures (Englewood Cliffs : Prentice-Hall, Inc., 1964) p.294. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/dy_devo5.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/dy_devo5.dgibi` |
 | Folder | [`12_dynamics/dy_devo5/`](12_dynamics/dy_devo5/) |
 
 **Topic.** A beam on elastic supports carries a triangular distributed load whose
@@ -5316,7 +5473,7 @@ amplitude varies in time; the response is computed on the modal basis.
 | pyrucast model | not available — missing: modal-basis transient dynamics with linkages (DYNE) |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/dy_devo6.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/dy_devo6.dgibi` |
 | Folder | [`12_dynamics/dy_devo6/`](12_dynamics/dy_devo6/) |
 
 **Topic.** A heavy mass with a sinusoidal motion of two amplitudes hits a plane; the
@@ -5338,9 +5495,9 @@ against the time.
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| largest gap of the deck's comparison | 0 | — | 0.00351229 (Δ = 0.0035) | not available |  |
+| largest gap of the `.dgibi` file's comparison | 0 | — | 0.00351229 (Δ = 0.0035) | not available |  |
 
-Acceptance: deck criterion, largest gap ≤ 0.005.
+Acceptance: criterion of the `.dgibi` file, largest gap ≤ 0.005.
 
 ### dy_devo3
 
@@ -5354,7 +5511,7 @@ Acceptance: deck criterion, largest gap ≤ 0.005.
 | pyrucast model | not available — missing: modal-basis transient dynamics with linkages (DYNE) |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/dy_devo3.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/dy_devo3.dgibi` |
 | Folder | [`12_dynamics/dy_devo3/`](12_dynamics/dy_devo3/) |
 
 **Topic.** A wheel of 1 m diameter, clamped between two planes, is driven by a torque;
@@ -5381,9 +5538,9 @@ the linkages are circle-plane with friction.
 | rotation, first compared time ¹ | 16 | — | 16.0141 (+0.0883 %) | not available |  |
 | rotation, second compared time ¹ | 16 | — | 16 (+0.0002 %) | not available |  |
 
-¹ Reference computed by the Cast3M 2026 deck from its analytical formula.
+¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
-Acceptance: deck criterion, both relative gaps ≤ 1e-2.
+Acceptance: criterion of the `.dgibi` file, both relative gaps ≤ 1e-2.
 
 ### dy_devo4
 
@@ -5397,7 +5554,7 @@ Acceptance: deck criterion, both relative gaps ≤ 1e-2.
 | pyrucast model | not available — missing: modal-basis transient dynamics with linkages (DYNE) |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/dy_devo4.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/dy_devo4.dgibi` |
 | Folder | [`12_dynamics/dy_devo4/`](12_dynamics/dy_devo4/) |
 
 **Topic.** A cantilever beam with a mass at its tip, deflected by a force then
@@ -5423,7 +5580,7 @@ released, hits a plane; two linkage types are compared.
 | impact force | 0.59178 | — | 0.231555 (-60.9 %) | not available |  |
 | u_x at t = 0.4 s | 0.13598 | — | 0.0532069 (-60.9 %) | not available |  |
 
-Acceptance: deck criterion, each value at most 1.2 times the reference (one-sided).
+Acceptance: criterion of the `.dgibi` file, each value at most 1.2 times the reference (one-sided).
 
 ### dy_devo8
 
@@ -5437,7 +5594,7 @@ Acceptance: deck criterion, each value at most 1.2 times the reference (one-side
 | pyrucast model | not available — missing: modal-basis transient dynamics with linkages (DYNE) |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/dy_devo8.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/dy_devo8.dgibi` |
 | Folder | [`12_dynamics/dy_devo8/`](12_dynamics/dy_devo8/) |
 
 **Topic.** A point hits a moving circle; the impact is computed with a point - moving
@@ -5463,7 +5620,7 @@ compared.
 | largest difference on u_x (m) | 0 | — | 0.000735971 (Δ = 0.00074) | not available |  |
 | largest difference on u_y (m) | 0 | — | 0.000870092 (Δ = 0.00087) | not available |  |
 
-Acceptance: deck criteria, largest differences below 0.0018 and 0.005 (x), 0.0012 and 0.004 (y).
+Acceptance: criteria of the `.dgibi` file, largest differences below 0.0018 and 0.005 (x), 0.0012 and 0.004 (y).
 
 ### dyne01
 
@@ -5477,7 +5634,7 @@ Acceptance: deck criteria, largest differences below 0.0018 and 0.005 (x), 0.001
 | pyrucast model | not available — missing: modal-basis transient dynamics with linkages (DYNE) |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/dyne01.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/dyne01.dgibi` |
 | Folder | [`12_dynamics/dyne01/`](12_dynamics/dyne01/) |
 
 **Topic.** A polynomial linkage computes a force on one mode from the contributions of
@@ -5496,7 +5653,7 @@ geometry (modal data only).
 | U₀ | 0.033 |
 | V₀ | 0.54 |
 
-**Notes.** The deck checks that both computations give the same histories; it has no numeric reference.
+**Notes.** The `.dgibi` file checks that both computations give the same histories; it has no numeric reference.
 
 #### Results
 
@@ -5514,7 +5671,7 @@ No compared quantity.
 | pyrucast model | not available — missing: eigenvalue solver |
 | Reference | Test NAFEMS number fv42. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/vibr2.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/vibr2.dgibi` |
 | Folder | [`12_dynamics/vibr2/`](12_dynamics/vibr2/) |
 
 **Topic.** Uniform radial vibration of a thick hollow sphere. A sector is meshed in
@@ -5537,7 +5694,7 @@ Hollow sphere of inner radius 1.8 m and outer radius 6 m, QUA8 elements.
 | frequency 4 (Hz) | 2117 | — | 2123.64 (+0.314 %) | not available |  |
 | frequency 5 (Hz) | 2795.8 | — | 2841.78 (+1.64 %) | not available |  |
 
-Acceptance: deck criterion, each frequency within 2 %.
+Acceptance: criterion of the `.dgibi` file, each frequency within 2 %.
 
 ## Non linear dynamics
 
@@ -5553,7 +5710,7 @@ Acceptance: deck criterion, each frequency within 2 %.
 | pyrucast model | not available — missing: point masses |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/dyna_nl1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/dyna_nl1.dgibi` |
 | Folder | [`13_nonlinear_dynamics/dyna_nl1/`](13_nonlinear_dynamics/dyna_nl1/) |
 
 **Topic.** A Duffing-type oscillator: a prestressed bar, clamped at one end, carries a
@@ -5583,7 +5740,7 @@ end.
 | amplitude of the free end (m) | 0.2 | — | 0.199997 (-0.00153 %) | not available |  |
 | period (s) | 0.2648 | — | 0.266 (+0.453 %) | not available |  |
 
-Acceptance: deck criteria, amplitude within 0.1 % and period within 0.5 %.
+Acceptance: criteria of the `.dgibi` file, amplitude within 0.1 % and period within 0.5 %.
 
 ### dyna_nl3
 
@@ -5597,7 +5754,7 @@ Acceptance: deck criteria, amplitude within 0.1 % and period within 0.5 %.
 | pyrucast model | not available — missing: large-displacement beam and shell dynamics |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/dyna_nl3.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/dyna_nl3.dgibi` |
 | Folder | [`13_nonlinear_dynamics/dyna_nl3/`](13_nonlinear_dynamics/dyna_nl3/) |
 
 **Topic.** A clamped-free beam under an axial follower compression slightly above the
@@ -5616,7 +5773,7 @@ computed in large displacements.
 | I_y = I_z | 2.8125e-4 |
 | I_o | 1e-5 |
 
-**Notes.** The deck holds two references for its complete and its short run; the reference is that of the run used.
+**Notes.** The `.dgibi` file holds two references for its complete and its short run; the reference is that of the run used.
 
 #### Results
 
@@ -5624,9 +5781,9 @@ computed in large displacements.
 |---|---|---|---|---|---|
 | largest displacement of the free end ¹ | 5.8565 | — | 5.85754 (+0.0178 %) | not available |  |
 
-¹ Reference computed by the Cast3M 2026 deck from its analytical formula.
+¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
-Acceptance: deck criterion, |d_max − d_ref| / d_ref ≤ 5 %.
+Acceptance: criterion of the `.dgibi` file, |d_max − d_ref| / d_ref ≤ 5 %.
 
 ## Thermal analysis
 
@@ -5642,7 +5799,7 @@ Acceptance: deck criterion, |d_max − d_ref| / d_ref ≤ 5 %.
 | pyrucast model | `model.heat_conduction(fes)` in axisymmetry, with `flux`, a volume `flux` and `boundary_transfer`; QUA4 (case 2 also one TRI3) |
 | Reference | Analytical solution (1st and 2nd parts). Comparison with results computed by THERMX (3rd part). |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/ther2.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/ther2.dgibi` |
 | Folder | [`14_thermal/ther2/`](14_thermal/ther2/) |
 
 **Topic.** Thermal boundary conditions in axisymmetry, on a thick-walled cylinder, in
@@ -5663,8 +5820,8 @@ R_e = 0.2015 m, QUA4 elements; temperature T_i imposed on the inner face.
 - Configuration 3: convection h to T_ext on the outer face,
   T = (T_i + h·R_e·T_ext/k·ln(R_e/R_i)) / (1 + h·R_e/k·ln(R_e/R_i)).
 
-**Notes.** The references are the deck's analytical formulas, evaluated at the
-compared point P3. Case 1 is computed on the deck's mesh; cases 2 and 3 on
+**Notes.** The references are the `.dgibi` file's analytical formulas, evaluated at the
+compared point P3. Case 1 is computed on the `.dgibi` file's mesh; cases 2 and 3 on
 free meshes of the same boundary lines, Cast3M's and pyrucast's pavers
 differing inside.
 
@@ -5676,9 +5833,9 @@ differing inside.
 | T at P3, configuration 2 (source) (°C) ¹ | 1510.92 | — | 1505.3 (-0.372 %) | 1506.88 (-0.267 %) | 1.1e-03 |
 | T at P3, configuration 3 (convection) (°C) ¹ | 122.687 | — | 122.682 (-0.00413 %) | 122.687 (+0.000118 %) | 4.2e-05 |
 
-¹ Reference computed by the Cast3M 2026 deck from its analytical formula.
+¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
-Acceptance: deck criterion, each relative gap ≤ 0.4 %.
+Acceptance: criterion of the `.dgibi` file, each relative gap ≤ 0.4 %.
 
 pyrucast: the 3 checked quantities are within tolerance.
 
@@ -5708,10 +5865,10 @@ imposed temperature on the inner face:
    k = 8, T_i = 100).
 
 References: the analytical temperatures at the outer corner P3, evaluated by
-the Cast3M deck.
+the Cast3M `.dgibi` file.
 
-Meshes: case 1 is the deck's row of 10 QUA4. Cases 2 and 3 are free meshes in
-the deck, from boundary lines of 8, 6, 9, 4 and 8, 5, 9, 6 elements; here
+Meshes: case 1 is the `.dgibi` file's row of 10 QUA4. Cases 2 and 3 are free meshes in
+the `.dgibi` file, from boundary lines of 8, 6, 9, 4 and 8, 5, 9, 6 elements; here
 pyrucast paves the same boundary lines, so the inside differs from Cast3M's
 and case 2's odd boundary leaves one triangle.
 
@@ -5758,7 +5915,7 @@ def main(out: str | None = None) -> dict[str, float]:
     t1 = pc.solver.solve(pc.matrix.stiffness(model, materials), rhs)
     t_case_1 = t1.value(p3, "T")
 
-    # ── Cases 2 and 3: the free meshes of the deck's boundary lines ─────────
+    # ── Cases 2 and 3: the free meshes of the `.dgibi` file's boundary lines ─────────
     results = []
     for n_right, n_left in ((6, 4), (5, 6)):
         coords = pc.Coords.axisymmetric()
@@ -5839,7 +5996,7 @@ if __name__ == "__main__":
 | pyrucast model | not available — missing: thermal shell elements |
 | Reference | Dowlatyari (03/91). |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/ther7or.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/ther7or.dgibi` |
 | Folder | [`14_thermal/ther7or/`](14_thermal/ther7or/) |
 
 **Topic.** Thermal boundary conditions on orthotropic thermal shells, in three
@@ -5867,7 +6024,7 @@ the isotropic elements.
 |---|---|---|---|---|---|
 | largest relative gap of the temperature profiles | 0 | — | 0.0301414 (Δ = 0.03) | not available |  |
 
-Acceptance: deck criterion, largest relative gap ≤ 5 %.
+Acceptance: criterion of the `.dgibi` file, largest relative gap ≤ 5 %.
 
 ### ther-perm
 
@@ -5881,7 +6038,7 @@ Acceptance: deck criterion, largest relative gap ≤ 5 %.
 | pyrucast model | `model.heat_conduction(fes)` with k(T) in `material_laws`, `stepping.step_by_step`, QUA4 |
 | Reference | Klaus-Jürgen Bathe & Mohammad R. Khoshgoftaar, Finite element formulation and solution of non-linear heat transfer, Nuclear Engineering and Design, v. 51 (1979), pp. 389-401. J. Joly, Cas tests non linéaires de validation pour DELFINE, Note technique EMT.SMTS.TTMF 84/29. V. Arpaci, Conduction Heat Transfer, Adison-Wesley, 1966, pp. 130-132. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/ther-perm.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/ther-perm.dgibi` |
 | Folder | [`14_thermal/ther-perm/`](14_thermal/ther-perm/) |
 
 **Topic.** A non-linear steady state: an infinite wall with a volume heat source and an
@@ -5901,9 +6058,9 @@ the temperature, k = k₀·(1 + β·(T − T₀)).
 
 - Conductivity: linear in T, through the points T₀ − 100 and T₀ + 1000.
 
-**Notes.** The deck's 26 cells grow from L/100 to L/10 along x; pyrucast's are even.
+**Notes.** The `.dgibi` file's 26 cells grow from L/100 to L/10 along x; pyrucast's are even.
 The non-linear iterations are converged to 1e-8: at step_by_step's default
-precision (1e-4) the profile stays about 1e-4 away and misses the deck's
+precision (1e-4) the profile stays about 1e-4 away and misses the `.dgibi` file's
 criterion.
 
 **Improvement points.**
@@ -5917,7 +6074,7 @@ criterion.
 | largest gap of T to the analytical profile | 0 | — | 3.88762e-07 (Δ = 3.9e-07) | 5.28512e-10 (Δ = 5.3e-10) | Δ = -3.9e-07 |
 | T at the insulated face x = 0 (°C) | 141.24 | — | 141.24 (-1.72e-05 %) | 141.24 (-1.97e-08 %) | 1.7e-07 |
 
-Acceptance: deck criterion, largest gap to the analytical profile ≤ 1e-5.
+Acceptance: criterion of the `.dgibi` file, largest gap to the analytical profile ≤ 1e-5.
 
 pyrucast: the 1 checked quantities are within tolerance.
 
@@ -5939,13 +6096,13 @@ With θ = (T − T₀)·2k₀/(q·L²) and s = L²·q·β/k₀, the exact profil
 
     θ(x) = 2·(√(1 + s·(1 − (x/L)²)) − 1) / s.
 
-Compared: the largest gap of θ to that profile over the nodes (the deck's
+Compared: the largest gap of θ to that profile over the nodes (the `.dgibi` file's
 test), and T at the insulated face, whose exact value is
 T₀ + (√(1 + s) − 1)/β.
 
 The non-linear iterations are converged to a precision of 1e-8.
 
-Mesh: one row of 26 QUA4 of height L/10, as many as the deck's. The deck's
+Mesh: one row of 26 QUA4 of height L/10, as many as the `.dgibi` file's. The `.dgibi` file's
 cells grow from L/100 to L/10 along x; pyrucast's `line` has no such
 progression, its cells are even.
 
@@ -5963,10 +6120,10 @@ L = 5e-3  # m
 HEIGHT = L / 10.0
 K0, BETA, T0 = 2.0, 0.025, 100.0
 SOURCE = 1e7  # W/m³
-# The deck's THERMIC procedure stops on its own criterion; at step_by_step's
+# The `.dgibi` file's THERMIC procedure stops on its own criterion; at step_by_step's
 # default precision (1e-4) the profile would stay 1e-4 from the converged one.
 PRECISION = 1e-8
-N = 26  # cells along x, as many as the deck's
+N = 26  # cells along x, as many as the `.dgibi` file's
 
 
 def main(out: str | None = None) -> dict[str, float]:
@@ -6045,7 +6202,7 @@ if __name__ == "__main__":
 | pyrucast model | `model.heat_conduction` and `model.elasticity(fes, "plane_strain")` in `stepping.step_by_step` (linear θ-scheme), QUA8 |
 | Reference | Analytical solution. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/thme1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/thme1.dgibi` |
 | Folder | [`15_thermo_mechanics/thme1/`](15_thermo_mechanics/thme1/) |
 
 **Topic.** Heat diffusion in a bar held at both ends: one end is brought to 500 °C,
@@ -6095,7 +6252,7 @@ heated element held along y stretches by α·ΔT/(1 − ν) instead of
 | u_x at x = 0.08, t = 100 | 3.90251e-05 | — | 3.87249e-05 (-0.769 %) | 3.87246e-05 (-0.77 %) | 1.0e-05 |
 | u_x at x = 0.08, t = 150 | 5.76962e-05 | — | 5.82925e-05 (+1.03 %) | 5.82919e-05 (+1.03 %) | 1.0e-05 |
 
-Acceptance: deck criterion, gaps within 2 % over the second half of the computed times (t ≥ 80).
+Acceptance: criterion of the `.dgibi` file, gaps within 2 % over the second half of the computed times (t ≥ 80).
 
 pyrucast: the 6 checked quantities are within tolerance.
 
@@ -6117,9 +6274,9 @@ along x. Reference: the temperature and the displacement u_x at x = 0.08,
 from the analytical solution T = 500 − 480·erf((0.1 − x)/(2√(a·t))) /
 erf(0.1/(2√(a·t))), a = k/(ρ·c), and its integral times α.
 
-Mesh: the deck's row of 10 QUA8. The heat problem is solved with the linear
+Mesh: the `.dgibi` file's row of 10 QUA8. The heat problem is solved with the linear
 θ-scheme (θ = 1) every 5 s up to 150 s, the mechanics at each instant with
-the temperature reached, as the deck's step-by-step procedure does.
+the temperature reached, as the `.dgibi` file's step-by-step procedure does.
 
 Running::
 
@@ -6227,7 +6384,7 @@ if __name__ == "__main__":
 | pyrucast model | not available — missing: rate-independent kinematic hardening |
 | Reference | Test de la Commission V.P.C.S. Groupe Thermo-plasticite et Statique non-lineaire. Test numero SSNA01/90 |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | `dgibi/thpl1.dgibi` |
+| Cast3M 2026 `.dgibi` file | `dgibi/thpl1.dgibi` |
 | Folder | [`15_thermo_mechanics/thpl1/`](15_thermo_mechanics/thpl1/) |
 
 **Topic.** A cylindrical bar 100 mm long and 20 mm in diameter, held axially at both
@@ -6254,7 +6411,7 @@ Axisymmetric, QUA4 elements.
 | σ_zz at A (MPa) | -309 | — | -308.911 (+0.0288 %) | not available |  |
 | plastic strain ε_zz at A | -0.004455 | — | -0.00445545 (-0.01 %) | not available |  |
 
-Acceptance: deck criterion, both relative gaps ≤ 0.03 %.
+Acceptance: criterion of the `.dgibi` file, both relative gaps ≤ 0.03 %.
 
 ## Magneto-static
 
@@ -6270,7 +6427,7 @@ Acceptance: deck criterion, both relative gaps ≤ 0.03 %.
 | pyrucast model | not available — missing: magnetostatics |
 | Reference | Analytical solution. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | not shipped with Cast3M 2026 |
+| Cast3M 2026 `.dgibi` file | not shipped with Cast3M 2026 |
 | Folder | [`16_magnetostatics/Ac2d93/`](16_magnetostatics/Ac2d93/) |
 
 **Topic.** A circular coil of rectangular cross-section sits in an iron box; the iron follows a non-linear B(H) curve (soft iron). The axisymmetric problem is solved for the vector potential.
@@ -6281,7 +6438,7 @@ Acceptance: deck criterion, both relative gaps ≤ 0.03 %.
 
 Coil of rectangular cross-section in an iron box; soft iron B(H) curve.
 
-**Notes.** The 2011 document prints no result table, and Cast3M 2026 no longer ships this deck.
+**Notes.** The 2011 document prints no result table, and Cast3M 2026 no longer ships this `.dgibi` file.
 
 #### Results
 
@@ -6299,7 +6456,7 @@ No compared quantity.
 | pyrucast model | not available — missing: magnetostatics |
 | Reference | Analytical solution. |
 | Cast3M version of the 2011 document | 97' customer version |
-| Cast3M 2026 deck | not shipped with Cast3M 2026 |
+| Cast3M 2026 `.dgibi` file | not shipped with Cast3M 2026 |
 | Folder | [`16_magnetostatics/Ac3d93/`](16_magnetostatics/Ac3d93/) |
 
 **Topic.** The same coil in its iron box, in 3D, solved with the two scalar potentials method (Trowbridge - Simkin) and a non-linear iron.
@@ -6310,7 +6467,7 @@ No compared quantity.
 
 Coil of rectangular cross-section in an iron box; soft iron B(H) curve.
 
-**Notes.** The 2011 document prints no result table, and Cast3M 2026 no longer ships this deck.
+**Notes.** The 2011 document prints no result table, and Cast3M 2026 no longer ships this `.dgibi` file.
 
 #### Results
 

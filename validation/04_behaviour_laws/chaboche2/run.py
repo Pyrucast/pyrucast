@@ -11,7 +11,7 @@ Cast3M's ONERA model and equivalent data, read at t = 100, 200, 300, 400 and
 
 The Cast3M data map to pyrucast's as SIGY → k, K → K, N → n, A·C → C_1,
 C → gamma_1, B → b, Q → Q. The strain is homogeneous: the stress is read at
-the first Gauss point, every 10 s as the deck computes. The deck's B-bar
+the first Gauss point, every 10 s as the `.dgibi` file computes. The `.dgibi` file's B-bar
 formulation changes nothing on a homogeneous strain; pyrucast has none.
 
 Running::

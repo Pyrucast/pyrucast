@@ -5,10 +5,10 @@ its two ends, receives at t = 5e-6 (raised from t = 4e-6) an internal
 pressure of 10, then held. E = 30e6, ν = 0, ρ = 0.28 × 0.002588. Without
 damping, the largest radial displacement of a point is twice its static
 value. Reference: that ratio, 2, at three points of the mid-height section,
-r = 6, 9 and 11; the static displacements are the deck's.
+r = 6, 9 and 11; the static displacements are the `.dgibi` file's.
 
-Mesh: the deck's regular grid of 6 × 8 QUA4. The motion is integrated by
-Newmark's average acceleration every 1e-6 up to 2e-4, as the deck's DYNAMIC
+Mesh: the `.dgibi` file's regular grid of 6 × 8 QUA4. The motion is integrated by
+Newmark's average acceleration every 1e-6 up to 2e-4, as the `.dgibi` file's DYNAMIC
 procedure does.
 
 Running::

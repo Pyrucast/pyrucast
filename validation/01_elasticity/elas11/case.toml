@@ -3,10 +3,10 @@ calculation_type = "MECHANICS ELASTICITY 2D AXI"
 castem_element = "QUA8"
 castem_version = "97' customer releas"
 source = "Test NAFEMS : LE11 : Modélisation des structures élastiques dans CASTEM 2000."
-deck = "elas11.dgibi"
+dgibi = "elas11.dgibi"
 pyrucast = "`model.elasticity(fes, \"axisymmetric\")` with a thermal strain, QUA8"
 tolerance = 0.02
-tolerance_note = "deck criterion, |σ_zz(A) + 105| / 105 ≤ 2 %."
+tolerance_note = "criterion of the `.dgibi` file, |σ_zz(A) + 105| / 105 ≤ 2 %."
 
 topic = """
 A thick solid of revolution made of a cylinder, a cone and a sphere (NAFEMS
@@ -20,7 +20,7 @@ Find the axial stress at the point A (1, 0). The analytical value is
 """
 
 model = """
-Meridian plane (r, z), QUA8 elements (fine mesh of the deck, K = 2).
+Meridian plane (r, z), QUA8 elements (fine mesh of the `.dgibi` file, K = 2).
 
 | Data | Value |
 |---|---|
@@ -34,13 +34,13 @@ Meridian plane (r, z), QUA8 elements (fine mesh of the deck, K = 2).
 
 notes = """
 The 2011 document gives the goal as σ_zz(A) = 105 MPa and the result table as
-σ_yy(A) = −105 MPa; the deck compares σ_zz with −105 MPa.
+σ_yy(A) = −105 MPa; the `.dgibi` file compares σ_zz with −105 MPa.
 
 `transfinite` puts the QUA8 mid-nodes of the arcs on the chords, where the
-deck puts them on the arcs. Cast3M's thermal stress operator also replaces
+`.dgibi` file puts them on the arcs. Cast3M's thermal stress operator also replaces
 the temperature of a mid-node of a quadratic cell by the mean of its edge's
 corners, which differs from r + z on the arcs' mid-nodes; pyrucast heats every
-node to r + z. With the deck's mid-nodes and its averaged temperatures,
+node to r + z. With the `.dgibi` file's mid-nodes and its averaged temperatures,
 pyrucast gives Cast3M's u_r(B) to round-off.
 """
 

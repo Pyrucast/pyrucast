@@ -3,9 +3,9 @@ calculation_type = "MECHANICS 2D, NON LINEAR GEOMETRICAL DYNAMICS"
 castem_element = "BARR"
 castem_version = "97' customer version"
 source = ""
-deck = "dyna_nl1.dgibi"
+dgibi = "dyna_nl1.dgibi"
 gap = ["point masses"]
-tolerance_note = "deck criteria, amplitude within 0.1 % and period within 0.5 %."
+tolerance_note = "criteria of the `.dgibi` file, amplitude within 0.1 % and period within 0.5 %."
 
 topic = """
 A Duffing-type oscillator: a prestressed bar, clamped at one end, carries a

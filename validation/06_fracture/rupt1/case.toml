@@ -3,10 +3,10 @@ calculation_type = "MECHANICS ELASTIC-PLASTIC AXI"
 castem_element = "QUA8"
 castem_version = "97' customer version"
 source = "Test NAFEMS : Ductile Fracture Handbook, A. ZAHOOR, EPRI, 1990 : rupt1 Modélisation des structures élastiques dans CASTEM 2000."
-deck = "rupt1.dgibi"
+dgibi = "rupt1.dgibi"
 gap = ["stress intensity factors (G-theta)"]
 tolerance = 0.01
-tolerance_note = "deck criterion, |K − K_Zahoor| / K_Zahoor < 1 %."
+tolerance_note = "criterion of the `.dgibi` file, |K − K_Zahoor| / K_Zahoor < 1 %."
 
 topic = """
 A cylinder with a circumferential crack, in linear elasticity and
@@ -22,7 +22,7 @@ Axisymmetric, QUA8 elements; crack depth a = 0.05 m.
 
 | Data | Value |
 |---|---|
-| E | 2.1e11 Pa (2e11 Pa in the deck) |
+| E | 2.1e11 Pa (2e11 Pa in the `.dgibi` file) |
 | ν | 0.3 |
 | a | 0.05 m |
 

@@ -3,10 +3,10 @@ calculation_type = "MECHANICS ELASTIC PLASTIC"
 castem_element = "TUYA"
 castem_version = "97' customer version"
 source = ""
-deck = "plas12.dgibi"
+dgibi = "plas12.dgibi"
 gap = ["pipe element (TUYA)"]
 tolerance = 5.5e-3
-tolerance_note = "deck criterion, relative gap of the areas under the two curves ≤ 5.5e-3."
+tolerance_note = "criterion of the `.dgibi` file, relative gap of the areas under the two curves ≤ 5.5e-3."
 
 topic = """
 A pipe clamped at both ends undergoes a thermal shock. Young's modulus, the

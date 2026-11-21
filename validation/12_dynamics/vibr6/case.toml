@@ -3,10 +3,10 @@ calculation_type = "MECHANICS DYNAMICS 3D, COMPOUND EIGEN SHAPES"
 castem_element = "TUYA"
 castem_version = "97' customer version"
 source = "Model of Paidoussis & Ortoja-Starzewski."
-deck = "vibr6.dgibi"
+dgibi = "vibr6.dgibi"
 gap = ["complex eigenmodes under axial flow", "pipe element (TUYA)"]
 tolerance = 0.05
-tolerance_note = "deck criterion, critical velocity within 5 % of 25 m/s."
+tolerance_note = "criterion of the `.dgibi` file, critical velocity within 5 % of 25 m/s."
 
 topic = """
 Complex modes of a pinned-pinned rod in an external axial flow, computed for

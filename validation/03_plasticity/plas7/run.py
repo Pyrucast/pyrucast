@@ -7,10 +7,10 @@ a symmetry plane (u_x = 0) and the origin is held along y. Reference: the
 bending moment of R. Hill's solution at seven load levels, up to the fully
 plastic moment, and σ_xx at two nodes of the loaded side at the last one.
 
-Mesh: the deck's regular grid of 32 × 4 QUA4.
+Mesh: the `.dgibi` file's regular grid of 32 × 4 QUA4.
 
 The moment is taken from the support forces on the loaded side, Σ y·F_x, in
-the deck's unit of 1e4 N·m: exact by equilibrium. The deck integrates y·σ_xx along that side, with
+the `.dgibi` file's unit of 1e4 N·m: exact by equilibrium. The `.dgibi` file integrates y·σ_xx along that side, with
 σ_xx extrapolated to the nodes and averaged between cells; the two estimates
 differ by the error of that integration. The stresses are read by `project`
 in one cell holding the node, from its Gauss points.
@@ -30,7 +30,7 @@ N_HEIGHT, N_WIDTH = 32, 4
 ROTATION = 1e-3  # u_x at y = 50 mm per unit time
 TIMES = [0.0, 0.029435, 0.1, 0.2, 0.3, 0.4, 0.5, 1.0]
 KINEMATICS = "plane_strain"
-MOMENT_UNIT = 1e4  # N·m, the deck's
+MOMENT_UNIT = 1e4  # N·m, the `.dgibi` file's
 
 
 def main(out: str | None = None) -> dict[str, float]:

@@ -3,10 +3,10 @@ calculation_type = "MECHANICS DYNAMICS 3D, TRANSIENT RESPONSE"
 castem_element = "BARR"
 castem_version = "97' customer version"
 source = "J. S. Przemieniecki : Theory of matrix structural analyses (New York : McGraw-Hill Book Co., 1968) p340."
-deck = "dyna12.dgibi"
+dgibi = "dyna12.dgibi"
 pyrucast = "`model.truss` in `stepping.step_by_step(dynamics=True)` (Newmark), SEG2"
 tolerance = 0.05
-tolerance_note = "deck criterion, both relative gaps < 5 %."
+tolerance_note = "criterion of the `.dgibi` file, both relative gaps < 5 %."
 
 topic = """
 Transient response of a free launcher to an axial thrust applied during a

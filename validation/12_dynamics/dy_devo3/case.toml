@@ -3,10 +3,10 @@ calculation_type = "MECHANICS DYNAMICS 3D, IMPACT, LINKAGE CIRCLE-PLANE-FRICTION
 castem_element = ""
 castem_version = "97' customer version"
 source = ""
-deck = "dy_devo3.dgibi"
+dgibi = "dy_devo3.dgibi"
 gap = ["modal-basis transient dynamics with linkages (DYNE)"]
 tolerance = 0.01
-tolerance_note = "deck criterion, both relative gaps ≤ 1e-2."
+tolerance_note = "criterion of the `.dgibi` file, both relative gaps ≤ 1e-2."
 
 topic = """
 A wheel of 1 m diameter, clamped between two planes, is driven by a torque;

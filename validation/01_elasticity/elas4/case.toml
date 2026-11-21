@@ -3,10 +3,10 @@ calculation_type = "MECHANICS ELASTICITY 3D"
 castem_element = "COQ4"
 castem_version = "97' customer version"
 source = "Test NAFEMS : ME8 : Modélisation des structures élastique dans CASTEM 2000."
-deck = "elas4.dgibi"
+dgibi = "elas4.dgibi"
 pyrucast = "`model.shell(fes, \"kirchhoff\")` (DKQ), QUA4"
 tolerance = 0.05
-tolerance_note = "deck criterion, |σ_xx(A) + 108| / 108 ≤ 5 %."
+tolerance_note = "criterion of the `.dgibi` file, |σ_xx(A) + 108| / 108 ≤ 5 %."
 
 topic = """
 A cantilever with a Z-shaped cross-section (NAFEMS LE5) is loaded in torsion
@@ -38,7 +38,7 @@ COQ4 quadrilaterals.
 
 notes = """
 The 2011 document gives the torque as 1200 mN and the loads as 600 N; the
-deck applies 1.2 MN·m with 600 kN per flange. The deck reads the axial
+`.dgibi` file applies 1.2 MN·m with 600 kN per flange. The `.dgibi` file reads the axial
 stress as the SMYY component of the shell stresses averaged through the
 thickness (CALP 'MOYEN'), extrapolated to the nodes and averaged between the
 two cells that share A; pyrucast reads N_yy / h in one of them. On the same

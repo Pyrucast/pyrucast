@@ -3,8 +3,9 @@ calculation_type = "ISOTROPIC ELASTIC MECHANICS"
 castem_element = "QUA4, CUB8, JOI4"
 castem_version = "97' customer version"
 source = ""
-deck = "joi41.dgibi"
-tolerance_note = "deck criterion, both largest differences ≤ 1e-9."
+dgibi = "joi41.dgibi"
+pyrucast = "`model.elasticity(fes, \"full_3d\")`, the joint as `model.interface_transfer` between the two cubes' faces, HEX8"
+tolerance_note = "the `.dgibi` file's bound, 1e-9, on the difference between the two computations."
 
 topic = """
 Two stacked cubes under a pressure on the upper face, computed twice: as a
@@ -17,30 +18,47 @@ stresses: with a very stiff joint, the two computations must agree.
 """
 
 model = """
-Two CUB8 cubes; JOI4 joint of stiffness k_s = k_n = 4.2e15 between them.
+Two CUB8 cubes of side 2, one above the other (z from −4 to 0); JOI4 joint
+of stiffness k_s = k_n = 4.2e15 between them.
 
 | Data | Value |
 |---|---|
 | E | 2.1e11 Pa |
 | ν | 0.3 |
 
-- Load: pressure 1e5 Pa on the upper face.
+- Boundary conditions on the base z = −4: the corner (2, 2) held, the edge
+  x = 2 held along x and z, the edge y = 2 along y and z, the corner (0, 0)
+  along z.
+- Load: a pull of 1e5 Pa on the upper face z = 0 (the `.dgibi` file's pressure −1e5).
 """
 
-notes = "The 2011 document prints no result table; the compared quantities are the deck's."
+notes = """
+The 2011 document prints no result table. The `.dgibi` file's own test is vacuous: it
+subtracts from the first computation's displacements those of the same
+computation (`desuav = deps`, `deinav = depi`), so its largest differences
+are 0 by construction. The quantities compared here are what it meant to
+check: the vertical displacement of the upper corner (0, 0, 0) without and
+with the joint, the joint being stiff enough to change it by less than 1e-9.
+
+The continuous body is extruded upwards from its base: extruded downwards
+from its upper face, its cells come out mirrored and `skin` orients that face
+inwards, which turns the pull into a push.
+"""
+
+improvements = [
+    "`extrude` against the normal of the source face gives mirrored HEX8 cells, whose facets `skin` then orients inwards",
+]
 
 [[quantity]]
-key = "max_du_upper"
-label = "largest displacement difference, upper cube"
+key = "uz_continuous"
+label = "u_z at (0, 0, 0), continuous cubes, no reference"
 unit = "m"
-reference = 0.0
-abs_tolerance = 1e-9
-castem_probe = "maxdis"
+castem_probe = "EXTR RE UZ SA1"
 
 [[quantity]]
-key = "max_du_lower"
-label = "largest displacement difference, lower cube"
+key = "uz_joint"
+label = "u_z at (0, 0, 0), cubes joined by the joint"
 unit = "m"
-reference = 0.0
 abs_tolerance = 1e-9
-castem_probe = "maxdii"
+castem_probe = "EXTR RETA UZ SA1A"
+reference_probe = "EXTR RE UZ SA1"

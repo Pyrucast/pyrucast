@@ -6,8 +6,8 @@ and pulled along x by a total force of 1e6 N spread evenly over its side
 x = 0.5. Reference (comparison with six other codes): the displacements of
 the corners A (0.5, 0.5), D (0.5, −0.5) and of the centre E.
 
-Mesh: 10 × 10 QUA4, the deck's (a regular grid). The force spread evenly is
-a uniform line load of 1e6 N/m, whose consistent nodal forces are the deck's.
+Mesh: 10 × 10 QUA4, the `.dgibi` file's (a regular grid). The force spread evenly is
+a uniform line load of 1e6 N/m, whose consistent nodal forces are the `.dgibi` file's.
 
 Running::
 

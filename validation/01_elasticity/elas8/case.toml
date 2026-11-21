@@ -3,10 +3,10 @@ calculation_type = "MECHANICS ELASTICITY 2D PLANE STRESS"
 castem_element = "QUA8"
 castem_version = "97' customer releas"
 source = "Test NAFEMS : ME12 : Modélisation des structures élastiques dans CASTEM 2000."
-deck = "elas8.dgibi"
+dgibi = "elas8.dgibi"
 pyrucast = "`model.elasticity(fes, \"plane_stress\")`, QUA8"
 tolerance = 0.01
-tolerance_note = "deck criterion, |σ_yy(D) − 92.7| / 92.7 ≤ 1 %."
+tolerance_note = "criterion of the `.dgibi` file, |σ_yy(D) − 92.7| / 92.7 ≤ 1 %."
 
 topic = """
 An elliptic membrane (NAFEMS LE1) is loaded by a uniform outward pressure on
@@ -34,9 +34,9 @@ straight edge has 4 elements.
 """
 
 notes = """
-The boundary nodes are the deck's. Inside, `transfinite` places the corner
-nodes as the deck does, but puts the QUA8 mid-nodes of the elliptic edges on
-the chords, where the deck puts them on the ellipses; σ_yy at D, where the
+The boundary nodes are the `.dgibi` file's. Inside, `transfinite` places the corner
+nodes as the `.dgibi` file does, but puts the QUA8 mid-nodes of the elliptic edges on
+the chords, where the `.dgibi` file puts them on the ellipses; σ_yy at D, where the
 inner ellipse is the most curved, is sensitive to it. Cast3M also reads the
 stress at a node differently: it extrapolates the Gauss values of the cell to
 its nodes, pyrucast evaluates their least-squares fit. With mid-nodes placed

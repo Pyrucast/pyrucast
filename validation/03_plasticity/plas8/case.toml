@@ -3,10 +3,10 @@ calculation_type = "MECHANICS ELASTIC PLASTIC"
 castem_element = "TRI3 (DKT plate, 7 integration layers)"
 castem_version = "97' customer version"
 source = ""
-deck = "plas8.dgibi"
+dgibi = "plas8.dgibi"
 gap = ["plasticity in plate elements"]
 tolerance = 0.085
-tolerance_note = "deck criterion (complete run), |F − F_u| / F_u ≤ 8.5 %."
+tolerance_note = "criterion of the `.dgibi` file (complete run), |F − F_u| / F_u ≤ 8.5 %."
 
 topic = """
 A plate strip, clamped at one end, is bent by an imposed deflection of its

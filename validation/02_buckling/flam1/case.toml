@@ -3,10 +3,10 @@ calculation_type = "MECHANICS BUCKLING. 2D PLANE STRESS"
 castem_element = "COQ2"
 castem_version = "97' customer version"
 source = "Analytical solution."
-deck = "flam1.dgibi"
+dgibi = "flam1.dgibi"
 gap = ["eigenvalue solver", "axisymmetric shell element (COQ2)"]
 tolerance = 1e-5
-tolerance_note = "deck criterion, |λ − 41.123| / 41.123 < 1e-3 %."
+tolerance_note = "criterion of the `.dgibi` file, |λ − 41.123| / 41.123 < 1e-3 %."
 
 topic = """
 Euler buckling of a strip clamped at one end and compressed by an axial force
@@ -32,7 +32,7 @@ COQ2 elements at a mesh density of 1 mm, thickness 1 mm.
   eigenvalue of the buckling problem between 0.001 and 100.
 """
 
-notes = "The 2011 document prints no result table; the reference is the deck's."
+notes = "The 2011 document prints no result table; the reference is the `.dgibi` file's."
 
 [[quantity]]
 key = "lambda_1"

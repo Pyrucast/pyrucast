@@ -3,10 +3,10 @@ calculation_type = "MECHANICS PLASTICITY 2D PLANE STRESS"
 castem_element = "QUA4 (COQ4 in the 2011 document)"
 castem_version = "97' customer version"
 source = "Test NAFEMS : Analytical-Solution : MP1 Modélisation des structures élastiques dans CASTEM 2000."
-deck = "plas1.dgibi"
+dgibi = "plas1.dgibi"
 pyrucast = "`model.plasticity_perfect(fes, \"plane_stress\")` with `mpc` relations, in `stepping.step_by_step`, QUA4"
 tolerance = 0.015
-tolerance_note = "deck criterion, each relative gap ≤ 1.5 %."
+tolerance_note = "criterion of the `.dgibi` file, each relative gap ≤ 1.5 %."
 
 topic = """
 A rectangular strip in plane stress is bent by imposed rotations of its end
@@ -39,7 +39,7 @@ Half of the strip, width 12.5 mm (x from 0 to 12.5 mm), height 100 mm
 """
 
 notes = """
-The 2011 document gives ν = 0.28 and names the element COQ4; the deck uses
+The 2011 document gives ν = 0.28 and names the element COQ4; the `.dgibi` file uses
 ν = 0.3 and QUA4.
 """
 

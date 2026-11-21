@@ -3,10 +3,10 @@ calculation_type = "DAMAGE MODEL FOR ELASTOPLASTIC MATERIAL"
 castem_element = "QUA8"
 castem_version = "97' customer version"
 source = "Analytical solution."
-deck = "endoaxi3.dgibi"
+dgibi = "endoaxi3.dgibi"
 gap = ["elastoplastic damage law (ENDOMMAGEABLE)"]
 tolerance = 0.05
-tolerance_note = "deck criterion, every relative gap ≤ 5 %."
+tolerance_note = "criterion of the `.dgibi` file, every relative gap ≤ 5 %."
 
 topic = """
 An axisymmetric test piece of an elastoplastic material with ductile damage
@@ -27,7 +27,7 @@ tabulated against the temperature.
 """
 
 notes = """
-The 2011 document prints no result table. The deck holds two sets of
+The 2011 document prints no result table. The `.dgibi` file holds two sets of
 references, for its complete and its short run; the references are those of
 the set the run uses.
 """

@@ -2,7 +2,10 @@
   "status": "ok",
   "message": "",
   "values": {
-    "max_du_upper": 0.0,
-    "max_du_lower": 0.0
+    "uz_continuous": 1.904761904761904e-06,
+    "uz_joint": 1.904785714263466e-06
+  },
+  "references": {
+    "uz_joint": 1.904761904761904e-06
   }
 }

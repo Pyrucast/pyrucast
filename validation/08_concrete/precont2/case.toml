@@ -3,7 +3,7 @@ calculation_type = "REINFORCED ELASTIC MECHANICS - BARR - 2D"
 castem_element = "QUA4, BARR"
 castem_version = "97' customer version"
 source = "J.S. Fleuret 08/96"
-deck = ""
+dgibi = ""
 gap = ["prestressing cables (KABL, PREC)"]
 
 topic = """
@@ -24,4 +24,4 @@ Plane QUA4 beam with BARR tendons.
 | section | | 0.02 m² |
 """
 
-notes = "The 2011 document prints no result table, and Cast3M 2026 no longer ships this deck."
+notes = "The 2011 document prints no result table, and Cast3M 2026 no longer ships this `.dgibi` file."

@@ -3,9 +3,9 @@ calculation_type = "POROUS-ELASTIC MECHANIC - MODE PLAN CONT"
 castem_element = "QUAP"
 castem_version = "97' customer version"
 source = "Problem of Terzaghi"
-deck = "pore3.dgibi"
+dgibi = "pore3.dgibi"
 gap = ["porous media elements (QUAP)"]
-tolerance_note = "deck criteria, both relative gaps ≤ 0.1."
+tolerance_note = "criteria of the `.dgibi` file, both relative gaps ≤ 0.1."
 
 topic = """
 One-dimensional consolidation (Terzaghi): a porous elastic column is loaded
@@ -26,7 +26,7 @@ Porous elements (QUAP).
 | ν | 0.4 |
 """
 
-notes = "The 2011 document prints no result table; the compared quantities are the deck's relative gaps."
+notes = "The 2011 document prints no result table; the compared quantities are the `.dgibi` file's relative gaps."
 
 [[quantity]]
 key = "gap_p"

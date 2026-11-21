@@ -3,10 +3,10 @@ calculation_type = "ELASTIC MECHANICS"
 castem_element = "QUA8, plane strain"
 castem_version = "97' customer version"
 source = "Test NAFEMS : The use of J-integral in thermal stress crack problems International Journal of Fracture: rupt2 Modélisation des structures élastiques dans CASTEM 2000."
-deck = "rupt2.dgibi"
+dgibi = "rupt2.dgibi"
 gap = ["stress intensity factors (G-theta)"]
 tolerance = 0.05
-tolerance_note = "deck criterion, shape factor F = K(1 − ν)/(E·α·T₀·w·√(πa)) within 5 % of 0.514."
+tolerance_note = "criterion of the `.dgibi` file, shape factor F = K(1 − ν)/(E·α·T₀·w·√(πa)) within 5 % of 0.514."
 
 topic = """
 An edge-cracked strip with constrained ends is loaded by a temperature that

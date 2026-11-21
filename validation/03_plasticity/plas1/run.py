@@ -8,9 +8,9 @@ modelled (12.5 mm wide, u_x = 0 on the symmetry edge x = 0). At t = 0.02875
 the strip is still elastic; at t = 0.05 it is plastic over most of its
 height. Reference: M1 = 805 kN·m and M2 = 1074 kN·m.
 
-Mesh: the deck's, one QUA4 across and 8 along y. `mpc` takes one
+Mesh: the `.dgibi` file's, one QUA4 across and 8 along y. `mpc` takes one
 coefficient per term for all its relations: the seven relations, whose
-coefficients differ, are seven `mpc`. The moment is the deck's:
+coefficients differ, are seven `mpc`. The moment is the `.dgibi` file's:
 the moment of the support forces on the end section, 2·Σ y·F_x over its
 upper half, in kN·m.
 

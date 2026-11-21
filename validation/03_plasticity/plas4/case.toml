@@ -3,10 +3,10 @@ calculation_type = "MECHANICS PLASTICITY 3D"
 castem_element = "CUB8"
 castem_version = "97' customer version"
 source = "Test NAFEMS : Analytical-Solution : MP4 Modélisation des structures élastiques dans CASTEM 2000."
-deck = "plas4.dgibi"
+dgibi = "plas4.dgibi"
 pyrucast = "`model.plasticity_perfect(fes, \"full_3d\")` in `stepping.step_by_step`, HEX8"
 tolerance = 0.005
-tolerance_note = "deck criterion, largest relative gap of the twelve stresses ≤ 0.5 %."
+tolerance_note = "criterion of the `.dgibi` file, largest relative gap of the twelve stresses ≤ 0.5 %."
 
 topic = """
 A block of two cubic elements is loaded in uniaxial strain: u_y = u_z = 0
@@ -36,7 +36,7 @@ Two HEX8 of size 0.5 × 1 × 1 along x, from x = 0 to x = 1.
 
 notes = """
 The 2011 document prints the Cast3M σ_yy and σ_zz at T4 as 1.6E6; the
-references are those of the deck (1.66e6).
+references are those of the `.dgibi` file (1.66e6).
 """
 
 [[quantity]]

@@ -3,10 +3,10 @@ calculation_type = "ORTHOTROPIC ELASTIC MECHANICS"
 castem_element = "QUA4, JOI4"
 castem_version = "97' customer version"
 source = "Analytical solution."
-deck = "joi45.dgibi"
+dgibi = "joi45.dgibi"
 gap = ["orthotropic joint with material axes"]
 tolerance = 1e-3
-tolerance_note = "deck criterion, both relative gaps ≤ 1e-3."
+tolerance_note = "criterion of the `.dgibi` file, both relative gaps ≤ 1e-3."
 
 topic = """
 A 3D joint, clamped on its lower face, carries a shear load on its upper

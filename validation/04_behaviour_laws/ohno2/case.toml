@@ -3,10 +3,10 @@ calculation_type = "ISOTROPIC VISCOPLASTIC MECHANICS - 2D AXIS"
 castem_element = "QUA8"
 castem_version = "97' customer version"
 source = ""
-deck = "ohno2.dgibi"
+dgibi = "ohno2.dgibi"
 gap = ["Ohno viscoplastic law"]
 tolerance = 0.003
-tolerance_note = "deck criterion, every displacement of the history within 0.3 % of the reference computation."
+tolerance_note = "criterion of the `.dgibi` file, every displacement of the history within 0.3 % of the reference computation."
 
 topic = """
 A hollow cylinder of an Ohno viscoplastic material (a modified Chaboche
@@ -16,7 +16,7 @@ upper face.
 
 goal = """
 Test the Ohno model: the displacement history must equal the one of an
-equivalent second computation run by the deck.
+equivalent second computation run by the `.dgibi` file.
 """
 
 model = """
@@ -28,7 +28,7 @@ Axisymmetric hollow cylinder, QUA8 elements.
 | ν | 0.33 |
 """
 
-notes = "The 2011 document prints no result table; the reference is the deck's second computation."
+notes = "The 2011 document prints no result table; the reference is the `.dgibi` file's second computation."
 
 [[quantity]]
 key = "u_end"

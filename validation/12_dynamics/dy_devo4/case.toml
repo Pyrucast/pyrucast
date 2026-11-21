@@ -3,10 +3,10 @@ calculation_type = "MECHANICS DYNAMICS 3D, IMPACT, LINKAGE SECTION-SECTION-OUTSI
 castem_element = "POUT"
 castem_version = "97' customer version"
 source = ""
-deck = "dy_devo4.dgibi"
+dgibi = "dy_devo4.dgibi"
 gap = ["modal-basis transient dynamics with linkages (DYNE)"]
 tolerance = 0.2
-tolerance_note = "deck criterion, each value at most 1.2 times the reference (one-sided)."
+tolerance_note = "criterion of the `.dgibi` file, each value at most 1.2 times the reference (one-sided)."
 
 topic = """
 A cantilever beam with a mass at its tip, deflected by a force then

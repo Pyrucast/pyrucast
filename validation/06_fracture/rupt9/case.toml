@@ -3,10 +3,10 @@ calculation_type = "MECHANICS ELASTICITY"
 castem_element = "QUA8, DIME 2"
 castem_version = "97' customer version"
 source = "Test NAFEMS : D.P.Rooke and D. J. Cartwright in Copendium of Intensity Factors HMSO (1976): rupt7 Modélisation des structures élastiques dans CASTEM 2000."
-deck = "rupt9.dgibi"
+dgibi = "rupt9.dgibi"
 gap = ["stress intensity factors (G-theta)"]
 tolerance = 0.02
-tolerance_note = "deck criterion, each factor within 2 % of 150.37 and −71.4."
+tolerance_note = "criterion of the `.dgibi` file, each factor within 2 % of 150.37 and −71.4."
 
 topic = """
 The oblique edge crack of rupt7, loaded by a pressure on the plate's sides;
@@ -19,7 +19,7 @@ model = """
 QUA8 elements; the plate of rupt7 with a pressure of 10 on its two sides.
 """
 
-notes = "The deck compares with 150.37 and −71.4 (the references of rupt7); the 2011 document gives 149.77 and −71.56."
+notes = "The `.dgibi` file compares with 150.37 and −71.4 (the references of rupt7); the 2011 document gives 149.77 and −71.56."
 
 [[quantity]]
 key = "K1"

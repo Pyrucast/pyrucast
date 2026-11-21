@@ -7,13 +7,13 @@ With θ = (T − T₀)·2k₀/(q·L²) and s = L²·q·β/k₀, the exact profil
 
     θ(x) = 2·(√(1 + s·(1 − (x/L)²)) − 1) / s.
 
-Compared: the largest gap of θ to that profile over the nodes (the deck's
+Compared: the largest gap of θ to that profile over the nodes (the `.dgibi` file's
 test), and T at the insulated face, whose exact value is
 T₀ + (√(1 + s) − 1)/β.
 
 The non-linear iterations are converged to a precision of 1e-8.
 
-Mesh: one row of 26 QUA4 of height L/10, as many as the deck's. The deck's
+Mesh: one row of 26 QUA4 of height L/10, as many as the `.dgibi` file's. The `.dgibi` file's
 cells grow from L/100 to L/10 along x; pyrucast's `line` has no such
 progression, its cells are even.
 
@@ -31,10 +31,10 @@ L = 5e-3  # m
 HEIGHT = L / 10.0
 K0, BETA, T0 = 2.0, 0.025, 100.0
 SOURCE = 1e7  # W/m³
-# The deck's THERMIC procedure stops on its own criterion; at step_by_step's
+# The `.dgibi` file's THERMIC procedure stops on its own criterion; at step_by_step's
 # default precision (1e-4) the profile would stay 1e-4 from the converged one.
 PRECISION = 1e-8
-N = 26  # cells along x, as many as the deck's
+N = 26  # cells along x, as many as the `.dgibi` file's
 
 
 def main(out: str | None = None) -> dict[str, float]:

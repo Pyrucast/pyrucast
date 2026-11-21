@@ -28,9 +28,9 @@ Each case keeps the original description sheet, cites the same source and
 compares with the same reference value. Four values are shown side by side:
 
 - **Reference**: the analytical or benchmark value of the original document
-  (or of the Cast3M deck when the document prints none);
+  (or of the Cast3M `.dgibi` file when the document prints none);
 - **Cast3M 2011**: the value printed in the 2011 document, as printed;
-- **Cast3M 2026**: the value obtained by running the case's deck shipped with
+- **Cast3M 2026**: the value obtained by running the case's `.dgibi` file shipped with
   Cast3M 2026 (`dgibi/<case>.dgibi`), unmodified apart from the lines that
   print the compared quantities;
 - **pyrucast**: the value computed by the case's `run.py`.
@@ -81,7 +81,7 @@ def status(case, folder):
 
 def references(case, folder):
     """The reference of each quantity: given in `case.toml`, or computed by the
-    Cast3M deck (`reference_probe`, stored in `castem2026.json`)."""
+    Cast3M `.dgibi` file (`reference_probe`, stored in `castem2026.json`)."""
     castem = read_json(folder / "castem2026.json") or {}
     computed = castem.get("references", {})
     refs = {}
@@ -234,9 +234,9 @@ def sheet(chapter, folder, case):
         model = "not available — missing: " + "; ".join(case["gap"])
     else:
         model = case.get("pyrucast", "")
-    deck = (
-        f"`dgibi/{case['deck']}`"
-        if case.get("deck")
+    dgibi = (
+        f"`dgibi/{case['dgibi']}`"
+        if case.get("dgibi")
         else "not shipped with Cast3M 2026"
     )
     lines = [
@@ -252,7 +252,7 @@ def sheet(chapter, folder, case):
         f"| pyrucast model | {model} |",
         f"| Reference | {case['source'] or 'no source cited in the original document'} |",
         f"| Cast3M version of the 2011 document | {case['castem_version']} |",
-        f"| Cast3M 2026 deck | {deck} |",
+        f"| Cast3M 2026 `.dgibi` file | {dgibi} |",
         f"| Folder | [`{rel}/`]({rel}/) |",
         "",
         f"**Topic.** {case['topic'].strip()}",
@@ -313,7 +313,7 @@ def results(folder, case):
     lines.append("")
     if any("reference_probe" in q for q in case.get("quantity", [])):
         lines += [
-            "¹ Reference computed by the Cast3M 2026 deck from its analytical formula.",
+            "¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.",
             "",
         ]
     if case.get("tolerance_note"):
@@ -373,7 +373,7 @@ def main():
         "improvements",
         "Improvement points",
         "What writing the computed cases showed: an operator or an option "
-        "pyrucast lacks to state the case as the deck does, or a difference with "
+        "pyrucast lacks to state the case as the `.dgibi` file does, or a difference with "
         "Cast3M to look into. The scripts use pyrucast as it is; each point is "
         "detailed in the case's notes.",
     ) + [""]

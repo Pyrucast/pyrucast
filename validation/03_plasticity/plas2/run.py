@@ -6,9 +6,9 @@ P = 1e6·t Pa. At t = 100 (P = 100 MPa) it is elastic; at t = 358.9 it is
 plastic through most of its wall. Reference: the radial displacement of the
 inner point A, 0.4 µm and 2.83 µm.
 
-Mesh: the deck's quarter of the meridian section, 14 × 16 QUA4: 14 elements
+Mesh: the `.dgibi` file's quarter of the meridian section, 14 × 16 QUA4: 14 elements
 through the wall (5 from 1 to 1.1 mm, 9 from 1.1 to 2 mm), 16 along each arc
-(every 5.625°), filled by `transfinite` as the deck's mesher does.
+(every 5.625°), filled by `transfinite` as the `.dgibi` file's mesher does.
 
 Running::
 
@@ -35,7 +35,7 @@ def main(out: str | None = None) -> dict[str, float]:
     c = coords.add_node([0.0, R_OUT])
     y = coords.add_node([0.0, R_MID])
     d = coords.add_node([0.0, R_IN])
-    # The four sides of the section, counter-clockwise, as in the deck.
+    # The four sides of the section, counter-clockwise, as in the `.dgibi` file.
     bottom = pc.mesh.consolidate(
         pc.mesh.line(a, x, N_THIN) | pc.mesh.line(x, b, N_THICK)
     )

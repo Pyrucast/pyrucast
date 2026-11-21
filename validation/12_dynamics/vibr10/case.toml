@@ -3,10 +3,10 @@ calculation_type = "MECHANICS DYNAMICS, MASS UNBALANCE RESPONSE"
 castem_element = ""
 castem_version = "97' customer version"
 source = "Analytical solution."
-deck = "vibr10.dgibi"
+dgibi = "vibr10.dgibi"
 gap = ["harmonic response with rotating unbalance"]
 tolerance = 0.001
-tolerance_note = "deck criterion, both semi-axes within 0.1 %."
+tolerance_note = "criterion of the `.dgibi` file, both semi-axes within 0.1 %."
 
 topic = """
 A point of mass M1 on a stiffness K1 is excited by a rotating unbalance:

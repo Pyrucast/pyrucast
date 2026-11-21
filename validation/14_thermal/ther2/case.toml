@@ -3,10 +3,10 @@ calculation_type = "THERMAL STEADY STATE, 2D AXISYMMETRICAL"
 castem_element = "QUA4"
 castem_version = "97' customer version"
 source = "Analytical solution (1st and 2nd parts). Comparison with results computed by THERMX (3rd part)."
-deck = "ther2.dgibi"
+dgibi = "ther2.dgibi"
 pyrucast = "`model.heat_conduction(fes)` in axisymmetry, with `flux`, a volume `flux` and `boundary_transfer`; QUA4 (case 2 also one TRI3)"
 tolerance = 0.004
-tolerance_note = "deck criterion, each relative gap ≤ 0.4 %."
+tolerance_note = "criterion of the `.dgibi` file, each relative gap ≤ 0.4 %."
 
 topic = """
 Thermal boundary conditions in axisymmetry, on a thick-walled cylinder, in
@@ -29,8 +29,8 @@ R_e = 0.2015 m, QUA4 elements; temperature T_i imposed on the inner face.
 """
 
 notes = """
-The references are the deck's analytical formulas, evaluated at the
-compared point P3. Case 1 is computed on the deck's mesh; cases 2 and 3 on
+The references are the `.dgibi` file's analytical formulas, evaluated at the
+compared point P3. Case 1 is computed on the `.dgibi` file's mesh; cases 2 and 3 on
 free meshes of the same boundary lines, Cast3M's and pyrucast's pavers
 differing inside.
 """

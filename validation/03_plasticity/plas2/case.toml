@@ -3,10 +3,10 @@ calculation_type = "MECHANIC PLASTICITY 2D AXI"
 castem_element = "QUA4 (COQ4 in the 2011 document)"
 castem_version = "97' customer version"
 source = "Test NAFEMS : Analytical-Solution : MP2 Modélisation des structures élastiques dans CASTEM 2000."
-deck = "plas2.dgibi"
+dgibi = "plas2.dgibi"
 pyrucast = "`model.plasticity_perfect(fes, \"axisymmetric\")` in `stepping.step_by_step`, QUA4"
 tolerance = 0.035
-tolerance_note = "deck criterion, largest relative gap of the two values < 3.5 %."
+tolerance_note = "criterion of the `.dgibi` file, largest relative gap of the two values < 3.5 %."
 
 topic = """
 A thick hollow sphere is loaded by an internal pressure that grows with time,
@@ -37,7 +37,7 @@ the thickness (5 from 1 to 1.1 mm, 9 from 1.1 to 2 mm), 16 along each arc.
 notes = """
 The 2011 document prints the Cast3M value at the second time as 1085.2 µm (the
 value of plas1); it is kept as printed. Its time labels t0 and t1000 are the
-times 100 and 358.9 of the deck.
+times 100 and 358.9 of the `.dgibi` file.
 """
 
 [[quantity]]

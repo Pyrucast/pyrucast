@@ -5,10 +5,10 @@ castem_version = "97' customer releas"
 source = """Test VPCS : SSLL16/89 : Modélisation des structures élastiques dans \
 CASTEM 2000. M. Courtand P. Lebelle Formulaire du béton armé T.2 Paris \
 Eyrolles 1976."""
-deck = "elas13.dgibi"
+dgibi = "elas13.dgibi"
 gap = ["spring supports (APPU)"]
 tolerance = 0.05
-tolerance_note = "deck criterion, largest relative gap of the four values ≤ 5 %."
+tolerance_note = "criterion of the `.dgibi` file, largest relative gap of the four values ≤ 5 %."
 
 topic = """
 A beam with pinned ends rests on an elastic foundation and carries a point
@@ -40,7 +40,7 @@ the nodes.
 notes = """
 The 2011 document prints the deflection reference as −4.233E3 m and the
 Cast3M value as −4.38085E3 m (exponent sign lost); the reference used here is
-the deck's −4.23326e-3 m, the 2011 value is kept as printed.
+the `.dgibi` file's −4.23326e-3 m, the 2011 value is kept as printed.
 """
 
 [[quantity]]

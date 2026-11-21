@@ -3,10 +3,10 @@ calculation_type = "MECHANICS ELASTIC PLASTIC - CAM-CLAY'S MATERIAL"
 castem_element = "CUB8"
 castem_version = "97' customer version"
 source = ""
-deck = "plas10.dgibi"
+dgibi = "plas10.dgibi"
 gap = ["Cam-Clay law"]
 tolerance = 1e-6
-tolerance_note = "deck criteria, both relative gaps ≤ 1e-6."
+tolerance_note = "criteria of the `.dgibi` file, both relative gaps ≤ 1e-6."
 
 topic = """
 A parallelepiped of a Cam-Clay material is compressed hydrostatically by
@@ -34,7 +34,7 @@ per time unit, up to t = 200.
   plastic volume strain 300·u·(λ − κ)/λ, with u = −2.664328e-5.
 """
 
-notes = "The 2011 document prints no result table; the references are the deck's formulas."
+notes = "The 2011 document prints no result table; the references are the `.dgibi` file's formulas."
 
 [[quantity]]
 key = "sxx_200"

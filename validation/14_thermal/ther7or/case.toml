@@ -3,9 +3,9 @@ calculation_type = "THERMAL STEADY STATE, 3D ORTHOTROPIC"
 castem_element = "COQ8, COQ6"
 castem_version = "97' customer version"
 source = "Dowlatyari (03/91)."
-deck = "ther7or.dgibi"
+dgibi = "ther7or.dgibi"
 gap = ["thermal shell elements"]
-tolerance_note = "deck criterion, largest relative gap ≤ 5 %."
+tolerance_note = "criterion of the `.dgibi` file, largest relative gap ≤ 5 %."
 
 topic = """
 Thermal boundary conditions on orthotropic thermal shells, in three

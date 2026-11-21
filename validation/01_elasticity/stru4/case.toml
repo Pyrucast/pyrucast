@@ -4,10 +4,10 @@ castem_element = "TUYAU"
 castem_version = "97' customer release"
 source = """Guide VPCS, Test SSLL 06/90. Solution analytique; JS Prezemieniecki; \
 Theory of matrix structural analysis, New York, MCGraw-Hill, 1968."""
-deck = "stru4.dgibi"
+dgibi = "stru4.dgibi"
 gap = ["pipe element (TUYA)"]
 tolerance = 0.05
-tolerance_note = "deck criterion, largest relative gap of the three values < 5 %."
+tolerance_note = "criterion of the `.dgibi` file, largest relative gap of the three values < 5 %."
 
 topic = """
 A curved tube, clamped at one end, is bent in its plane by a force and a

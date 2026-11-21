@@ -7,10 +7,10 @@ a symmetry plane (u_x = 0) and the origin is held along y. Reference: the
 bending moment of R. Hill's solution at nine load levels, up to the fully
 plastic moment.
 
-Mesh: the deck's regular grid of 32 × 4 QUA4.
+Mesh: the `.dgibi` file's regular grid of 32 × 4 QUA4.
 
 The moment is taken from the support forces on the loaded side, Σ y·F_x, in
-kN·m: exact by equilibrium. The deck integrates y·σ_xx along that side, with
+kN·m: exact by equilibrium. The `.dgibi` file integrates y·σ_xx along that side, with
 σ_xx extrapolated to the nodes and averaged between cells; the two estimates
 differ by the error of that integration.
 

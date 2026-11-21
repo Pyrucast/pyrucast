@@ -3,7 +3,7 @@ calculation_type = "MECHANICS DYNAMICS 3D, POLYNOMIAL LINKAGE"
 castem_element = ""
 castem_version = "97' customer version"
 source = ""
-deck = "dyne01.dgibi"
+dgibi = "dyne01.dgibi"
 gap = ["modal-basis transient dynamics with linkages (DYNE)"]
 
 topic = """
@@ -24,4 +24,4 @@ model = """
 | V₀ | 0.54 |
 """
 
-notes = "The deck checks that both computations give the same histories; it has no numeric reference."
+notes = "The `.dgibi` file checks that both computations give the same histories; it has no numeric reference."

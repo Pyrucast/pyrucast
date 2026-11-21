@@ -10,9 +10,9 @@ Reference: the exact uniaxial curve,
     σ = (K + H·m·ε) / ((α + β) + H·m/E)      after, floored at 0,
 
 with m = √(2α² + β²) / (α + β). Compared: max |σ − σ_exact| / K over the
-computed times (the deck's test).
+computed times (the `.dgibi` file's test).
 
-The deck adds, on the same cell, an elastic material of stiffness 2e-3 in
+The `.dgibi` file adds, on the same cell, an elastic material of stiffness 2e-3 in
 parallel. pyrucast refuses two laws carrying each their own E on one support;
 that material's stress stays below 2e-3 × 6e-4 ≈ 1e-6, under what the test
 reads (5e-5·K), so it is left out.

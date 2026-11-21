@@ -3,10 +3,10 @@ calculation_type = "MECHANICS DYNAMICS 3D, SUB-STRUCTURATION"
 castem_element = "POUT"
 castem_version = "97' customer version"
 source = "Analytical solution."
-deck = "dyna5.dgibi"
+dgibi = "dyna5.dgibi"
 gap = ["eigenvalue solver", "modal sub-structuring"]
 tolerance = 0.05
-tolerance_note = "deck criterion, each of the three frequencies within 5 %."
+tolerance_note = "criterion of the `.dgibi` file, each of the three frequencies within 5 %."
 
 topic = """
 The first frequency of a clamped-clamped beam computed by sub-structuring:

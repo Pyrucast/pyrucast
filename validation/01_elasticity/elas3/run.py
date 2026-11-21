@@ -6,11 +6,11 @@ modelled: a quarter of the circumference over half the length, with symmetry
 conditions on the cut edges. Reference: u_z = −0.452 under the load.
 
 Mesh: the quarter arc (10 elements, every 9°) extruded along y in 7
-layers, each quadrangle cut into two triangles by `convert`, as in the deck,
-with two differences: the deck lets its mesh density (0.75) place the
+layers, each quadrangle cut into two triangles by `convert`, as in the `.dgibi` file,
+with two differences: the `.dgibi` file lets its mesh density (0.75) place the
 layers, slightly closer towards the loaded section, where `extrude` spaces
 them evenly; and `convert` cuts every quadrangle along the same diagonal,
-where the deck alternates it along the arc.
+where the `.dgibi` file alternates it along the arc.
 
 Running::
 

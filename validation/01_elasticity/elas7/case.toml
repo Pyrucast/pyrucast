@@ -3,10 +3,10 @@ calculation_type = "MECHANICS ELASTICITY 2D AXI"
 castem_element = "COQ2"
 castem_version = "97' customer releas"
 source = "Test NAFEMS : ME11 : Modélisation des structures élastiques dans CASTEM 2000."
-deck = "elas7.dgibi"
+dgibi = "elas7.dgibi"
 gap = ["axisymmetric shell element (COQ2)"]
 tolerance = 0.025
-tolerance_note = "deck criterion, |σ_zz(C) + 319.9| / 319.9 ≤ 2.5 %."
+tolerance_note = "criterion of the `.dgibi` file, |σ_zz(C) + 319.9| / 319.9 ≤ 2.5 %."
 
 topic = """
 A branched shell of revolution under an internal pressure of 1 MPa (NAFEMS

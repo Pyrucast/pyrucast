@@ -3,10 +3,10 @@ calculation_type = "MECHANICS BUCKLING. 2D FOURIER"
 castem_element = "COQ2"
 castem_version = "97' customer release"
 source = "Analytic solution."
-deck = "four1.dgibi"
+dgibi = "four1.dgibi"
 gap = ["Fourier harmonic analysis", "eigenvalue solver", "axisymmetric shell element (COQ2)"]
 tolerance = 2e-7
-tolerance_note = "deck criterion, largest relative gap of the two multipliers < 2e-5 %."
+tolerance_note = "criterion of the `.dgibi` file, largest relative gap of the two multipliers < 2e-5 %."
 
 topic = """
 An infinitely long cylinder under external pressure. The prestress of the
@@ -32,7 +32,7 @@ and length 100 mm, 4 COQ2 elements, thickness 1 mm.
 - Reference: λ_1 = 2e-5 / 3, λ_2 = 5e-6.
 """
 
-notes = "The 2011 document prints no result table; the references are the deck's."
+notes = "The 2011 document prints no result table; the references are the `.dgibi` file's."
 
 [[quantity]]
 key = "lambda_1"

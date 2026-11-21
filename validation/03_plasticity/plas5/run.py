@@ -2,7 +2,7 @@
 
 Problem: one square QUA4 of side 1.5, held by u_x = 0 on x = 0 and u_y = 0
 on y = 0, is pulled by u_x = u_y = 1.5e-4·t on its two other sides, up to
-t = 2. The material is the deck's two-surface Drucker-Prager: an initial
+t = 2. The material is the `.dgibi` file's two-surface Drucker-Prager: an initial
 surface α·I₁ + β·q = K and an ultimate one η·I₁ + μ·q = K_L, with H = 0.
 Reference: the equibiaxial stress at the apex of the ultimate surface,
 σ_xx = σ_yy = K_L / (2η + μ).

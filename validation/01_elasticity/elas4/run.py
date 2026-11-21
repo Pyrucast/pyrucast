@@ -5,10 +5,10 @@ Problem: a cantilever 10 m long whose cross-section is a Z (two flanges of
 opposite forces of 600 kN spread over the flanges (1.2 MN·m). Reference: the
 axial stress on the mid-surface at A (2.5, 0, 0) is σ_xx = −108 MPa.
 
-The mesh is the Cast3M deck's: the section line (2 elements per segment)
+The mesh is the Cast3M `.dgibi` file's: the section line (2 elements per segment)
 extruded along x in 16 layers, 96 QUA4. Each cell's first edge runs along
 the section line, so the local y axis of the shell is the beam's axis and
-the axial stress on the mid-surface is N_yy / h, as the deck reads SMYY. A
+the axial stress on the mid-surface is N_yy / h, as the `.dgibi` file reads SMYY. A
 lies on the edge of the first flange, between two cells; `project` reads it
 in one of them, from that cell's Gauss points.
 
@@ -52,7 +52,7 @@ def main(out: str | None = None) -> dict[str, float]:
 
     shell = pc.model.shell(pc.FiniteElementSpace(surface), "kirchhoff")
     model = shell
-    for variable in ("u_x", "u_y", "u_z"):  # displacements only, as the deck
+    for variable in ("u_x", "u_y", "u_z"):  # displacements only, as the `.dgibi` file
         model = model | pc.model.dirichlet(clamped, shell, variable)
     materials = pc.element_field.material_field(
         model, [("E", E), ("nu", NU), ("h", THICKNESS)]

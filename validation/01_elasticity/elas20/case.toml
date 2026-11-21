@@ -5,10 +5,10 @@ castem_version = "97' customer releas"
 source = """Test VPCS : SSLL08/90 : Modélisation des structures élastiques dans \
 CASTEM 2000. J. S. Przemieniecki, theory of matrix structural analysis \
 (New-York : Mcgraw-Hill Book Company, 1968) pp 155."""
-deck = "elas20.dgibi"
+dgibi = "elas20.dgibi"
 gap = ["pipe element (TUYA)"]
 tolerance = 0.05
-tolerance_note = "deck criterion, largest relative gap of the five values ≤ 5 %."
+tolerance_note = "criterion of the `.dgibi` file, largest relative gap of the five values ≤ 5 %."
 
 topic = """
 A pipe made of two straight parts joined by an elbow is loaded by an

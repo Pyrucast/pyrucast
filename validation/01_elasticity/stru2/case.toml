@@ -3,11 +3,11 @@ calculation_type = "ELASTIC MECHANIC 2D, PLAN STRESS"
 castem_element = "QUA4"
 castem_version = "97' customer release"
 source = "Comparison with six others finite element codes."
-deck = "stru2.dgibi"
+dgibi = "stru2.dgibi"
 pyrucast = "`model.elasticity(fes, \"plane_stress\", symmetry=\"orthotropic\")`, QUA4"
 tolerance = 0.05
-tolerance_note = """deck criterion, largest relative gap ≤ 5 % over u_x(A), u_x(D), \
-u_x(E), u_y(A), u_y(D) (the deck lists u_y(D) twice and leaves u_y(E) out)."""
+tolerance_note = """criterion of the `.dgibi` file, largest relative gap ≤ 5 % over u_x(A), u_x(D), \
+u_x(E), u_y(A), u_y(D) (the `.dgibi` file lists u_y(D) twice and leaves u_y(E) out)."""
 
 topic = """
 An orthotropic square plate, in plane stress, is clamped on one side and
@@ -35,7 +35,7 @@ direction in the plane.
 """
 
 notes = """
-The 2011 document gives E_1 = 2.15737e10 Pa; the deck uses 2.5737e10 Pa.
+The 2011 document gives E_1 = 2.15737e10 Pa; the `.dgibi` file uses 2.5737e10 Pa.
 """
 
 [[quantity]]

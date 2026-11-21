@@ -3,10 +3,10 @@ calculation_type = "MECHANICS DYNAMICS 3D"
 castem_element = "POUT"
 castem_version = "97' customer version"
 source = "Analytical solution : Timoshenko."
-deck = "dyna6.dgibi"
+dgibi = "dyna6.dgibi"
 gap = ["eigenvalue solver"]
 tolerance = 0.01
-tolerance_note = "deck criterion, each frequency within 1 % for the four eigenvalue methods."
+tolerance_note = "criterion of the `.dgibi` file, each frequency within 1 % for the four eigenvalue methods."
 
 topic = """
 Bending modes of a cantilever beam. The eigenvalue operator is run in its
