@@ -1,0 +1,12 @@
+{
+  "status": "ok",
+  "message": "",
+  "values": {
+    "sigma_end": 137426580.4387965,
+    "epsp_end": 0.009345587712196209
+  },
+  "references": {
+    "sigma_end": 137269701.135828,
+    "epsp_end": 0.009346407218757619
+  }
+}

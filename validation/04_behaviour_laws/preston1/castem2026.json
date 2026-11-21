@@ -1,0 +1,8 @@
+{
+  "status": "ok",
+  "message": "",
+  "values": {
+    "stress_gap_max": 0.035875202124569,
+    "strain_gap_max": 0.0002645929179913228
+  }
+}

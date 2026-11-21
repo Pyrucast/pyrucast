@@ -1,0 +1,9 @@
+{
+  "status": "ok",
+  "message": "",
+  "values": {
+    "norm_minus_jacobian": 1.110223024625157e-16,
+    "normal_min": 1.0,
+    "normal_max": 1.0
+  }
+}
