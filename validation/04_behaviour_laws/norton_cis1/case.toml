@@ -4,6 +4,7 @@ castem_element = "QUA4"
 castem_version = "97' customer version"
 source = ""
 deck = "norton_cis1.dgibi"
+gap = ["Norton creep with a time-hardening exponent (Cast3M AF3)"]
 tolerance = 0.0025
 tolerance_note = """deck criterion, at every computed time the creep strain and the \
 shear stress within 0.25 % of the analytical values."""
@@ -39,7 +40,11 @@ One QUA4 square; u_y = 0 at every node, u_x = 0 on the lower side.
   τ_xy = G·(γ − γ_p) with G = E / (2(1 + ν)).
 """
 
-notes = "The 2011 document prints no result table; the references are the deck's formulas."
+notes = """
+The 2011 document prints no result table; the references are the deck's
+formulas. pyrucast's `model.creep_norton` is the secondary creep
+ṗ = (q/K)^n: it has no time exponent, and the deck's is m = 1.2.
+"""
 
 [[quantity]]
 key = "gamma_p_end"

@@ -4,6 +4,7 @@ castem_element = "QUA4"
 castem_version = "97' customer version"
 source = "S. H.Crandall, N. C. Dahl and T. J. Lardner : An introduction to the mechanics of solids, 2nd ed. (New York : McGraw-Hill Book Company, 1972) pp. 293-297."
 deck = "dyna11.dgibi"
+pyrucast = "`model.elasticity(fes, \"axisymmetric\")` in `stepping.step_by_step(dynamics=True)` (Newmark), QUA4"
 tolerance = 0.05
 tolerance_note = "deck criterion, each amplification within 5 % of 2."
 

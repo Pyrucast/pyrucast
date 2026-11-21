@@ -4,6 +4,7 @@ castem_element = "SEG2, JOI2"
 castem_version = "97' customer version"
 source = "Analytical solution (principle of virtual work)."
 deck = "joi22.dgibi"
+gap = ["joint element on its own, with normal and shear stiffnesses in its own frame (JOI2, JOI4)"]
 tolerance = 1e-4
 tolerance_note = "deck criterion, |δ − δ_th| / δ_th ≤ 1e-4."
 
@@ -27,6 +28,13 @@ Plane stress. One JOI2 element between two coincident lines from (0, 0) to
 
 - Load: F_y = 1e5 N spread over the upper line.
 - Reference: δ = F / (k_n·L·l) = 1e5 / (4.2e10 × 2 × 1).
+"""
+
+notes = """
+The deck models the joint alone, between two lines and with no solid around
+it. pyrucast's `model.interface_transfer` couples two faces of an existing
+elasticity model, per global displacement component: it has no joint element
+of its own.
 """
 
 [[quantity]]

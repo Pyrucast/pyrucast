@@ -32,7 +32,7 @@ python validation/make_document.py    # this document
 
 ## Summary
 
-86 cases: 16 computed by pyrucast, 64 not computable yet, 6 pending.
+86 cases: 19 computed by pyrucast, 66 not computable yet, 1 pending.
 
 | Chapter | Case | Status | Largest gap to the reference | Largest gap pyrucast / Cast3M 2026 |
 |---|---|---|---|---|
@@ -64,8 +64,8 @@ python validation/make_document.py    # this document
 | Plasticity | [plas12](#plas12) | gap | missing: pipe element (TUYA) | |
 | Plasticity | [plas13](#plas13) | gap | missing: beam plasticity (global law) | |
 | Plasticity | [plas14](#plas14) | gap | missing: multi-fibre beam sections | |
-| Behaviour laws | [norton_cis1](#norton_cis1) | pending | | |
-| Behaviour laws | [chaboche2](#chaboche2) | pending | | |
+| Behaviour laws | [norton_cis1](#norton_cis1) | gap | missing: Norton creep with a time-hardening exponent (Cast3M AF3) | |
+| Behaviour laws | [chaboche2](#chaboche2) | run | 1.07 % | 1.1e-02 |
 | Behaviour laws | [ohno2](#ohno2) | gap | missing: Ohno viscoplastic law | |
 | Behaviour laws | [guionnet_tra](#guionnet_tra) | gap | missing: Guionnet viscoplastic law | |
 | Behaviour laws | [zeril1](#zeril1) | gap | missing: Zerilli-Armstrong law | |
@@ -94,7 +94,7 @@ python validation/make_document.py    # this document
 | Porosity | [pore2](#pore2) | gap | missing: porous media elements (QUAP) | |
 | Porosity | [pore3](#pore3) | gap | missing: porous media elements (QUAP) | |
 | Metallurgy of powders | [poudre1](#poudre1) | gap | missing: Abouaf powder law | |
-| Joint | [joi22](#joi22) | pending | | |
+| Joint | [joi22](#joi22) | gap | missing: joint element on its own, with normal and shear stiffnesses in its own frame (JOI2, JOI4) | |
 | Joint | [joi41](#joi41) | pending | | |
 | Joint | [joi44](#joi44) | gap | missing: joint elements with thermal expansion | |
 | Joint | [joi45](#joi45) | gap | missing: orthotropic joint with material axes | |
@@ -104,8 +104,8 @@ python validation/make_document.py    # this document
 | Dynamics | [dyna5](#dyna5) | gap | missing: eigenvalue solver; modal sub-structuring | |
 | Dynamics | [vibr6](#vibr6) | gap | missing: complex eigenmodes under axial flow; pipe element (TUYA) | |
 | Dynamics | [vibr10](#vibr10) | gap | missing: harmonic response with rotating unbalance | |
-| Dynamics | [dyna12](#dyna12) | pending | | |
-| Dynamics | [dyna11](#dyna11) | pending | | |
+| Dynamics | [dyna12](#dyna12) | run, within tolerance | 3.78 % | 3.1e-13 |
+| Dynamics | [dyna11](#dyna11) | run, within tolerance | 3.46 % | 2.5e-13 |
 | Dynamics | [dy_devo5](#dy_devo5) | gap | missing: eigenvalue solver; modal-basis transient dynamics with linkages (DYNE) | |
 | Dynamics | [dy_devo6](#dy_devo6) | gap | missing: modal-basis transient dynamics with linkages (DYNE) | |
 | Dynamics | [dy_devo3](#dy_devo3) | gap | missing: modal-basis transient dynamics with linkages (DYNE) | |
@@ -143,6 +143,7 @@ Features pyrucast lacks for the cases it cannot compute yet, by number of cases 
 | Abouaf powder law | [poudre1](#poudre1) | 1 |
 | Cam-Clay law | [plas10](#plas10) | 1 |
 | Guionnet viscoplastic law | [guionnet_tra](#guionnet_tra) | 1 |
+| Norton creep with a time-hardening exponent (Cast3M AF3) | [norton_cis1](#norton_cis1) | 1 |
 | Ohno viscoplastic law | [ohno2](#ohno2) | 1 |
 | Preston-Tonks-Wallace law | [preston1](#preston1) | 1 |
 | Zerilli-Armstrong law | [zeril1](#zeril1) | 1 |
@@ -154,6 +155,7 @@ Features pyrucast lacks for the cases it cannot compute yet, by number of cases 
 | generalized plane strain | [plas11](#plas11) | 1 |
 | harmonic response with rotating unbalance | [vibr10](#vibr10) | 1 |
 | incompatible-mode element (ICQ4) | [testICQ4](#testicq4) | 1 |
+| joint element on its own, with normal and shear stiffnesses in its own frame (JOI2, JOI4) | [joi22](#joi22) | 1 |
 | joint elements with thermal expansion | [joi44](#joi44) | 1 |
 | large-displacement beam and shell dynamics | [dyna_nl3](#dyna_nl3) | 1 |
 | modal sub-structuring | [dyna5](#dyna5) | 1 |
@@ -174,6 +176,7 @@ What writing the computed cases showed: an operator or an option pyrucast lacks 
 | Point | Cases | Count |
 |---|---|---|
 | nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`) | [elas4](#elas4), [elas8](#elas8), [elas11](#elas11), [plas7](#plas7) | 4 |
+| B-bar (selective integration) against the volumetric locking of QUA4/QUA8 in incompressible plastic flow | [plas7](#plas7), [chaboche2](#chaboche2) | 2 |
 | Drucker-Prager with two surfaces: pyrucast's interpolation driven by H·p departs from Cast3M when K_L < K, or when K_L = K with H ≠ 0 | [plas5](#plas5), [plas9](#plas9) | 2 |
 | `Mesh`: no accessor for its nodes (`mesh.node(0, i, 0)` over the cells of a POI1 mesh) | [plas6](#plas6), [plas7](#plas7) | 2 |
 | `convert` / `extrude` to TRI3: alternating diagonals (Cast3M's translation alternates them) | [elas2](#elas2), [elas3](#elas3) | 2 |
@@ -182,10 +185,10 @@ What writing the computed cases showed: an operator or an option pyrucast lacks 
 | `project` of a field at the Gauss points: the cell a node shared by several cells is read in cannot be chosen | [elas4](#elas4), [plas7](#plas7) | 2 |
 | `transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords) | [elas8](#elas8), [elas11](#elas11) | 2 |
 | graded lines and extrusions (Cast3M `DINI`/`DFIN`, mesh density) | [elas3](#elas3), [ther-perm](#ther-perm) | 2 |
-| B-bar (selective integration) against the volumetric locking of QUA4/QUA8 in incompressible plastic flow | [plas7](#plas7) | 1 |
 | Kirchhoff quadrangle shell (DKQ): 4 % stiffer than Cast3M's COQ4 on elas4, to look into | [elas4](#elas4) | 1 |
 | `mpc`: one coefficient per term for every relation; relations whose coefficients differ need one `mpc` each | [plas1](#plas1) | 1 |
 | an ellipse, or the projection of a line onto a plane (Cast3M `PROJ`) | [elas8](#elas8) | 1 |
+| local sub-stepping of rate-dependent laws at the Gauss points (stiff Norton exponents) | [chaboche2](#chaboche2) | 1 |
 | plane-strain thermal strain: no out-of-plane component α·ΔT | [thme1](#thme1) | 1 |
 | two laws on one support (materials in parallel on the same cells) | [plas9](#plas9) | 1 |
 
@@ -3150,7 +3153,7 @@ Acceptance: deck criterion, |F_max − 7.72465e-2| ≤ 4e-2.
 | Test name | norton_cis1 |
 | Calculation type | ISOTROPIC ELASTIC MECHANICS - 2D - PLANE STRAIN |
 | Finite element type (Cast3M) | QUA4 |
-| pyrucast model |  |
+| pyrucast model | not available — missing: Norton creep with a time-hardening exponent (Cast3M AF3) |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 deck | `dgibi/norton_cis1.dgibi` |
@@ -3183,14 +3186,16 @@ One QUA4 square; u_y = 0 at every node, u_x = 0 on the lower side.
 - Analytical solution: γ_p = √3·A·(√3·τ)^n·t^m and
   τ_xy = G·(γ − γ_p) with G = E / (2(1 + ν)).
 
-**Notes.** The 2011 document prints no result table; the references are the deck's formulas.
+**Notes.** The 2011 document prints no result table; the references are the deck's
+formulas. pyrucast's `model.creep_norton` is the secondary creep
+ṗ = (q/K)^n: it has no time exponent, and the deck's is m = 1.2.
 
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| shear creep strain γ_p at t = 20 ¹ | 0.0016523 | — | 0.00165241 (+0.00636 %) | — |  |
-| shear stress σ_xy at t = 20 (Pa) ¹ | 6.99943e+07 | — | 6.99858e+07 (-0.0121 %) | — |  |
+| shear creep strain γ_p at t = 20 ¹ | 0.0016523 | — | 0.00165241 (+0.00636 %) | not available |  |
+| shear stress σ_xy at t = 20 (Pa) ¹ | 6.99943e+07 | — | 6.99858e+07 (-0.0121 %) | not available |  |
 
 ¹ Reference computed by the Cast3M 2026 deck from its analytical formula.
 
@@ -3205,7 +3210,7 @@ Acceptance: deck criterion, at every computed time the creep strain and the shea
 | Test name | chaboche2 |
 | Calculation type | ISOTROPIC VISCOPLASTIC MECHANICS - 2D AXIS |
 | Finite element type (Cast3M) | QUA8 (COQ8 in the 2011 document) |
-| pyrucast model |  |
+| pyrucast model | `model.viscoplasticity_chaboche(fes, "axisymmetric")` in `stepping.step_by_step`, QUA8 |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 deck | `dgibi/chaboche2.dgibi` |
@@ -3237,22 +3242,153 @@ Axisymmetric, one QUA8 square [0, 1] × [0, 1] in (r, z), B-bar formulation.
 - Reference: the same computation with the ONERA model and equivalent data.
 
 **Notes.** The 2011 document prints no result table and gives E = 7.34e10, ν = 0.33;
-the data above are the deck's. The deck uses the B-bar formulation; with a
-homogeneous strain it changes nothing.
+the data above are the deck's. The deck uses the B-bar formulation, which
+changes nothing on a homogeneous strain; pyrucast has none.
+
+pyrucast integrates the law over the deck's steps of 10 s with one implicit
+step each, and lands about 1 % from the reference with n = 24; with steps of
+1 s it comes within about 0.1 %. Cast3M reaches the converged values with the
+same 10 s steps: it divides them at the Gauss points, which pyrucast's
+step-by-step driver does not offer.
+
+**Improvement points.**
+
+- local sub-stepping of rate-dependent laws at the Gauss points (stiff Norton exponents)
+- B-bar (selective integration) against the volumetric locking of QUA4/QUA8 in incompressible plastic flow
 
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| σ_zz at t = 100 s (MPa) ¹ | 230.848 | — | 230.848 (-1.1e-06 %) | — |  |
-| σ_zz at t = 200 s (MPa) ¹ | -150.745 | — | -150.745 (-1.32e-06 %) | — |  |
-| σ_zz at t = 300 s (MPa) ¹ | -236.323 | — | -236.323 (+6.64e-07 %) | — |  |
-| σ_zz at t = 400 s (MPa) ¹ | 146.69 | — | 146.69 (+7.21e-07 %) | — |  |
-| σ_zz at t = 600 s (MPa) ¹ | 239.084 | — | 239.084 (-1.28e-07 %) | — |  |
+| σ_zz at t = 100 s (MPa) ¹ | 230.848 | — | 230.848 (-1.1e-06 %) | 228.373 (-1.07 %) | 1.1e-02 |
+| σ_zz at t = 200 s (MPa) ¹ | -150.745 | — | -150.745 (-1.32e-06 %) | -150.555 (+0.126 %) | 1.3e-03 |
+| σ_zz at t = 300 s (MPa) ¹ | -236.323 | — | -236.323 (+6.64e-07 %) | -235.108 (+0.514 %) | 5.1e-03 |
+| σ_zz at t = 400 s (MPa) ¹ | 146.69 | — | 146.69 (+7.21e-07 %) | 145.287 (-0.957 %) | 9.6e-03 |
+| σ_zz at t = 600 s (MPa) ¹ | 239.084 | — | 239.084 (-1.28e-07 %) | 239.05 (-0.0142 %) | 1.4e-04 |
 
 ¹ Reference computed by the Cast3M 2026 deck from its analytical formula.
 
 Acceptance: deck criterion, max |σ_CHABOCHE − σ_ONERA| / max |σ_ONERA| ≤ 1e-4 over the computed times.
+
+#### pyrucast figures
+
+![sigma_zz](04_behaviour_laws/chaboche2/sigma_zz.svg)
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""chaboche2 — tension-compression cycle on a Chaboche viscoplastic material.
+
+Problem: one axisymmetric QUA8, [0, 1] × [0, 1] in (r, z), held by u_z = 0
+on z = 0 and u_r = 0 on the axis, receives u_z = 0.002·f(t) on z = 1, with
+f = 0, 1, 0, −1, 0, 2 at t = 0, 100, 200, 300, 400, 600 s. The material is
+Chaboche's unified viscoplastic law: a Norton flow on the overstress
+J(σ − X) − R − k, one Armstrong-Frederick back stress and a saturating
+isotropic hardening. Reference: the axial stress of the same computation with
+Cast3M's ONERA model and equivalent data, read at t = 100, 200, 300, 400 and
+600 s.
+
+The Cast3M data map to pyrucast's as SIGY → k, K → K, N → n, A·C → C_1,
+C → gamma_1, B → b, Q → Q. The strain is homogeneous: the stress is read at
+the first Gauss point, every 10 s as the deck computes. The deck's B-bar
+formulation changes nothing on a homogeneous strain; pyrucast has none.
+
+Running::
+
+    python validation/04_behaviour_laws/chaboche2/run.py
+"""
+
+import os
+
+import pyrucast as pc
+
+E, NU = 200e9, 0.3
+CHABOCHE = [
+    ("k", 82e6),  # SIGY
+    ("K", 151e6),
+    ("n", 24.0),
+    ("C_1", 162400e6),  # A·C
+    ("gamma_1", 2800.0),  # C
+    ("b", 8.0),
+    ("Q", 142e6 - 82e6),
+]
+U_MAX = 0.002
+HISTORY = [
+    (0.0, 0.0),
+    (100.0, 1.0),
+    (200.0, 0.0),
+    (300.0, -1.0),
+    (400.0, 0.0),
+    (600.0, 2.0),
+]
+TIMES = [10.0 * i for i in range(61)]
+READ_AT = (100.0, 200.0, 300.0, 400.0, 600.0)
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    coords = pc.Coords.axisymmetric()
+    a = coords.add_node([0.0, 0.0])
+    b = coords.add_node([1.0, 0.0])
+    c = coords.add_node([1.0, 1.0])
+    d = coords.add_node([0.0, 1.0])
+    bottom = pc.mesh.line(a, b, 1, "SEG3")
+    top = pc.mesh.line(d, c, 1, "SEG3")
+    cylinder = pc.mesh.sweep(bottom, top, 1, "QUA8")
+
+    fes = pc.FiniteElementSpace(cylinder)
+    law = pc.model.viscoplasticity_chaboche(fes, "axisymmetric")
+    pull = pc.model.dirichlet(pc.mesh.consolidate(top.to_poi1()), law, "u_y")
+    model = (
+        law
+        | pc.model.dirichlet(pc.mesh.consolidate(bottom.to_poi1()), law, "u_y")
+        | pc.model.dirichlet(
+            pc.mesh.points_on_line(cylinder, [0.0, 0.0], [0.0, 1.0]), law, "u_x"
+        )
+        | pull
+    )
+    materials = pc.element_field.material_field(
+        model, [("E", E), ("nu", NU)] + CHABOCHE
+    )
+    frames = []
+    for t, f in HISTORY:
+        frames.append(
+            (t, pc.NodeField(pull.multiplier_mesh(), ["imposed"]) + U_MAX * f)
+        )
+    data = {
+        "model": model,
+        "times": TIMES,
+        "materials": materials,
+        "loads": pc.Evolution(frames),
+    }
+    pc.stepping.step_by_step(data)
+
+    values = {}
+    times, stresses = [], []
+    for record in data["results"]:
+        szz = record["behaviour"][0].value(0, 0, "sigma_yy") / 1e6
+        times.append(record["time"])
+        stresses.append(szz)
+        for t in READ_AT:
+            if abs(record["time"] - t) < 1e-9:
+                values[f"szz_{t:.0f}"] = szz
+
+    if out:
+        pc.SubEvolution(list(zip(times, stresses))).plot(
+            x_label="t (s)",
+            y_label="σ_zz (MPa)",
+            title="chaboche2 — axial stress",
+            save=os.path.join(out, "sigma_zz.svg"),
+        )
+    return values
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ### ohno2
 
@@ -4442,7 +4578,7 @@ Acceptance: deck criterion, sum of the relative gaps on u_r, u_z and the final d
 | Test name | joi22 |
 | Calculation type | ISOTROPIC ELASTIC MECHANIC |
 | Finite element type (Cast3M) | SEG2, JOI2 |
-| pyrucast model |  |
+| pyrucast model | not available — missing: joint element on its own, with normal and shear stiffnesses in its own frame (JOI2, JOI4) |
 | Reference | Analytical solution (principle of virtual work). |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 deck | `dgibi/joi22.dgibi` |
@@ -4468,11 +4604,16 @@ Plane stress. One JOI2 element between two coincident lines from (0, 0) to
 - Load: F_y = 1e5 N spread over the upper line.
 - Reference: δ = F / (k_n·L·l) = 1e5 / (4.2e10 × 2 × 1).
 
+**Notes.** The deck models the joint alone, between two lines and with no solid around
+it. pyrucast's `model.interface_transfer` couples two faces of an existing
+elasticity model, per global displacement component: it has no joint element
+of its own.
+
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| opening u_y at A1 (m) | 1.19048e-06 | — | 1.19048e-06 (-5.34e-14 %) | — |  |
+| opening u_y at A1 (m) | 1.19048e-06 | — | 1.19048e-06 (-5.34e-14 %) | not available |  |
 
 Acceptance: deck criterion, |δ − δ_th| / δ_th ≤ 1e-4.
 
@@ -4860,7 +5001,7 @@ Acceptance: deck criterion, both semi-axes within 0.1 %.
 | Test name | dyna12 |
 | Calculation type | MECHANICS DYNAMICS 3D, TRANSIENT RESPONSE |
 | Finite element type (Cast3M) | BARR |
-| pyrucast model |  |
+| pyrucast model | `model.truss` in `stepping.step_by_step(dynamics=True)` (Newmark), SEG2 |
 | Reference | J. S. Przemieniecki : Theory of matrix structural analyses (New York : McGraw-Hill Book Co., 1968) p340. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 deck | `dgibi/dyna12.dgibi` |
@@ -4886,10 +5027,98 @@ Free bar of length 140 along y, BARR elements.
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| u_y at P1, t = 1.9125 | 10.8997 | — | 10.6602 (-2.2 %) | — |  |
-| u_y at P1, t = 2.0625 | 11.7323 | — | 11.2886 (-3.78 %) | — |  |
+| u_y at P1, t = 1.9125 | 10.8997 | — | 10.6602 (-2.2 %) | 10.6602 (-2.2 %) | 2.5e-13 |
+| u_y at P1, t = 2.0625 | 11.7323 | — | 11.2886 (-3.78 %) | 11.2886 (-3.78 %) | 3.1e-13 |
 
 Acceptance: deck criterion, both relative gaps < 5 %.
+
+pyrucast: the 2 checked quantities are within tolerance.
+
+#### pyrucast figures
+
+![u_y](12_dynamics/dyna12/u_y.svg)
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""dyna12 — transient response of a free launcher to an axial thrust, bars.
+
+Problem: a free bar of length 140 along y (two bars of 70), section 1,
+E = 1e4, ρ = 0.1, at rest, receives at its bottom end P1 a thrust F_y = 100,
+raised in 0.0125, held until 1.0125 and released in 0.0125. It moves as a
+rigid body and vibrates along its axis. Reference (Przemieniecki): the
+displacement of P1 at t = 1.9125 and t = 2.0625.
+
+The motion is integrated by Newmark's average acceleration, as the deck's
+DYNAMIC procedure does, here with a step of 0.0125 that falls on the load's
+corners and on the two instants read.
+
+Running::
+
+    python validation/12_dynamics/dyna12/run.py
+"""
+
+import os
+
+import pyrucast as pc
+
+E, AREA, RHO = 1e4, 1.0, 0.1
+LENGTH, N = 140.0, 2
+THRUST = 100.0
+LOAD = [(0.0, 0.0), (0.0125, 1.0), (1.0125, 1.0), (1.025, 0.0), (3.0, 0.0)]
+DT = 0.0125
+TIMES = [DT * i for i in range(166)]  # up to 2.0625
+READ_AT = (1.9125, 2.0625)
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    coords = pc.Coords(3)
+    p1 = coords.add_node([0.0, 0.0, 0.0])
+    p3 = coords.add_node([0.0, LENGTH, 0.0])
+    launcher = pc.mesh.line(p1, p3, N)
+
+    model = pc.model.truss(pc.FiniteElementSpace(launcher))
+    materials = pc.element_field.material_field(
+        model, [("E", E), ("A", AREA), ("rho", RHO)]
+    )
+    thrust = pc.NodeField(pc.mesh.poi1_from_nodes([p1]), ["f_y"])
+    thrust[0].set_value(p1, "f_y", THRUST)
+    data = {
+        "model": model,
+        "times": TIMES,
+        "materials": materials,
+        "loads": pc.Evolution([(t, thrust * f) for t, f in LOAD]),
+        "dynamics": True,
+    }
+    pc.stepping.step_by_step(data)
+
+    values = {}
+    times, displacements = [], []
+    for record in data["results"]:
+        uy = record["displacement"].value(p1, "u_y")
+        times.append(record["time"])
+        displacements.append(uy)
+        for k, t in enumerate(READ_AT, start=1):
+            if abs(record["time"] - t) < 1e-9:
+                values[f"uy_{k}"] = uy
+
+    if out:
+        pc.SubEvolution(list(zip(times, displacements))).plot(
+            x_label="t",
+            y_label="u_y(P1)",
+            title="dyna12 — displacement of the bottom point",
+            save=os.path.join(out, "u_y.svg"),
+        )
+    return values
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ### dyna11
 
@@ -4900,7 +5129,7 @@ Acceptance: deck criterion, both relative gaps < 5 %.
 | Test name | dyna11 |
 | Calculation type | MECHANICS DYNAMICS 2D |
 | Finite element type (Cast3M) | QUA4 |
-| pyrucast model |  |
+| pyrucast model | `model.elasticity(fes, "axisymmetric")` in `stepping.step_by_step(dynamics=True)` (Newmark), QUA4 |
 | Reference | S. H.Crandall, N. C. Dahl and T. J. Lardner : An introduction to the mechanics of solids, 2nd ed. (New York : McGraw-Hill Book Company, 1972) pp. 293-297. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 deck | `dgibi/dyna11.dgibi` |
@@ -4929,11 +5158,115 @@ Axisymmetric, QUA4 elements.
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| amplification at the first point (node 25) | 2 | — | 1.9308 (-3.46 %) | — |  |
-| amplification at the second point (node 62) | 2 | — | 2.05572 (+2.79 %) | — |  |
-| amplification at the third point (node 36) | 2 | — | 2.05491 (+2.75 %) | — |  |
+| amplification at the first point (node 25) | 2 | — | 1.9308 (-3.46 %) | 1.9308 (-3.46 %) | 2.3e-13 |
+| amplification at the second point (node 62) | 2 | — | 2.05572 (+2.79 %) | 2.05572 (+2.79 %) | 2.5e-13 |
+| amplification at the third point (node 36) | 2 | — | 2.05491 (+2.75 %) | 2.05491 (+2.75 %) | 2.2e-13 |
 
 Acceptance: deck criterion, each amplification within 5 % of 2.
+
+pyrucast: the 3 checked quantities are within tolerance.
+
+#### pyrucast figures
+
+![u_r](12_dynamics/dyna11/u_r.svg)
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""dyna11 — thick cylinder under a sudden internal pressure, axisymmetric, QUA4.
+
+Problem: a thick cylinder, r from 6 to 12, of height 8 held by u_z = 0 on
+its two ends, receives at t = 5e-6 (raised from t = 4e-6) an internal
+pressure of 10, then held. E = 30e6, ν = 0, ρ = 0.28 × 0.002588. Without
+damping, the largest radial displacement of a point is twice its static
+value. Reference: that ratio, 2, at three points of the mid-height section,
+r = 6, 9 and 11; the static displacements are the deck's.
+
+Mesh: the deck's regular grid of 6 × 8 QUA4. The motion is integrated by
+Newmark's average acceleration every 1e-6 up to 2e-4, as the deck's DYNAMIC
+procedure does.
+
+Running::
+
+    python validation/12_dynamics/dyna11/run.py
+"""
+
+import os
+
+import pyrucast as pc
+
+E, NU, RHO = 30e6, 0.0, 0.28 * 0.002588
+R_IN, R_OUT, HEIGHT = 6.0, 12.0, 8.0
+N_R, N_Z = 6, 8
+PRESSURE = 10.0
+LOAD = [(0.0, 0.0), (4e-6, 0.0), (5e-6, 1.0), (204e-6, 1.0)]
+TIMES = [1e-6 * i for i in range(201)]
+# The points read, at mid-height, and their static radial displacement.
+POINTS = [((6.0, 4.0), 3.326e-6), ((9.0, 4.0), 2.773e-6), ((11.0, 4.0), 2.673e-6)]
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    coords = pc.Coords.axisymmetric()
+    p1 = coords.add_node([R_IN, 0.0])
+    p2 = coords.add_node([R_OUT, 0.0])
+    p3 = coords.add_node([R_OUT, HEIGHT])
+    p4 = coords.add_node([R_IN, HEIGHT])
+    bottom = pc.mesh.line(p1, p2, N_R)
+    top = pc.mesh.line(p3, p4, N_R)
+    inner = pc.mesh.line(p4, p1, N_Z)
+    cylinder = pc.mesh.transfinite(bottom, pc.mesh.line(p2, p3, N_Z), top, inner)
+    points = [cylinder.nearest_node(list(xy)) for xy, _ in POINTS]
+
+    fes = pc.FiniteElementSpace(cylinder)
+    elasticity = pc.model.elasticity(fes, "axisymmetric")
+    model = elasticity | pc.model.dirichlet(
+        pc.mesh.consolidate((bottom | top).to_poi1()), elasticity, "u_y"
+    )
+    materials = pc.element_field.material_field(
+        model, [("E", E), ("nu", NU), ("rho", RHO)]
+    )
+    # The internal pressure, pushing on the wall: φ_n = −p.
+    pressure = pc.model.flux(pc.FiniteElementSpace(inner), elasticity, "n")
+    force = pc.node_field.external_forces(
+        pressure, pc.element_field.material_field(pressure, [("phi_n", -PRESSURE)])
+    )
+    data = {
+        "model": model,
+        "times": TIMES,
+        "materials": materials,
+        "loads": pc.Evolution([(t, force * f) for t, f in LOAD]),
+        "dynamics": True,
+    }
+    pc.stepping.step_by_step(data)
+
+    largest = [0.0, 0.0, 0.0]
+    history = []
+    for record in data["results"]:
+        u = record["displacement"]
+        for k, node in enumerate(points):
+            largest[k] = max(largest[k], u.value(node, "u_x"))
+        history.append((record["time"], u.value(points[0], "u_x")))
+
+    if out:
+        pc.SubEvolution(history).plot(
+            x_label="t",
+            y_label="u_r at r = 6",
+            title="dyna11 — radial displacement of the inner point",
+            save=os.path.join(out, "u_r.svg"),
+        )
+    values = {}
+    for k, (_, static) in enumerate(POINTS, start=1):
+        values[f"amp_{k}"] = largest[k - 1] / static
+    return values
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ### dy_devo5
 
