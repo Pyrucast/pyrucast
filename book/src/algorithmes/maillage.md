@@ -26,3 +26,11 @@ quadratique prend de lui-même l'interpolation `LAGRANGE2` (cf.
 ```python
 {{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-extrude}}
 ```
+
+**Les mailles extrudées sont directes.** Quand l'extrusion remplit l'espace —
+une ligne en 2D, une surface en 3D —, chaque maille produite a un jacobien
+positif, de quelque côté qu'on extrude : une maille source qui donnerait une
+maille à l'envers (un segment extrudé vers sa droite, une facette extrudée
+contre sa normale) est d'abord retournée. La peau d'un volume extrudé a donc
+ses normales vers l'extérieur. Une ligne extrudée en 3D donne une surface, qui
+n'a pas de sens absolu : ses mailles gardent l'ordre de la source.

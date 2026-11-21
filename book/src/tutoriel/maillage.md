@@ -180,16 +180,17 @@ aux limites.
 *(La figure ne montre que les faces intermédiaires, `skin[1:-1]` — les trois
 chants en `QUA4` —, pour voir à travers la pièce.)*
 
-### `convert` + `invert` — préparer l'enveloppe
+### `convert` — préparer l'enveloppe
 
 ```python
-{{#include ../../../tutoriel/maillage.py:convert_invert}}
+{{#include ../../../tutoriel/maillage.py:convert}}
 ```
 
 `triangulate_volume` n'accepte qu'une enveloppe **TRI3** fermée dont les
 normales **sortent de la matière**. `convert` coupe chaque `QUA4` en deux
-`TRI3` sans ajouter le moindre nœud ; `invert` retourne l'ensemble dans le
-bon sens.
+`TRI3` sans ajouter le moindre nœud, et sans toucher aux normales : celles de
+la peau sortent déjà de la matière, parce qu'`extrude` construit des
+hexaèdres directs quel que soit le côté vers lequel on extrude.
 
 ![Enveloppe TRI3](img/maillage-enveloppe-tri3.svg)
 
@@ -348,13 +349,13 @@ long de ce rayon.
 Grille et couronne partageant les nœuds du bord droit `l1213`, l'union `|`
 suffit ensuite à en faire un maillage conforme — 200 + 120 = 320 `QUA8`.
 
-**Une surface extrudée garde son sens de rotation.** La couronne, balayée de
-la boucle extérieure vers la boucle intérieure, tourne en sens inverse de la
-grille. Extrudée telle quelle, elle donnerait des hexaèdres retournés, dont les
-faces pointeraient vers l'intérieur de la matière. Une conduction n'y verrait
-rien ; une pression ou un contact, qui lisent la normale des faces, s'y
-inverseraient. `pyrucast.mesh.orient` met toutes les mailles dans le sens de
-la première, ici celui de la grille :
+**Une surface balayée garde le sens de rotation de ses lignes.** La couronne,
+balayée de la boucle extérieure vers la boucle intérieure, tourne en sens
+inverse de la grille. L'extrusion n'en souffrirait pas — `extrude` retourne
+toute maille qui donnerait un hexaèdre à l'envers —, mais une surface dont les
+mailles tournent dans les deux sens trompe tout ce qui lit sa normale, une
+pression posée sur la plaque par exemple. `pyrucast.mesh.orient` met toutes
+les mailles dans le sens de la première, ici celui de la grille :
 
 ![Plaque structurée (QUA8)](img/maillage-structure.svg)
 

@@ -989,9 +989,9 @@ mod tests {
     /// peeled.
     ///
     /// `n` segments per side of a unit square, `size` the target edge length.
-    /// Note the `invert`: `extrude` does not check that its direction lies on
-    /// the same side as the source surface's normal, so `skin` of the result
-    /// comes back with its normals pointing into the material.
+    /// The plate's normal points to −y and it is extruded towards +y: `extrude`
+    /// still builds right-handed prisms, so `skin` of the result comes back
+    /// with its normals pointing out of the material, as the envelope must.
     fn extruded_plate(coords: &Handle<Coords>, n: usize, size: f64) -> Mesh {
         let mut pts: Vec<[f64; 3]> = Vec::new();
         for i in 0..n {
@@ -1020,8 +1020,7 @@ mod tests {
             super::super::triangulate_surface(&contour, ElementType::TRI3, Some(size)).unwrap();
         let solid = super::super::extrude(&plate, &[0.0, 0.4, 0.0], 1).unwrap();
         let skin = super::super::skin(&solid, crate::ops::mesh::skin::DEFAULT_ANGLE_DEG).unwrap();
-        let skin = super::super::convert(&skin, ElementType::TRI3).unwrap();
-        super::super::invert(&skin).unwrap()
+        super::super::convert(&skin, ElementType::TRI3).unwrap()
     }
 
     #[test]

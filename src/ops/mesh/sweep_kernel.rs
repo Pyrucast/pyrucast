@@ -718,7 +718,15 @@ fn axis_patterns(et: ElementType) -> (ElementType, [&'static [(usize, usize)]; 2
 /// extruded mesh. Source nodes are re-used (refcount incremented);
 /// intermediate layer nodes are newly created.
 ///
-/// Node ordering:
+/// Every cell that fills the space — a line extruded in 2-D, a surface in
+/// 3-D — comes out **right-handed** (positive jacobian), whatever the side
+/// `direction` points to: a source cell whose sweep would be left-handed (a
+/// segment extruded to its right, a facet extruded against its normal) is
+/// swept from its reversed copy, [`ElementType::reversal_permutation`]. A
+/// line extruded in 3-D gives a surface, which has no handedness: its cells
+/// keep the source's order.
+///
+/// Node ordering, `bot` being the source cell, reversed when it had to be:
 /// - QUA4: `bot[0], bot[1], top[1], top[0]`
 /// - PENTA6: `bot[0..3], top[0..3]`
 /// - HEX8: `bot[0..4], top[0..4]`
@@ -740,10 +748,14 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
         )));
     }
 
-    let cols = columns(mesh, "extrude")?;
+    // A cell whose sweep along `direction` would be left-handed is swept from
+    // its reversed copy, so that every extruded cell has a positive jacobian.
+    let flipped = right_handed_source(mesh, direction)?;
+    let source = flipped.as_ref().unwrap_or(mesh);
+    let cols = columns(source, "extrude")?;
     let step: Vec<f64> = direction.iter().map(|&d| d / n_layers as f64).collect();
     layered(
-        mesh,
+        source,
         &cols,
         n_layers,
         false,
@@ -753,6 +765,100 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
             out.extend(base.iter().zip(step.iter()).map(|(&c, &s)| c + level * s));
         },
     )
+}
+
+/// The copy of `mesh` whose cells sweep right-handed along `direction`, or
+/// `None` when every cell already does (or when the sweep does not fill the
+/// space: a line in 3-D).
+///
+/// The sign of a cell is that of its corners' orientation against the sweep:
+/// `(x₁ − x₀) × d` for a segment in 2-D, `n · d` for a facet in 3-D with `n`
+/// the normal of its winding — `(x₁ − x₀) × (x₂ − x₀)` for a triangle,
+/// `(x₂ − x₀) × (x₃ − x₁)` for a quadrangle. A negative sign reverses the cell
+/// through [`ElementType::reversal_permutation`], mid-nodes included.
+fn right_handed_source(mesh: &Mesh, direction: &[f64]) -> Result<Option<Mesh>> {
+    let coords = mesh.coords()?;
+    let dim = coords.read().dim() as usize;
+    let mut zones: Vec<(ElementType, Vec<NodeId>, bool)> = Vec::new();
+    let mut any = false;
+    {
+        let c = coords.read();
+        for sm_handle in mesh {
+            let s = sm_handle.read();
+            let et = s.element_type();
+            let npc = et.nodes_per_cell();
+            let mut conn = s.connectivity().to_vec();
+            let mut flipped = false;
+            if et.topological_dim() + 1 == dim {
+                let perm = et.reversal_permutation();
+                let mut reversed = vec![NodeId(0); npc];
+                for cell in conn.chunks_mut(npc) {
+                    if sweep_sign(&c, et, cell, direction)? < 0.0 {
+                        for (slot, &from) in reversed.iter_mut().zip(perm) {
+                            *slot = cell[from];
+                        }
+                        cell.copy_from_slice(&reversed);
+                        flipped = true;
+                    }
+                }
+            }
+            any |= flipped;
+            zones.push((et, conn, flipped));
+        }
+    }
+    if !any {
+        return Ok(None);
+    }
+    let mut out = Mesh::empty();
+    for (sm_handle, (et, conn, flipped)) in mesh.into_iter().zip(zones) {
+        if flipped {
+            out.add_sub(Handle::new(SubMesh::from_connectivity(
+                coords.clone(),
+                et,
+                conn,
+            )?))?;
+        } else {
+            out.add_sub(sm_handle.clone())?;
+        }
+    }
+    Ok(Some(out))
+}
+
+/// The orientation of a source cell against the sweep `d` (see
+/// [`right_handed_source`]): positive for a right-handed swept cell.
+fn sweep_sign(
+    coords: &crate::coords::Coords,
+    et: ElementType,
+    cell: &[NodeId],
+    d: &[f64],
+) -> Result<f64> {
+    let p = |i: usize| coords.position(cell[i]);
+    let sub = |a: &[f64], b: &[f64]| {
+        [
+            a[0] - b[0],
+            a[1] - b[1],
+            a.get(2).map_or(0.0, |&z| z - b[2]),
+        ]
+    };
+    let cross = |u: [f64; 3], v: [f64; 3]| {
+        [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ]
+    };
+    let d3 = [d[0], d[1], d.get(2).copied().unwrap_or(0.0)];
+    let normal = match et.topological_dim() {
+        // A segment in 2-D: its "normal" is the z-axis, the sign that of
+        // (x₁ − x₀) × d.
+        1 => {
+            let e = sub(p(1)?, p(0)?);
+            return Ok(e[0] * d3[1] - e[1] * d3[0]);
+        }
+        _ if et.as_kind().corner_count() == 3 => cross(sub(p(1)?, p(0)?), sub(p(2)?, p(0)?)),
+        _ => cross(sub(p(2)?, p(0)?), sub(p(3)?, p(1)?)),
+    };
+    Ok(normal[0] * d3[0] + normal[1] * d3[1] + normal[2] * d3[2])
 }
 
 /// Revolve a mesh by `n_layers` layers over a total `angle` (radians) — the
@@ -788,9 +894,10 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
 /// newly created. Node ordering per layer is [`extrude`]'s.
 ///
 /// A negative `angle` sweeps the cells the other way round and turns them
-/// inside out, just as an `extrude` against the surface normal does — call
-/// [`orient`](fn@super::orient) on the result, or revolve by a positive
-/// angle from the mirrored source.
+/// inside out — call [`invert`](fn@super::invert) on the result, or revolve
+/// by a positive angle from the mirrored source.
+/// ([`orient`](fn@super::orient) would not do: the cells are consistent with
+/// each other, all inside out alike.)
 pub fn revolve(
     mesh: &Mesh,
     angle: f64,

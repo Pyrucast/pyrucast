@@ -193,17 +193,17 @@ def unstructured_mesh(
     )
     # ANCHOR_END: skin
 
-    # ANCHOR: convert_invert
-    # FR — `convert` coupe chaque QUA4 en deux TRI3, `invert` sort les normales.
-    # EN — `convert` splits each QUA4 into two TRI3, `invert` turns normals out.
-    skin = pc.mesh.invert(pc.mesh.convert(skin, "TRI3"))
+    # ANCHOR: convert
+    # FR — `convert` coupe chaque QUA4 en deux TRI3, normales gardées.
+    # EN — `convert` splits each QUA4 into two TRI3, normals kept.
+    skin = pc.mesh.convert(skin, "TRI3")
     show(
         skin[1:-1],
         "Enveloppe TRI3",
         "maillage-enveloppe-tri3.svg",
         wireframe=True,
     )
-    # ANCHOR_END: convert_invert
+    # ANCHOR_END: convert
 
     # ANCHOR: triangulate_volume
     # FR — Remplissage TET4 ; le mailleur peut redécouper l'enveloppe donnée.
@@ -316,10 +316,10 @@ def structured_mesh(plot: bool = True) -> tuple[pc.Mesh, pc.Mesh]:
 
     # FR — Grille et couronne partagent les nœuds du bord droit : `|` suffit.
     #      La couronne tourne dans l'autre sens que la grille : `orient` met
-    #      toutes les mailles dans le sens de la première, avant l'extrusion.
+    #      toutes les mailles dans le sens de la première.
     # EN — Grid and ring share the right edge's nodes: `|` is enough. The
     #      ring turns the other way from the grid: `orient` turns every cell
-    #      the way the first one does, before the extrusion.
+    #      the way the first one does.
     grid = pc.mesh.orient(sr1 | sh1)
     if plot:
         print(f"structured      : {grid.element_types()}, {grid.cell_count} mailles")

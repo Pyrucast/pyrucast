@@ -2483,7 +2483,15 @@ class Mesh:
         r"""
         Extrude `mesh` along `direction` in `n_layers` layers.
         
-        SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
+        SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8, and their quadratic siblings
+        SEG3 → QUA8, TRI6 → PENTA15, QUA8 → HEX20.
+        
+        The cells that fill the space — a line extruded in 2-D, a surface in 3-D —
+        come out right-handed (positive jacobian) whatever the side `direction`
+        points to: a source cell whose sweep would be left-handed is swept from
+        its reversed copy. Their faces, from `skin`, thus point out of the
+        material. A line extruded in 3-D gives a surface, whose cells keep the
+        source's order.
         
         # Parameters
         
@@ -7312,7 +7320,15 @@ def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: bu
     r"""
     Extrude `mesh` along `direction` in `n_layers` layers.
     
-    SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
+    SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8, and their quadratic siblings
+    SEG3 → QUA8, TRI6 → PENTA15, QUA8 → HEX20.
+    
+    The cells that fill the space — a line extruded in 2-D, a surface in 3-D —
+    come out right-handed (positive jacobian) whatever the side `direction`
+    points to: a source cell whose sweep would be left-handed is swept from
+    its reversed copy. Their faces, from `skin`, thus point out of the
+    material. A line extruded in 3-D gives a surface, whose cells keep the
+    source's order.
     
     # Parameters
     

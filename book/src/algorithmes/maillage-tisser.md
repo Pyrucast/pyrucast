@@ -149,9 +149,10 @@ les deux sont refusées.
 {{#include ../../../tests/python/test_doc_ops_maillage.py:revolve_axe}}
 ```
 
-**Angle négatif.** Il balaye dans l'autre sens et retourne les cellules,
-exactement comme un `extrude` à contre-normale : passez par `orient` sur le
-résultat, ou révolutionnez d'un angle positif depuis la source symétrisée.
+**Angle négatif.** Il balaye dans l'autre sens et retourne les cellules :
+passez par `invert` sur le résultat, ou révolutionnez d'un angle positif
+depuis la source symétrisée. `orient` n'y suffirait pas : les cellules sont
+cohérentes entre elles, toutes retournées de la même façon.
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-revolve}}

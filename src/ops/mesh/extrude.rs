@@ -198,6 +198,148 @@ mod tests {
         }
     }
 
+    /// The sign of the jacobian at local node 0 of a swept cell, measured from
+    /// its positions: the signed area of the corner frame of a quadrangle in
+    /// 2-D, the triple product of the three edges leaving node 0 in 3-D
+    /// (nodes 1, 3, 4 of a hexahedron, 1, 2, 3 of a prism).
+    fn corner_jacobian(cell: &[Vec<f64>], et: ElementType) -> f64 {
+        let e =
+            |i: usize| -> Vec<f64> { cell[i].iter().zip(&cell[0]).map(|(a, b)| a - b).collect() };
+        match et {
+            ElementType::QUA4 | ElementType::QUA8 => {
+                let (u, v) = (e(1), e(3));
+                u[0] * v[1] - u[1] * v[0]
+            }
+            _ => {
+                let (u, v, w) = match et {
+                    ElementType::HEX8 | ElementType::HEX20 => (e(1), e(3), e(4)),
+                    _ => (e(1), e(2), e(3)),
+                };
+                let n = [
+                    u[1] * v[2] - u[2] * v[1],
+                    u[2] * v[0] - u[0] * v[2],
+                    u[0] * v[1] - u[1] * v[0],
+                ];
+                n[0] * w[0] + n[1] * w[1] + n[2] * w[2]
+            }
+        }
+    }
+
+    #[test]
+    fn extruded_cells_are_right_handed_whatever_the_direction() {
+        use crate::ops::mesh::to_quadratic;
+        // 2-D: a line extruded to its left and to its right.
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+        let seg = line(&p(&[0.0, 0.0]), &p(&[2.0, 0.0]), 2, ElementType::SEG2).unwrap();
+        // 3-D: a quadrangle wound one way and a quadrangle wound the other,
+        // sharing an edge, and a triangle — along and against their normal.
+        let coords3 = Handle::new(Coords::new(3).unwrap());
+        let q = |x: &[f64]| Node::create_in(coords3.clone(), x).unwrap();
+        let n: Vec<Node> = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [2.0, 1.0, 0.0],
+        ]
+        .iter()
+        .map(|x| q(x))
+        .collect();
+        let mut quads = Mesh::from_submesh(SubMesh::new(coords3.clone(), ElementType::QUA4));
+        quads
+            .add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])
+            .unwrap();
+        quads
+            .add_cell(&[n[1].id(), n[2].id(), n[5].id(), n[4].id()])
+            .unwrap();
+        let mut tri = Mesh::from_submesh(SubMesh::new(coords3.clone(), ElementType::TRI3));
+        tri.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+
+        let (seg3, qua8, tri6) = (
+            to_quadratic(&seg).unwrap(),
+            to_quadratic(&quads).unwrap(),
+            to_quadratic(&tri).unwrap(),
+        );
+        let cases: [(&Mesh, &[f64]); 8] = [
+            (&seg, &[0.0, 3.0]),
+            (&seg, &[0.0, -3.0]),
+            (&seg3, &[0.0, -3.0]),
+            (&quads, &[0.0, 0.0, 2.0]),
+            (&quads, &[0.0, 0.0, -2.0]),
+            (&qua8, &[0.0, 0.0, -2.0]),
+            (&tri, &[0.0, 0.0, -2.0]),
+            (&tri6, &[0.0, 0.0, -2.0]),
+        ];
+        for (source, direction) in cases {
+            let swept = extrude(source, direction, 2).unwrap();
+            let et = swept.element_types().unwrap()[0];
+            for cell in cell_positions(&swept) {
+                let j = corner_jacobian(&cell, et);
+                assert!(j > 0.0, "{et} along {direction:?}: jacobian {j}");
+            }
+        }
+        // The two quadrangles still share their edge's columns: 3 × 2 nodes
+        // per level, 3 levels.
+        let swept = extrude(&quads, &[0.0, 0.0, -2.0], 2).unwrap();
+        let mut ids: Vec<_> = (0..swept.cell_count())
+            .flat_map(|c| (0..8).map(move |k| (c, k)))
+            .map(|(c, k)| swept.node(0, c, k).unwrap().id())
+            .collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), 18);
+    }
+
+    #[test]
+    fn a_reversed_quadratic_cell_keeps_its_mid_nodes_on_its_edges() {
+        // A QUA8 extruded against its normal: its HEX20 is swept from the
+        // reversed QUA8, every mid-node still halfway along its edge (the edge
+        // order of the HEX8: bottom face, top face, then along the sweep).
+        use crate::ops::mesh::to_quadratic;
+        let coords = Handle::new(Coords::new(3).unwrap());
+        let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+        let n: Vec<Node> = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.2, 0.9, 0.0],
+            [0.1, 1.0, 0.0],
+        ]
+        .iter()
+        .map(|x| p(x))
+        .collect();
+        let mut qua = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
+        qua.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])
+            .unwrap();
+        let hex = extrude(&to_quadratic(&qua).unwrap(), &[0.0, 0.0, -1.5], 1).unwrap();
+        let cell = &cell_positions(&hex)[0];
+        assert!(corner_jacobian(cell, ElementType::HEX20) > 0.0);
+        let edges = [
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 0),
+            (4, 5),
+            (5, 6),
+            (6, 7),
+            (7, 4),
+            (0, 4),
+            (1, 5),
+            (2, 6),
+            (3, 7),
+        ];
+        for (k, &(a, b)) in edges.iter().enumerate() {
+            for d in 0..3 {
+                let mid = 0.5 * (cell[a][d] + cell[b][d]);
+                assert!(
+                    (cell[8 + k][d] - mid).abs() < 1e-12,
+                    "mid-node {k} of edge {a}-{b}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn extrude_refuses_linear_and_quadratic_zones_together() {
         use crate::ops::mesh::to_quadratic;

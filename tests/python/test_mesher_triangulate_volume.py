@@ -98,9 +98,9 @@ def test_triangulate_volume_leaves_the_surface_alone():
 def _extruded_plate(c, per_side, size):
     """A plate meshed, extruded and peeled — the usual way to get an envelope.
 
-    Note the `invert`: `extrude` does not check that its direction is on the
-    same side as the source surface's normal, so `skin` of the result comes
-    back with its normals pointing into the material.
+    The plate's normal points to −y and it is extruded towards +y: `extrude`
+    still builds right-handed prisms, so `skin` of the result comes back with
+    its normals pointing out of the material, as the envelope must.
     """
     pts = []
     for i in range(per_side):
@@ -117,8 +117,7 @@ def _extruded_plate(c, per_side, size):
         contour.unit().add_cell([nodes[i], nodes[(i + 1) % len(nodes)]])
     plate = pyrucast.mesh.triangulate_surface(contour, "TRI3", size=size)
     solid = pyrucast.mesh.extrude(plate, [0.0, 0.4, 0.0], 1)
-    skin = pyrucast.mesh.convert(pyrucast.mesh.skin(solid), "TRI3")
-    return pyrucast.mesh.invert(skin)
+    return pyrucast.mesh.convert(pyrucast.mesh.skin(solid), "TRI3")
 
 
 def test_triangulate_volume_size_controls_the_fineness():
