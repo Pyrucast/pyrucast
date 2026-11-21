@@ -4,6 +4,7 @@ castem_element = "CUB8"
 castem_version = "97' customer version"
 source = ""
 deck = "plas9.dgibi"
+pyrucast = "`model.drucker_prager(fes, \"full_3d\")` in `stepping.step_by_step`, HEX8"
 
 topic = """
 A parallelepiped of a Drucker-Prager material with negative hardening is
@@ -37,7 +38,16 @@ negligible stiffness, CUB8 elements.
 - Compared quantity: max |σ − σ_exact| / K over the computed times.
 """
 
-notes = "The 2011 document prints no result table; the reference is the deck's."
+notes = """
+The 2011 document prints no result table; the reference is the deck's.
+
+The deck gives the ultimate surface equal to the initial one (K_L = K) and
+H < 0. pyrucast reads the two surfaces as the ends of one interpolation
+driven by H·p (see `src/models/plasticity/drucker_prager.rs`): with K_L = K
+the interpolation is frozen, H has no effect, and the stress stays on the
+plateau K / (α + β) instead of softening to zero. The gap measured is that
+plateau against the exact curve's zero.
+"""
 
 [[quantity]]
 key = "curve_gap"

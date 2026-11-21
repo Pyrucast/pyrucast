@@ -4,6 +4,7 @@ castem_element = "QUA4 (COQ4 in the 2011 document)"
 castem_version = "97' customer version"
 source = "Test NAFEMS : Analytical-Solution : MP2 Modélisation des structures élastiques dans CASTEM 2000."
 deck = "plas2.dgibi"
+pyrucast = "`model.plasticity_perfect(fes, \"axisymmetric\")` in `stepping.step_by_step`, QUA4"
 tolerance = 0.035
 tolerance_note = "deck criterion, largest relative gap of the two values < 3.5 %."
 

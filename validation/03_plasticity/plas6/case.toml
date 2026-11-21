@@ -4,6 +4,7 @@ castem_element = "QUA4"
 castem_version = "97' customer version"
 source = "R. Hill, Mathematical theory of plasticity, Oxford, Oxford Clavendon Press, 1950. Test V.P.C.S. numero SSNP11/89"
 deck = "plas6.dgibi"
+pyrucast = "`model.plasticity_perfect(fes, \"plane_stress\")` in `stepping.step_by_step`, QUA4"
 tolerance = 0.005
 tolerance_note = "deck criterion, largest relative gap of the nine moments ≤ 0.5 %."
 
@@ -41,6 +42,11 @@ notes = """
 The 2011 document gives E = 2e11 Pa and states no goal; the deck uses
 E = 2.1e11 Pa. The document prints no result table; the references are the
 deck's.
+
+The pyrucast moment is that of the support forces on the loaded side,
+Σ y·F_x, exact by equilibrium; Cast3M's integrates y·σ_xx along the side with
+σ_xx extrapolated to the nodes and averaged between cells. The two estimates
+differ by the error of that integration, which grows with the plastic zone.
 """
 
 [[quantity]]

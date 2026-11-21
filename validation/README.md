@@ -32,12 +32,12 @@ python validation/make_document.py    # this document
 
 ## Summary
 
-86 cases: 9 computed by pyrucast, 64 not computable yet, 13 pending.
+86 cases: 16 computed by pyrucast, 64 not computable yet, 6 pending.
 
 | Chapter | Case | Status | Largest gap to the reference | Largest gap pyrucast / Cast3M 2026 |
 |---|---|---|---|---|
 | Elasticity | [elas1](#elas1) | gap | missing: axisymmetric shell element (COQ2) | |
-| Elasticity | [elas2](#elas2) | run, OUTSIDE tolerance | 0.0827 % | 3.2e-04 |
+| Elasticity | [elas2](#elas2) | run, OUTSIDE tolerance | 0.0827 %; Δ = 0 | 3.2e-04 |
 | Elasticity | [elas3](#elas3) | run, within tolerance | 0.017 % | 1.3e-04 |
 | Elasticity | [elas4](#elas4) | run, OUTSIDE tolerance | 5.59 % | 3.9e-02 |
 | Elasticity | [elas7](#elas7) | gap | missing: axisymmetric shell element (COQ2) | |
@@ -51,14 +51,14 @@ python validation/make_document.py    # this document
 | Elasticity | [vsur1](#vsur1) | gap | missing: axisymmetric shell element (COQ2); surface vector operator (VSUR) | |
 | Buckling | [flam1](#flam1) | gap | missing: eigenvalue solver; axisymmetric shell element (COQ2) | |
 | Buckling | [four1](#four1) | gap | missing: Fourier harmonic analysis; eigenvalue solver; axisymmetric shell element (COQ2) | |
-| Plasticity | [plas1](#plas1) | pending | | |
-| Plasticity | [plas2](#plas2) | pending | | |
-| Plasticity | [plas4](#plas4) | pending | | |
-| Plasticity | [plas5](#plas5) | pending | | |
-| Plasticity | [plas6](#plas6) | pending | | |
-| Plasticity | [plas7](#plas7) | pending | | |
+| Plasticity | [plas1](#plas1) | run, within tolerance | 1.03 % | 4.7e-10 |
+| Plasticity | [plas2](#plas2) | run, within tolerance | 3.16 % | 3.2e-15 |
+| Plasticity | [plas4](#plas4) | run, within tolerance | 0.402 % | 2.0e-15 |
+| Plasticity | [plas5](#plas5) | run, OUTSIDE tolerance | 15.2 % | 1.5e-01 |
+| Plasticity | [plas6](#plas6) | run, within tolerance | 0.13 % | 1.8e-03 |
+| Plasticity | [plas7](#plas7) | run, OUTSIDE tolerance | 83.4 % | 8.2e-01 |
 | Plasticity | [plas8](#plas8) | gap | missing: plasticity in plate elements | |
-| Plasticity | [plas9](#plas9) | pending | | |
+| Plasticity | [plas9](#plas9) | run, OUTSIDE tolerance | Δ = 0.68 |  |
 | Plasticity | [plas10](#plas10) | gap | missing: Cam-Clay law | |
 | Plasticity | [plas11](#plas11) | gap | missing: generalized plane strain; axisymmetric shell element (COQ2) | |
 | Plasticity | [plas12](#plas12) | gap | missing: pipe element (TUYA) | |
@@ -117,7 +117,7 @@ python validation/make_document.py    # this document
 | Non linear dynamics | [dyna_nl3](#dyna_nl3) | gap | missing: large-displacement beam and shell dynamics | |
 | Thermal analysis | [ther2](#ther2) | run, within tolerance | 0.267 % | 1.1e-03 |
 | Thermal analysis | [ther7or](#ther7or) | gap | missing: thermal shell elements | |
-| Thermal analysis | [ther-perm](#ther-perm) | run, within tolerance | 7.74e-08 % | 1.7e-07 |
+| Thermal analysis | [ther-perm](#ther-perm) | run, within tolerance | 7.74e-08 %; Δ = 1.7e-09 | 1.7e-07 |
 | Thermo-mechanics | [thme1](#thme1) | run, within tolerance | 1.79 % | 1.0e-05 |
 | Thermo-mechanics | [thpl1](#thpl1) | gap | missing: rate-independent kinematic hardening | |
 | Magneto-static | [Ac2d93](#ac2d93) | gap | missing: magnetostatics | |
@@ -1745,7 +1745,7 @@ Acceptance: deck criterion, largest relative gap of the two multipliers < 2e-5 %
 | Test name | plas1 |
 | Calculation type | MECHANICS PLASTICITY 2D PLANE STRESS |
 | Finite element type (Cast3M) | QUA4 (COQ4 in the 2011 document) |
-| pyrucast model |  |
+| pyrucast model | `model.plasticity_perfect(fes, "plane_stress")` with `mpc` relations, in `stepping.step_by_step`, QUA4 |
 | Reference | Test NAFEMS : Analytical-Solution : MP1 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 deck | `dgibi/plas1.dgibi` |
@@ -1784,10 +1784,126 @@ Half of the strip, width 12.5 mm (x from 0 to 12.5 mm), height 100 mm
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| elastic moment M1 (t = 0.02875) (kN·m) | 805 | 811.08 (+0.755 %) | 811.082 (+0.755 %) | — |  |
-| plastic moment M2 (t = 0.05) (kN·m) | 1074 | 1085.2 (+1.04 %) | 1085.05 (+1.03 %) | — |  |
+| elastic moment M1 (t = 0.02875) (kN·m) | 805 | 811.08 (+0.755 %) | 811.082 (+0.755 %) | 811.082 (+0.755 %) | 1.4e-15 |
+| plastic moment M2 (t = 0.05) (kN·m) | 1074 | 1085.2 (+1.04 %) | 1085.05 (+1.03 %) | 1085.05 (+1.03 %) | 4.7e-10 |
 
 Acceptance: deck criterion, each relative gap ≤ 1.5 %.
+
+pyrucast: the 2 checked quantities are within tolerance.
+
+#### pyrucast figures
+
+![mesh](03_plasticity/plas1/mesh.svg)
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""plas1 — bending of a strip into the plastic range (NAFEMS MP1), plane stress.
+
+Problem: a strip 100 mm high, in plane stress, of an elastic, perfectly
+plastic material, is bent by rotating its end section, which stays straight:
+u_x = ±1e-3·t at its corners y = ±50 mm, and linear relations keep the
+section's other nodes on the line between them. Half of the strip is
+modelled (12.5 mm wide, u_x = 0 on the symmetry edge x = 0). At t = 0.02875
+the strip is still elastic; at t = 0.05 it is plastic over most of its
+height. Reference: M1 = 805 kN·m and M2 = 1074 kN·m.
+
+Mesh: the deck's, one QUA4 across and 8 along y. The moment is the deck's:
+the moment of the support forces on the end section, 2·Σ y·F_x over its
+upper half, in kN·m.
+
+Running::
+
+    python validation/03_plasticity/plas1/run.py
+"""
+
+import os
+
+import pyrucast as pc
+
+E, NU, SIGMA_Y = 2.1e11, 0.3, 483e6
+WIDTH, HALF_HEIGHT = 12.5e-3, 50e-3
+N = 8  # elements along the end section
+ROTATION = 1e-3  # u_x at the corners per unit time
+TIMES = [0.0, 0.02875, 0.05]
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    coords = pc.Coords(2)
+    # End section x = WIDTH, from A (y = +50 mm) down to B (y = −50 mm).
+    section = [
+        coords.add_node([WIDTH, HALF_HEIGHT - 2.0 * HALF_HEIGHT * i / N])
+        for i in range(N + 1)
+    ]
+    axis = [
+        coords.add_node([0.0, HALF_HEIGHT - 2.0 * HALF_HEIGHT * i / N])
+        for i in range(N + 1)
+    ]
+    strip = pc.Mesh(coords, "QUA4")
+    for i in range(N):
+        strip.unit().add_cell([axis[i + 1], section[i + 1], section[i], axis[i]])
+    a, b = section[0], section[N]
+    origin = axis[N // 2]
+
+    fes = pc.FiniteElementSpace(strip)
+    plasticity = pc.model.plasticity_perfect(fes, "plane_stress")
+    pull_a = pc.model.dirichlet(pc.mesh.poi1_from_nodes([a]), plasticity, "u_x")
+    push_b = pc.model.dirichlet(pc.mesh.poi1_from_nodes([b]), plasticity, "u_x")
+    model = (
+        plasticity
+        | pc.model.dirichlet(pc.mesh.poi1_from_nodes(axis), plasticity, "u_x")
+        | pc.model.dirichlet(pc.mesh.poi1_from_nodes([origin]), plasticity, "u_y")
+        | pull_a
+        | push_b
+    )
+    # The section stays straight: 8·u(A_r) − (8 − r)·u(A) − r·u(B) = 0.
+    for r in range(1, N):
+        model = model | pc.model.mpc(
+            [
+                (pc.mesh.poi1_from_nodes([section[r]]), "u_x", float(N)),
+                (pc.mesh.poi1_from_nodes([a]), "u_x", -float(N - r)),
+                (pc.mesh.poi1_from_nodes([b]), "u_x", -float(r)),
+            ],
+            plasticity,
+        )
+    materials = pc.element_field.material_field(
+        model, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y)]
+    )
+    frames = []
+    for t in (0.0, 1.0):
+        imposed = (
+            pc.NodeField(pull_a.multiplier_mesh(), ["imposed"]) + ROTATION * t
+        ) | (pc.NodeField(push_b.multiplier_mesh(), ["imposed"]) - ROTATION * t)
+        frames.append((t, imposed))
+    data = {
+        "model": model,
+        "times": TIMES,
+        "materials": materials,
+        "loads": pc.Evolution(frames),
+    }
+    pc.stepping.step_by_step(data)
+
+    moments = []
+    for record in data["results"][1:]:
+        reactions = record["reactions"]
+        moment = 0.0
+        for i in range(N // 2 + 1):  # the upper half, A down to the middle
+            y = HALF_HEIGHT - 2.0 * HALF_HEIGHT * i / N
+            moment += y * reactions.value(section[i], "f_x")
+        moments.append(2.0 * moment * 1e-3)
+
+    if out:
+        strip.plot(title="plas1 — QUA4 mesh", save=os.path.join(out, "mesh.svg"))
+    return {"M1": moments[0], "M2": moments[1]}
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ### plas2
 
@@ -1798,7 +1914,7 @@ Acceptance: deck criterion, each relative gap ≤ 1.5 %.
 | Test name | plas2 |
 | Calculation type | MECHANIC PLASTICITY 2D AXI |
 | Finite element type (Cast3M) | QUA4 (COQ4 in the 2011 document) |
-| pyrucast model |  |
+| pyrucast model | `model.plasticity_perfect(fes, "axisymmetric")` in `stepping.step_by_step`, QUA4 |
 | Reference | Test NAFEMS : Analytical-Solution : MP2 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 deck | `dgibi/plas2.dgibi` |
@@ -1834,10 +1950,155 @@ times 100 and 358.9 of the deck.
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| u_r at A, t = 100 (µm) | 0.4 | 0.39821 (-0.448 %) | 0.398212 (-0.447 %) | — |  |
-| u_r at A, t = 358.9 (µm) | 2.83 | 1085.2 (+3.82e+04 %) | 2.74066 (-3.16 %) | — |  |
+| u_r at A, t = 100 (µm) | 0.4 | 0.39821 (-0.448 %) | 0.398212 (-0.447 %) | 0.398212 (-0.447 %) | 1.4e-16 |
+| u_r at A, t = 358.9 (µm) | 2.83 | 1085.2 (+3.82e+04 %) | 2.74066 (-3.16 %) | 2.74066 (-3.16 %) | 3.2e-15 |
 
 Acceptance: deck criterion, largest relative gap of the two values < 3.5 %.
+
+pyrucast: the 2 checked quantities are within tolerance.
+
+#### pyrucast figures
+
+![mesh](03_plasticity/plas2/mesh.svg)
+
+![p](03_plasticity/plas2/p.svg)
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""plas2 — thick hollow sphere under internal pressure (NAFEMS MP2), axisymmetric.
+
+Problem: a hollow sphere of inner radius 1 mm and outer radius 2 mm, of an
+elastic, perfectly plastic material, is loaded by an internal pressure
+P = 1e6·t Pa. At t = 100 (P = 100 MPa) it is elastic; at t = 358.9 it is
+plastic through most of its wall. Reference: the radial displacement of the
+inner point A, 0.4 µm and 2.83 µm.
+
+Mesh: the deck's quarter of the meridian section, 14 × 16 QUA4: 14 elements
+through the wall (5 from 1 to 1.1 mm, 9 from 1.1 to 2 mm), 16 along each arc
+(every 5.625°). The nodes inside are placed by a transfinite (Coons)
+interpolation of the boundary nodes, as the deck's mesher does.
+
+Running::
+
+    python validation/03_plasticity/plas2/run.py
+"""
+
+import math
+import os
+
+import pyrucast as pc
+
+E, NU, SIGMA_Y = 2e11, 0.3, 300e6
+R_IN, R_MID, R_OUT = 1e-3, 1.1e-3, 2e-3
+N_THIN, N_THICK, N_ARC = 5, 9, 16
+PRESSURE_RATE = 1e6  # Pa per unit time
+TIMES = [0.0, 100.0, 358.9]
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    # Radii across the wall, from the inner sphere to the outer one.
+    radii = [R_IN + (R_MID - R_IN) * k / N_THIN for k in range(N_THIN)]
+    radii += [R_MID + (R_OUT - R_MID) * k / N_THICK for k in range(N_THICK + 1)]
+    ni, nj = len(radii) - 1, N_ARC
+    # Boundary nodes: along z = 0 (j = 0), along the axis (j = NJ), on the
+    # inner arc (i = 0) and on the outer arc (i = NI).
+    bottom = [(r, 0.0) for r in radii]
+    top = [(0.0, r) for r in radii]
+    inner, outer = [], []
+    for j in range(nj + 1):
+        theta = math.pi / 2.0 * j / nj
+        inner.append((R_IN * math.cos(theta), R_IN * math.sin(theta)))
+        outer.append((R_OUT * math.cos(theta), R_OUT * math.sin(theta)))
+
+    coords = pc.Coords.axisymmetric()
+    node = {}
+    for i in range(ni + 1):
+        for j in range(nj + 1):
+            u, v = i / ni, j / nj
+            point = []
+            for d in range(2):
+                coons = (
+                    (1 - v) * bottom[i][d]
+                    + v * top[i][d]
+                    + (1 - u) * inner[j][d]
+                    + u * outer[j][d]
+                    - (1 - u) * (1 - v) * bottom[0][d]
+                    - u * (1 - v) * bottom[ni][d]
+                    - (1 - u) * v * top[0][d]
+                    - u * v * top[ni][d]
+                )
+                point.append(coons)
+            node[i, j] = coords.add_node(point)
+    sphere = pc.Mesh(coords, "QUA4")
+    for i in range(ni):
+        for j in range(nj):
+            sphere.unit().add_cell(
+                [node[i, j], node[i + 1, j], node[i + 1, j + 1], node[i, j + 1]]
+            )
+    # The inner arc, travelled counter-clockwise around the section: from the
+    # axis down to A.
+    inner_arc = pc.Mesh(coords, "SEG2")
+    for j in range(nj, 0, -1):
+        inner_arc.unit().add_cell([node[0, j], node[0, j - 1]])
+    point_a = node[0, 0]
+
+    fes = pc.FiniteElementSpace(sphere)
+    plasticity = pc.model.plasticity_perfect(fes, "axisymmetric")
+    model = (
+        plasticity
+        | pc.model.dirichlet(
+            pc.mesh.poi1_from_nodes([node[i, 0] for i in range(ni + 1)]),
+            plasticity,
+            "u_y",
+        )
+        | pc.model.dirichlet(
+            pc.mesh.poi1_from_nodes([node[i, nj] for i in range(ni + 1)]),
+            plasticity,
+            "u_x",
+        )
+    )
+    materials = pc.element_field.material_field(
+        model, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y)]
+    )
+    # The internal pressure at t = 1, pushing on the wall: φ_n = −p.
+    pressure = pc.model.flux(pc.FiniteElementSpace(inner_arc), plasticity, "n")
+    unit_force = pc.node_field.external_forces(
+        pressure, pc.element_field.material_field(pressure, [("phi_n", -PRESSURE_RATE)])
+    )
+    data = {
+        "model": model,
+        "times": TIMES,
+        "materials": materials,
+        "loads": pc.Evolution(
+            [(0.0, unit_force * 0.0), (TIMES[-1], unit_force * TIMES[-1])]
+        ),
+    }
+    pc.stepping.step_by_step(data)
+
+    values = {}
+    for k, record in enumerate(data["results"][1:], start=1):
+        values[f"ur_A_{k}"] = record["displacement"].value(point_a, "u_x") * 1e6
+
+    if out:
+        sphere.plot(title="plas2 — QUA4 mesh", save=os.path.join(out, "mesh.svg"))
+        sphere.plot(
+            title="plas2 — cumulated plastic strain p at t = 358.9",
+            field=data["results"][-1]["behaviour"],
+            component="p",
+            cmap="viridis",
+            save=os.path.join(out, "p.svg"),
+        )
+    return values
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ### plas4
 
@@ -1848,7 +2109,7 @@ Acceptance: deck criterion, largest relative gap of the two values < 3.5 %.
 | Test name | plas4 |
 | Calculation type | MECHANICS PLASTICITY 3D |
 | Finite element type (Cast3M) | CUB8 |
-| pyrucast model |  |
+| pyrucast model | `model.plasticity_perfect(fes, "full_3d")` in `stepping.step_by_step`, HEX8 |
 | Reference | Test NAFEMS : Analytical-Solution : MP4 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 deck | `dgibi/plas4.dgibi` |
@@ -1883,20 +2144,123 @@ references are those of the deck (1.66e6).
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| σ_xx at T1 (Pa) | 7.5e+06 | 7.5e+06 (+0 %) | 7.5e+06 (+6.21e-14 %) | — |  |
-| σ_yy at T1 (Pa) | 2.5e+06 | 2.5e+06 (+0 %) | 2.5e+06 (+7.45e-14 %) | — |  |
-| σ_zz at T1 (Pa) | 2.5e+06 | 2.5e+06 (+0 %) | 2.5e+06 (+7.45e-14 %) | — |  |
-| σ_xx at T2 (Pa) | 1.166e+07 | 1.166e+07 (+0 %) | 1.16667e+07 (+0.0572 %) | — |  |
-| σ_yy at T2 (Pa) | 6.66e+06 | 6.66e+06 (+0 %) | 6.66667e+06 (+0.1 %) | — |  |
-| σ_zz at T2 (Pa) | 6.66e+06 | 6.66e+06 (+0 %) | 6.66667e+06 (+0.1 %) | — |  |
-| σ_xx at T3 (Pa) | 4.16e+06 | 4.16e+06 (+0 %) | 4.16667e+06 (+0.16 %) | — |  |
-| σ_yy at T3 (Pa) | 4.16e+06 | 4.16e+06 (+0 %) | 4.16667e+06 (+0.16 %) | — |  |
-| σ_zz at T3 (Pa) | 4.16e+06 | 4.16e+06 (+0 %) | 4.16667e+06 (+0.16 %) | — |  |
-| σ_xx at T4 (Pa) | -3.33e+06 | -3.33e+06 (+0 %) | -3.33333e+06 (-0.1 %) | — |  |
-| σ_yy at T4 (Pa) | 1.66e+06 | 1.6e+06 (-3.61 %) | 1.66667e+06 (+0.402 %) | — |  |
-| σ_zz at T4 (Pa) | 1.66e+06 | 1.6e+06 (-3.61 %) | 1.66667e+06 (+0.402 %) | — |  |
+| σ_xx at T1 (Pa) | 7.5e+06 | 7.5e+06 (+0 %) | 7.5e+06 (+6.21e-14 %) | 7.5e+06 (+0 %) | 6.2e-16 |
+| σ_yy at T1 (Pa) | 2.5e+06 | 2.5e+06 (+0 %) | 2.5e+06 (+7.45e-14 %) | 2.5e+06 (+0 %) | 7.5e-16 |
+| σ_zz at T1 (Pa) | 2.5e+06 | 2.5e+06 (+0 %) | 2.5e+06 (+7.45e-14 %) | 2.5e+06 (+0 %) | 7.5e-16 |
+| σ_xx at T2 (Pa) | 1.166e+07 | 1.166e+07 (+0 %) | 1.16667e+07 (+0.0572 %) | 1.16667e+07 (+0.0572 %) | 3.2e-16 |
+| σ_yy at T2 (Pa) | 6.66e+06 | 6.66e+06 (+0 %) | 6.66667e+06 (+0.1 %) | 6.66667e+06 (+0.1 %) | 9.8e-16 |
+| σ_zz at T2 (Pa) | 6.66e+06 | 6.66e+06 (+0 %) | 6.66667e+06 (+0.1 %) | 6.66667e+06 (+0.1 %) | 9.8e-16 |
+| σ_xx at T3 (Pa) | 4.16e+06 | 4.16e+06 (+0 %) | 4.16667e+06 (+0.16 %) | 4.16667e+06 (+0.16 %) | 6.7e-16 |
+| σ_yy at T3 (Pa) | 4.16e+06 | 4.16e+06 (+0 %) | 4.16667e+06 (+0.16 %) | 4.16667e+06 (+0.16 %) | 1.2e-15 |
+| σ_zz at T3 (Pa) | 4.16e+06 | 4.16e+06 (+0 %) | 4.16667e+06 (+0.16 %) | 4.16667e+06 (+0.16 %) | 1.2e-15 |
+| σ_xx at T4 (Pa) | -3.33e+06 | -3.33e+06 (+0 %) | -3.33333e+06 (-0.1 %) | -3.33333e+06 (-0.1 %) | 7.0e-16 |
+| σ_yy at T4 (Pa) | 1.66e+06 | 1.6e+06 (-3.61 %) | 1.66667e+06 (+0.402 %) | 1.66667e+06 (+0.402 %) | 2.0e-15 |
+| σ_zz at T4 (Pa) | 1.66e+06 | 1.6e+06 (-3.61 %) | 1.66667e+06 (+0.402 %) | 1.66667e+06 (+0.402 %) | 2.0e-15 |
 
 Acceptance: deck criterion, largest relative gap of the twelve stresses ≤ 0.5 %.
+
+pyrucast: the 12 checked quantities are within tolerance.
+
+#### pyrucast figures
+
+![mesh](03_plasticity/plas4/mesh.svg)
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""plas4 — uniaxial strain cycle on an elastic, perfectly plastic block, HEX8.
+
+Problem: a block of two HEX8 (x from 0 to 1, section 1 × 1), held so that
+u_y = u_z = 0 everywhere and u_x = 0 on x = 0, receives u_x = ε₀·f(t)·x on
+its faces x = 0.5 and x = 1, with ε₀ = 2.5e-5 and f = 0, 1, 2, 1, 0 at
+t = 0, 1, 2, 3, 4: the strain goes up into the plastic range and back.
+Reference: σ_xx, σ_yy and σ_zz at t = 1, 2, 3, 4, the closed-form response of
+J2 perfect plasticity in uniaxial strain.
+
+The stress is homogeneous: it is read at the first Gauss point of the first
+cell, as in the deck.
+
+Running::
+
+    python validation/03_plasticity/plas4/run.py
+"""
+
+import os
+
+import pyrucast as pc
+
+E, NU, SIGMA_Y = 2.5e11, 0.25, 5e6
+EPS0 = 2.5e-5
+HISTORY = [(0.0, 0.0), (1.0, 1.0), (2.0, 2.0), (3.0, 1.0), (4.0, 0.0)]  # (t, f)
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    coords = pc.Coords(3)
+    square = pc.Mesh(coords, "QUA4")
+    square.unit().add_cell(
+        [
+            coords.add_node([0.0, 0.0, 0.0]),
+            coords.add_node([0.0, 1.0, 0.0]),
+            coords.add_node([0.0, 1.0, 1.0]),
+            coords.add_node([0.0, 0.0, 1.0]),
+        ]
+    )
+    block = pc.mesh.extrude(square, [1.0, 0.0, 0.0], 2)
+    face_0 = pc.mesh.points_on_plane(block, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0])
+    face_half = pc.mesh.points_on_plane(block, [0.5, 0.0, 0.0], [1.0, 0.0, 0.0])
+    face_1 = pc.mesh.points_on_plane(block, [1.0, 0.0, 0.0], [1.0, 0.0, 0.0])
+    every_node = pc.mesh.consolidate(pc.mesh.to_poi1(block))
+
+    fes = pc.FiniteElementSpace(block)
+    plasticity = pc.model.plasticity_perfect(fes, "full_3d")
+    pull_half = pc.model.dirichlet(face_half, plasticity, "u_x")
+    pull_end = pc.model.dirichlet(face_1, plasticity, "u_x")
+    model = (
+        plasticity
+        | pc.model.dirichlet(face_0, plasticity, "u_x")
+        | pull_half
+        | pull_end
+        | pc.model.dirichlet(every_node, plasticity, "u_y")
+        | pc.model.dirichlet(every_node, plasticity, "u_z")
+    )
+    materials = pc.element_field.material_field(
+        model, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y)]
+    )
+    frames = []
+    for t, f in HISTORY:
+        imposed = (
+            pc.NodeField(pull_half.multiplier_mesh(), ["imposed"]) + EPS0 * f * 0.5
+        ) | (pc.NodeField(pull_end.multiplier_mesh(), ["imposed"]) + EPS0 * f)
+        frames.append((t, imposed))
+    data = {
+        "model": model,
+        "times": [t for t, _ in HISTORY],
+        "materials": materials,
+        "loads": pc.Evolution(frames),
+    }
+    pc.stepping.step_by_step(data)
+
+    values = {}
+    for record in data["results"]:
+        k = round(record["time"])
+        if k == 0:
+            continue
+        behaviour = record["behaviour"][0]
+        for axis in ("xx", "yy", "zz"):
+            values[f"s{axis}_{k}"] = behaviour.value(0, 0, f"sigma_{axis}")
+
+    if out:
+        block.plot(title="plas4 — HEX8 mesh", save=os.path.join(out, "mesh.svg"))
+    return values
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ### plas5
 
@@ -1907,7 +2271,7 @@ Acceptance: deck criterion, largest relative gap of the twelve stresses ≤ 0.5 
 | Test name | plas5 |
 | Calculation type | MECHANICS PLASTICITY 2D PLANE STRESSE |
 | Finite element type (Cast3M) | QUA4 |
-| pyrucast model |  |
+| pyrucast model | `model.drucker_prager(fes, "plane_stress")` in `stepping.step_by_step`, QUA4 |
 | Reference | Test NAFEMS : Analytical-Solution : MP4 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 deck | `dgibi/plas5.dgibi` |
@@ -1941,14 +2305,123 @@ One QUA4, square of side 1.5.
 **Notes.** The 2011 document gives E = 2.5e11 Pa, ν = 0.25 and σ_y = 5e6 Pa, the data of
 plas4; the deck's data are those above.
 
+The deck's ultimate cohesion K_L = 3.56 is below the initial one K = 4.1, with
+H = 0. pyrucast reads the two surfaces as the ends of one interpolation
+driven by H·p (see `src/models/plasticity/drucker_prager.rs`): with H = 0 it
+stays on the initial surface, and its stress stops at that surface's apex,
+K / (2α + β). Cast3M's stops at the ultimate surface's apex, the reference.
+
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| σ_xx at t = 2 | 1.87171 | 1.8717 (-0.000747 %) | 1.87171 (+0 %) | — |  |
-| σ_yy at t = 2 | 1.87171 | 1.8717 (-0.000747 %) | 1.87171 (+0 %) | — |  |
+| σ_xx at t = 2 | 1.87171 | 1.8717 (-0.000747 %) | 1.87171 (+0 %) | 2.15563 (+15.2 %) | 1.5e-01 |
+| σ_yy at t = 2 | 1.87171 | 1.8717 (-0.000747 %) | 1.87171 (+0 %) | 2.15563 (+15.2 %) | 1.5e-01 |
 
 Acceptance: deck criterion, each relative gap ≤ 1e-10 %.
+
+pyrucast OUTSIDE tolerance: sxx: 2.155625657202943 vs 1.871713985278654, beyond 0.000000%
+
+pyrucast OUTSIDE tolerance: syy: 2.155625657202943 vs 1.871713985278654, beyond 0.000000%
+
+#### pyrucast figures
+
+![mesh](03_plasticity/plas5/mesh.svg)
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""plas5 — equibiaxial pull of a Drucker-Prager element, plane stress, QUA4.
+
+Problem: one square QUA4 of side 1.5, held by u_x = 0 on x = 0 and u_y = 0
+on y = 0, is pulled by u_x = u_y = 1.5e-4·t on its two other sides, up to
+t = 2. The material is the deck's two-surface Drucker-Prager: an initial
+surface α·I₁ + β·q = K and an ultimate one η·I₁ + μ·q = K_L, with H = 0.
+Reference: the equibiaxial stress at the apex of the ultimate surface,
+σ_xx = σ_yy = K_L / (2η + μ).
+
+The Cast3M parameters map to pyrucast's as ALFA → friction, BETA → beta,
+K → k, GAMM → psi, DELT → delta, ETA → friction_ult, MU → beta_ult,
+KL → k_ult, H → H.
+
+Running::
+
+    python validation/03_plasticity/plas5/run.py
+"""
+
+import os
+
+import pyrucast as pc
+
+E, NU = 40000.0, 0.21
+SIDE = 1.5
+RATE = 1.5e-4  # imposed displacement per unit time
+DRUCKER_PRAGER = [
+    ("friction", 0.441),  # ALFA
+    ("beta", 1.02),  # BETA
+    ("k", 4.1),  # K
+    ("psi", 0.441),  # GAMM
+    ("delta", 1.02),  # DELT
+    ("friction_ult", 0.441),  # ETA
+    ("beta_ult", 1.02),  # MU
+    ("k_ult", 3.56),  # KL
+    ("H", 0.0),
+]
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    coords = pc.Coords(2)
+    a = coords.add_node([0.0, 0.0])
+    b = coords.add_node([SIDE, 0.0])
+    c = coords.add_node([SIDE, SIDE])
+    d = coords.add_node([0.0, SIDE])
+    square = pc.Mesh(coords, "QUA4")
+    square.unit().add_cell([a, b, c, d])
+
+    fes = pc.FiniteElementSpace(square)
+    law = pc.model.drucker_prager(fes, "plane_stress")
+    pull_x = pc.model.dirichlet(pc.mesh.poi1_from_nodes([b, c]), law, "u_x")
+    pull_y = pc.model.dirichlet(pc.mesh.poi1_from_nodes([c, d]), law, "u_y")
+    model = (
+        law
+        | pc.model.dirichlet(pc.mesh.poi1_from_nodes([a, d]), law, "u_x")
+        | pc.model.dirichlet(pc.mesh.poi1_from_nodes([a, b]), law, "u_y")
+        | pull_x
+        | pull_y
+    )
+    materials = pc.element_field.material_field(
+        model, [("E", E), ("nu", NU)] + DRUCKER_PRAGER
+    )
+    frames = []
+    for t in (0.0, 2.0):
+        imposed = (pc.NodeField(pull_x.multiplier_mesh(), ["imposed"]) + RATE * t) | (
+            pc.NodeField(pull_y.multiplier_mesh(), ["imposed"]) + RATE * t
+        )
+        frames.append((t, imposed))
+    data = {
+        "model": model,
+        "times": [0.0, 1.0, 2.0],
+        "materials": materials,
+        "loads": pc.Evolution(frames),
+    }
+    pc.stepping.step_by_step(data)
+    behaviour = data["results"][-1]["behaviour"][0]
+
+    if out:
+        square.plot(title="plas5 — QUA4", save=os.path.join(out, "mesh.svg"))
+    return {
+        "sxx": behaviour.value(0, 0, "sigma_xx"),
+        "syy": behaviour.value(0, 0, "sigma_yy"),
+    }
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ### plas6
 
@@ -1959,7 +2432,7 @@ Acceptance: deck criterion, each relative gap ≤ 1e-10 %.
 | Test name | plas6 |
 | Calculation type | MECHANICS ELASTIC PLASTIC - PLANE STRESS |
 | Finite element type (Cast3M) | QUA4 |
-| pyrucast model |  |
+| pyrucast model | `model.plasticity_perfect(fes, "plane_stress")` in `stepping.step_by_step`, QUA4 |
 | Reference | R. Hill, Mathematical theory of plasticity, Oxford, Oxford Clavendon Press, 1950. Test V.P.C.S. numero SSNP11/89 |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 deck | `dgibi/plas6.dgibi` |
@@ -1995,21 +2468,137 @@ Rectangle of width 12.5 mm (x) and height 100 mm (y, from −50 to 50 mm),
 E = 2.1e11 Pa. The document prints no result table; the references are the
 deck's.
 
+The pyrucast moment is that of the support forces on the loaded side,
+Σ y·F_x, exact by equilibrium; Cast3M's integrates y·σ_xx along the side with
+σ_xx extrapolated to the nodes and averaged between cells. The two estimates
+differ by the error of that integration, which grows with the plastic zone.
+
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| bending moment at t = 0.02875 (kN·m) | 805 | — | 806.806 (+0.224 %) | — |  |
-| bending moment at t = 0.05 (kN·m) | 1074 | — | 1076.57 (+0.239 %) | — |  |
-| bending moment at t = 0.1 (kN·m) | 1174 | — | 1176.96 (+0.252 %) | — |  |
-| bending moment at t = 0.15 (kN·m) | 1193 | — | 1195.34 (+0.196 %) | — |  |
-| bending moment at t = 0.2 (kN·m) | 1199 | — | 1201.92 (+0.243 %) | — |  |
-| bending moment at t = 0.3 (kN·m) | 1204 | — | 1206.65 (+0.22 %) | — |  |
-| bending moment at t = 0.4 (kN·m) | 1205 | — | 1208.42 (+0.283 %) | — |  |
-| bending moment at t = 0.5 (kN·m) | 1206 | — | 1209.53 (+0.293 %) | — |  |
-| bending moment at t = 1.0 (kN·m) | 1207.5 | — | 1210.37 (+0.238 %) | — |  |
+| bending moment at t = 0.02875 (kN·m) | 805 | — | 806.806 (+0.224 %) | 805.38 (+0.0472 %) | 1.8e-03 |
+| bending moment at t = 0.05 (kN·m) | 1074 | — | 1076.57 (+0.239 %) | 1075.07 (+0.0998 %) | 1.4e-03 |
+| bending moment at t = 0.1 (kN·m) | 1174 | — | 1176.96 (+0.252 %) | 1175.17 (+0.0996 %) | 1.5e-03 |
+| bending moment at t = 0.15 (kN·m) | 1193 | — | 1195.34 (+0.196 %) | 1193.85 (+0.0709 %) | 1.2e-03 |
+| bending moment at t = 0.2 (kN·m) | 1199 | — | 1201.92 (+0.243 %) | 1200.21 (+0.101 %) | 1.4e-03 |
+| bending moment at t = 0.3 (kN·m) | 1204 | — | 1206.65 (+0.22 %) | 1204.71 (+0.0586 %) | 1.6e-03 |
+| bending moment at t = 0.4 (kN·m) | 1205 | — | 1208.42 (+0.283 %) | 1206.57 (+0.13 %) | 1.5e-03 |
+| bending moment at t = 0.5 (kN·m) | 1206 | — | 1209.53 (+0.293 %) | 1207.35 (+0.112 %) | 1.8e-03 |
+| bending moment at t = 1.0 (kN·m) | 1207.5 | — | 1210.37 (+0.238 %) | 1208.36 (+0.0711 %) | 1.7e-03 |
 
 Acceptance: deck criterion, largest relative gap of the nine moments ≤ 0.5 %.
+
+pyrucast: the 9 checked quantities are within tolerance.
+
+#### pyrucast figures
+
+![mesh](03_plasticity/plas6/mesh.svg)
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""plas6 — pure bending of a rectangle up to full plasticity, plane stress.
+
+Problem: a rectangle 12.5 mm wide (x) and 100 mm high (y, from −50 to
+50 mm), of an elastic, perfectly plastic material, in plane stress, is bent
+by u_x = 1e-3·t·y/(50 mm) imposed on its side x = 12.5 mm; its side x = 0 is
+a symmetry plane (u_x = 0) and the origin is held along y. Reference: the
+bending moment of R. Hill's solution at nine load levels, up to the fully
+plastic moment.
+
+Mesh: the deck's regular grid of 32 × 4 QUA4.
+
+The moment is taken from the support forces on the loaded side, Σ y·F_x, in
+kN·m: exact by equilibrium. The deck integrates y·σ_xx along that side, with
+σ_xx extrapolated to the nodes and averaged between cells; the two estimates
+differ by the error of that integration.
+
+Running::
+
+    python validation/03_plasticity/plas6/run.py
+"""
+
+import os
+
+import pyrucast as pc
+
+E, NU, SIGMA_Y = 2.1e11, 0.3, 483e6
+WIDTH, HALF_HEIGHT = 12.5e-3, 50e-3
+N_HEIGHT, N_WIDTH = 32, 4
+ROTATION = 1e-3  # u_x at y = 50 mm per unit time
+TIMES = [0.0, 0.02875, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 1.0]
+KINEMATICS = "plane_stress"
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    coords = pc.Coords(2)
+    pa = coords.add_node([WIDTH, HALF_HEIGHT])
+    pb = coords.add_node([WIDTH, -HALF_HEIGHT])
+    pc_ = coords.add_node([0.0, -HALF_HEIGHT])
+    pd = coords.add_node([0.0, HALF_HEIGHT])
+    loaded_side = pc.mesh.line(pa, pb, N_HEIGHT)
+    symmetry_side = pc.mesh.line(pc_, pd, N_HEIGHT)
+    rectangle = pc.mesh.transfinite(
+        loaded_side,
+        pc.mesh.line(pb, pc_, N_WIDTH),
+        symmetry_side,
+        pc.mesh.line(pd, pa, N_WIDTH),
+    )
+    loaded_nodes = pc.mesh.consolidate(loaded_side.to_poi1())
+    origin = rectangle.nearest_node([0.0, 0.0])
+
+    fes = pc.FiniteElementSpace(rectangle)
+    plasticity = pc.model.plasticity_perfect(fes, KINEMATICS)
+    bend = pc.model.dirichlet(loaded_nodes, plasticity, "u_x")
+    model = (
+        plasticity
+        | pc.model.dirichlet(
+            pc.mesh.consolidate(symmetry_side.to_poi1()), plasticity, "u_x"
+        )
+        | pc.model.dirichlet(pc.mesh.poi1_from_nodes([origin]), plasticity, "u_y")
+        | bend
+    )
+    materials = pc.element_field.material_field(
+        model, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y)]
+    )
+    # u_x = ROTATION·t·y/HALF_HEIGHT on the loaded side, here for t = 1.
+    side = [loaded_nodes.node(0, i, 0) for i in range(loaded_nodes.cell_count)]
+    # The multipliers have nodes of their own, at their support's positions.
+    multipliers = bend.multiplier_mesh()
+    unit = pc.NodeField(multipliers, ["imposed"])
+    for i in range(multipliers.cell_count):
+        node = multipliers.node(0, i, 0)
+        y = node.position()[1]
+        unit[0].set_value(node, "imposed", ROTATION * y / HALF_HEIGHT)
+    data = {
+        "model": model,
+        "times": TIMES,
+        "materials": materials,
+        "loads": pc.Evolution([(0.0, unit * 0.0), (1.0, unit)]),
+    }
+    pc.stepping.step_by_step(data)
+
+    values = {}
+    for k, record in enumerate(data["results"][1:], start=1):
+        reactions = record["reactions"]
+        moment = 0.0
+        for node in side:
+            moment += node.position()[1] * reactions.value(node, "f_x")
+        values[f"M_{k}"] = moment * 1e-3
+
+    if out:
+        rectangle.plot(title="plas6 — QUA4 mesh", save=os.path.join(out, "mesh.svg"))
+    return values
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ### plas7
 
@@ -2020,7 +2609,7 @@ Acceptance: deck criterion, largest relative gap of the nine moments ≤ 0.5 %.
 | Test name | plas7 |
 | Calculation type | MECHANICS ELASTIC PLASTIC - PLANE STRAIN |
 | Finite element type (Cast3M) | QUA4 |
-| pyrucast model |  |
+| pyrucast model | `model.plasticity_perfect(fes, "plane_strain")` in `stepping.step_by_step`, QUA4 |
 | Reference | R. Hill, Mathematical theory of plasticity, Oxford, Oxford Clavendon Press, 1950. Test V.P.C.S. numero SSNP11/89 |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 deck | `dgibi/plas7.dgibi` |
@@ -2045,30 +2634,174 @@ Rectangle of width 12.5 mm (x) and height 100 mm (y, from −50 to 50 mm),
 | σ_y (perfect plasticity) | 483e6 Pa |
 
 - Boundary conditions: u_x = 0 on x = 0, u_y = 0 at the origin.
-- Imposed displacement on x = 12.5 mm, linear in y.
+- Imposed displacement on x = 12.5 mm: u_x = −1e-3·t·y/(50 mm), linear in y.
 - Computed times: 0.029435, 0.1, 0.2, 0.3, 0.4, 0.5, 1.
-- Moment: integral of y σ_xx along the loaded side, with σ_xx extrapolated
-  to its nodes and integrated by the trapezoid rule.
+- Moment: 1e-4 · ∫ y σ_xx dy along the loaded side, with σ_xx extrapolated
+  to its nodes and integrated by the trapezoid rule, in 1e4 N·m.
 
 **Notes.** The 2011 document names the element QUA44 and gives E = 2e11 Pa; the deck
 uses QUA4 and E = 2.1e11 Pa. The document prints no result table; the
 references are the deck's.
 
+The pyrucast moment is that of the support forces on the loaded side,
+Σ y·F_x, exact by equilibrium; Cast3M's integrates y·σ_xx along the side with
+σ_xx extrapolated to the nodes and averaged between cells. The two estimates
+differ by the error of that integration, which grows with the plastic zone.
+
+In the fully plastic state the Gauss stresses of both codes oscillate from
+point to point, well above 2σ_y/√3 (the full-integration QUA4 locks in an
+incompressible plastic flow). Cast3M averages between neighbouring cells the
+values extrapolated to a node, which smooths the oscillation out; pyrucast
+reads the node in one cell, which shows it.
+
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| bending moment at t = 0.029435 (kN·m) | 90.57 | — | 90.8058 (+0.26 %) | — |  |
-| bending moment at t = 0.1 (kN·m) | 135.2 | — | 135.236 (+0.0269 %) | — |  |
-| bending moment at t = 0.2 (kN·m) | 138.4 | — | 139.666 (+0.915 %) | — |  |
-| bending moment at t = 0.3 (kN·m) | 139 | — | 141.016 (+1.45 %) | — |  |
-| bending moment at t = 0.4 (kN·m) | 139.2 | — | 141.921 (+1.95 %) | — |  |
-| bending moment at t = 0.5 (kN·m) | 139.3 | — | 142.712 (+2.45 %) | — |  |
-| bending moment at t = 1.0 (kN·m) | 139.4 | — | 146.289 (+4.94 %) | — |  |
-| σ_xx at A (12.5, 50) mm, t = 1 (MPa) | 543.4 | — | 547.236 (+0.706 %) | — |  |
-| σ_xx at the second node of the loaded edge, t = 1 (MPa) | 557.7 | — | 557.745 (+0.00805 %) | — |  |
+| bending moment at t = 0.029435 (1e4 N·m) | 90.57 | — | 90.8058 (+0.26 %) | 90.6201 (+0.0553 %) | 2.0e-03 |
+| bending moment at t = 0.1 (1e4 N·m) | 135.2 | — | 135.236 (+0.0269 %) | 134.726 (-0.351 %) | 3.8e-03 |
+| bending moment at t = 0.2 (1e4 N·m) | 138.4 | — | 139.666 (+0.915 %) | 138.716 (+0.228 %) | 6.8e-03 |
+| bending moment at t = 0.3 (1e4 N·m) | 139 | — | 141.016 (+1.45 %) | 139.619 (+0.445 %) | 9.9e-03 |
+| bending moment at t = 0.4 (1e4 N·m) | 139.2 | — | 141.921 (+1.95 %) | 140.09 (+0.639 %) | 1.3e-02 |
+| bending moment at t = 0.5 (1e4 N·m) | 139.3 | — | 142.712 (+2.45 %) | 140.424 (+0.807 %) | 1.6e-02 |
+| bending moment at t = 1.0 (1e4 N·m) | 139.4 | — | 146.289 (+4.94 %) | 141.784 (+1.71 %) | 3.1e-02 |
+| σ_xx at A (12.5, 50) mm, t = 1 (MPa) | 543.4 | — | 547.236 (+0.706 %) | 996.705 (+83.4 %) | 8.2e-01 |
+| σ_xx at the second node of the loaded edge (y = 46.875 mm), cell above, t = 1 (MPa) | 557.7 | — | 557.745 (+0.00805 %) | 118.706 (-78.7 %) | 7.9e-01 |
+| σ_xx at the second node of the loaded edge (y = 46.875 mm), cell below, t = 1 (MPa) | 557.7 | — | — | 118.705 (-78.7 %) |  |
 
 Acceptance: deck criterion, largest relative gap of the nine values ≤ 5 %.
+
+pyrucast OUTSIDE tolerance: sxx_A: 996.7051027453692 vs 543.4, beyond 5.000000%
+
+pyrucast OUTSIDE tolerance: sxx_A2: 118.70587497762746 vs 557.7, beyond 5.000000%
+
+pyrucast OUTSIDE tolerance: sxx_A2_below: 118.70531305794216 vs 557.7, beyond 5.000000%
+
+#### pyrucast figures
+
+![mesh](03_plasticity/plas7/mesh.svg)
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""plas7 — pure bending of a rectangle up to full plasticity, plane strain.
+
+Problem: a rectangle 12.5 mm wide (x) and 100 mm high (y, from −50 to
+50 mm), of an elastic, perfectly plastic material, in plane strain, is bent
+by u_x = 1e-3·t·y/(50 mm) imposed on its side x = 12.5 mm; its side x = 0 is
+a symmetry plane (u_x = 0) and the origin is held along y. Reference: the
+bending moment of R. Hill's solution at seven load levels, up to the fully
+plastic moment, and σ_xx at two nodes of the loaded side at the last one.
+
+Mesh: the deck's regular grid of 32 × 4 QUA4.
+
+The moment is taken from the support forces on the loaded side, Σ y·F_x, in
+the deck's unit of 1e4 N·m: exact by equilibrium. The deck integrates y·σ_xx along that side, with
+σ_xx extrapolated to the nodes and averaged between cells; the two estimates
+differ by the error of that integration. The stresses are read in the cell
+holding the node, from its Gauss points; the second node of the side lies
+between two cells, and is read in each.
+
+Running::
+
+    python validation/03_plasticity/plas6/run.py
+"""
+
+import os
+
+import pyrucast as pc
+
+E, NU, SIGMA_Y = 2.1e11, 0.3, 483e6
+WIDTH, HALF_HEIGHT = 12.5e-3, 50e-3
+N_HEIGHT, N_WIDTH = 32, 4
+ROTATION = 1e-3  # u_x at y = 50 mm per unit time
+TIMES = [0.0, 0.029435, 0.1, 0.2, 0.3, 0.4, 0.5, 1.0]
+KINEMATICS = "plane_strain"
+MOMENT_UNIT = 1e4  # N·m, the deck's
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    coords = pc.Coords(2)
+    pa = coords.add_node([WIDTH, HALF_HEIGHT])
+    pb = coords.add_node([WIDTH, -HALF_HEIGHT])
+    pc_ = coords.add_node([0.0, -HALF_HEIGHT])
+    pd = coords.add_node([0.0, HALF_HEIGHT])
+    loaded_side = pc.mesh.line(pa, pb, N_HEIGHT)
+    symmetry_side = pc.mesh.line(pc_, pd, N_HEIGHT)
+    rectangle = pc.mesh.transfinite(
+        loaded_side,
+        pc.mesh.line(pb, pc_, N_WIDTH),
+        symmetry_side,
+        pc.mesh.line(pd, pa, N_WIDTH),
+    )
+    loaded_nodes = pc.mesh.consolidate(loaded_side.to_poi1())
+    origin = rectangle.nearest_node([0.0, 0.0])
+
+    fes = pc.FiniteElementSpace(rectangle)
+    plasticity = pc.model.plasticity_perfect(fes, KINEMATICS)
+    bend = pc.model.dirichlet(loaded_nodes, plasticity, "u_x")
+    model = (
+        plasticity
+        | pc.model.dirichlet(
+            pc.mesh.consolidate(symmetry_side.to_poi1()), plasticity, "u_x"
+        )
+        | pc.model.dirichlet(pc.mesh.poi1_from_nodes([origin]), plasticity, "u_y")
+        | bend
+    )
+    materials = pc.element_field.material_field(
+        model, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y)]
+    )
+    # u_x = ROTATION·t·y/HALF_HEIGHT on the loaded side, here for t = 1.
+    side = [loaded_nodes.node(0, i, 0) for i in range(loaded_nodes.cell_count)]
+    # The multipliers have nodes of their own, at their support's positions.
+    multipliers = bend.multiplier_mesh()
+    unit = pc.NodeField(multipliers, ["imposed"])
+    for i in range(multipliers.cell_count):
+        node = multipliers.node(0, i, 0)
+        y = node.position()[1]
+        unit[0].set_value(node, "imposed", ROTATION * y / HALF_HEIGHT)
+    data = {
+        "model": model,
+        "times": TIMES,
+        "materials": materials,
+        "loads": pc.Evolution([(0.0, unit * 0.0), (1.0, unit)]),
+    }
+    pc.stepping.step_by_step(data)
+
+    values = {}
+    for k, record in enumerate(data["results"][1:], start=1):
+        reactions = record["reactions"]
+        moment = 0.0
+        for node in side:
+            moment += node.position()[1] * reactions.value(node, "f_x")
+        values[f"M_{k}"] = moment / MOMENT_UNIT
+
+    # σ_xx at A and at the second node of the side, just inside each cell.
+    dy = 2.0 * HALF_HEIGHT / N_HEIGHT
+    at_a = coords.add_node([WIDTH, HALF_HEIGHT])
+    above = coords.add_node([WIDTH, HALF_HEIGHT - dy + 1e-9])
+    below = coords.add_node([WIDTH, HALF_HEIGHT - dy - 1e-9])
+    stress = pc.node_field.project(
+        data["results"][-1]["behaviour"],
+        rectangle,
+        pc.mesh.poi1_from_nodes([at_a, above, below]),
+    )
+    values["sxx_A"] = stress.value(at_a, "sigma_xx") / 1e6
+    values["sxx_A2"] = stress.value(above, "sigma_xx") / 1e6
+    values["sxx_A2_below"] = stress.value(below, "sigma_xx") / 1e6
+
+    if out:
+        rectangle.plot(title="plas7 — QUA4 mesh", save=os.path.join(out, "mesh.svg"))
+    return values
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ### plas8
 
@@ -2126,7 +2859,7 @@ Acceptance: deck criterion (complete run), |F − F_u| / F_u ≤ 8.5 %.
 | Test name | plas9 |
 | Calculation type | MECHANICS ELASTIC PLASTIC - DRUCKER-PRAGER'S MATERIAL |
 | Finite element type (Cast3M) | CUB8 |
-| pyrucast model |  |
+| pyrucast model | `model.drucker_prager(fes, "full_3d")` in `stepping.step_by_step`, HEX8 |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 deck | `dgibi/plas9.dgibi` |
@@ -2162,11 +2895,147 @@ negligible stiffness, CUB8 elements.
 
 **Notes.** The 2011 document prints no result table; the reference is the deck's.
 
+The deck gives the ultimate surface equal to the initial one (K_L = K) and
+H < 0. pyrucast reads the two surfaces as the ends of one interpolation
+driven by H·p (see `src/models/plasticity/drucker_prager.rs`): with K_L = K
+the interpolation is frozen, H has no effect, and the stress stays on the
+plateau K / (α + β) instead of softening to zero. The gap measured is that
+plateau against the exact curve's zero.
+
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| max |σ − σ_exact| / K over the curve | 0 | — | 2.646e-09 (Δ = 2.6e-09) | — |  |
+| max |σ − σ_exact| / K over the curve | 0 | — | 2.646e-09 (Δ = 2.6e-09) | 0.684463 (Δ = 0.68) | Δ = 6.8e-01 |
+
+pyrucast OUTSIDE tolerance: curve_gap: |0.6844626967830254 - 0.0| > 5e-05
+
+#### pyrucast figures
+
+![curve](03_plasticity/plas9/curve.svg)
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""plas9 — uniaxial pull of a softening Drucker-Prager block, HEX8.
+
+Problem: a block 1.5 × 1.5 × 1 (one HEX8), held by u_x = 0 on x = 0,
+u_y = 0 on y = 0 and u_z = 0 on z = 0, is pulled by u_x = 1.5e-4·t on
+x = 1.5 up to t = 4, in steps of 0.1. The material is a Drucker-Prager law
+with α = 0.441, β = 1.02, K = 2 and a negative hardening H = −10 000.
+Reference: the exact uniaxial curve,
+
+    σ = E·ε                                  while ε < K / ((α + β)·E),
+    σ = (K + H·m·ε) / ((α + β) + H·m/E)      after, floored at 0,
+
+with m = √(2α² + β²) / (α + β). Compared: max |σ − σ_exact| / K over the
+computed times (the deck's test).
+
+The deck adds, on the same cell, an elastic material of stiffness 2e-3 in
+parallel. pyrucast refuses two laws carrying each their own E on one support;
+that material's stress stays below 2e-3 × 6e-4 ≈ 1e-6, under what the test
+reads (5e-5·K), so it is left out.
+
+Running::
+
+    python validation/03_plasticity/plas9/run.py
+"""
+
+import math
+import os
+
+import pyrucast as pc
+
+E, NU = 40000.0, 0.21
+ALPHA, BETA, K, H = 0.441, 1.02, 2.0, -10000.0
+LX, LY, LZ = 1.5, 1.5, 1.0
+RATE = 1.5e-4  # imposed u_x per unit time
+TIMES = [0.1 * i for i in range(41)]
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    coords = pc.Coords(3)
+    corners = [[0.0, 0.0], [LX, 0.0], [LX, LY], [0.0, LY]]
+    base = pc.Mesh(coords, "QUA4")
+    base.unit().add_cell([coords.add_node(p + [0.0]) for p in corners])
+    block = pc.mesh.extrude(base, [0.0, 0.0, LZ], 1)
+    face_x0 = pc.mesh.points_on_plane(block, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0])
+    face_x1 = pc.mesh.points_on_plane(block, [LX, 0.0, 0.0], [1.0, 0.0, 0.0])
+    face_y0 = pc.mesh.points_on_plane(block, [0.0, 0.0, 0.0], [0.0, 1.0, 0.0])
+    face_z0 = pc.mesh.points_on_plane(block, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+    corner = block.nearest_node([LX, LY, LZ])
+
+    fes = pc.FiniteElementSpace(block)
+    law = pc.model.drucker_prager(fes, "full_3d")
+    pull = pc.model.dirichlet(face_x1, law, "u_x")
+    model = (
+        law
+        | pc.model.dirichlet(face_x0, law, "u_x")
+        | pc.model.dirichlet(face_y0, law, "u_y")
+        | pc.model.dirichlet(face_z0, law, "u_z")
+        | pull
+    )
+    materials = pc.element_field.material_field(
+        model,
+        [
+            ("E", E),
+            ("nu", NU),
+            ("friction", ALPHA),
+            ("beta", BETA),
+            ("k", K),
+            ("psi", ALPHA),
+            ("delta", BETA),
+            ("friction_ult", ALPHA),
+            ("beta_ult", BETA),
+            ("k_ult", K),
+            ("H", H),
+        ],
+    )
+    frames = []
+    for t in (0.0, TIMES[-1]):
+        frames.append((t, pc.NodeField(pull.multiplier_mesh(), ["imposed"]) + RATE * t))
+    data = {
+        "model": model,
+        "times": TIMES,
+        "materials": materials,
+        "loads": pc.Evolution(frames),
+    }
+    pc.stepping.step_by_step(data)
+
+    m = math.sqrt(2.0 * ALPHA**2 + BETA**2) / (ALPHA + BETA)
+    eps_yield = K / ((ALPHA + BETA) * E)
+    worst = 0.0
+    strains, stresses, exacts = [], [], []
+    for record in data["results"]:
+        eps = record["displacement"].value(corner, "u_x") / LX
+        sigma = record["behaviour"][0].value(0, 0, "sigma_xx")
+        if eps < eps_yield:
+            exact = E * eps
+        else:
+            exact = max((K + H * m * eps) / ((ALPHA + BETA) + H * m / E), 0.0)
+        worst = max(worst, abs(sigma - exact) / K)
+        strains.append(eps)
+        stresses.append(sigma)
+        exacts.append(exact)
+
+    if out:
+        curve = pc.SubEvolution(list(zip(strains, stresses)))
+        curve.plot(
+            x_label="ε_xx",
+            y_label="σ_xx",
+            title="plas9 — computed σ_xx(ε_xx)",
+            save=os.path.join(out, "curve.svg"),
+        )
+    return {"curve_gap": worst}
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ### plas10
 

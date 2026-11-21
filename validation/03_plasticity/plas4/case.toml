@@ -4,6 +4,7 @@ castem_element = "CUB8"
 castem_version = "97' customer version"
 source = "Test NAFEMS : Analytical-Solution : MP4 Modélisation des structures élastiques dans CASTEM 2000."
 deck = "plas4.dgibi"
+pyrucast = "`model.plasticity_perfect(fes, \"full_3d\")` in `stepping.step_by_step`, HEX8"
 tolerance = 0.005
 tolerance_note = "deck criterion, largest relative gap of the twelve stresses ≤ 0.5 %."
 

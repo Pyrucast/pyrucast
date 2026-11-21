@@ -168,6 +168,7 @@ def summary(cases):
         castem = (read_json(folder / "castem2026.json") or {}).get("values", {})
         refs = references(case, folder)
         worst_ref = None
+        worst_abs = None  # over the quantities whose reference is 0
         worst_castem = None
         for q in case["quantity"]:
             value = values.get(q["key"])
@@ -177,6 +178,9 @@ def summary(cases):
             if ref is not None and ref != 0:
                 gap = abs(value - ref) / abs(ref)
                 worst_ref = gap if worst_ref is None else max(worst_ref, gap)
+            if ref == 0:
+                gap = abs(value)
+                worst_abs = gap if worst_abs is None else max(worst_abs, gap)
             other = castem.get(q["key"])
             # A quantity whose reference is 0 is an error measure: comparing
             # two small errors relatively says nothing.
@@ -189,7 +193,12 @@ def summary(cases):
             verdict = (
                 "run, within tolerance" if not failures else "run, OUTSIDE tolerance"
             )
-        ref_text = "" if worst_ref is None else f"{100 * worst_ref:.3g} %"
+        parts = []
+        if worst_ref is not None:
+            parts.append(f"{100 * worst_ref:.3g} %")
+        if worst_abs is not None:
+            parts.append(f"Δ = {worst_abs:.2g}")
+        ref_text = "; ".join(parts)
         castem_text = "" if worst_castem is None else f"{worst_castem:.1e}"
         lines.append(
             f"| {chapter['title']} | {link} | {verdict} | {ref_text} | {castem_text} |"
