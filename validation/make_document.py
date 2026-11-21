@@ -178,7 +178,9 @@ def summary(cases):
                 gap = abs(value - ref) / abs(ref)
                 worst_ref = gap if worst_ref is None else max(worst_ref, gap)
             other = castem.get(q["key"])
-            if other is not None and other != 0:
+            # A quantity whose reference is 0 is an error measure: comparing
+            # two small errors relatively says nothing.
+            if other is not None and other != 0 and ref != 0:
                 gap = abs(value - other) / abs(other)
                 worst_castem = gap if worst_castem is None else max(worst_castem, gap)
         checked, failures = check(case, values, refs)
@@ -292,7 +294,7 @@ def results(folder, case):
         other = castem_values.get(q["key"])
         versus = ""
         if mine is not None and other is not None:
-            if other == 0:
+            if other == 0 or ref == 0:
                 versus = f"Δ = {mine - other:.1e}"
             else:
                 versus = f"{abs(mine - other) / abs(other):.1e}"

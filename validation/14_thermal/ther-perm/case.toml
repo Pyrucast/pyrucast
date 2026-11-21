@@ -8,6 +8,7 @@ Design, v. 51 (1979), pp. 389-401. J. Joly, Cas tests non linéaires de \
 validation pour DELFINE, Note technique EMT.SMTS.TTMF 84/29. V. Arpaci, \
 Conduction Heat Transfer, Adison-Wesley, 1966, pp. 130-132."""
 deck = "ther-perm.dgibi"
+pyrucast = "`model.heat_conduction(fes)` with k(T) in `material_laws`, `stepping.step_by_step`, QUA4"
 tolerance_note = "deck criterion, largest gap to the analytical profile ≤ 1e-5."
 
 topic = """
@@ -36,3 +37,10 @@ unit = ""
 reference = 0.0
 abs_tolerance = 1e-5
 castem_probe = "valtst"
+
+[[quantity]]
+key = "T_hot"
+label = "T at the insulated face x = 0"
+unit = "°C"
+reference = 141.24038404635962
+castem_probe = "EXTR tresu T p1"

@@ -4,6 +4,7 @@ castem_element = "QUA8"
 castem_version = "97' customer version"
 source = "Analytical solution."
 deck = "thme1.dgibi"
+pyrucast = "`model.heat_conduction` and `model.elasticity(fes, \"plane_strain\")` in `stepping.step_by_step` (linear θ-scheme), QUA8"
 tolerance = 0.02
 tolerance_note = "deck criterion, gaps within 2 % over the second half of the computed times (t ≥ 80)."
 
@@ -35,6 +36,14 @@ Bar of length l = 0.1, plane strain, QUA8 elements.
   semi-infinite bar, T(x, t) = 500 − 480·erf((0.1 − x)/(2√(a t))) /
   erf(0.1/(2√(a t))), a = k/(ρc).
 - Computed times: 10 to 150 by 10.
+"""
+
+notes = """
+The temperatures of pyrucast and Cast3M 2026 agree to round-off, on the same
+mesh. Their displacements differ by about ν (here 1e-5): in plane strain,
+pyrucast's thermal strain has no out-of-plane component α·ΔT, so a uniformly
+heated element held along y stretches by α·ΔT/(1 − ν) instead of
+α·ΔT·(1 + ν)/(1 − ν). With ν = 1e-5 the effect stays at that level here.
 """
 
 [[quantity]]

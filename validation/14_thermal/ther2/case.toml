@@ -4,6 +4,7 @@ castem_element = "QUA4"
 castem_version = "97' customer version"
 source = "Analytical solution (1st and 2nd parts). Comparison with results computed by THERMX (3rd part)."
 deck = "ther2.dgibi"
+pyrucast = "`model.heat_conduction(fes)` in axisymmetry, with `flux`, a volume `flux` and `boundary_transfer`; QUA4 (case 2 also one TRI3)"
 tolerance = 0.004
 tolerance_note = "deck criterion, each relative gap ≤ 0.4 %."
 
@@ -27,7 +28,12 @@ R_e = 0.2015 m, QUA4 elements; temperature T_i imposed on the inner face.
   T = (T_i + h·R_e·T_ext/k·ln(R_e/R_i)) / (1 + h·R_e/k·ln(R_e/R_i)).
 """
 
-notes = "The references are the deck's analytical formulas, evaluated at the compared point P3."
+notes = """
+The references are the deck's analytical formulas, evaluated at the
+compared point P3. Case 1 is computed on the deck's mesh; cases 2 and 3 on
+free meshes of the same boundary lines, Cast3M's and pyrucast's pavers
+differing inside.
+"""
 
 [[quantity]]
 key = "T_1"

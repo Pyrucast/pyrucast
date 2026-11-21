@@ -32,7 +32,7 @@ python validation/make_document.py    # this document
 
 ## Summary
 
-86 cases: 6 computed by pyrucast, 64 not computable yet, 16 pending.
+86 cases: 9 computed by pyrucast, 64 not computable yet, 13 pending.
 
 | Chapter | Case | Status | Largest gap to the reference | Largest gap pyrucast / Cast3M 2026 |
 |---|---|---|---|---|
@@ -115,10 +115,10 @@ python validation/make_document.py    # this document
 | Dynamics | [vibr2](#vibr2) | gap | missing: eigenvalue solver | |
 | Non linear dynamics | [dyna_nl1](#dyna_nl1) | gap | missing: point masses | |
 | Non linear dynamics | [dyna_nl3](#dyna_nl3) | gap | missing: large-displacement beam and shell dynamics | |
-| Thermal analysis | [ther2](#ther2) | pending | | |
+| Thermal analysis | [ther2](#ther2) | run, within tolerance | 0.267 % | 1.1e-03 |
 | Thermal analysis | [ther7or](#ther7or) | gap | missing: thermal shell elements | |
-| Thermal analysis | [ther-perm](#ther-perm) | pending | | |
-| Thermo-mechanics | [thme1](#thme1) | pending | | |
+| Thermal analysis | [ther-perm](#ther-perm) | run, within tolerance | 7.74e-08 % | 1.7e-07 |
+| Thermo-mechanics | [thme1](#thme1) | run, within tolerance | 1.79 % | 1.0e-05 |
 | Thermo-mechanics | [thpl1](#thpl1) | gap | missing: rate-independent kinematic hardening | |
 | Magneto-static | [Ac2d93](#ac2d93) | gap | missing: magnetostatics | |
 | Magneto-static | [Ac3d93](#ac3d93) | gap | missing: magnetostatics | |
@@ -4560,7 +4560,7 @@ Acceptance: deck criterion, |d_max − d_ref| / d_ref ≤ 5 %.
 | Test name | ther2 |
 | Calculation type | THERMAL STEADY STATE, 2D AXISYMMETRICAL |
 | Finite element type (Cast3M) | QUA4 |
-| pyrucast model |  |
+| pyrucast model | `model.heat_conduction(fes)` in axisymmetry, with `flux`, a volume `flux` and `boundary_transfer`; QUA4 (case 2 also one TRI3) |
 | Reference | Analytical solution (1st and 2nd parts). Comparison with results computed by THERMX (3rd part). |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 deck | `dgibi/ther2.dgibi` |
@@ -4584,19 +4584,169 @@ R_e = 0.2015 m, QUA4 elements; temperature T_i imposed on the inner face.
 - Configuration 3: convection h to T_ext on the outer face,
   T = (T_i + h·R_e·T_ext/k·ln(R_e/R_i)) / (1 + h·R_e/k·ln(R_e/R_i)).
 
-**Notes.** The references are the deck's analytical formulas, evaluated at the compared point P3.
+**Notes.** The references are the deck's analytical formulas, evaluated at the
+compared point P3. Case 1 is computed on the deck's mesh; cases 2 and 3 on
+free meshes of the same boundary lines, Cast3M's and pyrucast's pavers
+differing inside.
 
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| T at P3, configuration 1 (flux) (°C) ¹ | 0.571522 | — | 0.571519 (-0.000635 %) | — |  |
-| T at P3, configuration 2 (source) (°C) ¹ | 1510.92 | — | 1505.3 (-0.372 %) | — |  |
-| T at P3, configuration 3 (convection) (°C) ¹ | 122.687 | — | 122.682 (-0.00413 %) | — |  |
+| T at P3, configuration 1 (flux) (°C) ¹ | 0.571522 | — | 0.571519 (-0.000635 %) | 0.571519 (-0.000635 %) | 2.6e-14 |
+| T at P3, configuration 2 (source) (°C) ¹ | 1510.92 | — | 1505.3 (-0.372 %) | 1506.88 (-0.267 %) | 1.1e-03 |
+| T at P3, configuration 3 (convection) (°C) ¹ | 122.687 | — | 122.682 (-0.00413 %) | 122.687 (+0.000118 %) | 4.2e-05 |
 
 ¹ Reference computed by the Cast3M 2026 deck from its analytical formula.
 
 Acceptance: deck criterion, each relative gap ≤ 0.4 %.
+
+pyrucast: the 3 checked quantities are within tolerance.
+
+#### pyrucast figures
+
+![T_case_1](14_thermal/ther2/T_case_1.svg)
+
+![T_case_2](14_thermal/ther2/T_case_2.svg)
+
+![T_case_3](14_thermal/ther2/T_case_3.svg)
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""ther2 — thermal boundary conditions on a thick cylinder, axisymmetric, QUA4.
+
+Three steady conduction problems on a thick-walled cylinder, each with an
+imposed temperature on the inner face:
+
+1. an imposed flux on the outer face (r from 0.0515 to 0.2015, k = 130,
+   T_i = 0.57, flux 0.72 entering);
+2. a volume heat source Q = 20 (r from 6 to 16, k = 1, T_i = 100, zero
+   flux on the outer face);
+3. a convection h = 5 towards T_ext = 125 on the outer face (r from 6 to 16,
+   k = 8, T_i = 100).
+
+References: the analytical temperatures at the outer corner P3, evaluated by
+the Cast3M deck.
+
+Meshes: case 1 is the deck's row of 10 QUA4. Cases 2 and 3 are free meshes in
+the deck, from boundary lines of 8, 6, 9, 4 and 8, 5, 9, 6 elements; here
+pyrucast paves the same boundary lines, so the inside differs from Cast3M's
+and case 2's odd boundary leaves one triangle.
+
+Running::
+
+    python validation/14_thermal/ther2/run.py
+"""
+
+import os
+
+import pyrucast as pc
+
+# Case 1: imposed flux.
+R_IN_1, R_OUT_1, HEIGHT_1, N_1 = 0.0515, 0.2015, 0.5, 10
+K_1, T_IN_1, FLUX_1 = 130.0, 0.57, 0.72
+# Cases 2 and 3: the section r from 6 to 16, z from 0 to 4.
+R_IN, R_OUT, HEIGHT = 6.0, 16.0, 4.0
+K_2, T_IN_2, SOURCE_2 = 1.0, 100.0, 20.0
+K_3, T_IN_3, H_3, T_EXT_3 = 8.0, 100.0, 5.0, 125.0
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    # ── Case 1: imposed temperature inside, imposed flux outside ────────────
+    coords = pc.Coords.axisymmetric()
+    p1 = coords.add_node([R_IN_1, 0.0])
+    p3 = coords.add_node([R_OUT_1, 0.0])
+    row = pc.mesh.extrude(pc.mesh.line(p1, p3, N_1), [0.0, HEIGHT_1], 1)
+    inner = pc.mesh.points_on_line(row, [R_IN_1, 0.0], [R_IN_1, HEIGHT_1])
+    outer_edge = pc.mesh.elements_on(
+        pc.mesh.border(row),
+        pc.mesh.points_on_line(row, [R_OUT_1, 0.0], [R_OUT_1, HEIGHT_1]),
+    )
+    conduction = pc.model.heat_conduction(pc.FiniteElementSpace(row))
+    blocked = pc.model.dirichlet(inner, conduction, "T")
+    model = (
+        conduction
+        | blocked
+        | pc.model.flux(pc.FiniteElementSpace(outer_edge), conduction, "q")
+    )
+    materials = pc.element_field.material_field(model, [("k", K_1), ("phi_q", FLUX_1)])
+    imposed = pc.NodeField(blocked.multiplier_mesh(), ["imposed"])
+    imposed[0].add_to_component("imposed", T_IN_1)
+    rhs = pc.node_field.external_forces(model, materials) | imposed
+    t1 = pc.solver.solve(pc.matrix.stiffness(model, materials), rhs)
+    t_case_1 = t1.value(p3, "T")
+
+    # ── Cases 2 and 3: the free meshes of the deck's boundary lines ─────────
+    results = []
+    for n_right, n_left in ((6, 4), (5, 6)):
+        coords = pc.Coords.axisymmetric()
+        a = coords.add_node([R_IN, 0.0])
+        b = coords.add_node([R_OUT, 0.0])
+        c = coords.add_node([R_OUT, HEIGHT])
+        d = coords.add_node([R_IN, HEIGHT])
+        right = pc.mesh.line(b, c, n_right)
+        left = pc.mesh.line(d, a, n_left)
+        contour = pc.mesh.consolidate(
+            pc.mesh.line(a, b, 8) | right | pc.mesh.line(c, d, 9) | left
+        )
+        section = pc.mesh.pave_surface(contour, "QUA4")
+        results.append((section, right, pc.mesh.consolidate(left.to_poi1()), c))
+
+    section, _right, inner, p3 = results[0]
+    fes = pc.FiniteElementSpace(section)
+    conduction = pc.model.heat_conduction(fes)
+    blocked = pc.model.dirichlet(inner, conduction, "T")
+    model = conduction | blocked | pc.model.flux(fes, conduction, "q")
+    materials = pc.element_field.material_field(
+        model, [("k", K_2), ("phi_q", SOURCE_2)]
+    )
+    imposed = pc.NodeField(blocked.multiplier_mesh(), ["imposed"])
+    imposed[0].add_to_component("imposed", T_IN_2)
+    rhs = pc.node_field.external_forces(model, materials) | imposed
+    t2 = pc.solver.solve(pc.matrix.stiffness(model, materials), rhs)
+    t_case_2 = t2.value(p3, "T")
+
+    section_3, right, inner, p3 = results[1]
+    conduction = pc.model.heat_conduction(pc.FiniteElementSpace(section_3))
+    blocked = pc.model.dirichlet(inner, conduction, "T")
+    model = (
+        conduction
+        | blocked
+        | pc.model.boundary_transfer(pc.FiniteElementSpace(right), conduction, ["T"])
+    )
+    materials = pc.element_field.material_field(
+        model, [("k", K_3), ("h_T", H_3), ("a_ext_T", T_EXT_3)]
+    )
+    imposed = pc.NodeField(blocked.multiplier_mesh(), ["imposed"])
+    imposed[0].add_to_component("imposed", T_IN_3)
+    rhs = pc.node_field.external_forces(model, materials) | imposed
+    t3 = pc.solver.solve(pc.matrix.stiffness(model, materials), rhs)
+    t_case_3 = t3.value(p3, "T")
+
+    if out:
+        for name, mesh, field in (
+            ("case_1", row, t1),
+            ("case_2", section, t2),
+            ("case_3", section_3, t3),
+        ):
+            mesh.plot(
+                title=f"ther2 — {name.replace('_', ' ')}, T (°C)",
+                field=field,
+                component="T",
+                cmap="viridis",
+                save=os.path.join(out, f"T_{name}.svg"),
+            )
+    return {"T_1": t_case_1, "T_2": t_case_2, "T_3": t_case_3}
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ### ther7or
 
@@ -4649,7 +4799,7 @@ Acceptance: deck criterion, largest relative gap ≤ 5 %.
 | Test name | ther-perm |
 | Calculation type | THERMAL STEADY STATE, 3D NON LINEAR |
 | Finite element type (Cast3M) | QUA4 |
-| pyrucast model |  |
+| pyrucast model | `model.heat_conduction(fes)` with k(T) in `material_laws`, `stepping.step_by_step`, QUA4 |
 | Reference | Klaus-Jürgen Bathe & Mohammad R. Khoshgoftaar, Finite element formulation and solution of non-linear heat transfer, Nuclear Engineering and Design, v. 51 (1979), pp. 389-401. J. Joly, Cas tests non linéaires de validation pour DELFINE, Note technique EMT.SMTS.TTMF 84/29. V. Arpaci, Conduction Heat Transfer, Adison-Wesley, 1966, pp. 130-132. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 deck | `dgibi/ther-perm.dgibi` |
@@ -4676,9 +4826,149 @@ the temperature, k = k₀·(1 + β·(T − T₀)).
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| largest gap of T to the analytical profile | 0 | — | 3.88762e-07 (Δ = 3.9e-07) | — |  |
+| largest gap of T to the analytical profile | 0 | — | 3.88762e-07 (Δ = 3.9e-07) | 1.74891e-09 (Δ = 1.7e-09) | Δ = -3.9e-07 |
+| T at the insulated face x = 0 (°C) | 141.24 | — | 141.24 (-1.72e-05 %) | 141.24 (-7.74e-08 %) | 1.7e-07 |
 
 Acceptance: deck criterion, largest gap to the analytical profile ≤ 1e-5.
+
+pyrucast: the 1 checked quantities are within tolerance.
+
+#### pyrucast figures
+
+![T](14_thermal/ther-perm/T.svg)
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""ther-perm — steady conduction with a conductivity linear in T, QUA4.
+
+Problem: an infinite wall of thickness L = 5 mm, heated by a volume source
+q = 1e7 W/m³, its face x = L held at T₀ = 100 °C and its face x = 0
+insulated. The conductivity is k = k₀·(1 + β·(T − T₀)), k₀ = 2, β = 0.025.
+With θ = (T − T₀)·2k₀/(q·L²) and s = L²·q·β/k₀, the exact profile is
+
+    θ(x) = 2·(√(1 + s·(1 − (x/L)²)) − 1) / s.
+
+Compared: the largest gap of θ to that profile over the nodes (the deck's
+test), and T at the insulated face, whose exact value is
+T₀ + (√(1 + s) − 1)/β.
+
+The non-linear iterations are converged to a precision of 1e-8.
+
+Mesh: one row of QUA4 of height L/10, the deck's: its cells grow from L/100
+to L/10 along x, at the positions `X_NODES` the deck's mesh density gives.
+
+Running::
+
+    python validation/14_thermal/ther-perm/run.py
+"""
+
+import math
+import os
+
+import pyrucast as pc
+
+L = 5e-3  # m
+HEIGHT = L / 10.0
+K0, BETA, T0 = 2.0, 0.025, 100.0
+SOURCE = 1e7  # W/m³
+# The deck's THERMIC procedure stops on its own criterion; at step_by_step's
+# default precision (1e-4) the profile would stay 1e-4 from the converged one.
+PRECISION = 1e-8
+X_NODES = [
+    0.0,
+    5.021902808304401e-05,
+    1.051657296518693e-04,
+    1.652851729891834e-04,
+    2.310643255860185e-04,
+    3.030359985784089e-04,
+    3.817831625175931e-04,
+    4.679436694314784e-04,
+    5.622154194260674e-04,
+    6.653620136763161e-04,
+    7.782189395956515e-04,
+    9.017003382840204e-04,
+    1.036806409070798e-03,
+    1.184631511129359e-03,
+    1.346373027786375e-03,
+    1.523341065326770e-03,
+    1.716969064854620e-03,
+    1.928825413166102e-03,
+    2.160626146682537e-03,
+    2.414248851345410e-03,
+    2.691747871062489e-03,
+    2.995370947893483e-03,
+    3.327577428760723e-03,
+    3.691058186159234e-03,
+    4.088757414223942e-03,
+    4.523896476702174e-03,
+    5.0e-03,
+]
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    coords = pc.Coords(2)
+    bottom = [coords.add_node([x, 0.0]) for x in X_NODES]
+    top = [coords.add_node([x, HEIGHT]) for x in X_NODES]
+    wall = pc.Mesh(coords, "QUA4")
+    for i in range(len(X_NODES) - 1):
+        wall.unit().add_cell([bottom[i], bottom[i + 1], top[i + 1], top[i]])
+    held_face = pc.mesh.poi1_from_nodes([bottom[-1], top[-1]])
+
+    fes = pc.FiniteElementSpace(wall)
+    conduction = pc.model.heat_conduction(fes)
+    blocked = pc.model.dirichlet(held_face, conduction, "T")
+    model = conduction | blocked | pc.model.flux(fes, conduction, "q")
+    # No heat capacity: the problem is steady. k is overridden by k(T).
+    materials = pc.element_field.material_field(model, [("k", K0), ("phi_q", SOURCE)])
+    conductivity = pc.Evolution(
+        [
+            (T0 - 100.0, K0 * (1.0 - 100.0 * BETA)),
+            (T0 + 1000.0, K0 * (1.0 + 1000.0 * BETA)),
+        ],
+        abscissa_type="T",
+        ordinate_type="k",
+        out_of_range="extrapolate",
+    )
+    imposed = pc.NodeField(blocked.multiplier_mesh(), ["imposed"])
+    imposed[0].add_to_component("imposed", T0)
+    data = {
+        "model": model,
+        "times": [0.0, 1.0],
+        "materials": materials,
+        "material_laws": conductivity,
+        "loads": imposed,
+        "initial": {"temperature": pc.NodeField(wall, ["T"]) + T0},
+        "precision": PRECISION,
+    }
+    pc.stepping.step_by_step(data)
+    temperature = data["results"][-1]["temperature"]
+
+    s = L * L * SOURCE * BETA / K0
+    worst = 0.0
+    for i, x in enumerate(X_NODES):
+        theta = (temperature.value(top[i], "T") - T0) * 2.0 * K0 / (SOURCE * L * L)
+        exact = 2.0 * (math.sqrt(1.0 + s * (1.0 - (x / L) ** 2)) - 1.0) / s
+        worst = max(worst, abs(theta - exact))
+
+    if out:
+        wall.plot(
+            title="ther-perm — T (°C)",
+            field=temperature,
+            component="T",
+            cmap="viridis",
+            save=os.path.join(out, "T.svg"),
+        )
+    return {"gap_max": worst, "T_hot": temperature.value(bottom[0], "T")}
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ## Thermo-mechanics
 
@@ -4691,7 +4981,7 @@ Acceptance: deck criterion, largest gap to the analytical profile ≤ 1e-5.
 | Test name | thme1 |
 | Calculation type | LINEAR THERMAL ANALYSIS AND MECHANIC |
 | Finite element type (Cast3M) | QUA8 |
-| pyrucast model |  |
+| pyrucast model | `model.heat_conduction` and `model.elasticity(fes, "plane_strain")` in `stepping.step_by_step` (linear θ-scheme), QUA8 |
 | Reference | Analytical solution. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 deck | `dgibi/thme1.dgibi` |
@@ -4723,18 +5013,142 @@ Bar of length l = 0.1, plane strain, QUA8 elements.
   erf(0.1/(2√(a t))), a = k/(ρc).
 - Computed times: 10 to 150 by 10.
 
+**Notes.** The temperatures of pyrucast and Cast3M 2026 agree to round-off, on the same
+mesh. Their displacements differ by about ν (here 1e-5): in plane strain,
+pyrucast's thermal strain has no out-of-plane component α·ΔT, so a uniformly
+heated element held along y stretches by α·ΔT/(1 − ν) instead of
+α·ΔT·(1 + ν)/(1 − ν). With ν = 1e-5 the effect stays at that level here.
+
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| T at x = 0.08, t = 80 (°C) | 227.88 | — | 223.804 (-1.79 %) | — |  |
-| T at x = 0.08, t = 100 (°C) | 251.85 | — | 248.66 (-1.27 %) | — |  |
-| T at x = 0.08, t = 150 (°C) | 291.3 | — | 290.089 (-0.416 %) | — |  |
-| u_x at x = 0.08, t = 80 | 3.04069e-05 | — | 3.00681e-05 (-1.11 %) | — |  |
-| u_x at x = 0.08, t = 100 | 3.90251e-05 | — | 3.87249e-05 (-0.769 %) | — |  |
-| u_x at x = 0.08, t = 150 | 5.76962e-05 | — | 5.82925e-05 (+1.03 %) | — |  |
+| T at x = 0.08, t = 80 (°C) | 227.88 | — | 223.804 (-1.79 %) | 223.804 (-1.79 %) | 1.5e-15 |
+| T at x = 0.08, t = 100 (°C) | 251.85 | — | 248.66 (-1.27 %) | 248.66 (-1.27 %) | 2.2e-15 |
+| T at x = 0.08, t = 150 (°C) | 291.3 | — | 290.089 (-0.416 %) | 290.089 (-0.416 %) | 2.5e-15 |
+| u_x at x = 0.08, t = 80 | 3.04069e-05 | — | 3.00681e-05 (-1.11 %) | 3.00678e-05 (-1.12 %) | 1.0e-05 |
+| u_x at x = 0.08, t = 100 | 3.90251e-05 | — | 3.87249e-05 (-0.769 %) | 3.87246e-05 (-0.77 %) | 1.0e-05 |
+| u_x at x = 0.08, t = 150 | 5.76962e-05 | — | 5.82925e-05 (+1.03 %) | 5.82919e-05 (+1.03 %) | 1.0e-05 |
 
 Acceptance: deck criterion, gaps within 2 % over the second half of the computed times (t ≥ 80).
+
+pyrucast: the 6 checked quantities are within tolerance.
+
+#### pyrucast figures
+
+![T_150](15_thermo_mechanics/thme1/T_150.svg)
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""thme1 — heat diffusion in a bar and its expansion, step by step, QUA8.
+
+Problem: a bar of length 0.1 (height 0.01), at 20 °C, has its end x = 0.1
+brought to 500 °C at t = 0 while its end x = 0 stays at 20 °C. In plane
+strain, held along y everywhere and along x at x = 0, it expands freely
+along x. Reference: the temperature and the displacement u_x at x = 0.08,
+from the analytical solution T = 500 − 480·erf((0.1 − x)/(2√(a·t))) /
+erf(0.1/(2√(a·t))), a = k/(ρ·c), and its integral times α.
+
+Mesh: the deck's row of 10 QUA8. The heat problem is solved with the linear
+θ-scheme (θ = 1) every 5 s up to 150 s, the mechanics at each instant with
+the temperature reached, as the deck's step-by-step procedure does.
+
+Running::
+
+    python validation/15_thermo_mechanics/thme1/run.py
+"""
+
+import os
+
+import pyrucast as pc
+
+LENGTH, HEIGHT, N = 0.1, 0.01, 10
+K, C, RHO = 14.6, 460.0, 7800.0
+E, NU, ALPHA = 2e11, 1e-5, 1e-5
+T_START, T_HOT = 20.0, 500.0
+X_READ = 0.08
+TIMES = [5.0 * i for i in range(31)]  # 0 to 150 s
+READ_AT = (80.0, 100.0, 150.0)
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    coords = pc.Coords(2)
+    pa = coords.add_node([0.0, 0.0])
+    pb = coords.add_node([LENGTH, 0.0])
+    pc_ = coords.add_node([LENGTH, HEIGHT])
+    pd = coords.add_node([0.0, HEIGHT])
+    bar = pc.mesh.sweep(
+        pc.mesh.line(pa, pb, N, "SEG3"), pc.mesh.line(pd, pc_, N, "SEG3"), 1, "QUA8"
+    )
+    hot_end = pc.mesh.points_on_line(bar, [LENGTH, 0.0], [LENGTH, HEIGHT])
+    cold_end = pc.mesh.points_on_line(bar, [0.0, 0.0], [0.0, HEIGHT])
+    every_node = pc.mesh.consolidate(pc.mesh.to_poi1(bar))
+    point = bar.nearest_node([X_READ, 0.0])
+
+    fes = pc.FiniteElementSpace(bar)
+    conduction = pc.model.heat_conduction(fes)
+    solid = pc.model.elasticity(fes, "plane_strain")
+    hot = pc.model.dirichlet(hot_end, conduction, "T")
+    cold = pc.model.dirichlet(cold_end, conduction, "T")
+    model = (
+        conduction
+        | solid
+        | hot
+        | cold
+        | pc.model.dirichlet(every_node, solid, "u_y")
+        | pc.model.dirichlet(cold_end, solid, "u_x")
+    )
+    materials = pc.element_field.material_field(
+        model,
+        [
+            ("k", K),
+            ("cp", C),
+            ("rho", RHO),
+            ("E", E),
+            ("nu", NU),
+            ("alpha", ALPHA),
+        ],
+    )
+    hot_value = pc.NodeField(hot.multiplier_mesh(), ["imposed"]) + T_HOT
+    cold_value = pc.NodeField(cold.multiplier_mesh(), ["imposed"]) + T_START
+    data = {
+        "model": model,
+        "times": TIMES,
+        "materials": materials,
+        "loads": hot_value | cold_value,
+        "initial": {"temperature": pc.NodeField(bar, ["T"]) + T_START},
+        "t_ref": T_START,
+        "heat_scheme": "linear",
+    }
+    pc.stepping.step_by_step(data)
+
+    values = {}
+    for record in data["results"]:
+        for t in READ_AT:
+            if abs(record["time"] - t) < 1e-9:
+                values[f"T_{t:.0f}"] = record["temperature"].value(point, "T")
+                values[f"u_{t:.0f}"] = record["displacement"].value(point, "u_x")
+
+    if out:
+        last = data["results"][-1]
+        bar.plot(
+            title="thme1 — T at t = 150 s (°C)",
+            field=last["temperature"],
+            component="T",
+            cmap="viridis",
+            save=os.path.join(out, "T_150.svg"),
+        )
+    return values
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ### thpl1
 
