@@ -47,7 +47,17 @@ driven by H·p (see `src/models/plasticity/drucker_prager.rs`): with K_L = K
 the interpolation is frozen, H has no effect, and the stress stays on the
 plateau K / (α + β) instead of softening to zero. The gap measured is that
 plateau against the exact curve's zero.
+
+The deck adds, on the same cell, an elastic material of stiffness 2e-3 in
+parallel; pyrucast refuses two laws carrying each their own E on one support,
+and the script leaves it out (its stress stays below 1e-6).
 """
+
+improvements = [
+    "Drucker-Prager with two surfaces: pyrucast's interpolation driven by H·p departs from Cast3M when K_L < K, or when K_L = K with H ≠ 0",
+    "two laws on one support (materials in parallel on the same cells)",
+    "`model.drucker_prager` docstring: the friction is the `friction` component, not `alpha`",
+]
 
 [[quantity]]
 key = "curve_gap"

@@ -212,23 +212,15 @@ def summary(cases):
     return lines
 
 
-def missing_features(cases):
-    blocked = {}
+def feature_table(cases, field, title, intro):
+    """A table of the strings listed under `field` in the cases, each with the
+    cases that list it, most listed first."""
+    listed = {}
     for _chapter, _folder, case in cases:
-        for feature in case.get("gap", []):
-            blocked.setdefault(feature, []).append(case["name"])
-    lines = [
-        "## Missing features",
-        "",
-        (
-            "Features pyrucast lacks for the cases it cannot compute yet, "
-            "by number of cases blocked."
-        ),
-        "",
-        "| Feature | Cases | Count |",
-        "|---|---|---|",
-    ]
-    ranked = sorted(blocked.items(), key=lambda item: (-len(item[1]), item[0]))
+        for feature in case.get(field, []):
+            listed.setdefault(feature, []).append(case["name"])
+    lines = [f"## {title}", "", intro, "", "| Point | Cases | Count |", "|---|---|---|"]
+    ranked = sorted(listed.items(), key=lambda item: (-len(item[1]), item[0]))
     for feature, names in ranked:
         links = ", ".join(f"[{n}](#{anchor(n)})" for n in names)
         lines.append(f"| {feature} | {links} | {len(names)} |")
@@ -274,6 +266,9 @@ def sheet(chapter, folder, case):
     ]
     if case.get("notes"):
         lines += [f"**Notes.** {case['notes'].strip()}", ""]
+    if case.get("improvements"):
+        lines += ["**Improvement points.**", ""]
+        lines += [f"- {point}" for point in case["improvements"]] + [""]
     return lines
 
 
@@ -366,7 +361,22 @@ def main():
     cases = load_cases()
     lines = [HEADER]
     lines += summary(cases) + [""]
-    lines += missing_features(cases) + [""]
+    lines += feature_table(
+        cases,
+        "gap",
+        "Missing features",
+        "Features pyrucast lacks for the cases it cannot compute yet, by number "
+        "of cases blocked.",
+    ) + [""]
+    lines += feature_table(
+        cases,
+        "improvements",
+        "Improvement points",
+        "What writing the computed cases showed: an operator or an option "
+        "pyrucast lacks to state the case as the deck does, or a difference with "
+        "Cast3M to look into. The scripts use pyrucast as it is; each point is "
+        "detailed in the case's notes.",
+    ) + [""]
     current = None
     for chapter, folder, case in cases:
         if chapter is not current:

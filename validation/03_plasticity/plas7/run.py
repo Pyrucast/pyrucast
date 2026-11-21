@@ -12,9 +12,8 @@ Mesh: the deck's regular grid of 32 × 4 QUA4.
 The moment is taken from the support forces on the loaded side, Σ y·F_x, in
 the deck's unit of 1e4 N·m: exact by equilibrium. The deck integrates y·σ_xx along that side, with
 σ_xx extrapolated to the nodes and averaged between cells; the two estimates
-differ by the error of that integration. The stresses are read in the cell
-holding the node, from its Gauss points; the second node of the side lies
-between two cells, and is read in each.
+differ by the error of that integration. The stresses are read by `project`
+in one cell holding the node, from its Gauss points.
 
 Running::
 
@@ -66,14 +65,10 @@ def main(out: str | None = None) -> dict[str, float]:
         model, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y)]
     )
     # u_x = ROTATION·t·y/HALF_HEIGHT on the loaded side, here for t = 1.
+    unit = pc.node_field.positions(bend.multiplier_mesh(), ["Y"]).rename_component(
+        "Y", "imposed"
+    ) * (ROTATION / HALF_HEIGHT)
     side = [loaded_nodes.node(0, i, 0) for i in range(loaded_nodes.cell_count)]
-    # The multipliers have nodes of their own, at their support's positions.
-    multipliers = bend.multiplier_mesh()
-    unit = pc.NodeField(multipliers, ["imposed"])
-    for i in range(multipliers.cell_count):
-        node = multipliers.node(0, i, 0)
-        y = node.position()[1]
-        unit[0].set_value(node, "imposed", ROTATION * y / HALF_HEIGHT)
     data = {
         "model": model,
         "times": TIMES,
@@ -90,19 +85,18 @@ def main(out: str | None = None) -> dict[str, float]:
             moment += node.position()[1] * reactions.value(node, "f_x")
         values[f"M_{k}"] = moment / MOMENT_UNIT
 
-    # σ_xx at A and at the second node of the side, just inside each cell.
-    dy = 2.0 * HALF_HEIGHT / N_HEIGHT
-    at_a = coords.add_node([WIDTH, HALF_HEIGHT])
-    above = coords.add_node([WIDTH, HALF_HEIGHT - dy + 1e-9])
-    below = coords.add_node([WIDTH, HALF_HEIGHT - dy - 1e-9])
+    # σ_xx at A and at the second node of the side, read in one cell each.
+    point_a = rectangle.nearest_node([WIDTH, HALF_HEIGHT])
+    point_2 = rectangle.nearest_node(
+        [WIDTH, HALF_HEIGHT - 2.0 * HALF_HEIGHT / N_HEIGHT]
+    )
     stress = pc.node_field.project(
         data["results"][-1]["behaviour"],
         rectangle,
-        pc.mesh.poi1_from_nodes([at_a, above, below]),
+        pc.mesh.poi1_from_nodes([point_a, point_2]),
     )
-    values["sxx_A"] = stress.value(at_a, "sigma_xx") / 1e6
-    values["sxx_A2"] = stress.value(above, "sigma_xx") / 1e6
-    values["sxx_A2_below"] = stress.value(below, "sigma_xx") / 1e6
+    values["sxx_A"] = stress.value(point_a, "sigma_xx") / 1e6
+    values["sxx_A2"] = stress.value(point_2, "sigma_xx") / 1e6
 
     if out:
         rectangle.plot(title="plas7 — QUA4 mesh", save=os.path.join(out, "mesh.svg"))

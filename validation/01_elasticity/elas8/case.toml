@@ -34,12 +34,21 @@ straight edge has 4 elements.
 """
 
 notes = """
-The pyrucast mesh is the Cast3M one node for node: the displacement u_y at B,
-compared with no reference, agrees to round-off, and so do the stresses at the
-Gauss points. The gap on σ_yy(D) comes from how each code reads a stress at a
-node: Cast3M extrapolates the Gauss values of the cell to its nodes, pyrucast
-evaluates the least-squares fit of the cell's Gauss values.
+The boundary nodes are the deck's. Inside, `transfinite` places the corner
+nodes as the deck does, but puts the QUA8 mid-nodes of the elliptic edges on
+the chords, where the deck puts them on the ellipses; σ_yy at D, where the
+inner ellipse is the most curved, is sensitive to it. Cast3M also reads the
+stress at a node differently: it extrapolates the Gauss values of the cell to
+its nodes, pyrucast evaluates their least-squares fit. With mid-nodes placed
+on the ellipses, the two codes give the same displacements and the same
+Gauss stresses to round-off.
 """
+
+improvements = [
+    "an ellipse, or the projection of a line onto a plane (Cast3M `PROJ`)",
+    "`transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords)",
+    "nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)",
+]
 
 [[quantity]]
 key = "syy_D"

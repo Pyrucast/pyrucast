@@ -6,10 +6,11 @@ opposite forces of 600 kN spread over the flanges (1.2 MN·m). Reference: the
 axial stress on the mid-surface at A (2.5, 0, 0) is σ_xx = −108 MPa.
 
 The mesh is the Cast3M deck's: the section line (2 elements per segment)
-translated along x in 16 layers, 96 QUA4. Each cell's first edge runs along
-x, so the local x axis of the shell is the beam's axis and σ_xx = N_xx / h.
-A lies on the edge of the first flange, between two cells; the stress is
-read in each of them, from its own Gauss points.
+extruded along x in 16 layers, 96 QUA4. Each cell's first edge runs along
+the section line, so the local y axis of the shell is the beam's axis and
+the axial stress on the mid-surface is N_yy / h, as the deck reads SMYY. A
+lies on the edge of the first flange, between two cells; `project` reads it
+in one of them, from that cell's Gauss points.
 
 Running::
 
@@ -22,36 +23,32 @@ import pyrucast as pc
 
 E, NU, THICKNESS = 210e9, 0.3, 0.1
 LENGTH, N_LENGTH = 10.0, 16
-# The section line in the plane x = 0, 2 elements per segment.
-SECTION = [
-    (0.0, 0.0),
-    (0.0, 0.5),
-    (0.0, 1.0),
-    (1.0, 1.0),
-    (2.0, 1.0),
-    (2.0, 1.5),
-    (2.0, 2.0),
-]  # (y, z)
-# F_z at x = 10 on the nodes of the section line: −600 kN on the first
-# flange, +600 kN on the second.
-END_FORCES = {0: -150e3, 1: -300e3, 2: -150e3, 4: 150e3, 5: 300e3, 6: 150e3}
+# F_z at x = 10: −600 kN on the first flange, +600 kN on the second.
+END_FORCES = [
+    ((0.0, 0.0), -150e3),
+    ((0.0, 0.5), -300e3),
+    ((0.0, 1.0), -150e3),
+    ((2.0, 1.0), 150e3),
+    ((2.0, 1.5), 300e3),
+    ((2.0, 2.0), 150e3),
+]  # ((y, z), F_z)
 X_A = 2.5
 
 
 def main(out: str | None = None) -> dict[str, float]:
-    # Node (s, i): s-th point of the section line, i-th layer along x.
     coords = pc.Coords(3)
-    node = {}
-    for i in range(N_LENGTH + 1):
-        for s, (y, z) in enumerate(SECTION):
-            node[s, i] = coords.add_node([LENGTH * i / N_LENGTH, y, z])
-    surface = pc.Mesh(coords, "QUA4")
-    for i in range(N_LENGTH):
-        for s in range(len(SECTION) - 1):
-            surface.unit().add_cell(
-                [node[s, i], node[s, i + 1], node[s + 1, i + 1], node[s + 1, i]]
-            )
-    clamped = pc.mesh.poi1_from_nodes([node[s, 0] for s in range(len(SECTION))])
+    p1 = coords.add_node([0.0, 0.0, 0.0])
+    p2 = coords.add_node([0.0, 0.0, 1.0])
+    p3 = coords.add_node([0.0, 2.0, 1.0])
+    p4 = coords.add_node([0.0, 2.0, 2.0])
+    section = pc.mesh.consolidate(
+        pc.mesh.line(p1, p2, 2) | pc.mesh.line(p2, p3, 2) | pc.mesh.line(p3, p4, 2)
+    )
+    surface = pc.mesh.extrude(section, [LENGTH, 0.0, 0.0], N_LENGTH)
+    clamped = pc.mesh.points_on_plane(surface, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0])
+    loaded = [surface.nearest_node([LENGTH, y, z]) for (y, z), _ in END_FORCES]
+    point_a = surface.nearest_node([X_A, 0.0, 0.0])
+    tip = loaded[0]
 
     shell = pc.model.shell(pc.FiniteElementSpace(surface), "kirchhoff")
     model = shell
@@ -60,38 +57,29 @@ def main(out: str | None = None) -> dict[str, float]:
     materials = pc.element_field.material_field(
         model, [("E", E), ("nu", NU), ("h", THICKNESS)]
     )
-    loaded = [node[s, N_LENGTH] for s in END_FORCES]
     load = pc.NodeField(pc.mesh.poi1_from_nodes(loaded), ["f_z"])
-    for s, force in END_FORCES.items():
-        load[0].set_value(node[s, N_LENGTH], "f_z", force)
+    for node, (_, force) in zip(loaded, END_FORCES):
+        load[0].set_value(node, "f_z", force)
     u = pc.solver.solve(pc.matrix.stiffness(model, materials), load)
 
     strain = pc.element_field.strain(model, u, materials)
     forces = pc.element_field.integrate_behavior(
         model, strain, materials, pc.element_field.initial_state(model, materials)
     )
-    # Two points just inside the two cells that share A.
-    before = coords.add_node([X_A - 1e-9, 0.0, 0.0])
-    after = coords.add_node([X_A + 1e-9, 0.0, 0.0])
-    at_a = pc.node_field.project(
-        forces, surface, pc.mesh.poi1_from_nodes([before, after])
-    )
-    sxx_before = at_a.value(before, "N_xx") / THICKNESS / 1e6
-    sxx_after = at_a.value(after, "N_xx") / THICKNESS / 1e6
+    at_a = pc.node_field.project(forces, surface, pc.mesh.poi1_from_nodes([point_a]))
 
     if out:
         surface.plot(title="elas4 — QUA4 mesh", save=os.path.join(out, "mesh.svg"))
         surface.plot(
-            title="elas4 — N_xx / h (MPa)",
+            title="elas4 — axial stress N_yy / h (MPa)",
             field=forces * (1e-6 / THICKNESS),
-            component="N_xx",
+            component="N_yy",
             cmap="viridis",
-            save=os.path.join(out, "sigma_xx.svg"),
+            save=os.path.join(out, "sigma_axial.svg"),
         )
     return {
-        "sxx_A": sxx_before,
-        "sxx_A_after": sxx_after,
-        "uz_tip": u.value(node[0, N_LENGTH], "u_z"),
+        "sxx_A": at_a.value(point_a, "N_yy") / THICKNESS / 1e6,
+        "uz_tip": u.value(tip, "u_z"),
     }
 
 

@@ -36,13 +36,18 @@ notes = """
 The 2011 document gives the goal as σ_zz(A) = 105 MPa and the result table as
 σ_yy(A) = −105 MPa; the deck compares σ_zz with −105 MPa.
 
-The pyrucast mesh is the Cast3M one node for node. pyrucast heats every node
-to T = r + z; Cast3M's thermal stress operator replaces the temperature of a
-mid-node of a quadratic cell by the mean of its edge's corners, which differs
-from r + z on the mid-nodes of the arcs. Run with that same linearised
-temperature, pyrucast gives Cast3M's u_r(B) to round-off; the gap left in the
-table is that of the temperature field.
+`transfinite` puts the QUA8 mid-nodes of the arcs on the chords, where the
+deck puts them on the arcs. Cast3M's thermal stress operator also replaces
+the temperature of a mid-node of a quadratic cell by the mean of its edge's
+corners, which differs from r + z on the arcs' mid-nodes; pyrucast heats every
+node to r + z. With the deck's mid-nodes and its averaged temperatures,
+pyrucast gives Cast3M's u_r(B) to round-off.
 """
+
+improvements = [
+    "`transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords)",
+    "nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)",
+]
 
 [[quantity]]
 key = "szz_A"

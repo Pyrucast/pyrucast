@@ -49,6 +49,10 @@ The pyrucast moment is that of the support forces on the loaded side,
 differ by the error of that integration, which grows with the plastic zone.
 """
 
+improvements = [
+    "`Mesh`: no accessor for its nodes (`mesh.node(0, i, 0)` over the cells of a POI1 mesh)",
+]
+
 [[quantity]]
 key = "M_1"
 label = "bending moment at t = 0.02875"

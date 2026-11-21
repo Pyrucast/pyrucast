@@ -13,8 +13,9 @@ T₀ + (√(1 + s) − 1)/β.
 
 The non-linear iterations are converged to a precision of 1e-8.
 
-Mesh: one row of QUA4 of height L/10, the deck's: its cells grow from L/100
-to L/10 along x, at the positions `X_NODES` the deck's mesh density gives.
+Mesh: one row of 26 QUA4 of height L/10, as many as the deck's. The deck's
+cells grow from L/100 to L/10 along x; pyrucast's `line` has no such
+progression, its cells are even.
 
 Running::
 
@@ -33,45 +34,15 @@ SOURCE = 1e7  # W/m³
 # The deck's THERMIC procedure stops on its own criterion; at step_by_step's
 # default precision (1e-4) the profile would stay 1e-4 from the converged one.
 PRECISION = 1e-8
-X_NODES = [
-    0.0,
-    5.021902808304401e-05,
-    1.051657296518693e-04,
-    1.652851729891834e-04,
-    2.310643255860185e-04,
-    3.030359985784089e-04,
-    3.817831625175931e-04,
-    4.679436694314784e-04,
-    5.622154194260674e-04,
-    6.653620136763161e-04,
-    7.782189395956515e-04,
-    9.017003382840204e-04,
-    1.036806409070798e-03,
-    1.184631511129359e-03,
-    1.346373027786375e-03,
-    1.523341065326770e-03,
-    1.716969064854620e-03,
-    1.928825413166102e-03,
-    2.160626146682537e-03,
-    2.414248851345410e-03,
-    2.691747871062489e-03,
-    2.995370947893483e-03,
-    3.327577428760723e-03,
-    3.691058186159234e-03,
-    4.088757414223942e-03,
-    4.523896476702174e-03,
-    5.0e-03,
-]
+N = 26  # cells along x, as many as the deck's
 
 
 def main(out: str | None = None) -> dict[str, float]:
     coords = pc.Coords(2)
-    bottom = [coords.add_node([x, 0.0]) for x in X_NODES]
-    top = [coords.add_node([x, HEIGHT]) for x in X_NODES]
-    wall = pc.Mesh(coords, "QUA4")
-    for i in range(len(X_NODES) - 1):
-        wall.unit().add_cell([bottom[i], bottom[i + 1], top[i + 1], top[i]])
-    held_face = pc.mesh.poi1_from_nodes([bottom[-1], top[-1]])
+    hot = coords.add_node([0.0, 0.0])
+    held = coords.add_node([L, 0.0])
+    wall = pc.mesh.extrude(pc.mesh.line(hot, held, N), [0.0, HEIGHT], 1)
+    held_face = pc.mesh.points_on_line(wall, [L, 0.0], [L, HEIGHT])
 
     fes = pc.FiniteElementSpace(wall)
     conduction = pc.model.heat_conduction(fes)
@@ -104,8 +75,10 @@ def main(out: str | None = None) -> dict[str, float]:
 
     s = L * L * SOURCE * BETA / K0
     worst = 0.0
-    for i, x in enumerate(X_NODES):
-        theta = (temperature.value(top[i], "T") - T0) * 2.0 * K0 / (SOURCE * L * L)
+    for i in range(N + 1):
+        x = L * i / N
+        node = wall.nearest_node([x, HEIGHT])
+        theta = (temperature.value(node, "T") - T0) * 2.0 * K0 / (SOURCE * L * L)
         exact = 2.0 * (math.sqrt(1.0 + s * (1.0 - (x / L) ** 2)) - 1.0) / s
         worst = max(worst, abs(theta - exact))
 
@@ -117,7 +90,7 @@ def main(out: str | None = None) -> dict[str, float]:
             cmap="viridis",
             save=os.path.join(out, "T.svg"),
         )
-    return {"gap_max": worst, "T_hot": temperature.value(bottom[0], "T")}
+    return {"gap_max": worst, "T_hot": temperature.value(hot, "T")}
 
 
 if __name__ == "__main__":

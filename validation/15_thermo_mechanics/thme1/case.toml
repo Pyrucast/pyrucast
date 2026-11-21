@@ -46,6 +46,10 @@ heated element held along y stretches by α·ΔT/(1 − ν) instead of
 α·ΔT·(1 + ν)/(1 − ν). With ν = 1e-5 the effect stays at that level here.
 """
 
+improvements = [
+    "plane-strain thermal strain: no out-of-plane component α·ΔT",
+]
+
 [[quantity]]
 key = "T_80"
 label = "T at x = 0.08, t = 80"

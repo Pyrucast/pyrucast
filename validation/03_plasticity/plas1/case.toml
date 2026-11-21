@@ -43,6 +43,10 @@ The 2011 document gives ν = 0.28 and names the element COQ4; the deck uses
 ν = 0.3 and QUA4.
 """
 
+improvements = [
+    "`mpc`: one coefficient per term for every relation; relations whose coefficients differ need one `mpc` each",
+]
+
 [[quantity]]
 key = "M1"
 label = "elastic moment M1 (t = 0.02875)"

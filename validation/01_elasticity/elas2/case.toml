@@ -40,10 +40,15 @@ y (30 elements), giving 360 DKT triangles.
 """
 
 notes = """
-The pyrucast mesh is the Cast3M one cell for cell, and both codes use DKT
-triangles; their deflections still differ (last column of the table). The
-deck's criterion, 6e-4 from the reference, is tighter than that difference.
+The nodes are the deck's; the triangles are not: `convert` cuts every
+quadrangle along the same diagonal, the deck's translation alternates it.
+The deck's criterion, 6e-4 from the reference, was set on Cast3M's own mesh.
 """
+
+improvements = [
+    "`convert` / `extrude` to TRI3: alternating diagonals (Cast3M's translation alternates them)",
+    "`dirichlet`: a node blocked twice for the same unknown (two supports meeting) makes the matrix singular, and the LU error does not name the cause",
+]
 
 [[quantity]]
 key = "ux_P1"

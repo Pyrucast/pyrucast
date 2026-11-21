@@ -8,7 +8,9 @@ modelled (12.5 mm wide, u_x = 0 on the symmetry edge x = 0). At t = 0.02875
 the strip is still elastic; at t = 0.05 it is plastic over most of its
 height. Reference: M1 = 805 kN·m and M2 = 1074 kN·m.
 
-Mesh: the deck's, one QUA4 across and 8 along y. The moment is the deck's:
+Mesh: the deck's, one QUA4 across and 8 along y. `mpc` takes one
+coefficient per term for all its relations: the seven relations, whose
+coefficients differ, are seven `mpc`. The moment is the deck's:
 the moment of the support forces on the end section, 2·Σ y·F_x over its
 upper half, in kN·m.
 
@@ -30,20 +32,16 @@ TIMES = [0.0, 0.02875, 0.05]
 
 def main(out: str | None = None) -> dict[str, float]:
     coords = pc.Coords(2)
-    # End section x = WIDTH, from A (y = +50 mm) down to B (y = −50 mm).
+    a = coords.add_node([WIDTH, HALF_HEIGHT])
+    b = coords.add_node([WIDTH, -HALF_HEIGHT])
+    strip = pc.mesh.extrude(pc.mesh.line(b, a, N), [-WIDTH, 0.0], 1)
+    # The end section's nodes, from A (y = +50 mm) down to B (y = −50 mm).
     section = [
-        coords.add_node([WIDTH, HALF_HEIGHT - 2.0 * HALF_HEIGHT * i / N])
+        strip.nearest_node([WIDTH, HALF_HEIGHT - 2.0 * HALF_HEIGHT * i / N])
         for i in range(N + 1)
     ]
-    axis = [
-        coords.add_node([0.0, HALF_HEIGHT - 2.0 * HALF_HEIGHT * i / N])
-        for i in range(N + 1)
-    ]
-    strip = pc.Mesh(coords, "QUA4")
-    for i in range(N):
-        strip.unit().add_cell([axis[i + 1], section[i + 1], section[i], axis[i]])
-    a, b = section[0], section[N]
-    origin = axis[N // 2]
+    axis = pc.mesh.points_on_line(strip, [0.0, -HALF_HEIGHT], [0.0, HALF_HEIGHT])
+    origin = strip.nearest_node([0.0, 0.0])
 
     fes = pc.FiniteElementSpace(strip)
     plasticity = pc.model.plasticity_perfect(fes, "plane_stress")
@@ -51,7 +49,7 @@ def main(out: str | None = None) -> dict[str, float]:
     push_b = pc.model.dirichlet(pc.mesh.poi1_from_nodes([b]), plasticity, "u_x")
     model = (
         plasticity
-        | pc.model.dirichlet(pc.mesh.poi1_from_nodes(axis), plasticity, "u_x")
+        | pc.model.dirichlet(axis, plasticity, "u_x")
         | pc.model.dirichlet(pc.mesh.poi1_from_nodes([origin]), plasticity, "u_y")
         | pull_a
         | push_b

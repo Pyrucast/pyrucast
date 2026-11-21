@@ -5,18 +5,18 @@ ends, is pinched at its mid-length by two opposite point loads. One eighth is
 modelled: a quarter of the circumference over half the length, with symmetry
 conditions on the cut edges. Reference: u_z = −0.452 under the load.
 
-The mesh is the Cast3M deck's, cell for cell: the quarter arc (10 elements,
-every 9°) translated along y in 7 layers, each quadrangle cut into two
-triangles along a diagonal that alternates along the arc. The deck lets its
-mesh density (0.75) place the layers, slightly closer towards the loaded
-section; `Y_LAYERS` are the positions it produces.
+Mesh: the quarter arc (10 elements, every 9°) extruded along y in 7
+layers, each quadrangle cut into two triangles by `convert`, as in the deck,
+with two differences: the deck lets its mesh density (0.75) place the
+layers, slightly closer towards the loaded section, where `extrude` spaces
+them evenly; and `convert` cuts every quadrangle along the same diagonal,
+where the deck alternates it along the arc.
 
 Running::
 
     python validation/01_elasticity/elas3/run.py
 """
 
-import math
 import os
 
 import pyrucast as pc
@@ -24,46 +24,26 @@ import pyrucast as pc
 E, NU, THICKNESS = 10.5e6, 0.3125, 0.094
 RADIUS = 4.953
 N_ARC = 10
-Y_LAYERS = [
-    0.0,
-    0.7501353964340833,
-    1.496624840688324,
-    2.239486053520015,
-    2.978736669556621,
-    3.714394237714402,
-    4.446476221615003,
-    5.175,
-]
+HALF_LENGTH, N_LAYERS = 5.175, 7
 FORCE = -100.0  # F_z at the loaded point
 
 
 def main(out: str | None = None) -> dict[str, float]:
-    # Node (k, j): k-th point of the arc from (R, 0, 0) to (0, 0, R), j-th layer.
-    n_layers = len(Y_LAYERS) - 1
     coords = pc.Coords(3)
-    node = {}
-    for j in range(n_layers + 1):
-        for k in range(N_ARC + 1):
-            theta = math.pi / 2.0 * k / N_ARC
-            node[k, j] = coords.add_node(
-                [RADIUS * math.cos(theta), Y_LAYERS[j], RADIUS * math.sin(theta)]
-            )
-    surface = pc.Mesh(coords, "TRI3")
-    for j in range(n_layers):
-        for k in range(N_ARC):
-            a0, a1 = node[k, j], node[k + 1, j]
-            b0, b1 = node[k, j + 1], node[k + 1, j + 1]
-            if k % 2 == 0:
-                surface.unit().add_cell([a0, a1, b1])
-                surface.unit().add_cell([a0, b1, b0])
-            else:
-                surface.unit().add_cell([a0, a1, b0])
-                surface.unit().add_cell([a1, b1, b0])
+    centre = coords.add_node([0.0, 0.0, 0.0])
+    p1 = coords.add_node([RADIUS, 0.0, 0.0])
+    p2 = coords.add_node([0.0, 0.0, RADIUS])
+    arc = pc.mesh.arc(p1, centre, p2, N_ARC)
+    surface = pc.mesh.convert(
+        pc.mesh.extrude(arc, [0.0, HALF_LENGTH, 0.0], N_LAYERS), "TRI3"
+    )
+    p3 = surface.nearest_node([0.0, HALF_LENGTH, RADIUS])
 
-    plane_z0 = pc.mesh.poi1_from_nodes([node[0, j] for j in range(n_layers + 1)])
-    plane_x0 = pc.mesh.poi1_from_nodes([node[N_ARC, j] for j in range(n_layers + 1)])
-    mid_length = pc.mesh.poi1_from_nodes([node[k, n_layers] for k in range(N_ARC + 1)])
-    p3 = node[N_ARC, n_layers]
+    plane_z0 = pc.mesh.points_on_plane(surface, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+    plane_x0 = pc.mesh.points_on_plane(surface, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0])
+    mid_length = pc.mesh.points_on_plane(
+        surface, [0.0, HALF_LENGTH, 0.0], [0.0, 1.0, 0.0]
+    )
 
     # The blocked nodes of each unknown on the symmetry planes z = 0
     # (u_z, r_x, r_y), x = 0 (u_x, r_y, r_z) and y = 5.175 (u_y, r_x, r_z).

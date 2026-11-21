@@ -37,12 +37,12 @@ python validation/make_document.py    # this document
 | Chapter | Case | Status | Largest gap to the reference | Largest gap pyrucast / Cast3M 2026 |
 |---|---|---|---|---|
 | Elasticity | [elas1](#elas1) | gap | missing: axisymmetric shell element (COQ2) | |
-| Elasticity | [elas2](#elas2) | run, OUTSIDE tolerance | 0.0827 %; Δ = 0 | 3.2e-04 |
-| Elasticity | [elas3](#elas3) | run, within tolerance | 0.017 % | 1.3e-04 |
+| Elasticity | [elas2](#elas2) | run, OUTSIDE tolerance | 0.153 %; Δ = 0 | 2.0e-03 |
+| Elasticity | [elas3](#elas3) | run, OUTSIDE tolerance | 0.321 % | 3.5e-03 |
 | Elasticity | [elas4](#elas4) | run, OUTSIDE tolerance | 5.59 % | 3.9e-02 |
 | Elasticity | [elas7](#elas7) | gap | missing: axisymmetric shell element (COQ2) | |
-| Elasticity | [elas8](#elas8) | run, within tolerance | 0.841 % | 7.2e-04 |
-| Elasticity | [elas11](#elas11) | run, within tolerance | 1.59 % | 1.0e-03 |
+| Elasticity | [elas8](#elas8) | run, OUTSIDE tolerance | 7.85 % | 6.9e-02 |
+| Elasticity | [elas11](#elas11) | run, within tolerance | 0.0973 % | 1.6e-02 |
 | Elasticity | [elas13](#elas13) | gap | missing: spring supports (APPU) | |
 | Elasticity | [stru2](#stru2) | run, within tolerance | 0.789 % | 2.3e-14 |
 | Elasticity | [stru4](#stru4) | gap | missing: pipe element (TUYA) | |
@@ -52,7 +52,7 @@ python validation/make_document.py    # this document
 | Buckling | [flam1](#flam1) | gap | missing: eigenvalue solver; axisymmetric shell element (COQ2) | |
 | Buckling | [four1](#four1) | gap | missing: Fourier harmonic analysis; eigenvalue solver; axisymmetric shell element (COQ2) | |
 | Plasticity | [plas1](#plas1) | run, within tolerance | 1.03 % | 4.7e-10 |
-| Plasticity | [plas2](#plas2) | run, within tolerance | 3.16 % | 3.2e-15 |
+| Plasticity | [plas2](#plas2) | run, within tolerance | 3.16 % | 9.7e-16 |
 | Plasticity | [plas4](#plas4) | run, within tolerance | 0.402 % | 2.0e-15 |
 | Plasticity | [plas5](#plas5) | run, OUTSIDE tolerance | 15.2 % | 1.5e-01 |
 | Plasticity | [plas6](#plas6) | run, within tolerance | 0.13 % | 1.8e-03 |
@@ -117,7 +117,7 @@ python validation/make_document.py    # this document
 | Non linear dynamics | [dyna_nl3](#dyna_nl3) | gap | missing: large-displacement beam and shell dynamics | |
 | Thermal analysis | [ther2](#ther2) | run, within tolerance | 0.267 % | 1.1e-03 |
 | Thermal analysis | [ther7or](#ther7or) | gap | missing: thermal shell elements | |
-| Thermal analysis | [ther-perm](#ther-perm) | run, within tolerance | 7.74e-08 %; Δ = 1.7e-09 | 1.7e-07 |
+| Thermal analysis | [ther-perm](#ther-perm) | run, within tolerance | 1.97e-08 %; Δ = 5.3e-10 | 1.7e-07 |
 | Thermo-mechanics | [thme1](#thme1) | run, within tolerance | 1.79 % | 1.0e-05 |
 | Thermo-mechanics | [thpl1](#thpl1) | gap | missing: rate-independent kinematic hardening | |
 | Magneto-static | [Ac2d93](#ac2d93) | gap | missing: magnetostatics | |
@@ -127,7 +127,7 @@ python validation/make_document.py    # this document
 
 Features pyrucast lacks for the cases it cannot compute yet, by number of cases blocked.
 
-| Feature | Cases | Count |
+| Point | Cases | Count |
 |---|---|---|
 | stress intensity factors (G-theta) | [rupt1](#rupt1), [rupt2](#rupt2), [rupt3](#rupt3), [rupt4](#rupt4), [rupt5](#rupt5), [rupt6](#rupt6), [rupt7](#rupt7), [rupt8](#rupt8), [rupt9](#rupt9) | 9 |
 | eigenvalue solver | [flam1](#flam1), [four1](#four1), [dyna6](#dyna6), [dyna7](#dyna7), [fsi4](#fsi4), [dyna5](#dyna5), [dy_devo5](#dy_devo5), [vibr2](#vibr2) | 8 |
@@ -166,6 +166,28 @@ Features pyrucast lacks for the cases it cannot compute yet, by number of cases 
 | surface vector operator (VSUR) | [vsur1](#vsur1) | 1 |
 | thermal shell elements | [ther7or](#ther7or) | 1 |
 | two-inelastic-strain damage law (DDI) | [ddi](#ddi) | 1 |
+
+## Improvement points
+
+What writing the computed cases showed: an operator or an option pyrucast lacks to state the case as the deck does, or a difference with Cast3M to look into. The scripts use pyrucast as it is; each point is detailed in the case's notes.
+
+| Point | Cases | Count |
+|---|---|---|
+| nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`) | [elas4](#elas4), [elas8](#elas8), [elas11](#elas11), [plas7](#plas7) | 4 |
+| Drucker-Prager with two surfaces: pyrucast's interpolation driven by H·p departs from Cast3M when K_L < K, or when K_L = K with H ≠ 0 | [plas5](#plas5), [plas9](#plas9) | 2 |
+| `Mesh`: no accessor for its nodes (`mesh.node(0, i, 0)` over the cells of a POI1 mesh) | [plas6](#plas6), [plas7](#plas7) | 2 |
+| `convert` / `extrude` to TRI3: alternating diagonals (Cast3M's translation alternates them) | [elas2](#elas2), [elas3](#elas3) | 2 |
+| `dirichlet`: a node blocked twice for the same unknown (two supports meeting) makes the matrix singular, and the LU error does not name the cause | [elas2](#elas2), [elas3](#elas3) | 2 |
+| `model.drucker_prager` docstring: the friction is the `friction` component, not `alpha` | [plas5](#plas5), [plas9](#plas9) | 2 |
+| `project` of a field at the Gauss points: the cell a node shared by several cells is read in cannot be chosen | [elas4](#elas4), [plas7](#plas7) | 2 |
+| `transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords) | [elas8](#elas8), [elas11](#elas11) | 2 |
+| graded lines and extrusions (Cast3M `DINI`/`DFIN`, mesh density) | [elas3](#elas3), [ther-perm](#ther-perm) | 2 |
+| B-bar (selective integration) against the volumetric locking of QUA4/QUA8 in incompressible plastic flow | [plas7](#plas7) | 1 |
+| Kirchhoff quadrangle shell (DKQ): 4 % stiffer than Cast3M's COQ4 on elas4, to look into | [elas4](#elas4) | 1 |
+| `mpc`: one coefficient per term for every relation; relations whose coefficients differ need one `mpc` each | [plas1](#plas1) | 1 |
+| an ellipse, or the projection of a line onto a plane (Cast3M `PROJ`) | [elas8](#elas8) | 1 |
+| plane-strain thermal strain: no out-of-plane component α·ΔT | [thme1](#thme1) | 1 |
+| two laws on one support (materials in parallel on the same cells) | [plas9](#plas9) | 1 |
 
 ## Elasticity
 
@@ -259,20 +281,25 @@ y (30 elements), giving 360 DKT triangles.
 - Load: F_z = −2500 at P3 (0, 70, 7), the top of the mid-length section
   (a quarter of the pinching load).
 
-**Notes.** The pyrucast mesh is the Cast3M one cell for cell, and both codes use DKT
-triangles; their deflections still differ (last column of the table). The
-deck's criterion, 6e-4 from the reference, is tighter than that difference.
+**Notes.** The nodes are the deck's; the triangles are not: `convert` cuts every
+quadrangle along the same diagonal, the deck's translation alternates it.
+The deck's criterion, 6e-4 from the reference, was set on Cast3M's own mesh.
+
+**Improvement points.**
+
+- `convert` / `extrude` to TRI3: alternating diagonals (Cast3M's translation alternates them)
+- `dirichlet`: a node blocked twice for the same unknown (two supports meeting) makes the matrix singular, and the LU error does not name the cause
 
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
 | u_x at P1 (cm) | 0 | -2.1247e-19 (Δ = -2.1e-19) | 0 (Δ = 0) | 0 (Δ = 0) | Δ = 0.0e+00 |
-| u_z at P3 (cm) | -1.14 | -1.1394 (+0.0526 %) | -1.13943 (+0.0503 %) | -1.13906 (+0.0827 %) | 3.2e-04 |
+| u_z at P3 (cm) | -1.14 | -1.1394 (+0.0526 %) | -1.13943 (+0.0503 %) | -1.14175 (-0.153 %) | 2.0e-03 |
 
 Acceptance: deck criteria, |u_z(P3) + 1.14| / 1.14 ≤ 6e-4 and |u_x(P1)| ≤ 1e-18.
 
-pyrucast OUTSIDE tolerance: uz_P3: -1.1390576769087797 vs -1.14, beyond 0.060000%
+pyrucast OUTSIDE tolerance: uz_P3: -1.1417491751788946 vs -1.14, beyond 0.060000%
 
 #### pyrucast figures
 
@@ -292,17 +319,17 @@ mid-length by two opposite point loads. One eighth is modelled: a quarter of
 the circumference over half the length, with symmetry conditions on the cut
 edges. Reference: u_z = −1.14 under the load, u_x = 0 at the clamped point P1.
 
-The mesh is the Cast3M deck's, cell for cell: the quarter arc (6 elements,
-every 15°) translated by 70 along y (30 layers), each quadrangle cut into two
-triangles along a diagonal that alternates from one quadrangle to the next
-along the arc, as the deck's translation in TRI3 does.
+Mesh: the deck's nodes, the quarter arc (6 elements, every 15°) extruded by
+70 along y in 30 layers, each quadrangle cut into two triangles by
+`convert`. `convert` cuts every quadrangle along the same diagonal; the
+deck's translation in TRI3 alternates it from one quadrangle to the next
+along the arc.
 
 Running::
 
     python validation/01_elasticity/elas2/run.py
 """
 
-import math
 import os
 
 import pyrucast as pc
@@ -314,34 +341,22 @@ FORCE = -2500.0  # F_z at the loaded point, a quarter of the pinching load
 
 
 def main(out: str | None = None) -> dict[str, float]:
-    # Node (k, j): k-th point of the arc from (R, 0, 0) to (0, 0, R), j-th layer.
     coords = pc.Coords(3)
-    node = {}
-    for j in range(N_LENGTH + 1):
-        for k in range(N_ARC + 1):
-            theta = math.pi / 2.0 * k / N_ARC
-            y = HALF_LENGTH * j / N_LENGTH
-            node[k, j] = coords.add_node(
-                [RADIUS * math.cos(theta), y, RADIUS * math.sin(theta)]
-            )
-    surface = pc.Mesh(coords, "TRI3")
-    for j in range(N_LENGTH):
-        for k in range(N_ARC):
-            a0, a1 = node[k, j], node[k + 1, j]
-            b0, b1 = node[k, j + 1], node[k + 1, j + 1]
-            if k % 2 == 0:
-                surface.unit().add_cell([a0, a1, b1])
-                surface.unit().add_cell([a0, b1, b0])
-            else:
-                surface.unit().add_cell([a0, a1, b0])
-                surface.unit().add_cell([a1, b1, b0])
+    centre = coords.add_node([0.0, 0.0, 0.0])
+    p1 = coords.add_node([RADIUS, 0.0, 0.0])
+    p2 = coords.add_node([0.0, 0.0, RADIUS])
+    arc = pc.mesh.arc(p1, centre, p2, N_ARC)
+    surface = pc.mesh.convert(
+        pc.mesh.extrude(arc, [0.0, HALF_LENGTH, 0.0], N_LENGTH), "TRI3"
+    )
+    p3 = surface.nearest_node([0.0, HALF_LENGTH, RADIUS])
 
-    clamped = pc.mesh.poi1_from_nodes([node[k, 0] for k in range(N_ARC + 1)])
-    plane_z0 = pc.mesh.poi1_from_nodes([node[0, j] for j in range(N_LENGTH + 1)])
-    plane_x0 = pc.mesh.poi1_from_nodes([node[N_ARC, j] for j in range(N_LENGTH + 1)])
-    mid_length = pc.mesh.poi1_from_nodes([node[k, N_LENGTH] for k in range(N_ARC + 1)])
-    p1 = node[0, 0]
-    p3 = node[N_ARC, N_LENGTH]
+    clamped = pc.mesh.points_on_plane(surface, [0.0, 0.0, 0.0], [0.0, 1.0, 0.0])
+    plane_z0 = pc.mesh.points_on_plane(surface, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+    plane_x0 = pc.mesh.points_on_plane(surface, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0])
+    mid_length = pc.mesh.points_on_plane(
+        surface, [0.0, HALF_LENGTH, 0.0], [0.0, 1.0, 0.0]
+    )
 
     # The blocked nodes of each unknown: clamped end, then the symmetry planes
     # z = 0 (u_z, r_x, r_y), x = 0 (u_x, r_y, r_z) and y = 70 (u_y, r_x, r_z).
@@ -422,18 +437,25 @@ Quarter cylinder of radius 4.953 and half-length 5.175 (axis y), thickness
 - Load: F_z = −100 at P3 (0, 5.175, 4.953), the top of the mid-length
   section.
 
-**Notes.** The pyrucast mesh is the Cast3M one cell for cell (10 elements on the arc,
-7 layers placed by the deck's mesh density).
+**Notes.** The deck places its 7 layers by its mesh density, slightly closer towards the
+loaded section, and alternates the diagonals of its triangles; pyrucast's
+layers are even and its diagonals all alike.
+
+**Improvement points.**
+
+- graded lines and extrusions (Cast3M `DINI`/`DFIN`, mesh density)
+- `convert` / `extrude` to TRI3: alternating diagonals (Cast3M's translation alternates them)
+- `dirichlet`: a node blocked twice for the same unknown (two supports meeting) makes the matrix singular, and the LU error does not name the cause
 
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| u_z at P3 (cm) | -0.452 | -0.45214 (-0.031 %) | -0.452137 (-0.0303 %) | -0.452077 (-0.017 %) | 1.3e-04 |
+| u_z at P3 (cm) | -0.452 | -0.45214 (-0.031 %) | -0.452137 (-0.0303 %) | -0.45055 (+0.321 %) | 3.5e-03 |
 
 Acceptance: deck criterion, |u_z(P3) + 0.452| / 0.452 ≤ 4e-4.
 
-pyrucast: the 1 checked quantities are within tolerance.
+pyrucast OUTSIDE tolerance: uz_P3: -0.4505498830241352 vs -0.452, beyond 0.040000%
 
 #### pyrucast figures
 
@@ -453,18 +475,18 @@ ends, is pinched at its mid-length by two opposite point loads. One eighth is
 modelled: a quarter of the circumference over half the length, with symmetry
 conditions on the cut edges. Reference: u_z = −0.452 under the load.
 
-The mesh is the Cast3M deck's, cell for cell: the quarter arc (10 elements,
-every 9°) translated along y in 7 layers, each quadrangle cut into two
-triangles along a diagonal that alternates along the arc. The deck lets its
-mesh density (0.75) place the layers, slightly closer towards the loaded
-section; `Y_LAYERS` are the positions it produces.
+Mesh: the quarter arc (10 elements, every 9°) extruded along y in 7
+layers, each quadrangle cut into two triangles by `convert`, as in the deck,
+with two differences: the deck lets its mesh density (0.75) place the
+layers, slightly closer towards the loaded section, where `extrude` spaces
+them evenly; and `convert` cuts every quadrangle along the same diagonal,
+where the deck alternates it along the arc.
 
 Running::
 
     python validation/01_elasticity/elas3/run.py
 """
 
-import math
 import os
 
 import pyrucast as pc
@@ -472,46 +494,26 @@ import pyrucast as pc
 E, NU, THICKNESS = 10.5e6, 0.3125, 0.094
 RADIUS = 4.953
 N_ARC = 10
-Y_LAYERS = [
-    0.0,
-    0.7501353964340833,
-    1.496624840688324,
-    2.239486053520015,
-    2.978736669556621,
-    3.714394237714402,
-    4.446476221615003,
-    5.175,
-]
+HALF_LENGTH, N_LAYERS = 5.175, 7
 FORCE = -100.0  # F_z at the loaded point
 
 
 def main(out: str | None = None) -> dict[str, float]:
-    # Node (k, j): k-th point of the arc from (R, 0, 0) to (0, 0, R), j-th layer.
-    n_layers = len(Y_LAYERS) - 1
     coords = pc.Coords(3)
-    node = {}
-    for j in range(n_layers + 1):
-        for k in range(N_ARC + 1):
-            theta = math.pi / 2.0 * k / N_ARC
-            node[k, j] = coords.add_node(
-                [RADIUS * math.cos(theta), Y_LAYERS[j], RADIUS * math.sin(theta)]
-            )
-    surface = pc.Mesh(coords, "TRI3")
-    for j in range(n_layers):
-        for k in range(N_ARC):
-            a0, a1 = node[k, j], node[k + 1, j]
-            b0, b1 = node[k, j + 1], node[k + 1, j + 1]
-            if k % 2 == 0:
-                surface.unit().add_cell([a0, a1, b1])
-                surface.unit().add_cell([a0, b1, b0])
-            else:
-                surface.unit().add_cell([a0, a1, b0])
-                surface.unit().add_cell([a1, b1, b0])
+    centre = coords.add_node([0.0, 0.0, 0.0])
+    p1 = coords.add_node([RADIUS, 0.0, 0.0])
+    p2 = coords.add_node([0.0, 0.0, RADIUS])
+    arc = pc.mesh.arc(p1, centre, p2, N_ARC)
+    surface = pc.mesh.convert(
+        pc.mesh.extrude(arc, [0.0, HALF_LENGTH, 0.0], N_LAYERS), "TRI3"
+    )
+    p3 = surface.nearest_node([0.0, HALF_LENGTH, RADIUS])
 
-    plane_z0 = pc.mesh.poi1_from_nodes([node[0, j] for j in range(n_layers + 1)])
-    plane_x0 = pc.mesh.poi1_from_nodes([node[N_ARC, j] for j in range(n_layers + 1)])
-    mid_length = pc.mesh.poi1_from_nodes([node[k, n_layers] for k in range(N_ARC + 1)])
-    p3 = node[N_ARC, n_layers]
+    plane_z0 = pc.mesh.points_on_plane(surface, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+    plane_x0 = pc.mesh.points_on_plane(surface, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0])
+    mid_length = pc.mesh.points_on_plane(
+        surface, [0.0, HALF_LENGTH, 0.0], [0.0, 1.0, 0.0]
+    )
 
     # The blocked nodes of each unknown on the symmetry planes z = 0
     # (u_z, r_x, r_y), x = 0 (u_x, r_y, r_z) and y = 5.175 (u_y, r_x, r_z).
@@ -596,30 +598,32 @@ COQ4 quadrilaterals.
 deck applies 1.2 MN·m with 600 kN per flange. The deck reads the axial
 stress as the SMYY component of the shell stresses averaged through the
 thickness (CALP 'MOYEN'), extrapolated to the nodes and averaged between the
-two cells that share A. pyrucast reads N_xx / h in each of the two cells.
-The mesh is the Cast3M one, but the quadrangle shells differ: the tip
-deflection u_z, compared with no reference, is 4 % smaller in pyrucast's DKQ
-than in Cast3M's COQ4.
+two cells that share A; pyrucast reads N_yy / h in one of them. On the same
+mesh, the tip deflection u_z, compared with no reference, is 4 % smaller in
+pyrucast's DKQ than in Cast3M's COQ4.
+
+**Improvement points.**
+
+- Kirchhoff quadrangle shell (DKQ): 4 % stiffer than Cast3M's COQ4 on elas4, to look into
+- nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)
+- `project` of a field at the Gauss points: the cell a node shared by several cells is read in cannot be chosen
 
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| σ_xx at A, mid-surface, cell x < 2.5 (MPa) | -108 | -112.73 (-4.38 %) | -112.727 (-4.38 %) | -114.036 (-5.59 %) | 1.2e-02 |
-| σ_xx at A, mid-surface, cell x > 2.5 (MPa) | -108 | -112.73 (-4.38 %) | -112.727 (-4.38 %) | -114.036 (-5.59 %) | 1.2e-02 |
+| σ_xx at A, mid-surface (MPa) | -108 | -112.73 (-4.38 %) | -112.727 (-4.38 %) | -114.036 (-5.59 %) | 1.2e-02 |
 | u_z at the tip (10, 0, 0), no reference (m) | — | — | -0.0316979 | -0.0304768 | 3.9e-02 |
 
 Acceptance: deck criterion, |σ_xx(A) + 108| / 108 ≤ 5 %.
 
-pyrucast OUTSIDE tolerance: sxx_A: -114.03623937825742 vs -108.0, beyond 5.000000%
-
-pyrucast OUTSIDE tolerance: sxx_A_after: -114.03623938065093 vs -108.0, beyond 5.000000%
+pyrucast OUTSIDE tolerance: sxx_A: -114.03623937937851 vs -108.0, beyond 5.000000%
 
 #### pyrucast figures
 
 ![mesh](01_elasticity/elas4/mesh.svg)
 
-![sigma_xx](01_elasticity/elas4/sigma_xx.svg)
+![sigma_axial](01_elasticity/elas4/sigma_axial.svg)
 
 #### pyrucast listing
 
@@ -634,10 +638,11 @@ opposite forces of 600 kN spread over the flanges (1.2 MN·m). Reference: the
 axial stress on the mid-surface at A (2.5, 0, 0) is σ_xx = −108 MPa.
 
 The mesh is the Cast3M deck's: the section line (2 elements per segment)
-translated along x in 16 layers, 96 QUA4. Each cell's first edge runs along
-x, so the local x axis of the shell is the beam's axis and σ_xx = N_xx / h.
-A lies on the edge of the first flange, between two cells; the stress is
-read in each of them, from its own Gauss points.
+extruded along x in 16 layers, 96 QUA4. Each cell's first edge runs along
+the section line, so the local y axis of the shell is the beam's axis and
+the axial stress on the mid-surface is N_yy / h, as the deck reads SMYY. A
+lies on the edge of the first flange, between two cells; `project` reads it
+in one of them, from that cell's Gauss points.
 
 Running::
 
@@ -650,36 +655,32 @@ import pyrucast as pc
 
 E, NU, THICKNESS = 210e9, 0.3, 0.1
 LENGTH, N_LENGTH = 10.0, 16
-# The section line in the plane x = 0, 2 elements per segment.
-SECTION = [
-    (0.0, 0.0),
-    (0.0, 0.5),
-    (0.0, 1.0),
-    (1.0, 1.0),
-    (2.0, 1.0),
-    (2.0, 1.5),
-    (2.0, 2.0),
-]  # (y, z)
-# F_z at x = 10 on the nodes of the section line: −600 kN on the first
-# flange, +600 kN on the second.
-END_FORCES = {0: -150e3, 1: -300e3, 2: -150e3, 4: 150e3, 5: 300e3, 6: 150e3}
+# F_z at x = 10: −600 kN on the first flange, +600 kN on the second.
+END_FORCES = [
+    ((0.0, 0.0), -150e3),
+    ((0.0, 0.5), -300e3),
+    ((0.0, 1.0), -150e3),
+    ((2.0, 1.0), 150e3),
+    ((2.0, 1.5), 300e3),
+    ((2.0, 2.0), 150e3),
+]  # ((y, z), F_z)
 X_A = 2.5
 
 
 def main(out: str | None = None) -> dict[str, float]:
-    # Node (s, i): s-th point of the section line, i-th layer along x.
     coords = pc.Coords(3)
-    node = {}
-    for i in range(N_LENGTH + 1):
-        for s, (y, z) in enumerate(SECTION):
-            node[s, i] = coords.add_node([LENGTH * i / N_LENGTH, y, z])
-    surface = pc.Mesh(coords, "QUA4")
-    for i in range(N_LENGTH):
-        for s in range(len(SECTION) - 1):
-            surface.unit().add_cell(
-                [node[s, i], node[s, i + 1], node[s + 1, i + 1], node[s + 1, i]]
-            )
-    clamped = pc.mesh.poi1_from_nodes([node[s, 0] for s in range(len(SECTION))])
+    p1 = coords.add_node([0.0, 0.0, 0.0])
+    p2 = coords.add_node([0.0, 0.0, 1.0])
+    p3 = coords.add_node([0.0, 2.0, 1.0])
+    p4 = coords.add_node([0.0, 2.0, 2.0])
+    section = pc.mesh.consolidate(
+        pc.mesh.line(p1, p2, 2) | pc.mesh.line(p2, p3, 2) | pc.mesh.line(p3, p4, 2)
+    )
+    surface = pc.mesh.extrude(section, [LENGTH, 0.0, 0.0], N_LENGTH)
+    clamped = pc.mesh.points_on_plane(surface, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0])
+    loaded = [surface.nearest_node([LENGTH, y, z]) for (y, z), _ in END_FORCES]
+    point_a = surface.nearest_node([X_A, 0.0, 0.0])
+    tip = loaded[0]
 
     shell = pc.model.shell(pc.FiniteElementSpace(surface), "kirchhoff")
     model = shell
@@ -688,38 +689,29 @@ def main(out: str | None = None) -> dict[str, float]:
     materials = pc.element_field.material_field(
         model, [("E", E), ("nu", NU), ("h", THICKNESS)]
     )
-    loaded = [node[s, N_LENGTH] for s in END_FORCES]
     load = pc.NodeField(pc.mesh.poi1_from_nodes(loaded), ["f_z"])
-    for s, force in END_FORCES.items():
-        load[0].set_value(node[s, N_LENGTH], "f_z", force)
+    for node, (_, force) in zip(loaded, END_FORCES):
+        load[0].set_value(node, "f_z", force)
     u = pc.solver.solve(pc.matrix.stiffness(model, materials), load)
 
     strain = pc.element_field.strain(model, u, materials)
     forces = pc.element_field.integrate_behavior(
         model, strain, materials, pc.element_field.initial_state(model, materials)
     )
-    # Two points just inside the two cells that share A.
-    before = coords.add_node([X_A - 1e-9, 0.0, 0.0])
-    after = coords.add_node([X_A + 1e-9, 0.0, 0.0])
-    at_a = pc.node_field.project(
-        forces, surface, pc.mesh.poi1_from_nodes([before, after])
-    )
-    sxx_before = at_a.value(before, "N_xx") / THICKNESS / 1e6
-    sxx_after = at_a.value(after, "N_xx") / THICKNESS / 1e6
+    at_a = pc.node_field.project(forces, surface, pc.mesh.poi1_from_nodes([point_a]))
 
     if out:
         surface.plot(title="elas4 — QUA4 mesh", save=os.path.join(out, "mesh.svg"))
         surface.plot(
-            title="elas4 — N_xx / h (MPa)",
+            title="elas4 — axial stress N_yy / h (MPa)",
             field=forces * (1e-6 / THICKNESS),
-            component="N_xx",
+            component="N_yy",
             cmap="viridis",
-            save=os.path.join(out, "sigma_xx.svg"),
+            save=os.path.join(out, "sigma_axial.svg"),
         )
     return {
-        "sxx_A": sxx_before,
-        "sxx_A_after": sxx_after,
-        "uz_tip": u.value(node[0, N_LENGTH], "u_z"),
+        "sxx_A": at_a.value(point_a, "N_yy") / THICKNESS / 1e6,
+        "uz_tip": u.value(tip, "u_z"),
     }
 
 
@@ -811,22 +803,31 @@ straight edge has 4 elements.
 - Boundary conditions: symmetry about x = 0 (u_x = 0) and y = 0 (u_y = 0).
 - Load: outward pressure of 10 MPa on the outer elliptic edge.
 
-**Notes.** The pyrucast mesh is the Cast3M one node for node: the displacement u_y at B,
-compared with no reference, agrees to round-off, and so do the stresses at the
-Gauss points. The gap on σ_yy(D) comes from how each code reads a stress at a
-node: Cast3M extrapolates the Gauss values of the cell to its nodes, pyrucast
-evaluates the least-squares fit of the cell's Gauss values.
+**Notes.** The boundary nodes are the deck's. Inside, `transfinite` places the corner
+nodes as the deck does, but puts the QUA8 mid-nodes of the elliptic edges on
+the chords, where the deck puts them on the ellipses; σ_yy at D, where the
+inner ellipse is the most curved, is sensitive to it. Cast3M also reads the
+stress at a node differently: it extrapolates the Gauss values of the cell to
+its nodes, pyrucast evaluates their least-squares fit. With mid-nodes placed
+on the ellipses, the two codes give the same displacements and the same
+Gauss stresses to round-off.
+
+**Improvement points.**
+
+- an ellipse, or the projection of a line onto a plane (Cast3M `PROJ`)
+- `transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords)
+- nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)
 
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| σ_yy at D (MPa) | 92.7 | 93.548 (+0.915 %) | 93.5476 (+0.914 %) | 93.48 (+0.841 %) | 7.2e-04 |
-| u_y at B (0, 2.75), no reference (m) | — | — | 0.000545846 | 0.000545846 | 1.6e-13 |
+| σ_yy at D (MPa) | 92.7 | 93.548 (+0.915 %) | 93.5476 (+0.914 %) | 99.9753 (+7.85 %) | 6.9e-02 |
+| u_y at B (0, 2.75), no reference (m) | — | — | 0.000545846 | 0.000542939 | 5.3e-03 |
 
 Acceptance: deck criterion, |σ_yy(D) − 92.7| / 92.7 ≤ 1 %.
 
-pyrucast: the 1 checked quantities are within tolerance.
+pyrucast OUTSIDE tolerance: syy_D: 99.97533666117648 vs 92.7, beyond 1.000000%
 
 #### pyrucast figures
 
@@ -846,13 +847,14 @@ x²/3.25² + y²/2.75² = 1, symmetric about x = 0 and y = 0, is pulled by a
 uniform outward pressure of 10 MPa on its outer edge. Reference:
 σ_yy = 92.7 MPa at the point D (2, 0).
 
-The QUA8 mesh is the one of the Cast3M deck, node for node: 6 elements along
-each ellipse (a node at every 15° of the ellipse's parameter, the mid-nodes
-on the ellipse), 4 across, the straight sides cut at 1.583 on x = 0 and at
-2.417 on y = 0. The corner nodes inside are placed by a transfinite (Coons)
-interpolation of the boundary nodes, the inner mid-nodes at the middle of
-their edge. `pyrucast.mesh.transfinite` would put the mid-nodes of the
-elliptic edges on the chords, so the nodes are laid out here.
+The QUA8 mesh has the deck's boundary lines: 6 elements along each ellipse
+(a node at every 15° of the ellipse's parameter), 4 across, the straight
+sides cut at 1.583 on x = 0 and at 2.417 on y = 0, filled by `transfinite`
+as the deck's mesher does. pyrucast has no ellipse, nor the projection of a
+circle onto a plane that the deck uses to draw one: the nodes of the two
+elliptic lines are placed here. `transfinite` puts the QUA8 mid-nodes on the
+chords; the deck's are on the ellipses. The QUA4 patch and the outer line
+are made quadratic together, so that they share their mid-nodes.
 
 σ_yy at D is read in the only cell holding D, from that cell's Gauss points.
 
@@ -871,99 +873,53 @@ PRESSURE = 10e6  # outward pressure on the outer edge, Pa
 A_IN, B_IN = 2.0, 1.0  # semi-axes of the inner ellipse, m
 A_OUT, B_OUT = 3.25, 2.75  # semi-axes of the outer ellipse, m
 N_ARC = 6  # elements along each ellipse
-N_SIDE = 4  # elements across, along each straight side
-Y_SIDE = [1.0, 1.583, 2.75]  # side x = 0: two lines of 2 elements
-X_SIDE = [2.0, 2.417, 3.25]  # side y = 0: two lines of 2 elements
+Y_CUT, X_CUT = 1.583, 2.417  # where the straight sides change their line
 
 
 def main(out: str | None = None) -> dict[str, float]:
-    # Node grid: i along the ellipses from x = 0 (i = 0) to y = 0 (i = NI),
-    # j across from the inner ellipse (j = 0) to the outer one (j = NJ);
-    # even indices are corners, odd ones mid-nodes.
-    ni, nj = 2 * N_ARC, 2 * N_SIDE
-    inner, outer, left, right = [], [], [], []
-    for i in range(ni + 1):
-        phi = math.pi / 2.0 * (1.0 - i / ni)
-        inner.append((A_IN * math.cos(phi), B_IN * math.sin(phi)))
-        outer.append((A_OUT * math.cos(phi), B_OUT * math.sin(phi)))
-    for j in range(nj + 1):
-        half, k = divmod(j, N_SIDE)  # which straight line, and where on it
-        if half == 2:
-            half, k = 1, N_SIDE
-        t = k / N_SIDE
-        left.append((0.0, Y_SIDE[half] + t * (Y_SIDE[half + 1] - Y_SIDE[half])))
-        right.append((X_SIDE[half] + t * (X_SIDE[half + 1] - X_SIDE[half]), 0.0))
-
-    position = {}
-    for i in range(0, ni + 1, 2):
-        for j in range(0, nj + 1, 2):
-            u, v = i / ni, j / nj
-            point = []
-            for d in range(2):
-                coons = (
-                    (1 - v) * inner[i][d]
-                    + v * outer[i][d]
-                    + (1 - u) * left[j][d]
-                    + u * right[j][d]
-                    - (1 - u) * (1 - v) * inner[0][d]
-                    - u * (1 - v) * inner[ni][d]
-                    - (1 - u) * v * outer[0][d]
-                    - u * v * outer[ni][d]
-                )
-                point.append(coons)
-            position[i, j] = point
-    for i in range(ni + 1):
-        for j in range(nj + 1):
-            if (i % 2, j % 2) == (0, 0) or (i % 2, j % 2) == (1, 1):
-                continue
-            if j == 0:
-                position[i, j] = list(inner[i])
-            elif j == nj:
-                position[i, j] = list(outer[i])
-            elif i == 0:
-                position[i, j] = list(left[j])
-            elif i == ni:
-                position[i, j] = list(right[j])
-            elif i % 2 == 1:
-                a, b = position[i - 1, j], position[i + 1, j]
-                position[i, j] = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]
-            else:
-                a, b = position[i, j - 1], position[i, j + 1]
-                position[i, j] = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]
-
     coords = pc.Coords(2)
-    node = {}
-    for key in sorted(position):
-        node[key] = coords.add_node(position[key])
-    membrane = pc.Mesh(coords, "QUA8")
-    for i in range(0, ni, 2):
-        for j in range(0, nj, 2):
-            membrane.unit().add_cell(
-                [
-                    node[i, j],
-                    node[i + 2, j],
-                    node[i + 2, j + 2],
-                    node[i, j + 2],
-                    node[i + 1, j],
-                    node[i + 2, j + 1],
-                    node[i + 1, j + 2],
-                    node[i, j + 1],
-                ]
-            )
-    # Outer edge, travelled counter-clockwise: from y = 0 (i = NI) to x = 0.
-    outer_edge = pc.Mesh(coords, "SEG3")
-    for i in range(ni, 0, -2):
-        outer_edge.unit().add_cell([node[i, nj], node[i - 2, nj], node[i - 1, nj]])
-    side_x0 = pc.mesh.poi1_from_nodes([node[0, j] for j in range(nj + 1)])
-    side_y0 = pc.mesh.poi1_from_nodes([node[ni, j] for j in range(nj + 1)])
-    point_d = node[ni, 0]
+    # The two elliptic lines, counter-clockwise around the membrane: the outer
+    # one from y = 0 to x = 0, the inner one from x = 0 to y = 0.
+    outer_nodes, inner_nodes = [], []
+    for k in range(N_ARC + 1):
+        phi = math.pi / 2.0 * k / N_ARC
+        outer_nodes.append(
+            coords.add_node([A_OUT * math.cos(phi), B_OUT * math.sin(phi)])
+        )
+        inner_nodes.append(
+            coords.add_node([A_IN * math.sin(phi), B_IN * math.cos(phi)])
+        )
+    outer = pc.Mesh(coords, "SEG2")
+    inner = pc.Mesh(coords, "SEG2")
+    for k in range(N_ARC):
+        outer.unit().add_cell([outer_nodes[k], outer_nodes[k + 1]])
+        inner.unit().add_cell([inner_nodes[k], inner_nodes[k + 1]])
+    pc_, pb = outer_nodes[0], outer_nodes[-1]
+    pa, pd = inner_nodes[0], inner_nodes[-1]
+    cut_y0 = coords.add_node([X_CUT, 0.0])
+    cut_x0 = coords.add_node([0.0, Y_CUT])
+    side_y0 = pc.mesh.consolidate(
+        pc.mesh.line(pd, cut_y0, 2) | pc.mesh.line(cut_y0, pc_, 2)
+    )
+    side_x0 = pc.mesh.consolidate(
+        pc.mesh.line(pb, cut_x0, 2) | pc.mesh.line(cut_x0, pa, 2)
+    )
+    patch = pc.mesh.transfinite(side_y0, outer, side_x0, inner)
+    quadratic = pc.mesh.to_quadratic(patch | outer)
+    membrane, outer_edge = pc.Mesh.empty(), pc.Mesh.empty()
+    membrane.add_sub(quadratic[0])
+    outer_edge.add_sub(quadratic[1])
 
     fes = pc.FiniteElementSpace(membrane)
     elasticity = pc.model.elasticity(fes, "plane_stress")
     model = (
         elasticity
-        | pc.model.dirichlet(side_x0, elasticity, "u_x")
-        | pc.model.dirichlet(side_y0, elasticity, "u_y")
+        | pc.model.dirichlet(
+            pc.mesh.points_on_line(membrane, [0.0, 0.0], [0.0, 1.0]), elasticity, "u_x"
+        )
+        | pc.model.dirichlet(
+            pc.mesh.points_on_line(membrane, [0.0, 0.0], [1.0, 0.0]), elasticity, "u_y"
+        )
     )
     # An outward pressure on a counter-clockwise contour: φ_n = +p.
     traction = pc.model.flux(pc.FiniteElementSpace(outer_edge), elasticity, "n")
@@ -976,9 +932,7 @@ def main(out: str | None = None) -> dict[str, float]:
 
     strain = pc.element_field.strain(model, u, materials)
     stress = pc.element_field.elastic_stress(model, strain, materials)
-    at_d = pc.node_field.project(stress, membrane, pc.mesh.poi1_from_nodes([point_d]))
-    syy_d = at_d.value(point_d, "sigma_yy") / 1e6
-    uy_b = u.value(node[0, nj], "u_y")
+    at_d = pc.node_field.project(stress, membrane, pc.mesh.poi1_from_nodes([pd]))
 
     if out:
         membrane.plot(title="elas8 — QUA8 mesh", save=os.path.join(out, "mesh.svg"))
@@ -989,7 +943,10 @@ def main(out: str | None = None) -> dict[str, float]:
             cmap="viridis",
             save=os.path.join(out, "sigma_yy.svg"),
         )
-    return {"syy_D": syy_d, "uy_B": uy_b}
+    return {
+        "syy_D": at_d.value(pd, "sigma_yy") / 1e6,
+        "uy_B": u.value(pb, "u_y"),
+    }
 
 
 if __name__ == "__main__":
@@ -1036,19 +993,24 @@ Meridian plane (r, z), QUA8 elements (fine mesh of the deck, K = 2).
 **Notes.** The 2011 document gives the goal as σ_zz(A) = 105 MPa and the result table as
 σ_yy(A) = −105 MPa; the deck compares σ_zz with −105 MPa.
 
-The pyrucast mesh is the Cast3M one node for node. pyrucast heats every node
-to T = r + z; Cast3M's thermal stress operator replaces the temperature of a
-mid-node of a quadratic cell by the mean of its edge's corners, which differs
-from r + z on the mid-nodes of the arcs. Run with that same linearised
-temperature, pyrucast gives Cast3M's u_r(B) to round-off; the gap left in the
-table is that of the temperature field.
+`transfinite` puts the QUA8 mid-nodes of the arcs on the chords, where the
+deck puts them on the arcs. Cast3M's thermal stress operator also replaces
+the temperature of a mid-node of a quadratic cell by the mean of its edge's
+corners, which differs from r + z on the arcs' mid-nodes; pyrucast heats every
+node to r + z. With the deck's mid-nodes and its averaged temperatures,
+pyrucast gives Cast3M's u_r(B) to round-off.
+
+**Improvement points.**
+
+- `transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords)
+- nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)
 
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| σ_zz at A (MPa) | -105 | -103.34 (+1.58 %) | -103.436 (+1.49 %) | -103.328 (+1.59 %) | 1.0e-03 |
-| u_r at B (1.4, 0), no reference (m) | — | — | 0.000766758 | 0.000767139 | 5.0e-04 |
+| σ_zz at A (MPa) | -105 | -103.34 (+1.58 %) | -103.436 (+1.49 %) | -105.102 (-0.0973 %) | 1.6e-02 |
+| u_r at B (1.4, 0), no reference (m) | — | — | 0.000766758 | 0.000765887 | 1.1e-03 |
 
 Acceptance: deck criterion, |σ_zz(A) + 105| / 105 ≤ 2 %.
 
@@ -1072,12 +1034,12 @@ a conical part and a cylindrical part — is heated to T = r + z (°C), with
 α = 2.3e-4 /°C and the reference temperature 0; u_z = 0 on its two flat
 faces. Reference: the axial stress at A (1, 0) is σ_zz = −105 MPa.
 
-The QUA8 mesh is the one of the Cast3M deck, node for node: 2 elements
-across and 10 along the meridian (4 on the arcs of 30°, 2 on the arc from
-30° to 45°, 4 on the cone and on the inner straight part, 2 on the outer
-cylinder). The corner nodes inside are placed by a transfinite (Coons)
-interpolation of the boundary nodes, the mid-nodes of the arcs on the arcs,
-the other mid-nodes at the middle of their edge.
+The QUA8 mesh has the deck's boundary lines: 2 elements across and 10 along
+the meridian (4 on the arcs of 30°, 2 on the arc from 30° to 45°, 4 on the
+cone and on the inner straight part, 2 on the outer cylinder), filled by
+`transfinite` as the deck's mesher does. `transfinite` takes straight-sided
+SEG2 lines and puts the QUA8 mid-nodes on the chords; the deck's are on the
+arcs.
 
 In pyrucast's axisymmetric coordinates x is r and y is z: the axial stress
 is `sigma_yy`. It is read in the only cell holding A, from its Gauss points.
@@ -1094,100 +1056,39 @@ import pyrucast as pc
 
 E, NU, ALPHA = 210e9, 0.3, 2.3e-4  # Pa, —, /°C
 T_REF = 0.0  # °C
-N_ACROSS, N_ALONG = 2, 10  # elements across and along the meridian
-PE = (math.cos(math.radians(45.0)), math.sin(math.radians(45.0)))
-PH, PI, PG = (0.7071, 1.79), (1.0, 1.79), (1.0, 1.39)
-PD = (1.4 * math.cos(math.radians(30.0)), 0.7)
+COS30, SIN30 = math.cos(math.radians(30.0)), math.sin(math.radians(30.0))
+COS45 = math.cos(math.radians(45.0))
 
 
 def main(out: str | None = None) -> dict[str, float]:
-    # Node grid at half-element steps: i across from the inner side (i = 0)
-    # to the outer one (i = NI), j along from z = 0 (j = 0) to z = 1.79.
-    ni, nj = 2 * N_ACROSS, 2 * N_ALONG
-    bottom, top, inner, outer = [], [], [], []
-    for i in range(ni + 1):
-        t = i / ni
-        bottom.append((1.0 + 0.4 * t, 0.0))
-        top.append((PH[0] + t * (PI[0] - PH[0]), 1.79))
-    for j in range(nj + 1):
-        if j <= 8:  # arc of radius 1 from 0° to 30°, then of radius 1.4
-            angle = math.radians(30.0 * j / 8)
-            inner.append((math.cos(angle), math.sin(angle)))
-            outer.append((1.4 * math.cos(angle), 1.4 * math.sin(angle)))
-            continue
-        if j <= 12:  # inner arc from 30° to 45°
-            angle = math.radians(30.0 + 15.0 * (j - 8) / 4)
-            inner.append((math.cos(angle), math.sin(angle)))
-        else:  # inner straight part, from 45° up to H
-            t = (j - 12) / 8
-            inner.append((PE[0] + t * (PH[0] - PE[0]), PE[1] + t * (PH[1] - PE[1])))
-        if j <= 16:  # cone, from D to G
-            t = (j - 8) / 8
-            outer.append((PD[0] + t * (PG[0] - PD[0]), PD[1] + t * (PG[1] - PD[1])))
-        else:  # outer cylinder, from G to I
-            t = (j - 16) / 4
-            outer.append((1.0, PG[1] + t * (PI[1] - PG[1])))
-
-    position = {}
-    for i in range(0, ni + 1, 2):
-        for j in range(0, nj + 1, 2):
-            u, v = i / ni, j / nj
-            point = []
-            for d in range(2):
-                coons = (
-                    (1 - v) * bottom[i][d]
-                    + v * top[i][d]
-                    + (1 - u) * inner[j][d]
-                    + u * outer[j][d]
-                    - (1 - u) * (1 - v) * bottom[0][d]
-                    - u * (1 - v) * bottom[ni][d]
-                    - (1 - u) * v * top[0][d]
-                    - u * v * top[ni][d]
-                )
-                point.append(coons)
-            position[i, j] = point
-    for i in range(ni + 1):
-        for j in range(nj + 1):
-            if (i % 2, j % 2) == (0, 0) or (i % 2, j % 2) == (1, 1):
-                continue
-            if j == 0:
-                position[i, j] = list(bottom[i])
-            elif j == nj:
-                position[i, j] = list(top[i])
-            elif i == 0:
-                position[i, j] = list(inner[j])
-            elif i == ni:
-                position[i, j] = list(outer[j])
-            elif i % 2 == 1:
-                a, b = position[i - 1, j], position[i + 1, j]
-                position[i, j] = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]
-            else:
-                a, b = position[i, j - 1], position[i, j + 1]
-                position[i, j] = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]
-
     coords = pc.Coords.axisymmetric()
-    node = {}
-    for key in sorted(position):
-        node[key] = coords.add_node(position[key])
-    solid = pc.Mesh(coords, "QUA8")
-    for i in range(0, ni, 2):
-        for j in range(0, nj, 2):
-            solid.unit().add_cell(
-                [
-                    node[i, j],
-                    node[i + 2, j],
-                    node[i + 2, j + 2],
-                    node[i, j + 2],
-                    node[i + 1, j],
-                    node[i + 2, j + 1],
-                    node[i + 1, j + 2],
-                    node[i, j + 1],
-                ]
-            )
-    flat_faces = pc.mesh.poi1_from_nodes(
-        [node[i, 0] for i in range(ni + 1)] + [node[i, nj] for i in range(ni + 1)]
+    origin = coords.add_node([0.0, 0.0])
+    pa = coords.add_node([1.0, 0.0])
+    pb = coords.add_node([1.4, 0.0])
+    pc_ = coords.add_node([COS30, SIN30])
+    pd = coords.add_node([1.4 * COS30, 0.7])
+    pe = coords.add_node([COS45, COS45])
+    pg = coords.add_node([1.0, 1.39])
+    ph = coords.add_node([0.7071, 1.79])
+    pi = coords.add_node([1.0, 1.79])
+    # The four sides, counter-clockwise, as in the deck.
+    bottom = pc.mesh.line(pa, pb, 2)
+    outer = pc.mesh.consolidate(
+        pc.mesh.arc(pb, origin, pd, 4)
+        | pc.mesh.line(pd, pg, 4)
+        | pc.mesh.line(pg, pi, 2)
     )
-    point_a, point_b = node[0, 0], node[ni, 0]
+    top = pc.mesh.line(pi, ph, 2)
+    inner = pc.mesh.consolidate(
+        pc.mesh.line(ph, pe, 4)
+        | pc.mesh.arc(pe, origin, pc_, 2)
+        | pc.mesh.arc(pc_, origin, pa, 4)
+    )
+    solid = pc.mesh.transfinite(bottom, outer, top, inner, "QUA8")
+    flat_faces = pc.mesh.consolidate(
+        pc.mesh.points_on_line(solid, [1.0, 0.0], [1.4, 0.0])
+        | pc.mesh.points_on_line(solid, [0.7071, 1.79], [1.0, 1.79])
+    )
 
     fes = pc.FiniteElementSpace(solid)
     elasticity = pc.model.elasticity(fes, "axisymmetric")
@@ -1195,10 +1096,10 @@ def main(out: str | None = None) -> dict[str, float]:
     materials = pc.element_field.material_field(
         model, [("E", E), ("nu", NU), ("alpha", ALPHA)]
     )
-    temperature = pc.NodeField(solid, ["T"])
-    for (i, j), n in node.items():
-        r, z = position[i, j]
-        temperature[0].set_value(n, "T", r + z)
+    # T = r + z at the nodes: x is r, y is z.
+    temperature = pc.node_field.positions(solid, ["X"]).rename_component(
+        "X", "T"
+    ) + pc.node_field.positions(solid, ["Y"]).rename_component("Y", "T")
     eps_th = pc.element_field.thermal_strain(
         pc.element_field.interp_to_gauss(temperature, fes), materials, fes, T_REF
     )
@@ -1212,7 +1113,7 @@ def main(out: str | None = None) -> dict[str, float]:
 
     strain = pc.element_field.strain(model, u, materials)
     stress = pc.element_field.elastic_stress(model, strain, materials) - sigma_th
-    at_a = pc.node_field.project(stress, solid, pc.mesh.poi1_from_nodes([point_a]))
+    at_a = pc.node_field.project(stress, solid, pc.mesh.poi1_from_nodes([pa]))
 
     if out:
         solid.plot(title="elas11 — QUA8 mesh", save=os.path.join(out, "mesh.svg"))
@@ -1224,8 +1125,8 @@ def main(out: str | None = None) -> dict[str, float]:
             save=os.path.join(out, "sigma_zz.svg"),
         )
     return {
-        "szz_A": at_a.value(point_a, "sigma_yy") / 1e6,
-        "ur_B": u.value(point_b, "u_x"),
+        "szz_A": at_a.value(pa, "sigma_yy") / 1e6,
+        "ur_B": u.value(pb, "u_x"),
     }
 
 
@@ -1780,11 +1681,15 @@ Half of the strip, width 12.5 mm (x from 0 to 12.5 mm), height 100 mm
 **Notes.** The 2011 document gives ν = 0.28 and names the element COQ4; the deck uses
 ν = 0.3 and QUA4.
 
+**Improvement points.**
+
+- `mpc`: one coefficient per term for every relation; relations whose coefficients differ need one `mpc` each
+
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| elastic moment M1 (t = 0.02875) (kN·m) | 805 | 811.08 (+0.755 %) | 811.082 (+0.755 %) | 811.082 (+0.755 %) | 1.4e-15 |
+| elastic moment M1 (t = 0.02875) (kN·m) | 805 | 811.08 (+0.755 %) | 811.082 (+0.755 %) | 811.082 (+0.755 %) | 1.1e-15 |
 | plastic moment M2 (t = 0.05) (kN·m) | 1074 | 1085.2 (+1.04 %) | 1085.05 (+1.03 %) | 1085.05 (+1.03 %) | 4.7e-10 |
 
 Acceptance: deck criterion, each relative gap ≤ 1.5 %.
@@ -1810,7 +1715,9 @@ modelled (12.5 mm wide, u_x = 0 on the symmetry edge x = 0). At t = 0.02875
 the strip is still elastic; at t = 0.05 it is plastic over most of its
 height. Reference: M1 = 805 kN·m and M2 = 1074 kN·m.
 
-Mesh: the deck's, one QUA4 across and 8 along y. The moment is the deck's:
+Mesh: the deck's, one QUA4 across and 8 along y. `mpc` takes one
+coefficient per term for all its relations: the seven relations, whose
+coefficients differ, are seven `mpc`. The moment is the deck's:
 the moment of the support forces on the end section, 2·Σ y·F_x over its
 upper half, in kN·m.
 
@@ -1832,20 +1739,16 @@ TIMES = [0.0, 0.02875, 0.05]
 
 def main(out: str | None = None) -> dict[str, float]:
     coords = pc.Coords(2)
-    # End section x = WIDTH, from A (y = +50 mm) down to B (y = −50 mm).
+    a = coords.add_node([WIDTH, HALF_HEIGHT])
+    b = coords.add_node([WIDTH, -HALF_HEIGHT])
+    strip = pc.mesh.extrude(pc.mesh.line(b, a, N), [-WIDTH, 0.0], 1)
+    # The end section's nodes, from A (y = +50 mm) down to B (y = −50 mm).
     section = [
-        coords.add_node([WIDTH, HALF_HEIGHT - 2.0 * HALF_HEIGHT * i / N])
+        strip.nearest_node([WIDTH, HALF_HEIGHT - 2.0 * HALF_HEIGHT * i / N])
         for i in range(N + 1)
     ]
-    axis = [
-        coords.add_node([0.0, HALF_HEIGHT - 2.0 * HALF_HEIGHT * i / N])
-        for i in range(N + 1)
-    ]
-    strip = pc.Mesh(coords, "QUA4")
-    for i in range(N):
-        strip.unit().add_cell([axis[i + 1], section[i + 1], section[i], axis[i]])
-    a, b = section[0], section[N]
-    origin = axis[N // 2]
+    axis = pc.mesh.points_on_line(strip, [0.0, -HALF_HEIGHT], [0.0, HALF_HEIGHT])
+    origin = strip.nearest_node([0.0, 0.0])
 
     fes = pc.FiniteElementSpace(strip)
     plasticity = pc.model.plasticity_perfect(fes, "plane_stress")
@@ -1853,7 +1756,7 @@ def main(out: str | None = None) -> dict[str, float]:
     push_b = pc.model.dirichlet(pc.mesh.poi1_from_nodes([b]), plasticity, "u_x")
     model = (
         plasticity
-        | pc.model.dirichlet(pc.mesh.poi1_from_nodes(axis), plasticity, "u_x")
+        | pc.model.dirichlet(axis, plasticity, "u_x")
         | pc.model.dirichlet(pc.mesh.poi1_from_nodes([origin]), plasticity, "u_y")
         | pull_a
         | push_b
@@ -1950,8 +1853,8 @@ times 100 and 358.9 of the deck.
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| u_r at A, t = 100 (µm) | 0.4 | 0.39821 (-0.448 %) | 0.398212 (-0.447 %) | 0.398212 (-0.447 %) | 1.4e-16 |
-| u_r at A, t = 358.9 (µm) | 2.83 | 1085.2 (+3.82e+04 %) | 2.74066 (-3.16 %) | 2.74066 (-3.16 %) | 3.2e-15 |
+| u_r at A, t = 100 (µm) | 0.4 | 0.39821 (-0.448 %) | 0.398212 (-0.447 %) | 0.398212 (-0.447 %) | 0.0e+00 |
+| u_r at A, t = 358.9 (µm) | 2.83 | 1085.2 (+3.82e+04 %) | 2.74066 (-3.16 %) | 2.74066 (-3.16 %) | 9.7e-16 |
 
 Acceptance: deck criterion, largest relative gap of the two values < 3.5 %.
 
@@ -1978,15 +1881,13 @@ inner point A, 0.4 µm and 2.83 µm.
 
 Mesh: the deck's quarter of the meridian section, 14 × 16 QUA4: 14 elements
 through the wall (5 from 1 to 1.1 mm, 9 from 1.1 to 2 mm), 16 along each arc
-(every 5.625°). The nodes inside are placed by a transfinite (Coons)
-interpolation of the boundary nodes, as the deck's mesher does.
+(every 5.625°), filled by `transfinite` as the deck's mesher does.
 
 Running::
 
     python validation/03_plasticity/plas2/run.py
 """
 
-import math
 import os
 
 import pyrucast as pc
@@ -1999,72 +1900,35 @@ TIMES = [0.0, 100.0, 358.9]
 
 
 def main(out: str | None = None) -> dict[str, float]:
-    # Radii across the wall, from the inner sphere to the outer one.
-    radii = [R_IN + (R_MID - R_IN) * k / N_THIN for k in range(N_THIN)]
-    radii += [R_MID + (R_OUT - R_MID) * k / N_THICK for k in range(N_THICK + 1)]
-    ni, nj = len(radii) - 1, N_ARC
-    # Boundary nodes: along z = 0 (j = 0), along the axis (j = NJ), on the
-    # inner arc (i = 0) and on the outer arc (i = NI).
-    bottom = [(r, 0.0) for r in radii]
-    top = [(0.0, r) for r in radii]
-    inner, outer = [], []
-    for j in range(nj + 1):
-        theta = math.pi / 2.0 * j / nj
-        inner.append((R_IN * math.cos(theta), R_IN * math.sin(theta)))
-        outer.append((R_OUT * math.cos(theta), R_OUT * math.sin(theta)))
-
     coords = pc.Coords.axisymmetric()
-    node = {}
-    for i in range(ni + 1):
-        for j in range(nj + 1):
-            u, v = i / ni, j / nj
-            point = []
-            for d in range(2):
-                coons = (
-                    (1 - v) * bottom[i][d]
-                    + v * top[i][d]
-                    + (1 - u) * inner[j][d]
-                    + u * outer[j][d]
-                    - (1 - u) * (1 - v) * bottom[0][d]
-                    - u * (1 - v) * bottom[ni][d]
-                    - (1 - u) * v * top[0][d]
-                    - u * v * top[ni][d]
-                )
-                point.append(coons)
-            node[i, j] = coords.add_node(point)
-    sphere = pc.Mesh(coords, "QUA4")
-    for i in range(ni):
-        for j in range(nj):
-            sphere.unit().add_cell(
-                [node[i, j], node[i + 1, j], node[i + 1, j + 1], node[i, j + 1]]
-            )
-    # The inner arc, travelled counter-clockwise around the section: from the
-    # axis down to A.
-    inner_arc = pc.Mesh(coords, "SEG2")
-    for j in range(nj, 0, -1):
-        inner_arc.unit().add_cell([node[0, j], node[0, j - 1]])
-    point_a = node[0, 0]
+    origin = coords.add_node([0.0, 0.0])
+    a = coords.add_node([R_IN, 0.0])
+    x = coords.add_node([R_MID, 0.0])
+    b = coords.add_node([R_OUT, 0.0])
+    c = coords.add_node([0.0, R_OUT])
+    y = coords.add_node([0.0, R_MID])
+    d = coords.add_node([0.0, R_IN])
+    # The four sides of the section, counter-clockwise, as in the deck.
+    bottom = pc.mesh.consolidate(
+        pc.mesh.line(a, x, N_THIN) | pc.mesh.line(x, b, N_THICK)
+    )
+    outer = pc.mesh.arc(b, origin, c, N_ARC)
+    axis = pc.mesh.consolidate(pc.mesh.line(c, y, N_THICK) | pc.mesh.line(y, d, N_THIN))
+    inner = pc.mesh.arc(d, origin, a, N_ARC)
+    sphere = pc.mesh.transfinite(bottom, outer, axis, inner)
 
     fes = pc.FiniteElementSpace(sphere)
     plasticity = pc.model.plasticity_perfect(fes, "axisymmetric")
     model = (
         plasticity
-        | pc.model.dirichlet(
-            pc.mesh.poi1_from_nodes([node[i, 0] for i in range(ni + 1)]),
-            plasticity,
-            "u_y",
-        )
-        | pc.model.dirichlet(
-            pc.mesh.poi1_from_nodes([node[i, nj] for i in range(ni + 1)]),
-            plasticity,
-            "u_x",
-        )
+        | pc.model.dirichlet(pc.mesh.consolidate(bottom.to_poi1()), plasticity, "u_y")
+        | pc.model.dirichlet(pc.mesh.consolidate(axis.to_poi1()), plasticity, "u_x")
     )
     materials = pc.element_field.material_field(
         model, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y)]
     )
     # The internal pressure at t = 1, pushing on the wall: φ_n = −p.
-    pressure = pc.model.flux(pc.FiniteElementSpace(inner_arc), plasticity, "n")
+    pressure = pc.model.flux(pc.FiniteElementSpace(inner), plasticity, "n")
     unit_force = pc.node_field.external_forces(
         pressure, pc.element_field.material_field(pressure, [("phi_n", -PRESSURE_RATE)])
     )
@@ -2080,7 +1944,7 @@ def main(out: str | None = None) -> dict[str, float]:
 
     values = {}
     for k, record in enumerate(data["results"][1:], start=1):
-        values[f"ur_A_{k}"] = record["displacement"].value(point_a, "u_x") * 1e6
+        values[f"ur_A_{k}"] = record["displacement"].value(a, "u_x") * 1e6
 
     if out:
         sphere.plot(title="plas2 — QUA4 mesh", save=os.path.join(out, "mesh.svg"))
@@ -2311,6 +2175,11 @@ driven by H·p (see `src/models/plasticity/drucker_prager.rs`): with H = 0 it
 stays on the initial surface, and its stress stops at that surface's apex,
 K / (2α + β). Cast3M's stops at the ultimate surface's apex, the reference.
 
+**Improvement points.**
+
+- Drucker-Prager with two surfaces: pyrucast's interpolation driven by H·p departs from Cast3M when K_L < K, or when K_L = K with H ≠ 0
+- `model.drucker_prager` docstring: the friction is the `friction` component, not `alpha`
+
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
@@ -2473,6 +2342,10 @@ The pyrucast moment is that of the support forces on the loaded side,
 σ_xx extrapolated to the nodes and averaged between cells. The two estimates
 differ by the error of that integration, which grows with the plastic zone.
 
+**Improvement points.**
+
+- `Mesh`: no accessor for its nodes (`mesh.node(0, i, 0)` over the cells of a POI1 mesh)
+
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
@@ -2565,14 +2438,10 @@ def main(out: str | None = None) -> dict[str, float]:
         model, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y)]
     )
     # u_x = ROTATION·t·y/HALF_HEIGHT on the loaded side, here for t = 1.
+    unit = pc.node_field.positions(bend.multiplier_mesh(), ["Y"]).rename_component(
+        "Y", "imposed"
+    ) * (ROTATION / HALF_HEIGHT)
     side = [loaded_nodes.node(0, i, 0) for i in range(loaded_nodes.cell_count)]
-    # The multipliers have nodes of their own, at their support's positions.
-    multipliers = bend.multiplier_mesh()
-    unit = pc.NodeField(multipliers, ["imposed"])
-    for i in range(multipliers.cell_count):
-        node = multipliers.node(0, i, 0)
-        y = node.position()[1]
-        unit[0].set_value(node, "imposed", ROTATION * y / HALF_HEIGHT)
     data = {
         "model": model,
         "times": TIMES,
@@ -2654,6 +2523,13 @@ incompressible plastic flow). Cast3M averages between neighbouring cells the
 values extrapolated to a node, which smooths the oscillation out; pyrucast
 reads the node in one cell, which shows it.
 
+**Improvement points.**
+
+- B-bar (selective integration) against the volumetric locking of QUA4/QUA8 in incompressible plastic flow
+- nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)
+- `project` of a field at the Gauss points: the cell a node shared by several cells is read in cannot be chosen
+- `Mesh`: no accessor for its nodes (`mesh.node(0, i, 0)` over the cells of a POI1 mesh)
+
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
@@ -2666,16 +2542,13 @@ reads the node in one cell, which shows it.
 | bending moment at t = 0.5 (1e4 N·m) | 139.3 | — | 142.712 (+2.45 %) | 140.424 (+0.807 %) | 1.6e-02 |
 | bending moment at t = 1.0 (1e4 N·m) | 139.4 | — | 146.289 (+4.94 %) | 141.784 (+1.71 %) | 3.1e-02 |
 | σ_xx at A (12.5, 50) mm, t = 1 (MPa) | 543.4 | — | 547.236 (+0.706 %) | 996.705 (+83.4 %) | 8.2e-01 |
-| σ_xx at the second node of the loaded edge (y = 46.875 mm), cell above, t = 1 (MPa) | 557.7 | — | 557.745 (+0.00805 %) | 118.706 (-78.7 %) | 7.9e-01 |
-| σ_xx at the second node of the loaded edge (y = 46.875 mm), cell below, t = 1 (MPa) | 557.7 | — | — | 118.705 (-78.7 %) |  |
+| σ_xx at the second node of the loaded edge (y = 46.875 mm), t = 1 (MPa) | 557.7 | — | 557.745 (+0.00805 %) | 118.706 (-78.7 %) | 7.9e-01 |
 
 Acceptance: deck criterion, largest relative gap of the nine values ≤ 5 %.
 
-pyrucast OUTSIDE tolerance: sxx_A: 996.7051027453692 vs 543.4, beyond 5.000000%
+pyrucast OUTSIDE tolerance: sxx_A: 996.7051027453901 vs 543.4, beyond 5.000000%
 
-pyrucast OUTSIDE tolerance: sxx_A2: 118.70587497762746 vs 557.7, beyond 5.000000%
-
-pyrucast OUTSIDE tolerance: sxx_A2_below: 118.70531305794216 vs 557.7, beyond 5.000000%
+pyrucast OUTSIDE tolerance: sxx_A2: 118.70559401777976 vs 557.7, beyond 5.000000%
 
 #### pyrucast figures
 
@@ -2700,9 +2573,8 @@ Mesh: the deck's regular grid of 32 × 4 QUA4.
 The moment is taken from the support forces on the loaded side, Σ y·F_x, in
 the deck's unit of 1e4 N·m: exact by equilibrium. The deck integrates y·σ_xx along that side, with
 σ_xx extrapolated to the nodes and averaged between cells; the two estimates
-differ by the error of that integration. The stresses are read in the cell
-holding the node, from its Gauss points; the second node of the side lies
-between two cells, and is read in each.
+differ by the error of that integration. The stresses are read by `project`
+in one cell holding the node, from its Gauss points.
 
 Running::
 
@@ -2754,14 +2626,10 @@ def main(out: str | None = None) -> dict[str, float]:
         model, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y)]
     )
     # u_x = ROTATION·t·y/HALF_HEIGHT on the loaded side, here for t = 1.
+    unit = pc.node_field.positions(bend.multiplier_mesh(), ["Y"]).rename_component(
+        "Y", "imposed"
+    ) * (ROTATION / HALF_HEIGHT)
     side = [loaded_nodes.node(0, i, 0) for i in range(loaded_nodes.cell_count)]
-    # The multipliers have nodes of their own, at their support's positions.
-    multipliers = bend.multiplier_mesh()
-    unit = pc.NodeField(multipliers, ["imposed"])
-    for i in range(multipliers.cell_count):
-        node = multipliers.node(0, i, 0)
-        y = node.position()[1]
-        unit[0].set_value(node, "imposed", ROTATION * y / HALF_HEIGHT)
     data = {
         "model": model,
         "times": TIMES,
@@ -2778,19 +2646,18 @@ def main(out: str | None = None) -> dict[str, float]:
             moment += node.position()[1] * reactions.value(node, "f_x")
         values[f"M_{k}"] = moment / MOMENT_UNIT
 
-    # σ_xx at A and at the second node of the side, just inside each cell.
-    dy = 2.0 * HALF_HEIGHT / N_HEIGHT
-    at_a = coords.add_node([WIDTH, HALF_HEIGHT])
-    above = coords.add_node([WIDTH, HALF_HEIGHT - dy + 1e-9])
-    below = coords.add_node([WIDTH, HALF_HEIGHT - dy - 1e-9])
+    # σ_xx at A and at the second node of the side, read in one cell each.
+    point_a = rectangle.nearest_node([WIDTH, HALF_HEIGHT])
+    point_2 = rectangle.nearest_node(
+        [WIDTH, HALF_HEIGHT - 2.0 * HALF_HEIGHT / N_HEIGHT]
+    )
     stress = pc.node_field.project(
         data["results"][-1]["behaviour"],
         rectangle,
-        pc.mesh.poi1_from_nodes([at_a, above, below]),
+        pc.mesh.poi1_from_nodes([point_a, point_2]),
     )
-    values["sxx_A"] = stress.value(at_a, "sigma_xx") / 1e6
-    values["sxx_A2"] = stress.value(above, "sigma_xx") / 1e6
-    values["sxx_A2_below"] = stress.value(below, "sigma_xx") / 1e6
+    values["sxx_A"] = stress.value(point_a, "sigma_xx") / 1e6
+    values["sxx_A2"] = stress.value(point_2, "sigma_xx") / 1e6
 
     if out:
         rectangle.plot(title="plas7 — QUA4 mesh", save=os.path.join(out, "mesh.svg"))
@@ -2901,6 +2768,16 @@ driven by H·p (see `src/models/plasticity/drucker_prager.rs`): with K_L = K
 the interpolation is frozen, H has no effect, and the stress stays on the
 plateau K / (α + β) instead of softening to zero. The gap measured is that
 plateau against the exact curve's zero.
+
+The deck adds, on the same cell, an elastic material of stiffness 2e-3 in
+parallel; pyrucast refuses two laws carrying each their own E on one support,
+and the script leaves it out (its stress stays below 1e-6).
+
+**Improvement points.**
+
+- Drucker-Prager with two surfaces: pyrucast's interpolation driven by H·p departs from Cast3M when K_L < K, or when K_L = K with H ≠ 0
+- two laws on one support (materials in parallel on the same cells)
+- `model.drucker_prager` docstring: the friction is the `friction` component, not `alpha`
 
 #### Results
 
@@ -5691,12 +5568,21 @@ the temperature, k = k₀·(1 + β·(T − T₀)).
 
 - Conductivity: linear in T, through the points T₀ − 100 and T₀ + 1000.
 
+**Notes.** The deck's 26 cells grow from L/100 to L/10 along x; pyrucast's are even.
+The non-linear iterations are converged to 1e-8: at step_by_step's default
+precision (1e-4) the profile stays about 1e-4 away and misses the deck's
+criterion.
+
+**Improvement points.**
+
+- graded lines and extrusions (Cast3M `DINI`/`DFIN`, mesh density)
+
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / Cast3M 2026 |
 |---|---|---|---|---|---|
-| largest gap of T to the analytical profile | 0 | — | 3.88762e-07 (Δ = 3.9e-07) | 1.74891e-09 (Δ = 1.7e-09) | Δ = -3.9e-07 |
-| T at the insulated face x = 0 (°C) | 141.24 | — | 141.24 (-1.72e-05 %) | 141.24 (-7.74e-08 %) | 1.7e-07 |
+| largest gap of T to the analytical profile | 0 | — | 3.88762e-07 (Δ = 3.9e-07) | 5.28512e-10 (Δ = 5.3e-10) | Δ = -3.9e-07 |
+| T at the insulated face x = 0 (°C) | 141.24 | — | 141.24 (-1.72e-05 %) | 141.24 (-1.97e-08 %) | 1.7e-07 |
 
 Acceptance: deck criterion, largest gap to the analytical profile ≤ 1e-5.
 
@@ -5726,8 +5612,9 @@ T₀ + (√(1 + s) − 1)/β.
 
 The non-linear iterations are converged to a precision of 1e-8.
 
-Mesh: one row of QUA4 of height L/10, the deck's: its cells grow from L/100
-to L/10 along x, at the positions `X_NODES` the deck's mesh density gives.
+Mesh: one row of 26 QUA4 of height L/10, as many as the deck's. The deck's
+cells grow from L/100 to L/10 along x; pyrucast's `line` has no such
+progression, its cells are even.
 
 Running::
 
@@ -5746,45 +5633,15 @@ SOURCE = 1e7  # W/m³
 # The deck's THERMIC procedure stops on its own criterion; at step_by_step's
 # default precision (1e-4) the profile would stay 1e-4 from the converged one.
 PRECISION = 1e-8
-X_NODES = [
-    0.0,
-    5.021902808304401e-05,
-    1.051657296518693e-04,
-    1.652851729891834e-04,
-    2.310643255860185e-04,
-    3.030359985784089e-04,
-    3.817831625175931e-04,
-    4.679436694314784e-04,
-    5.622154194260674e-04,
-    6.653620136763161e-04,
-    7.782189395956515e-04,
-    9.017003382840204e-04,
-    1.036806409070798e-03,
-    1.184631511129359e-03,
-    1.346373027786375e-03,
-    1.523341065326770e-03,
-    1.716969064854620e-03,
-    1.928825413166102e-03,
-    2.160626146682537e-03,
-    2.414248851345410e-03,
-    2.691747871062489e-03,
-    2.995370947893483e-03,
-    3.327577428760723e-03,
-    3.691058186159234e-03,
-    4.088757414223942e-03,
-    4.523896476702174e-03,
-    5.0e-03,
-]
+N = 26  # cells along x, as many as the deck's
 
 
 def main(out: str | None = None) -> dict[str, float]:
     coords = pc.Coords(2)
-    bottom = [coords.add_node([x, 0.0]) for x in X_NODES]
-    top = [coords.add_node([x, HEIGHT]) for x in X_NODES]
-    wall = pc.Mesh(coords, "QUA4")
-    for i in range(len(X_NODES) - 1):
-        wall.unit().add_cell([bottom[i], bottom[i + 1], top[i + 1], top[i]])
-    held_face = pc.mesh.poi1_from_nodes([bottom[-1], top[-1]])
+    hot = coords.add_node([0.0, 0.0])
+    held = coords.add_node([L, 0.0])
+    wall = pc.mesh.extrude(pc.mesh.line(hot, held, N), [0.0, HEIGHT], 1)
+    held_face = pc.mesh.points_on_line(wall, [L, 0.0], [L, HEIGHT])
 
     fes = pc.FiniteElementSpace(wall)
     conduction = pc.model.heat_conduction(fes)
@@ -5817,8 +5674,10 @@ def main(out: str | None = None) -> dict[str, float]:
 
     s = L * L * SOURCE * BETA / K0
     worst = 0.0
-    for i, x in enumerate(X_NODES):
-        theta = (temperature.value(top[i], "T") - T0) * 2.0 * K0 / (SOURCE * L * L)
+    for i in range(N + 1):
+        x = L * i / N
+        node = wall.nearest_node([x, HEIGHT])
+        theta = (temperature.value(node, "T") - T0) * 2.0 * K0 / (SOURCE * L * L)
         exact = 2.0 * (math.sqrt(1.0 + s * (1.0 - (x / L) ** 2)) - 1.0) / s
         worst = max(worst, abs(theta - exact))
 
@@ -5830,7 +5689,7 @@ def main(out: str | None = None) -> dict[str, float]:
             cmap="viridis",
             save=os.path.join(out, "T.svg"),
         )
-    return {"gap_max": worst, "T_hot": temperature.value(bottom[0], "T")}
+    return {"gap_max": worst, "T_hot": temperature.value(hot, "T")}
 
 
 if __name__ == "__main__":
@@ -5887,6 +5746,10 @@ mesh. Their displacements differ by about ν (here 1e-5): in plane strain,
 pyrucast's thermal strain has no out-of-plane component α·ΔT, so a uniformly
 heated element held along y stretches by α·ΔT/(1 − ν) instead of
 α·ΔT·(1 + ν)/(1 − ν). With ν = 1e-5 the effect stays at that level here.
+
+**Improvement points.**
+
+- plane-strain thermal strain: no out-of-plane component α·ΔT
 
 #### Results
 

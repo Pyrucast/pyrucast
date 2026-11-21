@@ -41,23 +41,20 @@ The 2011 document gives the torque as 1200 mN and the loads as 600 N; the
 deck applies 1.2 MN·m with 600 kN per flange. The deck reads the axial
 stress as the SMYY component of the shell stresses averaged through the
 thickness (CALP 'MOYEN'), extrapolated to the nodes and averaged between the
-two cells that share A. pyrucast reads N_xx / h in each of the two cells.
-The mesh is the Cast3M one, but the quadrangle shells differ: the tip
-deflection u_z, compared with no reference, is 4 % smaller in pyrucast's DKQ
-than in Cast3M's COQ4.
+two cells that share A; pyrucast reads N_yy / h in one of them. On the same
+mesh, the tip deflection u_z, compared with no reference, is 4 % smaller in
+pyrucast's DKQ than in Cast3M's COQ4.
 """
+
+improvements = [
+    "Kirchhoff quadrangle shell (DKQ): 4 % stiffer than Cast3M's COQ4 on elas4, to look into",
+    "nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)",
+    "`project` of a field at the Gauss points: the cell a node shared by several cells is read in cannot be chosen",
+]
 
 [[quantity]]
 key = "sxx_A"
-label = "σ_xx at A, mid-surface, cell x < 2.5"
-unit = "MPa"
-reference = -108.0
-castem_2011 = -112.73
-castem_probe = "SMXXA2"
-
-[[quantity]]
-key = "sxx_A_after"
-label = "σ_xx at A, mid-surface, cell x > 2.5"
+label = "σ_xx at A, mid-surface"
 unit = "MPa"
 reference = -108.0
 castem_2011 = -112.73

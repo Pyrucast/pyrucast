@@ -1,21 +1,21 @@
 <svg fill="none" stroke-width="1" width="800" height="600" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
 <rect x="0" y="0" width="800" height="600" fill="#FFFFFF" stroke="none"/>
-<polygon fill="#B4C8E6" points="245,166 201,192 245,217 289,192 "/>
-<polyline stroke="#000000" points="245,166 201,192 245,217 289,192 245,166 "/>
-<polygon fill="#B4C8E6" points="289,192 245,217 289,242 333,217 "/>
-<polyline stroke="#000000" points="289,192 245,217 289,242 333,217 289,192 "/>
-<polygon fill="#B4C8E6" points="333,217 289,242 333,267 377,242 "/>
-<polyline stroke="#000000" points="333,217 289,242 333,267 377,242 333,217 "/>
-<polygon fill="#B4C8E6" points="377,242 333,267 377,293 421,267 "/>
-<polyline stroke="#000000" points="377,242 333,267 377,293 421,267 377,242 "/>
-<polygon fill="#B4C8E6" points="421,267 377,293 421,318 465,293 "/>
-<polyline stroke="#000000" points="421,267 377,293 421,318 465,293 421,267 "/>
-<polygon fill="#B4C8E6" points="465,293 421,318 465,343 509,318 "/>
-<polyline stroke="#000000" points="465,293 421,318 465,343 509,318 465,293 "/>
-<polygon fill="#B4C8E6" points="509,318 465,343 509,368 553,343 "/>
-<polyline stroke="#000000" points="509,318 465,343 509,368 553,343 509,318 "/>
-<polygon fill="#B4C8E6" points="553,343 509,368 553,394 597,368 "/>
-<polyline stroke="#000000" points="553,343 509,368 553,394 597,368 553,343 "/>
+<polygon fill="#B4C8E6" points="201,192 245,217 289,192 245,166 "/>
+<polyline stroke="#000000" points="201,192 245,217 289,192 245,166 201,192 "/>
+<polygon fill="#B4C8E6" points="245,217 289,242 333,217 289,192 "/>
+<polyline stroke="#000000" points="245,217 289,242 333,217 289,192 245,217 "/>
+<polygon fill="#B4C8E6" points="289,242 333,267 377,242 333,217 "/>
+<polyline stroke="#000000" points="289,242 333,267 377,242 333,217 289,242 "/>
+<polygon fill="#B4C8E6" points="333,267 377,293 421,267 377,242 "/>
+<polyline stroke="#000000" points="333,267 377,293 421,267 377,242 333,267 "/>
+<polygon fill="#B4C8E6" points="377,293 421,318 465,293 421,267 "/>
+<polyline stroke="#000000" points="377,293 421,318 465,293 421,267 377,293 "/>
+<polygon fill="#B4C8E6" points="421,318 465,343 509,318 465,293 "/>
+<polyline stroke="#000000" points="421,318 465,343 509,318 465,293 421,318 "/>
+<polygon fill="#B4C8E6" points="465,343 509,368 553,343 509,318 "/>
+<polyline stroke="#000000" points="465,343 509,368 553,343 509,318 465,343 "/>
+<polygon fill="#B4C8E6" points="509,368 553,394 597,368 553,343 "/>
+<polyline stroke="#000000" points="509,368 553,394 597,368 553,343 509,368 "/>
 <polyline stroke="#DC3C3C" stroke-width="2" points="56,503 32,517 "/>
 <text x="27" y="519" dy="0.76em" text-anchor="start" font-family="sans-serif" font-size="11.290322580645162" fill="#DC3C3C">
 X

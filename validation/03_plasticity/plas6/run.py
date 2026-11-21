@@ -63,14 +63,10 @@ def main(out: str | None = None) -> dict[str, float]:
         model, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y)]
     )
     # u_x = ROTATION·t·y/HALF_HEIGHT on the loaded side, here for t = 1.
+    unit = pc.node_field.positions(bend.multiplier_mesh(), ["Y"]).rename_component(
+        "Y", "imposed"
+    ) * (ROTATION / HALF_HEIGHT)
     side = [loaded_nodes.node(0, i, 0) for i in range(loaded_nodes.cell_count)]
-    # The multipliers have nodes of their own, at their support's positions.
-    multipliers = bend.multiplier_mesh()
-    unit = pc.NodeField(multipliers, ["imposed"])
-    for i in range(multipliers.cell_count):
-        node = multipliers.node(0, i, 0)
-        y = node.position()[1]
-        unit[0].set_value(node, "imposed", ROTATION * y / HALF_HEIGHT)
     data = {
         "model": model,
         "times": TIMES,

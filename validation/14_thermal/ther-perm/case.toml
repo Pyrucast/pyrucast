@@ -30,6 +30,17 @@ model = """
 - Conductivity: linear in T, through the points T₀ − 100 and T₀ + 1000.
 """
 
+notes = """
+The deck's 26 cells grow from L/100 to L/10 along x; pyrucast's are even.
+The non-linear iterations are converged to 1e-8: at step_by_step's default
+precision (1e-4) the profile stays about 1e-4 away and misses the deck's
+criterion.
+"""
+
+improvements = [
+    "graded lines and extrusions (Cast3M `DINI`/`DFIN`, mesh density)",
+]
+
 [[quantity]]
 key = "gap_max"
 label = "largest gap of T to the analytical profile"

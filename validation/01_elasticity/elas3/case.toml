@@ -35,9 +35,16 @@ Quarter cylinder of radius 4.953 and half-length 5.175 (axis y), thickness
 """
 
 notes = """
-The pyrucast mesh is the Cast3M one cell for cell (10 elements on the arc,
-7 layers placed by the deck's mesh density).
+The deck places its 7 layers by its mesh density, slightly closer towards the
+loaded section, and alternates the diagonals of its triangles; pyrucast's
+layers are even and its diagonals all alike.
 """
+
+improvements = [
+    "graded lines and extrusions (Cast3M `DINI`/`DFIN`, mesh density)",
+    "`convert` / `extrude` to TRI3: alternating diagonals (Cast3M's translation alternates them)",
+    "`dirichlet`: a node blocked twice for the same unknown (two supports meeting) makes the matrix singular, and the LU error does not name the cause",
+]
 
 [[quantity]]
 key = "uz_P3"

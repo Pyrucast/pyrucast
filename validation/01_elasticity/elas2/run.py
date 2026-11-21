@@ -5,17 +5,17 @@ mid-length by two opposite point loads. One eighth is modelled: a quarter of
 the circumference over half the length, with symmetry conditions on the cut
 edges. Reference: u_z = −1.14 under the load, u_x = 0 at the clamped point P1.
 
-The mesh is the Cast3M deck's, cell for cell: the quarter arc (6 elements,
-every 15°) translated by 70 along y (30 layers), each quadrangle cut into two
-triangles along a diagonal that alternates from one quadrangle to the next
-along the arc, as the deck's translation in TRI3 does.
+Mesh: the deck's nodes, the quarter arc (6 elements, every 15°) extruded by
+70 along y in 30 layers, each quadrangle cut into two triangles by
+`convert`. `convert` cuts every quadrangle along the same diagonal; the
+deck's translation in TRI3 alternates it from one quadrangle to the next
+along the arc.
 
 Running::
 
     python validation/01_elasticity/elas2/run.py
 """
 
-import math
 import os
 
 import pyrucast as pc
@@ -27,34 +27,22 @@ FORCE = -2500.0  # F_z at the loaded point, a quarter of the pinching load
 
 
 def main(out: str | None = None) -> dict[str, float]:
-    # Node (k, j): k-th point of the arc from (R, 0, 0) to (0, 0, R), j-th layer.
     coords = pc.Coords(3)
-    node = {}
-    for j in range(N_LENGTH + 1):
-        for k in range(N_ARC + 1):
-            theta = math.pi / 2.0 * k / N_ARC
-            y = HALF_LENGTH * j / N_LENGTH
-            node[k, j] = coords.add_node(
-                [RADIUS * math.cos(theta), y, RADIUS * math.sin(theta)]
-            )
-    surface = pc.Mesh(coords, "TRI3")
-    for j in range(N_LENGTH):
-        for k in range(N_ARC):
-            a0, a1 = node[k, j], node[k + 1, j]
-            b0, b1 = node[k, j + 1], node[k + 1, j + 1]
-            if k % 2 == 0:
-                surface.unit().add_cell([a0, a1, b1])
-                surface.unit().add_cell([a0, b1, b0])
-            else:
-                surface.unit().add_cell([a0, a1, b0])
-                surface.unit().add_cell([a1, b1, b0])
+    centre = coords.add_node([0.0, 0.0, 0.0])
+    p1 = coords.add_node([RADIUS, 0.0, 0.0])
+    p2 = coords.add_node([0.0, 0.0, RADIUS])
+    arc = pc.mesh.arc(p1, centre, p2, N_ARC)
+    surface = pc.mesh.convert(
+        pc.mesh.extrude(arc, [0.0, HALF_LENGTH, 0.0], N_LENGTH), "TRI3"
+    )
+    p3 = surface.nearest_node([0.0, HALF_LENGTH, RADIUS])
 
-    clamped = pc.mesh.poi1_from_nodes([node[k, 0] for k in range(N_ARC + 1)])
-    plane_z0 = pc.mesh.poi1_from_nodes([node[0, j] for j in range(N_LENGTH + 1)])
-    plane_x0 = pc.mesh.poi1_from_nodes([node[N_ARC, j] for j in range(N_LENGTH + 1)])
-    mid_length = pc.mesh.poi1_from_nodes([node[k, N_LENGTH] for k in range(N_ARC + 1)])
-    p1 = node[0, 0]
-    p3 = node[N_ARC, N_LENGTH]
+    clamped = pc.mesh.points_on_plane(surface, [0.0, 0.0, 0.0], [0.0, 1.0, 0.0])
+    plane_z0 = pc.mesh.points_on_plane(surface, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+    plane_x0 = pc.mesh.points_on_plane(surface, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0])
+    mid_length = pc.mesh.points_on_plane(
+        surface, [0.0, HALF_LENGTH, 0.0], [0.0, 1.0, 0.0]
+    )
 
     # The blocked nodes of each unknown: clamped end, then the symmetry planes
     # z = 0 (u_z, r_x, r_y), x = 0 (u_x, r_y, r_z) and y = 70 (u_y, r_x, r_z).

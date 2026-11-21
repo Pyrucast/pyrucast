@@ -53,6 +53,13 @@ values extrapolated to a node, which smooths the oscillation out; pyrucast
 reads the node in one cell, which shows it.
 """
 
+improvements = [
+    "B-bar (selective integration) against the volumetric locking of QUA4/QUA8 in incompressible plastic flow",
+    "nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)",
+    "`project` of a field at the Gauss points: the cell a node shared by several cells is read in cannot be chosen",
+    "`Mesh`: no accessor for its nodes (`mesh.node(0, i, 0)` over the cells of a POI1 mesh)",
+]
+
 [[quantity]]
 key = "M_1"
 label = "bending moment at t = 0.029435"
@@ -111,14 +118,8 @@ castem_probe = "MOM1 . 8"
 
 [[quantity]]
 key = "sxx_A2"
-label = "σ_xx at the second node of the loaded edge (y = 46.875 mm), cell above, t = 1"
+label = "σ_xx at the second node of the loaded edge (y = 46.875 mm), t = 1"
 unit = "MPa"
 reference = 557.7
 castem_probe = "MOM1 . 9"
 
-[[quantity]]
-key = "sxx_A2_below"
-label = "σ_xx at the second node of the loaded edge (y = 46.875 mm), cell below, t = 1"
-unit = "MPa"
-reference = 557.7
-castem_probe = "MOM1 . 9"
