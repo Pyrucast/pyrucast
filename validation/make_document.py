@@ -115,7 +115,7 @@ def check(case, values, refs):
         elif rel_tol is not None and ref != 0:
             checked += 1
             if abs(value - ref) > rel_tol * abs(ref):
-                failures.append(f"{q['key']}: {value} vs {ref}, beyond {rel_tol:%}")
+                failures.append(f"{q['key']}: {value} vs {ref}, beyond {rel_tol:.2g}")
     return checked, failures
 
 

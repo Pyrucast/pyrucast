@@ -251,7 +251,7 @@ après un changement de dépendances paie en plus leur compilation.
 | `cargo build --features viz-interactive` | la fenêtre winit compile | aucun test — 959 lignes que rien n'exerce sans écran | 49 s | ✓ | | ✓ | | | | ✓ | ✓ |
 | `cargo test --features spill --test spill` | l'allocateur `spill` place les grosses allocations dans des fichiers (Unix) | `tests/spill.rs`, 3 tests | 136 s | ✓ | | ✓ | | | | ✓ | ✓ |
 | `maturin develop --release --features extension-module,viz` | l'extension Python s'installe, compilée en release comme la roue | — | 96 s | | | | ✓ | | | ✓ | ✓ |
-| `python -m pytest` | l'API Python, unité par unité (740 tests, hors gmsh et medcoupling) | 99 fichiers `tests/python/test_*.py`, dont 27 `test_doc_*.py` qui sont aussi les sources des exemples du book | 78 s | | | | ✓ | | | ✓ | ✓ |
+| `python -m pytest` | l'API Python, unité par unité (761 tests, hors gmsh et medcoupling) | 100 fichiers `tests/python/test_*.py`, dont 27 `test_doc_*.py` qui sont aussi les sources des exemples du book | 78 s | | | | ✓ | | | ✓ | ✓ |
 | `script/run_examples.sh` | des chaînes de calcul **de bout en bout** | 30 `examples/*.py`, 11 `tutoriel/*.py` | 69 s | | | | | ✓ | | ✓ | ✓ |
 | `cargo doc --no-deps --lib` (`-D warnings`) | la rustdoc n'a aucun lien cassé | — | 15 s | | | | | | ✓ | ✓ | ✓ |
 | `python script/elements_figures.py` | les figures des fiches d'éléments se dessinent, dans `book/src/elements/img/` vidé puis réécrit | — | <1 s | | | | | | ✓ | ✓ | ✓ |

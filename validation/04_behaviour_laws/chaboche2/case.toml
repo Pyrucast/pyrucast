@@ -5,8 +5,9 @@ castem_version = "97' customer version"
 source = ""
 dgibi = "chaboche2.dgibi"
 pyrucast = "`model.viscoplasticity_chaboche(fes, \"axisymmetric\")` in `stepping.step_by_step`, QUA8"
+tolerance = 1e-4
 tolerance_note = """criterion of the `.dgibi` file, max |σ_CHABOCHE − σ_ONERA| / max |σ_ONERA| ≤ 1e-4 \
-over the computed times."""
+over the computed times; applied here to each value read."""
 
 topic = """
 A cylinder of a unified viscoplastic Chaboche material (Norton flow, one

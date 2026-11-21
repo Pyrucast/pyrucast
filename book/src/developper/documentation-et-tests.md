@@ -34,6 +34,7 @@ D'où la ligne directrice de toute cette page :
 | **garde-fou** | `tests/python/test_method_exposure.py`, `test_mirror_completeness.py`, `script/doc_lint.py` | une **règle d'API ou de documentation**, pas un comportement | `pytest` — `check_python` ; `doc_lint.py` — `check_doc` |
 | **exemple** | `examples/*.py` | une chaîne utilisateur de bout en bout | `run_examples` — `check_examples` |
 | **script du tutoriel** | `tutoriel/*.py` | un parcours pédagogique complet | `run_examples` — `check_examples` |
+| **cas de validation** | `validation/*/*/run.py` | un cas publié (le recueil de cas tests annotés de Cast3M) tenu dans sa tolérance, comparé à la référence et à Cast3M 2026 | `pytest` (`test_validation.py`) — `check_python` |
 | **banc** | `benches/*.rs` | une **performance**, jamais une correction | `cargo bench`, hors CI |
 
 Trois distinctions valent d'être tenues :
@@ -77,6 +78,7 @@ jamais de la page où on veut l'afficher.
 | une chaîne Rust complète (une physique) | `tests/<sujet>.rs`, entre ancres | un `include` ancré | `cargo test` |
 | une chaîne Python complète | `examples/<sujet>.py` | un `include`, entier ou ancré | `run_examples` |
 | un parcours pédagogique | `tutoriel/<sujet>.py`, entre ancres | un `include` ancré | `run_examples` |
+| un cas publié (le recueil de cas tests annotés de Cast3M) | `validation/<chapitre>/<cas>/run.py` | rien — `validation/README.md` le rassemble | `pytest` (`test_validation.py`) |
 | l'usage d'un opérateur en Python | `tests/python/test_doc_<famille>.py`, entre ancres ; l'ancre `module-fonction` (`mesh-skin`) le rattache à la fonction, `test_doc_reference.py` accueille ceux d'aucune page | un `include` ancré, et la référence sous la fonction | `pytest` |
 | le contrat d'une fonction Python (arguments, retour, erreurs) | sa docstring, en anglais | la référence, fabriquée à partir d'elle | `doc_lint.py docstrings` |
 | ce qui n'est **pas du code** (signature annotée, pseudo-code) | la page elle-même | ` ```text ` — pas de coloration, donc pas de promesse | rien, et c'est assumé |
@@ -240,6 +242,7 @@ Deux points utiles :
 | tout opérateur Rust a son binding Python | `test_mirror_completeness.py` | `check_python` |
 | tout verbe éligible a sa méthode | `test_method_exposure.py` | `check_python` |
 | les exemples et le tutoriel tournent | `run_examples` | `check_examples` |
+| les cas de validation tiennent leur tolérance | `test_validation.py` | `check_python` |
 | les doctests compilent et tournent | `cargo test --workspace --features viz` | `check_rust` |
 | la rustdoc n'a aucun lien cassé | `cargo doc` avec `RUSTDOCFLAGS="-D warnings"` | `check_doc` |
 | les includes du book résolvent | `doc_lint.py includes` | `check_doc` |

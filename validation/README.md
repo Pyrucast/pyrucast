@@ -65,7 +65,7 @@ python validation/make_document.py    # this document
 | Plasticity | [plas13](#plas13) | gap | missing: beam plasticity (global law) | |
 | Plasticity | [plas14](#plas14) | gap | missing: multi-fibre beam sections | |
 | Behaviour laws | [norton_cis1](#norton_cis1) | gap | missing: Norton creep with a time-hardening exponent (Cast3M AF3) | |
-| Behaviour laws | [chaboche2](#chaboche2) | run | 1.07 % | 1.1e-02 |
+| Behaviour laws | [chaboche2](#chaboche2) | run, OUTSIDE tolerance | 1.07 % | 1.1e-02 |
 | Behaviour laws | [ohno2](#ohno2) | gap | missing: Ohno viscoplastic law | |
 | Behaviour laws | [guionnet_tra](#guionnet_tra) | gap | missing: Guionnet viscoplastic law | |
 | Behaviour laws | [zeril1](#zeril1) | gap | missing: Zerilli-Armstrong law | |
@@ -303,7 +303,7 @@ The `.dgibi` file's criterion, 6e-4 from the reference, was set on Cast3M's own 
 
 Acceptance: criteria of the `.dgibi` file, |u_z(P3) + 1.14| / 1.14 ≤ 6e-4 and |u_x(P1)| ≤ 1e-18.
 
-pyrucast OUTSIDE tolerance: uz_P3: -1.1417491751788946 vs -1.14, beyond 0.060000%
+pyrucast OUTSIDE tolerance: uz_P3: -1.1417491751788946 vs -1.14, beyond 0.0006
 
 #### pyrucast figures
 
@@ -459,7 +459,7 @@ layers are even and its diagonals all alike.
 
 Acceptance: criterion of the `.dgibi` file, |u_z(P3) + 0.452| / 0.452 ≤ 4e-4.
 
-pyrucast OUTSIDE tolerance: uz_P3: -0.4505498830241352 vs -0.452, beyond 0.040000%
+pyrucast OUTSIDE tolerance: uz_P3: -0.4505498830241352 vs -0.452, beyond 0.0004
 
 #### pyrucast figures
 
@@ -621,7 +621,7 @@ pyrucast's DKQ than in Cast3M's COQ4.
 
 Acceptance: criterion of the `.dgibi` file, |σ_xx(A) + 108| / 108 ≤ 5 %.
 
-pyrucast OUTSIDE tolerance: sxx_A: -114.03623937937851 vs -108.0, beyond 5.000000%
+pyrucast OUTSIDE tolerance: sxx_A: -114.03623937937851 vs -108.0, beyond 0.05
 
 #### pyrucast figures
 
@@ -831,7 +831,7 @@ Gauss stresses to round-off.
 
 Acceptance: criterion of the `.dgibi` file, |σ_yy(D) − 92.7| / 92.7 ≤ 1 %.
 
-pyrucast OUTSIDE tolerance: syy_D: 99.97533666117648 vs 92.7, beyond 1.000000%
+pyrucast OUTSIDE tolerance: syy_D: 99.97533666117648 vs 92.7, beyond 0.01
 
 #### pyrucast figures
 
@@ -2193,9 +2193,9 @@ K / (2α + β). Cast3M's stops at the ultimate surface's apex, the reference.
 
 Acceptance: criterion of the `.dgibi` file, each relative gap ≤ 1e-10 %.
 
-pyrucast OUTSIDE tolerance: sxx: 2.155625657202943 vs 1.871713985278654, beyond 0.000000%
+pyrucast OUTSIDE tolerance: sxx: 2.155625657202943 vs 1.871713985278654, beyond 1e-12
 
-pyrucast OUTSIDE tolerance: syy: 2.155625657202943 vs 1.871713985278654, beyond 0.000000%
+pyrucast OUTSIDE tolerance: syy: 2.155625657202943 vs 1.871713985278654, beyond 1e-12
 
 #### pyrucast figures
 
@@ -2550,9 +2550,9 @@ reads the node in one cell, which shows it.
 
 Acceptance: criterion of the `.dgibi` file, largest relative gap of the nine values ≤ 5 %.
 
-pyrucast OUTSIDE tolerance: sxx_A: 996.7051027453901 vs 543.4, beyond 5.000000%
+pyrucast OUTSIDE tolerance: sxx_A: 996.7051027453901 vs 543.4, beyond 0.05
 
-pyrucast OUTSIDE tolerance: sxx_A2: 118.70559401777976 vs 557.7, beyond 5.000000%
+pyrucast OUTSIDE tolerance: sxx_A2: 118.70559401777976 vs 557.7, beyond 0.05
 
 #### pyrucast figures
 
@@ -3269,7 +3269,17 @@ step-by-step driver does not offer.
 
 ¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
-Acceptance: criterion of the `.dgibi` file, max |σ_CHABOCHE − σ_ONERA| / max |σ_ONERA| ≤ 1e-4 over the computed times.
+Acceptance: criterion of the `.dgibi` file, max |σ_CHABOCHE − σ_ONERA| / max |σ_ONERA| ≤ 1e-4 over the computed times; applied here to each value read.
+
+pyrucast OUTSIDE tolerance: szz_100: 228.37307501323795 vs 230.848466095189, beyond 0.0001
+
+pyrucast OUTSIDE tolerance: szz_200: -150.55493045818838 vs -150.7450563956658, beyond 0.0001
+
+pyrucast OUTSIDE tolerance: szz_300: -235.1082171296712 vs -236.3229485644268, beyond 0.0001
+
+pyrucast OUTSIDE tolerance: szz_400: 145.2869239782215 vs 146.6900665779636, beyond 0.0001
+
+pyrucast OUTSIDE tolerance: szz_600: 239.049947041125 vs 239.0838493430581, beyond 0.0001
 
 #### pyrucast figures
 
