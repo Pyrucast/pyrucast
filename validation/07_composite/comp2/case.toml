@@ -1,0 +1,36 @@
+name = "comp2"
+calculation_type = "MECHANICS COMPOSITE 3D"
+castem_element = "DKT"
+castem_version = "97' customer version"
+source = "Report CEA-DMT 89/186 :"
+deck = "comp2.dgibi"
+gap = ["layered orthotropic shells (offset layers)"]
+tolerance = 0.01
+tolerance_note = "deck criterion, |w(O) − 23.25| / 23.25 ≤ 1 %."
+
+topic = """
+A square two-layer composite plate, its fibres at ±45° to the edges, simply
+supported on its contour, carries a uniform pressure.
+"""
+
+goal = "Find the deflection of the centre O (0, 0, 0)."
+
+model = """
+Square plate of side A = 127 mm, total thickness 5.08 mm (two layers at
+±45°), DKT triangles.
+
+| Data | Value |
+|---|---|
+| E_1 | 276e3 MPa |
+| E_2 | 6.3e3 MPa |
+| pressure | 0.6894 MPa |
+
+- Boundary conditions: u_z and θ_z blocked on the contour.
+"""
+
+[[quantity]]
+key = "w_O"
+label = "deflection at O"
+unit = ""
+reference = 23.25
+castem_probe = "FP1"

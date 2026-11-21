@@ -1,0 +1,41 @@
+name = "dyna7"
+calculation_type = "MECHANICS DYNAMICS 2D FOURIER"
+castem_element = "LQUA4, LSU2"
+castem_version = "97' customer version"
+source = "Analytical solution."
+deck = "dyna7.dgibi"
+gap = ["Fourier harmonic analysis", "acoustic fluid elements with free surface", "eigenvalue solver"]
+tolerance = 0.01
+tolerance_note = "deck criterion, each of its 32 values within 1 %."
+
+topic = """
+Sloshing modes of a thin layer of fluid in an annular rigid cavity, with
+gravity, computed for the Fourier harmonics 1 and 3 with the three methods of
+the eigenvalue operator.
+"""
+
+goal = "Find the frequencies of the first sloshing mode for the harmonics 1 and 3."
+
+model = """
+Annular cavity: L = 2 m, L₂ = 1.2 m, thickness 0.01 m.
+
+| Data | Value |
+|---|---|
+| ρ | 1000 kg/m³ |
+| speed of sound | 1200 m/s |
+| g | 9.81 m/s² |
+"""
+
+[[quantity]]
+key = "f_n1"
+label = "first frequency, harmonic 1"
+unit = "Hz"
+reference = 0.489
+castem_probe = "F1"
+
+[[quantity]]
+key = "f_n3"
+label = "first frequency, harmonic 3"
+unit = "Hz"
+reference = 0.863
+castem_probe = "G1"

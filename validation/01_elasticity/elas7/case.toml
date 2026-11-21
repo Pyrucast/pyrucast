@@ -1,0 +1,44 @@
+name = "elas7"
+calculation_type = "MECHANICS ELASTICITY 2D AXI"
+castem_element = "COQ2"
+castem_version = "97' customer releas"
+source = "Test NAFEMS : ME11 : Modélisation des structures élastiques dans CASTEM 2000."
+deck = "elas7.dgibi"
+gap = ["axisymmetric shell element (COQ2)"]
+tolerance = 0.025
+tolerance_note = "deck criterion, |σ_zz(C) + 319.9| / 319.9 ≤ 2.5 %."
+
+topic = """
+A branched shell of revolution under an internal pressure of 1 MPa (NAFEMS
+LE9): a cylinder carries, at its mid-height, a spherical dome closing it.
+The problem is axisymmetric.
+"""
+
+goal = """
+Find the axial stress on the outer surface of the upper cylinder at the point
+C (0.70, 1). The analytical value is σ_zz = −319.9 MPa.
+"""
+
+model = """
+Meridian plane (r, z). A cylinder of radius √2/2 m runs from A (√2/2, 0) to
+D (√2/2, 2); a spherical dome of radius 1 m, centred on the axis at
+(0, 1 + √2/2), joins it at C (√2/2, 1) and closes at its pole B (0, √2/2).
+COQ2 elements, 4 per segment on the cylinder near C, 4 and 5 on the dome.
+
+| Data | Value |
+|---|---|
+| E | 210e9 Pa |
+| ν | 0.3 |
+| thickness | 0.01 m |
+
+- Boundary condition: A clamped.
+- Load: internal pressure 1e6 Pa on the three parts.
+"""
+
+[[quantity]]
+key = "szz_C"
+label = "σ_zz at C, outer surface"
+unit = "MPa"
+reference = -319.9
+castem_2011 = -312.29
+castem_probe = "SMZZC"

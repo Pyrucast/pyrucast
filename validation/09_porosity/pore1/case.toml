@@ -1,0 +1,48 @@
+name = "pore1"
+calculation_type = "ELASTOPLASTIC MECHANICS - DRUCKER-PRAGER MODEL IN POROSITY - MODE AXIS"
+castem_element = "QUAP"
+castem_version = "97' customer version"
+source = "Benchmark INTERCLAY 1.1 Variante 2"
+deck = "pore1.dgibi"
+gap = ["porous media elements (QUAP)"]
+tolerance = 0.05
+tolerance_note = "deck criteria on the two relative gaps."
+
+topic = """
+A porous elastoplastic thick cylinder (Drucker-Prager, non-associated flow);
+the stress inside the hole is released.
+"""
+
+goal = "Calculate the convergence of the hole and the hoop stress at its wall."
+
+model = """
+Axisymmetric porous elements (QUAP).
+
+| Data | Value |
+|---|---|
+| E | 200.13e6 Pa |
+| ν | 0.25 |
+| ρ | 0 |
+| α | 0 |
+"""
+
+notes = """
+The 2011 document states that its reference values were computed with
+CASTEM 2000 and agree with the INTERCLAY results.
+"""
+
+[[quantity]]
+key = "conv"
+label = "convergence of the hole"
+unit = "m"
+reference = -0.266
+castem_2011 = -0.26586
+castem_probe = "CONVXX"
+
+[[quantity]]
+key = "stt"
+label = "hoop stress at the wall"
+unit = "Pa"
+reference = -3.47e6
+castem_2011 = -3.46667e6
+castem_probe = "SIGTXX"

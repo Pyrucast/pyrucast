@@ -1,0 +1,19 @@
+name = "Ac3d93"
+calculation_type = "3D SCALAR POTENTIAL COMPUTATION OF MAGNETIC FIELD, Non Linear Material, 2 Scalar potentials method (see Trowbridge - Simkin)"
+castem_element = "CUB8 or CU20"
+castem_version = "97' customer version"
+source = "Analytical solution."
+deck = ""
+gap = ["magnetostatics"]
+
+topic = """
+The same coil in its iron box, in 3D, solved with the two scalar potentials method (Trowbridge - Simkin) and a non-linear iron.
+"""
+
+goal = "Calculate the scalar potential and the field in the cavity."
+
+model = """
+Coil of rectangular cross-section in an iron box; soft iron B(H) curve.
+"""
+
+notes = "The 2011 document prints no result table, and Cast3M 2026 no longer ships this deck."

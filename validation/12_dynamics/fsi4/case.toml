@@ -1,0 +1,41 @@
+name = "fsi4"
+calculation_type = "MECHANICS DYNAMICS 2D FOURIER, FLUID-STRUCTURE INTERACTION"
+castem_element = "COQ2, LQUA4, RACO"
+castem_version = "97' customer version"
+source = "Report CEA 91/479 : Validation of CASTEM 2000 for fluid structure interaction problems."
+deck = "fsi4.dgibi"
+gap = ["fluid-structure interaction", "Fourier harmonic analysis", "eigenvalue solver", "axisymmetric shell element (COQ2)"]
+tolerance = 0.05
+tolerance_note = "deck criterion, each frequency within 5 %."
+
+topic = """
+Two concentric cylindrical shells separated by water, on springs at their
+base; modes of the harmonic m = 1.
+"""
+
+goal = "Find the frequencies of the first two modes of the shells (m = 1)."
+
+model = """
+| Data | Value |
+|---|---|
+| inner radius | 500 mm |
+| outer radius | 1000 mm |
+| height | 1000 mm |
+| shell thickness | 5 mm |
+| shell E, ν, ρ | 2e5 MPa, 0.3, 8000 kg/m³ |
+| water ρ, speed of sound | 1000 kg/m³, 1435e3 mm/s |
+"""
+
+[[quantity]]
+key = "f1"
+label = "first frequency"
+unit = "Hz"
+reference = 18.88
+castem_probe = "FRE2 . 1"
+
+[[quantity]]
+key = "f2"
+label = "second frequency"
+unit = "Hz"
+reference = 55.278
+castem_probe = "FRE2 . 2"

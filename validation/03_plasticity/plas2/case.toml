@@ -1,0 +1,56 @@
+name = "plas2"
+calculation_type = "MECHANIC PLASTICITY 2D AXI"
+castem_element = "QUA4 (COQ4 in the 2011 document)"
+castem_version = "97' customer version"
+source = "Test NAFEMS : Analytical-Solution : MP2 Modélisation des structures élastiques dans CASTEM 2000."
+deck = "plas2.dgibi"
+tolerance = 0.035
+tolerance_note = "deck criterion, largest relative gap of the two values < 3.5 %."
+
+topic = """
+A thick hollow sphere is loaded by an internal pressure that grows with time,
+P = 1e6·t Pa: elastic at t = 100 (P = 100 MPa), plastic through most of the
+wall at t = 358.9 (P = 358.9 MPa).
+"""
+
+goal = """
+Find the radial displacement of the inner point A at the two times. The
+theoretical values are 0.4 µm and 2.83 µm.
+"""
+
+model = """
+Axisymmetric, meridian plane: a quarter of the sphere of inner radius 1 mm
+and outer radius 2 mm, centred at the origin. QUA4 mesh: 14 elements through
+the thickness (5 from 1 to 1.1 mm, 9 from 1.1 to 2 mm), 16 along each arc.
+
+| Data | Value |
+|---|---|
+| E | 2e11 Pa |
+| ν | 0.3 |
+| σ_y (perfect plasticity) | 300e6 Pa |
+
+- Boundary conditions: u_z = 0 on the radial edge z = 0, u_r = 0 on the axis.
+- Load: internal pressure P = 1e6·t Pa; computed times 100 and 358.9.
+"""
+
+notes = """
+The 2011 document prints the Cast3M value at the second time as 1085.2 µm (the
+value of plas1); it is kept as printed. Its time labels t0 and t1000 are the
+times 100 and 358.9 of the deck.
+"""
+
+[[quantity]]
+key = "ur_A_1"
+label = "u_r at A, t = 100"
+unit = "µm"
+reference = 0.4
+castem_2011 = 0.39821
+castem_probe = "V1"
+
+[[quantity]]
+key = "ur_A_2"
+label = "u_r at A, t = 358.9"
+unit = "µm"
+reference = 2.83
+castem_2011 = 1085.2
+castem_probe = "V2"

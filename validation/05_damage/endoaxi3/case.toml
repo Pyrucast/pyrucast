@@ -1,0 +1,54 @@
+name = "endoaxi3"
+calculation_type = "DAMAGE MODEL FOR ELASTOPLASTIC MATERIAL"
+castem_element = "QUA8"
+castem_version = "97' customer version"
+source = "Analytical solution."
+deck = "endoaxi3.dgibi"
+gap = ["elastoplastic damage law (ENDOMMAGEABLE)"]
+tolerance = 0.05
+tolerance_note = "deck criterion, every relative gap ≤ 5 %."
+
+topic = """
+An axisymmetric test piece of an elastoplastic material with ductile damage
+is compressed by an imposed displacement under a thermal load; the tensile
+curve and the thermal expansion depend on the temperature (reference
+temperature 30 °C, reference of the expansion 10 °C, initial temperature
+50 °C).
+"""
+
+goal = """
+Test the damage model (MODE AXIS) against the solution integrated by an
+algorithm: cumulated plastic strain, damage variable D and axial stress.
+"""
+
+model = """
+Axisymmetric test piece of QUA8 elements, E = 74 020e6 Pa, tensile curves
+tabulated against the temperature.
+"""
+
+notes = """
+The 2011 document prints no result table. The deck holds two sets of
+references, for its complete and its short run; the references are those of
+the set the run uses.
+"""
+
+[[quantity]]
+key = "D_end"
+label = "damage D at the second compared time"
+unit = ""
+castem_probe = "D2"
+reference_probe = "EXTR REF_D 2"
+
+[[quantity]]
+key = "p_end"
+label = "cumulated plastic strain at the second compared time"
+unit = ""
+castem_probe = "P2"
+reference_probe = "EXTR REF_P 2"
+
+[[quantity]]
+key = "szz_end"
+label = "σ_zz at the second compared time"
+unit = "Pa"
+castem_probe = "EXTR EF_S 2"
+reference_probe = "EXTR REF_S 2"

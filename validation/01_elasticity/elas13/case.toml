@@ -1,0 +1,76 @@
+name = "elas13"
+calculation_type = "MECHANICS ELASTICITY 3D AXI"
+castem_element = "POUT"
+castem_version = "97' customer releas"
+source = """Test VPCS : SSLL16/89 : Modélisation des structures élastiques dans \
+CASTEM 2000. M. Courtand P. Lebelle Formulaire du béton armé T.2 Paris \
+Eyrolles 1976."""
+deck = "elas13.dgibi"
+gap = ["spring supports (APPU)"]
+tolerance = 0.05
+tolerance_note = "deck criterion, largest relative gap of the four values ≤ 5 %."
+
+topic = """
+A beam with pinned ends rests on an elastic foundation and carries a point
+load at mid-span.
+"""
+
+goal = """
+Find the rotation and the reaction at the end A (−2.48, 0, 0), and the
+deflection and the bending moment at the centre D (0, 0, 0).
+"""
+
+model = """
+Beam along x from A (−2.48, 0, 0) to B (2.48, 0, 0), POUT elements; the
+foundation is made of elastic supports of stiffness K = 840 000 attached to
+the nodes.
+
+| Data | Value |
+|---|---|
+| E | 2e11 Pa |
+| ν | 0.3 |
+| section | 1000 |
+| I_y = I_z | 1e-4 |
+| torsion constant | 1000 |
+
+- Boundary conditions: u_x = u_y = 0 at A and B; u_z = θ_x = 0 everywhere.
+- Load: F_y = −10 kN at D.
+"""
+
+notes = """
+The 2011 document prints the deflection reference as −4.233E3 m and the
+Cast3M value as −4.38085E3 m (exponent sign lost); the reference used here is
+the deck's −4.23326e-3 m, the 2011 value is kept as printed.
+"""
+
+[[quantity]]
+key = "rz_A"
+label = "rotation θ_z at A"
+unit = "rad"
+reference = -3.045e-3
+castem_2011 = -3.1525e-3
+castem_probe = "RZA1"
+
+[[quantity]]
+key = "fy_A"
+label = "reaction F_y at A"
+unit = "N"
+reference = 1.1674e4
+castem_2011 = 11559.0
+castem_probe = "VA1"
+
+[[quantity]]
+key = "uy_D"
+label = "deflection u_y at D"
+unit = "m"
+reference = -4.23326e-3
+castem_2011 = -4.38085e3
+castem_probe = "UYD1"
+
+[[quantity]]
+key = "mz_D"
+label = "bending moment at D"
+unit = "N·m"
+reference = 3.384e4
+castem_2011 = 3.3407e4
+castem_probe = "MD1"

@@ -1,0 +1,27 @@
+name = "precont2"
+calculation_type = "REINFORCED ELASTIC MECHANICS - BARR - 2D"
+castem_element = "QUA4, BARR"
+castem_version = "97' customer version"
+source = "J.S. Fleuret 08/96"
+deck = ""
+gap = ["prestressing cables (KABL, PREC)"]
+
+topic = """
+Calculation with active reinforcement. A reinforced concrete beam, its tendons modelled by bar elements
+embedded in the concrete, is loaded by a pressure on its upper face and
+held on its lower one.
+"""
+
+goal = "Test the KABL, EQUI RIGI and PROI ARMA operators with active reinforcement."
+
+model = """
+Plane QUA4 beam with BARR tendons.
+
+| Data | Concrete | Tendons |
+|---|---|---|
+| E | 0.4e11 Pa | 2e11 Pa |
+| ν | 0 | |
+| section | | 0.02 m² |
+"""
+
+notes = "The 2011 document prints no result table, and Cast3M 2026 no longer ships this deck."

@@ -1,0 +1,19 @@
+name = "Ac2d93"
+calculation_type = "2D AXISYMMETRIC VECTOR POTENTIAL, Computation of magnetic field with non linear material"
+castem_element = "TRI6, QUA8"
+castem_version = "97' customer version"
+source = "Analytical solution."
+deck = ""
+gap = ["magnetostatics"]
+
+topic = """
+A circular coil of rectangular cross-section sits in an iron box; the iron follows a non-linear B(H) curve (soft iron). The axisymmetric problem is solved for the vector potential.
+"""
+
+goal = "Calculate the vector potential and the field in the cavity."
+
+model = """
+Coil of rectangular cross-section in an iron box; soft iron B(H) curve.
+"""
+
+notes = "The 2011 document prints no result table, and Cast3M 2026 no longer ships this deck."

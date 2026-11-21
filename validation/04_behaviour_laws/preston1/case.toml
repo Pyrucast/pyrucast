@@ -1,0 +1,47 @@
+name = "preston1"
+calculation_type = "ISOTROPIC ELASTOPLASTIC MECHANICS"
+castem_element = "CUB8"
+castem_version = "97' customer release"
+source = ""
+deck = "preston1.dgibi"
+gap = ["Preston-Tonks-Wallace law"]
+tolerance_note = "deck criterion, every gap of the stress and of the plastic strain to the deck's integration ≤ 5e-2 %."
+
+topic = """
+A bar of a Preston-Tonks-Wallace elastoplastic material, held at its ends,
+is pulled by an imposed displacement.
+"""
+
+goal = """
+Test the Preston-Tonks-Wallace model for a body-centred cubic structure
+against the uniaxial curve integrated by the deck.
+"""
+
+model = """
+CUB8 bar.
+
+| Data | Value |
+|---|---|
+| E | 2.1e11 Pa |
+| ν | 0.3 |
+| ρ | 7.8e3 kg/m³ |
+| τ | 0.025 |
+"""
+
+notes = "The 2011 document prints no result table; the reference is the deck's integration."
+
+[[quantity]]
+key = "stress_gap_max"
+label = "largest gap of the stress"
+unit = "%"
+reference = 0.0
+abs_tolerance = 5e-2
+castem_probe = "MAXI err1"
+
+[[quantity]]
+key = "strain_gap_max"
+label = "largest gap of the plastic strain"
+unit = "%"
+reference = 0.0
+abs_tolerance = 5e-2
+castem_probe = "MAXI err2"

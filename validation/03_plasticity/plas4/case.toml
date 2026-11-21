@@ -1,0 +1,135 @@
+name = "plas4"
+calculation_type = "MECHANICS PLASTICITY 3D"
+castem_element = "CUB8"
+castem_version = "97' customer version"
+source = "Test NAFEMS : Analytical-Solution : MP4 Modélisation des structures élastiques dans CASTEM 2000."
+deck = "plas4.dgibi"
+tolerance = 0.005
+tolerance_note = "deck criterion, largest relative gap of the twelve stresses ≤ 0.5 %."
+
+topic = """
+A block of two cubic elements is loaded in uniaxial strain: u_y = u_z = 0
+everywhere and an axial displacement imposed on its end faces, first
+increased, then reversed. The material is elastic, perfectly plastic.
+"""
+
+goal = """
+Find σ_xx, σ_yy and σ_zz at the first Gauss point of the first element at the
+four times T1 to T4, and compare them with the theoretical values.
+"""
+
+model = """
+Two HEX8 of size 0.5 × 1 × 1 along x, from x = 0 to x = 1.
+
+| Data | Value |
+|---|---|
+| E | 2.5e11 Pa |
+| ν | 0.25 |
+| σ_y (perfect plasticity) | 5e6 Pa |
+
+- Boundary conditions: u_x = 0 on x = 0; u_y = u_z = 0 at every node.
+- Imposed u_x: ε₀·f(t)·x on the faces x = 0.5 and x = 1, with
+  ε₀ = 2.5e-5 and f = 0, 1, 2, 1, 0 at t = 0, 1, 2, 3, 4.
+- Computed times: 1, 2, 3, 4.
+"""
+
+notes = """
+The 2011 document prints the Cast3M σ_yy and σ_zz at T4 as 1.6E6; the
+references are those of the deck (1.66e6).
+"""
+
+[[quantity]]
+key = "sxx_1"
+label = "σ_xx at T1"
+unit = "Pa"
+reference = 7.5e6
+castem_2011 = 7.5e6
+castem_probe = "SXX1"
+
+[[quantity]]
+key = "syy_1"
+label = "σ_yy at T1"
+unit = "Pa"
+reference = 2.5e6
+castem_2011 = 2.5e6
+castem_probe = "SYY1"
+
+[[quantity]]
+key = "szz_1"
+label = "σ_zz at T1"
+unit = "Pa"
+reference = 2.5e6
+castem_2011 = 2.5e6
+castem_probe = "SZZ1"
+
+[[quantity]]
+key = "sxx_2"
+label = "σ_xx at T2"
+unit = "Pa"
+reference = 11.66e6
+castem_2011 = 11.66e6
+castem_probe = "SXX2"
+
+[[quantity]]
+key = "syy_2"
+label = "σ_yy at T2"
+unit = "Pa"
+reference = 6.66e6
+castem_2011 = 6.66e6
+castem_probe = "SYY2"
+
+[[quantity]]
+key = "szz_2"
+label = "σ_zz at T2"
+unit = "Pa"
+reference = 6.66e6
+castem_2011 = 6.66e6
+castem_probe = "SZZ2"
+
+[[quantity]]
+key = "sxx_3"
+label = "σ_xx at T3"
+unit = "Pa"
+reference = 4.16e6
+castem_2011 = 4.16e6
+castem_probe = "SXX3"
+
+[[quantity]]
+key = "syy_3"
+label = "σ_yy at T3"
+unit = "Pa"
+reference = 4.16e6
+castem_2011 = 4.16e6
+castem_probe = "SYY3"
+
+[[quantity]]
+key = "szz_3"
+label = "σ_zz at T3"
+unit = "Pa"
+reference = 4.16e6
+castem_2011 = 4.16e6
+castem_probe = "SZZ3"
+
+[[quantity]]
+key = "sxx_4"
+label = "σ_xx at T4"
+unit = "Pa"
+reference = -3.33e6
+castem_2011 = -3.33e6
+castem_probe = "SXX4"
+
+[[quantity]]
+key = "syy_4"
+label = "σ_yy at T4"
+unit = "Pa"
+reference = 1.66e6
+castem_2011 = 1.6e6
+castem_probe = "SYY4"
+
+[[quantity]]
+key = "szz_4"
+label = "σ_zz at T4"
+unit = "Pa"
+reference = 1.66e6
+castem_2011 = 1.6e6
+castem_probe = "SZZ4"

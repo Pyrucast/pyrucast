@@ -1,0 +1,49 @@
+name = "ddi"
+calculation_type = "DAMAGE MODEL FOR VISCOPLASTIC MATERIAL"
+castem_element = "QUA8"
+castem_version = "97' customer version"
+source = ""
+deck = "ddi.dgibi"
+gap = ["two-inelastic-strain damage law (DDI)"]
+tolerance = 0.001
+tolerance_note = "deck criterion, every relative gap ≤ 0.1 %."
+
+topic = """
+A cylindrical test piece of a viscoplastic material with damage and two
+inelastic strains (alpha zirconium at 200 °C), axisymmetric, is pulled by a
+monotonically increasing displacement.
+"""
+
+goal = "Test the two-inelastic-strain model (MODE AXIS) against the analytical solution."
+
+model = """
+Axisymmetric test piece of QUA8 elements.
+
+| Data | Value |
+|---|---|
+| E | 8.2e10 Pa |
+| ν | 0.36 |
+"""
+
+notes = "The 2011 document prints no result table; the references are the deck's."
+
+[[quantity]]
+key = "p_end"
+label = "inelastic strain p at the last time"
+unit = ""
+reference = 4.17896e-3
+castem_probe = "p0"
+
+[[quantity]]
+key = "v_end"
+label = "inelastic strain v at the last time"
+unit = ""
+reference = 3.14432e-3
+castem_probe = "v0"
+
+[[quantity]]
+key = "szz_end"
+label = "σ_zz at the last time"
+unit = "Pa"
+reference = 2.19491e8
+castem_probe = "sig0"

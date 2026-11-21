@@ -1,0 +1,45 @@
+name = "pore3"
+calculation_type = "POROUS-ELASTIC MECHANIC - MODE PLAN CONT"
+castem_element = "QUAP"
+castem_version = "97' customer version"
+source = "Problem of Terzaghi"
+deck = "pore3.dgibi"
+gap = ["porous media elements (QUAP)"]
+tolerance_note = "deck criteria, both relative gaps ≤ 0.1."
+
+topic = """
+One-dimensional consolidation (Terzaghi): a porous elastic column is loaded
+by a pressure on its upper face and drains through it.
+"""
+
+goal = """
+Compare the pore pressures and the vertical displacement profiles with the
+analytical solution.
+"""
+
+model = """
+Porous elements (QUAP).
+
+| Data | Value |
+|---|---|
+| E | 7000e6 Pa |
+| ν | 0.4 |
+"""
+
+notes = "The 2011 document prints no result table; the compared quantities are the deck's relative gaps."
+
+[[quantity]]
+key = "gap_p"
+label = "relative gap of the pore pressure"
+unit = ""
+reference = 0.0
+abs_tolerance = 0.1
+castem_probe = "ERPP"
+
+[[quantity]]
+key = "gap_uy"
+label = "relative gap of the vertical displacement profile"
+unit = ""
+reference = 0.0
+abs_tolerance = 0.1
+castem_probe = "ERDUY"

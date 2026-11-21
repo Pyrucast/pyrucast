@@ -1,0 +1,42 @@
+name = "thpl1"
+calculation_type = "KINEMATIC ELASTOPLASTIC MATERIAL"
+castem_element = "QUA4"
+castem_version = "97' customer version"
+source = "Test de la Commission V.P.C.S. Groupe Thermo-plasticite et Statique non-lineaire. Test numero SSNA01/90"
+deck = "thpl1.dgibi"
+gap = ["rate-independent kinematic hardening"]
+tolerance = 3e-4
+tolerance_note = "deck criterion, both relative gaps ≤ 0.03 %."
+
+topic = """
+A cylindrical bar 100 mm long and 20 mm in diameter, held axially at both
+ends, is heated uniformly to 500 °C. The material has linear kinematic
+hardening; the problem is axisymmetric.
+"""
+
+goal = "Calculate the axial stress and the axial plastic strain."
+
+model = """
+Axisymmetric, QUA4 elements.
+
+| Data | Value |
+|---|---|
+| E | 200e3 MPa |
+| ν | 0.3 |
+| σ_y | 300 MPa |
+| hardening modulus H | 2000 MPa |
+"""
+
+[[quantity]]
+key = "szz"
+label = "σ_zz at A"
+unit = "MPa"
+reference = -309.0
+castem_probe = "SMZZ1"
+
+[[quantity]]
+key = "epzz"
+label = "plastic strain ε_zz at A"
+unit = ""
+reference = -0.4455e-2
+castem_probe = "EPZZ1"

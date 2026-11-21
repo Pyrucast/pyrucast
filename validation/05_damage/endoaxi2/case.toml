@@ -1,0 +1,55 @@
+name = "endoaxi2"
+calculation_type = "DAMAGE MODEL FOR ELASTOPLASTIC MATERIAL"
+castem_element = "QUA8"
+castem_version = "97' customer version"
+source = "Analytical solution."
+deck = "endoaxi2.dgibi"
+gap = ["elastoplastic damage law (ENDOMMAGEABLE)"]
+tolerance = 0.05
+tolerance_note = "deck criterion, every relative gap ≤ 5 %."
+
+topic = """
+An axisymmetric test piece of an elastoplastic material with ductile damage
+is pulled by an imposed displacement while its temperature changes; the
+tensile curve and the thermal expansion depend on the temperature.
+"""
+
+goal = """
+Test the damage model (MODE AXIS) against the solution integrated by an
+algorithm: cumulated plastic strain, damage variable D and axial stress.
+"""
+
+model = """
+Axisymmetric test piece of QUA8 elements.
+
+| Data | Value |
+|---|---|
+| E | 74 020e6 Pa |
+| ν | 0.3 |
+
+- Tensile curves and thermal expansion tabulated against the temperature.
+- Load: imposed axial displacement and temperature history.
+"""
+
+notes = "The 2011 document prints no result table; the references are the deck's."
+
+[[quantity]]
+key = "p_end"
+label = "cumulated plastic strain at the last time (step 18)"
+unit = ""
+reference = 0.1143
+castem_probe = "P4"
+
+[[quantity]]
+key = "D_end"
+label = "damage D at the last time (step 18)"
+unit = ""
+reference = 8.131e-2
+castem_probe = "D4"
+
+[[quantity]]
+key = "szz_end"
+label = "σ_zz at the last time (step 18)"
+unit = "Pa"
+reference = 389.2e6
+castem_probe = "S4"

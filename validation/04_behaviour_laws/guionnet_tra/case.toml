@@ -1,0 +1,36 @@
+name = "guionnet_tra"
+calculation_type = "ISOTROPIC VISCOPLASTIC MECHANICS"
+castem_element = "CUB8"
+castem_version = "97' customer version"
+source = ""
+deck = "guionnet_tra.dgibi"
+gap = ["Guionnet viscoplastic law"]
+tolerance = 3e-4
+tolerance_note = "deck criterion, relative gap of the reaction ≤ 0.03 %."
+
+topic = """
+A block of a Guionnet viscoplastic material, held on its lower and upper
+faces, is pulled by a displacement imposed on its upper face.
+"""
+
+goal = "Test the Guionnet model: the computed reaction must equal the reference one."
+
+model = """
+CUB8 block.
+
+| Data | Value |
+|---|---|
+| E | 192 500 |
+| ν | 0.3 |
+| Norton n, K | 24, 200 |
+| R0 | 25 |
+"""
+
+notes = "The 2011 document prints no result table and gives ν = 0.33; the reference is the deck's."
+
+[[quantity]]
+key = "reaction"
+label = "axial reaction of the upper face"
+unit = ""
+castem_probe = "reac2"
+reference_probe = "reac1"

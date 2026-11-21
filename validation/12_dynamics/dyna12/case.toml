@@ -1,0 +1,40 @@
+name = "dyna12"
+calculation_type = "MECHANICS DYNAMICS 3D, TRANSIENT RESPONSE"
+castem_element = "BARR"
+castem_version = "97' customer version"
+source = "J. S. Przemieniecki : Theory of matrix structural analyses (New York : McGraw-Hill Book Co., 1968) p340."
+deck = "dyna12.dgibi"
+tolerance = 0.05
+tolerance_note = "deck criterion, both relative gaps < 5 %."
+
+topic = """
+Transient response of a free launcher to an axial thrust applied during a
+limited time: rigid-body motion plus axial vibration.
+"""
+
+goal = "Find the displacement history of the bottom point P1."
+
+model = """
+Free bar of length 140 along y, BARR elements.
+
+| Data | Value |
+|---|---|
+| A | 1 |
+| E | 1e4 |
+| ν | 0.3 |
+| ρ | 0.1 |
+"""
+
+[[quantity]]
+key = "uy_1"
+label = "u_y at P1, t = 1.9125"
+unit = ""
+reference = 10.89972
+castem_probe = "U1"
+
+[[quantity]]
+key = "uy_2"
+label = "u_y at P1, t = 2.0625"
+unit = ""
+reference = 11.73228
+castem_probe = "U2"

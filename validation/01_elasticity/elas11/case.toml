@@ -1,0 +1,45 @@
+name = "elas11"
+calculation_type = "MECHANICS ELASTICITY 2D AXI"
+castem_element = "QUA8"
+castem_version = "97' customer releas"
+source = "Test NAFEMS : LE11 : Modélisation des structures élastiques dans CASTEM 2000."
+deck = "elas11.dgibi"
+tolerance = 0.02
+tolerance_note = "deck criterion, |σ_zz(A) + 105| / 105 ≤ 2 %."
+
+topic = """
+A thick solid of revolution made of a cylinder, a cone and a sphere (NAFEMS
+LE11) is loaded by a temperature field that grows linearly with the radius
+and the height, T = r + z. The problem is axisymmetric.
+"""
+
+goal = """
+Find the axial stress at the point A (1, 0). The analytical value is
+σ_zz = −105 MPa.
+"""
+
+model = """
+Meridian plane (r, z), QUA8 elements (fine mesh of the deck, K = 2).
+
+| Data | Value |
+|---|---|
+| E | 210e9 Pa |
+| ν | 0.3 |
+| α | 2.3e-4 /°C |
+| reference temperature | 0 °C |
+
+- Load: temperature T = r + z (°C).
+"""
+
+notes = """
+The 2011 document gives the goal as σ_zz(A) = 105 MPa and the result table as
+σ_yy(A) = −105 MPa; the deck compares σ_zz with −105 MPa.
+"""
+
+[[quantity]]
+key = "szz_A"
+label = "σ_zz at A"
+unit = "MPa"
+reference = -105.0
+castem_2011 = -103.34
+castem_probe = "SMZZA"

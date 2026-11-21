@@ -1,0 +1,52 @@
+name = "dyna11"
+calculation_type = "MECHANICS DYNAMICS 2D"
+castem_element = "QUA4"
+castem_version = "97' customer version"
+source = "S. H.Crandall, N. C. Dahl and T. J. Lardner : An introduction to the mechanics of solids, 2nd ed. (New York : McGraw-Hill Book Company, 1972) pp. 293-297."
+deck = "dyna11.dgibi"
+tolerance = 0.05
+tolerance_note = "deck criterion, each amplification within 5 % of 2."
+
+topic = """
+A thick-walled cylinder is suddenly loaded by an internal pressure. Without
+damping, the largest radial displacement is twice the static one.
+"""
+
+goal = """
+Find the largest radial displacement of three points at the cylinder's
+half-length, divided by their static displacement.
+"""
+
+model = """
+Axisymmetric, QUA4 elements.
+
+| Data | Value |
+|---|---|
+| E | 30e6 |
+| ν | 0 |
+
+- Load: internal pressure 10, applied at once and held.
+- Static radial displacements of the three points: 3.326e-6, 2.773e-6 and
+  2.673e-6.
+"""
+
+[[quantity]]
+key = "amp_1"
+label = "amplification at the first point (node 25)"
+unit = ""
+reference = 2.0
+castem_probe = "UR1"
+
+[[quantity]]
+key = "amp_2"
+label = "amplification at the second point (node 62)"
+unit = ""
+reference = 2.0
+castem_probe = "UR2"
+
+[[quantity]]
+key = "amp_3"
+label = "amplification at the third point (node 36)"
+unit = ""
+reference = 2.0
+castem_probe = "UR3"

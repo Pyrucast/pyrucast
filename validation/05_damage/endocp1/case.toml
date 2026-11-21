@@ -1,0 +1,66 @@
+name = "endocp1"
+calculation_type = "DAMAGE MODEL FOR ELASTOPLASTIC MATERIAL"
+castem_element = "QUA8"
+castem_version = "97' customer version"
+source = "Analytical solution. Tests carried out by Mr STRUB (rapport DMT/91 .558)."
+deck = "endocp1.dgibi"
+gap = ["elastoplastic damage law (ENDOMMAGEABLE)"]
+tolerance = 0.05
+tolerance_note = "deck criterion, every relative gap ≤ 5 %."
+
+topic = """
+A test piece of an elastoplastic material with ductile damage, in plane stress, is
+pulled by an imposed displacement.
+"""
+
+goal = """
+Test the damage model (MODE PLAN CONT) against the solution integrated by an
+algorithm: cumulated plastic strain, damage variable D and axial stress.
+"""
+
+model = """
+Test piece of QUA8 elements, plane stress.
+
+| Data | Value |
+|---|---|
+| E | 74 020e6 Pa |
+| ν | 0.3 |
+| ρ | 7800 kg/m³ |
+
+- Tensile curve given point by point; damage law of the ENDOMMAGEABLE model.
+- Load: imposed axial displacement increasing with time.
+"""
+
+notes = """
+The 2011 document prints no result table; the references are the deck's.
+The deck runs its short version by default (`complet = faux`): two computed
+times. Its complete version goes on to a cumulated plastic strain of 0.2427
+and a damage of 0.2199."""
+
+[[quantity]]
+key = "p_1"
+label = "cumulated plastic strain, first computed time"
+unit = ""
+reference = 5.46e-4
+castem_probe = "dpc0"
+
+[[quantity]]
+key = "p_2"
+label = "cumulated plastic strain, second computed time"
+unit = ""
+reference = 1.12694e-2
+castem_probe = "dpc1"
+
+[[quantity]]
+key = "s_1"
+label = "axial stress (SMYY), first computed time"
+unit = "Pa"
+reference = 354.3e6
+castem_probe = "SZZ0"
+
+[[quantity]]
+key = "s_2"
+label = "axial stress (SMYY), second computed time"
+unit = "Pa"
+reference = 4.07984e8
+castem_probe = "SZZ1"

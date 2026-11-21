@@ -1,0 +1,27 @@
+name = "dyne01"
+calculation_type = "MECHANICS DYNAMICS 3D, POLYNOMIAL LINKAGE"
+castem_element = ""
+castem_version = "97' customer version"
+source = ""
+deck = "dyne01.dgibi"
+gap = ["modal-basis transient dynamics with linkages (DYNE)"]
+
+topic = """
+A polynomial linkage computes a force on one mode from the contributions of
+other modes; the computation is run once, then again with a restart, with no
+geometry (modal data only).
+"""
+
+goal = "Compare the displacement, velocity and acceleration of the two computations."
+
+model = """
+| Data | Value |
+|---|---|
+| gap | 1 |
+| K_e | 0 |
+| C | 0 |
+| U₀ | 0.033 |
+| V₀ | 0.54 |
+"""
+
+notes = "The deck checks that both computations give the same histories; it has no numeric reference."

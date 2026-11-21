@@ -1,0 +1,35 @@
+name = "dy_devo6"
+calculation_type = "MECHANICS DYNAMICS 3D, IMPACT, LINKAGE POINT-PLANE"
+castem_element = ""
+castem_version = "97' customer version"
+source = ""
+deck = "dy_devo6.dgibi"
+gap = ["modal-basis transient dynamics with linkages (DYNE)"]
+tolerance_note = "deck criterion, largest gap ≤ 0.005."
+
+topic = """
+A heavy mass with a sinusoidal motion of two amplitudes hits a plane; the
+contact is a point-plane linkage with plasticity.
+"""
+
+goal = """
+Get the impact force against the displacement and the plastic displacement
+against the time.
+"""
+
+model = """
+| Data | Value |
+|---|---|
+| M1 | 100 000 kg |
+| gap | 0 |
+| E | 50 Pa |
+| K_e | 100 N/m |
+"""
+
+[[quantity]]
+key = "gap_max"
+label = "largest gap of the deck's comparison"
+unit = ""
+reference = 0.0
+abs_tolerance = 0.005
+castem_probe = "err"

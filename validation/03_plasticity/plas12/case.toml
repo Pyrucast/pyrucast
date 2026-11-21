@@ -1,0 +1,38 @@
+name = "plas12"
+calculation_type = "MECHANICS ELASTIC PLASTIC"
+castem_element = "TUYA"
+castem_version = "97' customer version"
+source = ""
+deck = "plas12.dgibi"
+gap = ["pipe element (TUYA)"]
+tolerance = 5.5e-3
+tolerance_note = "deck criterion, relative gap of the areas under the two curves ≤ 5.5e-3."
+
+topic = """
+A pipe clamped at both ends undergoes a thermal shock. Young's modulus, the
+thermal expansion and the tensile curve depend on the temperature.
+"""
+
+goal = """
+Test the step-by-step procedure with a temperature-dependent material: the
+stress must follow the tensile curve at the strain α·ΔT.
+"""
+
+model = """
+Pipe elements clamped at both ends; E(T) tabulated at 0, 200, 400, 600 and
+800 °C, α(T) = (10.4, 11.9, 13.0, 13.8, 14.25)·8e-6, tensile curves scaled
+by 1, 0.8, 0.6, 0.4, 0.2 with the temperature; ν = 0.3.
+
+- Analytical solution: ε = α·ΔT, σ read on the tensile curve at that strain.
+- Compared quantity: the area under the computed σ(ε) curve against the area
+  under the analytical one.
+"""
+
+notes = "The 2011 document prints no result table."
+
+[[quantity]]
+key = "curve_area"
+label = "area under the σ(ε) curve"
+unit = ""
+reference_probe = "ENEANA"
+castem_probe = "ENEK20"

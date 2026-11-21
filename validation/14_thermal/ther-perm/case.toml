@@ -1,0 +1,38 @@
+name = "ther-perm"
+calculation_type = "THERMAL STEADY STATE, 3D NON LINEAR"
+castem_element = "QUA4"
+castem_version = "97' customer version"
+source = """Klaus-Jürgen Bathe & Mohammad R. Khoshgoftaar, Finite element \
+formulation and solution of non-linear heat transfer, Nuclear Engineering and \
+Design, v. 51 (1979), pp. 389-401. J. Joly, Cas tests non linéaires de \
+validation pour DELFINE, Note technique EMT.SMTS.TTMF 84/29. V. Arpaci, \
+Conduction Heat Transfer, Adison-Wesley, 1966, pp. 130-132."""
+deck = "ther-perm.dgibi"
+tolerance_note = "deck criterion, largest gap to the analytical profile ≤ 1e-5."
+
+topic = """
+A non-linear steady state: an infinite wall with a volume heat source and an
+imposed temperature on one face; the conductivity is a linear function of
+the temperature, k = k₀·(1 + β·(T − T₀)).
+"""
+
+goal = "Find the temperature profile in the wall and compare it with the analytical solution."
+
+model = """
+| Data | Value |
+|---|---|
+| L | 5e-3 m |
+| thickness | L/10 |
+| imposed temperature T_o | 100 °C |
+| source Q | 1e7 W/m³ |
+
+- Conductivity: linear in T, through the points T₀ − 100 and T₀ + 1000.
+"""
+
+[[quantity]]
+key = "gap_max"
+label = "largest gap of T to the analytical profile"
+unit = ""
+reference = 0.0
+abs_tolerance = 1e-5
+castem_probe = "valtst"

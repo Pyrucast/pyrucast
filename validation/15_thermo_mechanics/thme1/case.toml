@@ -1,0 +1,80 @@
+name = "thme1"
+calculation_type = "LINEAR THERMAL ANALYSIS AND MECHANIC"
+castem_element = "QUA8"
+castem_version = "97' customer version"
+source = "Analytical solution."
+deck = "thme1.dgibi"
+tolerance = 0.02
+tolerance_note = "deck criterion, gaps within 2 % over the second half of the computed times (t ≥ 80)."
+
+topic = """
+Heat diffusion in a bar held at both ends: one end is brought to 500 °C,
+the other stays at 20 °C; the bar expands. A step-by-step computation chains
+the transient heat conduction and the mechanics.
+"""
+
+goal = """
+Use the step-by-step procedure: temperature and axial displacement at
+x = 0.08 against time, compared with the analytical solution.
+"""
+
+model = """
+Bar of length l = 0.1, plane strain, QUA8 elements.
+
+| Data | Value |
+|---|---|
+| k | 14.6 |
+| c | 460 |
+| ρ | 7800 |
+| α | 1e-5 |
+| E | 2e11 |
+| ν | 1e-5 |
+| reference temperature | 20 |
+
+- Analytical temperature: T = 500 − 480·erfc-type solution of the
+  semi-infinite bar, T(x, t) = 500 − 480·erf((0.1 − x)/(2√(a t))) /
+  erf(0.1/(2√(a t))), a = k/(ρc).
+- Computed times: 10 to 150 by 10.
+"""
+
+[[quantity]]
+key = "T_80"
+label = "T at x = 0.08, t = 80"
+unit = "°C"
+reference = 227.88
+castem_probe = "EXTR tpr1 8"
+
+[[quantity]]
+key = "T_100"
+label = "T at x = 0.08, t = 100"
+unit = "°C"
+reference = 251.85
+castem_probe = "EXTR tpr1 10"
+
+[[quantity]]
+key = "T_150"
+label = "T at x = 0.08, t = 150"
+unit = "°C"
+reference = 291.30
+castem_probe = "EXTR tpr1 15"
+
+[[quantity]]
+key = "u_80"
+label = "u_x at x = 0.08, t = 80"
+unit = ""
+reference = 3.04069e-5
+castem_probe = "EXTR tpr2 8"
+
+[[quantity]]
+key = "u_100"
+label = "u_x at x = 0.08, t = 100"
+unit = ""
+reference = 3.90251e-5
+castem_probe = "EXTR tpr2 10"
+
+[[quantity]]
+key = "u_150"
+label = "u_x at x = 0.08, t = 150"
+unit = ""
+reference = 5.76962e-5
+castem_probe = "EXTR tpr2 15"

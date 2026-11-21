@@ -1,0 +1,56 @@
+name = "vibr2"
+calculation_type = "MECHANICS DYNAMICS 2D AXISYMMETRICAL"
+castem_element = "QUA8"
+castem_version = "97' customer version"
+source = "Test NAFEMS number fv42."
+deck = "vibr2.dgibi"
+gap = ["eigenvalue solver"]
+tolerance = 0.02
+tolerance_note = "deck criterion, each frequency within 2 %."
+
+topic = """
+Uniform radial vibration of a thick hollow sphere. A sector is meshed in
+axisymmetry, and linear relations give the nodes of the same radius the same
+radial displacement.
+"""
+
+goal = "Find the first five eigenfrequencies of the radial modes."
+
+model = """
+Hollow sphere of inner radius 1.8 m and outer radius 6 m, QUA8 elements.
+"""
+
+[[quantity]]
+key = "f1"
+label = "frequency 1"
+unit = "Hz"
+reference = 369.91
+castem_probe = "FRE2 . 1"
+
+[[quantity]]
+key = "f2"
+label = "frequency 2"
+unit = "Hz"
+reference = 838.03
+castem_probe = "FRE2 . 2"
+
+[[quantity]]
+key = "f3"
+label = "frequency 3"
+unit = "Hz"
+reference = 1451.2
+castem_probe = "FRE2 . 3"
+
+[[quantity]]
+key = "f4"
+label = "frequency 4"
+unit = "Hz"
+reference = 2117.0
+castem_probe = "FRE2 . 4"
+
+[[quantity]]
+key = "f5"
+label = "frequency 5"
+unit = "Hz"
+reference = 2795.8
+castem_probe = "FRE2 . 5"

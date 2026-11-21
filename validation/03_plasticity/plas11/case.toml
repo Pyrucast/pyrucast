@@ -1,0 +1,44 @@
+name = "plas11"
+calculation_type = "MECHANIC ELASTIC PLASTIC - GENERALISED PLANE STRAINS"
+castem_element = "QUA8, COQ2, POI1"
+castem_version = "97' customer version"
+source = ""
+deck = "plas11.dgibi"
+gap = ["generalized plane strain", "axisymmetric shell element (COQ2)"]
+tolerance = 0.005
+tolerance_note = "deck criterion, |M − M_theory| / M_theory ≤ 0.5 %."
+
+topic = """
+A beam of rectangular cross-section is bent by an imposed rotation about x,
+in generalized plane strain. The section is modelled by a solid part, a part
+of shell elements and point elements, up to the plastic range.
+"""
+
+goal = """
+Study the moment produced by the imposed rotation beyond the elastic limit
+and compare it with the theoretical moment.
+"""
+
+model = """
+Generalized plane strain section of height 2H = 4 and width 2B = 2: a solid
+part (QUA8), a part of COQ2 elements (length 0.5, thickness 2) and four POI1
+points, all with the same material.
+
+| Data | Value |
+|---|---|
+| E | 2e11 Pa |
+| ν | 0 |
+| σ_y (perfect plasticity) | 4.83e8 Pa |
+
+- Theoretical moment: M = (1 − (ε_e/ε)²/3)·M_lim beyond the elastic strain
+  ε_e = σ_y / E, with M_lim = 3/2·M_e.
+"""
+
+notes = "The 2011 document prints no result table."
+
+[[quantity]]
+key = "Mx_final"
+label = "moment M_x at the last rotation"
+unit = ""
+reference_probe = "MOMN"
+castem_probe = "MMX"

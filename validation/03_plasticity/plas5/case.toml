@@ -1,0 +1,58 @@
+name = "plas5"
+calculation_type = "MECHANICS PLASTICITY 2D PLANE STRESSE"
+castem_element = "QUA4"
+castem_version = "97' customer version"
+source = "Test NAFEMS : Analytical-Solution : MP4 Modélisation des structures élastiques dans CASTEM 2000."
+deck = "plas5.dgibi"
+tolerance = 1e-12
+tolerance_note = "deck criterion, each relative gap ≤ 1e-10 %."
+
+topic = """
+A single plane-stress element is stretched equally in x and y by imposed
+displacements until its stress state reaches the apex of the limit cone of a
+Drucker-Prager material with two cones.
+"""
+
+goal = """
+Find σ_xx and σ_yy at the first Gauss point at time 2 and compare them with
+the apex value KL / (2η + μ).
+"""
+
+model = """
+One QUA4, square of side 1.5.
+
+| Data | Value |
+|---|---|
+| E | 40 000 |
+| ν | 0.21 |
+| first cone α, β, K | 0.441, 1.02, 4.1 |
+| ultimate cone γ, δ, K_L | 0.441, 1.02, 3.56 |
+| flow η, μ | 0.441, 1.02 |
+| H | 0 |
+
+- Boundary conditions: u_y = 0 on y = 0, u_x = 0 on x = 0.
+- Imposed displacements: u_x = 1.5e-4·t on x = 1.5 and u_y = 1.5e-4·t on
+  y = 1.5; computed times 1 and 2.
+- Reference: σ_xx = σ_yy = K_L / (2η + μ) = 3.56 / 1.902.
+"""
+
+notes = """
+The 2011 document gives E = 2.5e11 Pa, ν = 0.25 and σ_y = 5e6 Pa, the data of
+plas4; the deck's data are those above.
+"""
+
+[[quantity]]
+key = "sxx"
+label = "σ_xx at t = 2"
+unit = ""
+reference = 1.871713985278654
+castem_2011 = 1.8717
+castem_probe = "SXX"
+
+[[quantity]]
+key = "syy"
+label = "σ_yy at t = 2"
+unit = ""
+reference = 1.871713985278654
+castem_2011 = 1.8717
+castem_probe = "SYY"

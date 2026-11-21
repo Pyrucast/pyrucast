@@ -1,0 +1,42 @@
+name = "elas3"
+calculation_type = "MECHANICS ELASTICITY 3D"
+castem_element = "TRI3"
+castem_version = "97' customer version"
+source = "Test NAFEMS : ME7 : Modélisation des structures élastiques dans CASTEM 2000."
+deck = "elas3.dgibi"
+tolerance = 4e-4
+tolerance_note = "deck criterion, |u_z(P3) + 0.452| / 0.452 ≤ 4e-4."
+
+topic = """
+The pinched cylinder of elas2 with free ends instead of a clamped one (and a
+different geometry). One eighth of the cylinder is modelled, with symmetry
+conditions on the cut edges, and loaded by a diametrical point load.
+"""
+
+goal = "Find the deflection u_z of the loaded point P3."
+
+model = """
+Quarter cylinder of radius 4.953 and half-length 5.175 (axis y), thickness
+0.094, meshed with DKT triangles at a mesh density of 0.75: the arc from
+(4.953, 0, 0) to (0, 0, 4.953) is translated by 5.175 along y.
+
+| Data | Value |
+|---|---|
+| E | 10.5e6 |
+| ν | 0.3125 |
+| thickness | 0.094 |
+
+- Boundary conditions: the arc at y = 0 is a free end; symmetry about z = 0
+  (u_z = θ_x = θ_y = 0), about x = 0 (u_x = θ_y = θ_z = 0) and about the
+  mid-length plane y = 5.175 (u_y = θ_x = θ_z = 0).
+- Load: F_z = −100 at P3 (0, 5.175, 4.953), the top of the mid-length
+  section.
+"""
+
+[[quantity]]
+key = "uz_P3"
+label = "u_z at P3"
+unit = "cm"
+reference = -0.452
+castem_2011 = -0.45214
+castem_probe = "D3Z"

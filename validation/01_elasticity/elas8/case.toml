@@ -1,0 +1,41 @@
+name = "elas8"
+calculation_type = "MECHANICS ELASTICITY 2D PLANE STRESS"
+castem_element = "QUA8"
+castem_version = "97' customer releas"
+source = "Test NAFEMS : ME12 : Modélisation des structures élastiques dans CASTEM 2000."
+deck = "elas8.dgibi"
+tolerance = 0.01
+tolerance_note = "deck criterion, |σ_yy(D) − 92.7| / 92.7 ≤ 1 %."
+
+topic = """
+An elliptic membrane (NAFEMS LE1) is loaded by a uniform outward pressure on
+its outer edge. By symmetry, one quarter is modelled in plane stress.
+"""
+
+goal = """
+Find the stress σ_yy at the point D (2, 0). The analytical value is
+σ_yy = 92.7 MPa.
+"""
+
+model = """
+Quarter of the region between the inner ellipse x²/2² + y²/1² = 1 and the
+outer ellipse x²/3.25² + y²/2.75² = 1, meshed with 24 QUA8: each elliptic
+edge is the plane projection of a circular arc cut into 6 elements, each
+straight edge has 4 elements.
+
+| Data | Value |
+|---|---|
+| E | 210e9 Pa |
+| ν | 0.3 |
+
+- Boundary conditions: symmetry about x = 0 (u_x = 0) and y = 0 (u_y = 0).
+- Load: outward pressure of 10 MPa on the outer elliptic edge.
+"""
+
+[[quantity]]
+key = "syy_D"
+label = "σ_yy at D"
+unit = "MPa"
+reference = 92.7
+castem_2011 = 93.548
+castem_probe = "SMYYD"

@@ -1,0 +1,36 @@
+name = "dyna_nl3"
+calculation_type = "MECHANICS 3D, NON LINEAR DYNAMICS"
+castem_element = "POUT, COQ3"
+castem_version = "97' customer version"
+source = ""
+deck = "dyna_nl3.dgibi"
+gap = ["large-displacement beam and shell dynamics"]
+tolerance = 0.05
+tolerance_note = "deck criterion, |d_max − d_ref| / d_ref ≤ 5 %."
+
+topic = """
+A clamped-free beam under an axial follower compression slightly above the
+critical (flutter) load F_cr = 20.05·E·I/L² is released; its response is
+computed in large displacements.
+"""
+
+goal = "Find the largest amplitude of the displacement of the free end."
+
+model = """
+| Data | Value |
+|---|---|
+| L | 12 |
+| section side | 0.01 |
+| initial deflection δ | 0.01 |
+| I_y = I_z | 2.8125e-4 |
+| I_o | 1e-5 |
+"""
+
+notes = "The deck holds two references for its complete and its short run; the reference is that of the run used."
+
+[[quantity]]
+key = "d_max"
+label = "largest displacement of the free end"
+unit = ""
+castem_probe = "dmax"
+reference_probe = "valtes"

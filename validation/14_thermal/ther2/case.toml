@@ -1,0 +1,51 @@
+name = "ther2"
+calculation_type = "THERMAL STEADY STATE, 2D AXISYMMETRICAL"
+castem_element = "QUA4"
+castem_version = "97' customer version"
+source = "Analytical solution (1st and 2nd parts). Comparison with results computed by THERMX (3rd part)."
+deck = "ther2.dgibi"
+tolerance = 0.004
+tolerance_note = "deck criterion, each relative gap ≤ 0.4 %."
+
+topic = """
+Thermal boundary conditions in axisymmetry, on a thick-walled cylinder, in
+three configurations: imposed temperature and imposed flux; imposed
+temperature and a volume heat source; imposed temperature and convection.
+"""
+
+goal = "Find the temperature in the cylinder for each configuration."
+
+model = """
+Thick-walled cylinder, inner radius R_i = 0.0515 m, outer radius
+R_e = 0.2015 m, QUA4 elements; temperature T_i imposed on the inner face.
+
+- Configuration 1: flux F on the outer face,
+  T = T_i + ln(r/R_i)·F·R_e/k.
+- Configuration 2: volume source Q,
+  T = T_i + Q/(2k)·((R_i² − R_e²)/2 + R_e²·ln(R_e/R_i)) at the outer face.
+- Configuration 3: convection h to T_ext on the outer face,
+  T = (T_i + h·R_e·T_ext/k·ln(R_e/R_i)) / (1 + h·R_e/k·ln(R_e/R_i)).
+"""
+
+notes = "The references are the deck's analytical formulas, evaluated at the compared point P3."
+
+[[quantity]]
+key = "T_1"
+label = "T at P3, configuration 1 (flux)"
+unit = "°C"
+castem_probe = "TETA1"
+reference_probe = "TREF1"
+
+[[quantity]]
+key = "T_2"
+label = "T at P3, configuration 2 (source)"
+unit = "°C"
+castem_probe = "TETA2"
+reference_probe = "TREF2"
+
+[[quantity]]
+key = "T_3"
+label = "T at P3, configuration 3 (convection)"
+unit = "°C"
+castem_probe = "TETA3"
+reference_probe = "TREF3"

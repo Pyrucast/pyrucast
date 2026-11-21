@@ -1,0 +1,51 @@
+name = "elas4"
+calculation_type = "MECHANICS ELASTICITY 3D"
+castem_element = "COQ4"
+castem_version = "97' customer version"
+source = "Test NAFEMS : ME8 : Modélisation des structures élastique dans CASTEM 2000."
+deck = "elas4.dgibi"
+tolerance = 0.05
+tolerance_note = "deck criterion, |σ_xx(A) + 108| / 108 ≤ 5 %."
+
+topic = """
+A cantilever with a Z-shaped cross-section (NAFEMS LE5) is loaded in torsion
+at its free end: a torque of 1.2 MN·m made of two opposite forces of
+600 kN, each spread over one flange.
+"""
+
+goal = """
+Find the axial stress on the mid-surface at the point A (2.5, 0, 0). The
+analytical value is σ_xx = −108 MPa.
+"""
+
+model = """
+Length 10 m along x. Cross-section in the plane x = 0: a lower flange from
+(0, 0, 0) to (0, 0, 1), a web from (0, 0, 1) to (0, 2, 1) and an upper flange
+from (0, 2, 1) to (0, 2, 2), 2 elements each; 16 elements along x, i.e. 96
+COQ4 quadrilaterals.
+
+| Data | Value |
+|---|---|
+| E | 210e9 Pa |
+| ν | 0.3 |
+| thickness | 0.1 m |
+
+- Boundary condition: the section x = 0 has its displacements blocked.
+- Loads at x = 10: on the lower flange F_z = −150 kN at its two ends and
+  −300 kN at its middle; on the upper flange the opposite.
+"""
+
+notes = """
+The 2011 document gives the torque as 1200 mN and the loads as 600 N; the
+deck applies 1.2 MN·m with 600 kN per flange. The deck reads the axial
+stress as the SMYY component of the shell stresses averaged through the
+thickness (CALP 'MOYEN'), extrapolated to the nodes.
+"""
+
+[[quantity]]
+key = "sxx_A"
+label = "σ_xx at A, mid-surface"
+unit = "MPa"
+reference = -108.0
+castem_2011 = -112.73
+castem_probe = "SMXXA2"

@@ -1,0 +1,54 @@
+name = "testICQ4"
+calculation_type = "ISOTROPIC ELASTIC MECHANIC, PLAN DEFO"
+castem_element = "ICQ4"
+castem_version = "97' customer release"
+source = "Rapport DMT sur les elements ICQ4."
+deck = "testICQ4.dgibi"
+gap = ["incompatible-mode element (ICQ4)"]
+tolerance = 0.01
+tolerance_note = "deck criteria, each relative gap < 1 %."
+
+topic = """
+A square plate of a nearly incompressible material (ν = 0.499), in plane
+strain, is loaded on its four sides by a hydrostatic stress field (weight
+α = 1) plus a deviatoric one (weight β = 1e-3).
+"""
+
+goal = """
+Test the incompressible ICQ4 elements: compare the vertical displacement of
+the corner (100, 100) and the mean stress with the incompressible solution.
+"""
+
+model = """
+Square 100 × 100, 10 × 10 ICQ4.
+
+| Data | Value |
+|---|---|
+| E | 2e11 Pa |
+| ν | 0.499 |
+| hydrostatic weight α | 1 |
+| deviatoric weight β | 1e-3 |
+
+- Boundary conditions: u_y = 0 on y = 0 and on x = 0, u_x = 0 at the origin.
+- Loads: pressure α·1e5 Pa on the four sides, plus the tractions of the
+  deviatoric field β·1e5·(σ_xx = 200 on x = 100 and −200 on y = 100 …,
+  σ_xy = −2x or −2y).
+- Reference: u_y(100, 100) = 2·x·y / (2μ) · 1e5 · β with μ = 1e11 / (1 + ν),
+  i.e. 1.499e-5; mean stress −α·1e5 Pa.
+"""
+
+notes = "The 2011 document prints no result table; the references are the deck's."
+
+[[quantity]]
+key = "uy_corner"
+label = "u_y at (100, 100)"
+unit = ""
+reference = 1.499e-5
+castem_probe = "uycas"
+
+[[quantity]]
+key = "mean_stress_max"
+label = "largest mean stress"
+unit = "Pa"
+reference = -1e5
+castem_probe = "maxpres1"

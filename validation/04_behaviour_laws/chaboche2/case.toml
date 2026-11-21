@@ -1,0 +1,78 @@
+name = "chaboche2"
+calculation_type = "ISOTROPIC VISCOPLASTIC MECHANICS - 2D AXIS"
+castem_element = "QUA8 (COQ8 in the 2011 document)"
+castem_version = "97' customer version"
+source = ""
+deck = "chaboche2.dgibi"
+tolerance_note = """deck criterion, max |σ_CHABOCHE − σ_ONERA| / max |σ_ONERA| ≤ 1e-4 \
+over the computed times."""
+
+topic = """
+A cylinder of a unified viscoplastic Chaboche material (Norton flow, one
+Armstrong-Frederick back-stress, saturating isotropic hardening) is cycled in
+tension and compression by an imposed axial displacement.
+"""
+
+goal = """
+Test the Chaboche model: the axial stress must equal the one of the same law
+written in the ONERA model of Cast3M.
+"""
+
+model = """
+Axisymmetric, one QUA8 square [0, 1] × [0, 1] in (r, z), B-bar formulation.
+
+| Data | Value |
+|---|---|
+| E | 200e9 Pa |
+| ν | 0.3 |
+| σ_y | 82e6 Pa |
+| Norton K, n | 151e6 Pa, 24 |
+| back-stress A = C_lin / γ, C = γ | 162 400e6 / 2800, 2800 |
+| isotropic Q, b | 60e6 Pa, 8 |
+
+- Boundary conditions: u_z = 0 on z = 0, u_r = 0 on the axis.
+- Imposed u_z on z = 1: 0.002·f(t), f = 0, 1, 0, −1, 0, 2 at
+  t = 0, 100, 200, 300, 400, 600 s.
+- Reference: the same computation with the ONERA model and equivalent data.
+"""
+
+notes = """
+The 2011 document prints no result table and gives E = 7.34e10, ν = 0.33;
+the data above are the deck's. The deck uses the B-bar formulation; with a
+homogeneous strain it changes nothing.
+"""
+
+[[quantity]]
+key = "szz_100"
+label = "σ_zz at t = 100 s"
+unit = "MPa"
+castem_probe = "IPOL 100. ltps1 lsig1"
+reference_probe = "IPOL 100. ltps1 lsig2"
+
+[[quantity]]
+key = "szz_200"
+label = "σ_zz at t = 200 s"
+unit = "MPa"
+castem_probe = "IPOL 200. ltps1 lsig1"
+reference_probe = "IPOL 200. ltps1 lsig2"
+
+[[quantity]]
+key = "szz_300"
+label = "σ_zz at t = 300 s"
+unit = "MPa"
+castem_probe = "IPOL 300. ltps1 lsig1"
+reference_probe = "IPOL 300. ltps1 lsig2"
+
+[[quantity]]
+key = "szz_400"
+label = "σ_zz at t = 400 s"
+unit = "MPa"
+castem_probe = "IPOL 400. ltps1 lsig1"
+reference_probe = "IPOL 400. ltps1 lsig2"
+
+[[quantity]]
+key = "szz_600"
+label = "σ_zz at t = 600 s"
+unit = "MPa"
+castem_probe = "IPOL 600. ltps1 lsig1"
+reference_probe = "IPOL 600. ltps1 lsig2"

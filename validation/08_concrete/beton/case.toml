@@ -1,0 +1,37 @@
+name = "beton"
+calculation_type = "ELASTIC PLASTIC MECHANICS - CONCRETE"
+castem_element = "CUB8"
+castem_version = "97' customer version"
+source = "NAH (93/01/19)"
+deck = "beton.dgibi"
+gap = ["concrete plasticity law (BETON)"]
+tolerance_note = "deck criterion, |σ_zz − 2| < 1e-6."
+
+topic = """
+A concrete cube, held on its base, is pulled by an imposed displacement
+beyond its tensile strength (LTR1 = 4 MPa); the concrete follows an
+elastoplastic law with cracking.
+"""
+
+goal = "Test the concrete model: the axial stress after cracking."
+
+model = """
+One CUB8 cube.
+
+| Data | Value |
+|---|---|
+| E | 40 000 MPa |
+| ν | 0.2 |
+| α | 1e-5 /°C |
+| tensile strength LTR1 | 4 MPa |
+"""
+
+notes = "The 2011 document prints no result table; the reference is the deck's."
+
+[[quantity]]
+key = "szz_B3"
+label = "σ_zz at B3, last time"
+unit = "MPa"
+reference = 2.0
+abs_tolerance = 1e-6
+castem_probe = "sz"

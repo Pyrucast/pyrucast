@@ -1,0 +1,36 @@
+name = "plas13"
+calculation_type = "MECHANICS ELASTIC PLASTIC"
+castem_element = "POUT"
+castem_version = "97' customer version"
+source = ""
+deck = "plas13.dgibi"
+gap = ["beam plasticity (global law)"]
+tolerance = 1e-3
+tolerance_note = "deck criterion, |M_max − 21 401| / 21 401 ≤ 1e-3."
+
+topic = """
+A reinforced-concrete post under a load of 2 t, modelled by beam elements
+with a global plasticity law (Ambroise-type model) that couples axial force,
+bending and shear.
+"""
+
+goal = "Find the largest bending moment reached at the clamped base."
+
+model = """
+Post of beam elements clamped at A0 (0, 0, 0), section 0.0289 m².
+
+| Data | Value |
+|---|---|
+| E | 35 510e6 Pa |
+| ν | 0.2 |
+| ρ | 2516 kg/m³ |
+"""
+
+notes = "The 2011 document prints no result table; the reference is the deck's."
+
+[[quantity]]
+key = "Mx_max"
+label = "largest moment M_x at A0"
+unit = "N·m"
+reference = 21401.0
+castem_probe = "MOMAX"

@@ -1,0 +1,59 @@
+name = "plas1"
+calculation_type = "MECHANICS PLASTICITY 2D PLANE STRESS"
+castem_element = "QUA4 (COQ4 in the 2011 document)"
+castem_version = "97' customer version"
+source = "Test NAFEMS : Analytical-Solution : MP1 Modélisation des structures élastiques dans CASTEM 2000."
+deck = "plas1.dgibi"
+tolerance = 0.015
+tolerance_note = "deck criterion, each relative gap ≤ 1.5 %."
+
+topic = """
+A rectangular strip in plane stress is bent by imposed rotations of its end
+section, which stays straight. At the first time (0.02875) the strip is
+still elastic; at the second (0.05) it is plastic over most of its height.
+"""
+
+goal = """
+Find the bending moments M1 (elastic) and M2 (plastic). The theoretical
+values are M1 = 805 kN·m and M2 = 1074 kN·m.
+"""
+
+model = """
+Half of the strip, width 12.5 mm (x from 0 to 12.5 mm), height 100 mm
+(y from −50 to 50 mm): one QUA4 across, 8 along y.
+
+| Data | Value |
+|---|---|
+| E | 2.1e11 Pa |
+| ν | 0.3 |
+| σ_y (perfect plasticity) | 483e6 Pa |
+
+- Boundary conditions: u_x = 0 on the symmetry edge x = 0, u_y = 0 at the
+  origin. On the edge x = 12.5 mm, u_x is imposed at the corners,
+  +1e-3·t at A (y = 50 mm) and −1e-3·t at B (y = −50 mm), and linear
+  relations keep the edge straight.
+- Computed times: 0.02875 and 0.05.
+- Moment: M = 2 × Σ y_i F_x,i over the nodes of the upper half of the loaded
+  edge, in kN·m.
+"""
+
+notes = """
+The 2011 document gives ν = 0.28 and names the element COQ4; the deck uses
+ν = 0.3 and QUA4.
+"""
+
+[[quantity]]
+key = "M1"
+label = "elastic moment M1 (t = 0.02875)"
+unit = "kN·m"
+reference = 805.0
+castem_2011 = 811.08
+castem_probe = "M1"
+
+[[quantity]]
+key = "M2"
+label = "plastic moment M2 (t = 0.05)"
+unit = "kN·m"
+reference = 1074.0
+castem_2011 = 1085.2
+castem_probe = "M2"

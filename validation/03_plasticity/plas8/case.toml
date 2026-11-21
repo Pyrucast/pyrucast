@@ -1,0 +1,44 @@
+name = "plas8"
+calculation_type = "MECHANICS ELASTIC PLASTIC"
+castem_element = "TRI3 (DKT plate, 7 integration layers)"
+castem_version = "97' customer version"
+source = ""
+deck = "plas8.dgibi"
+gap = ["plasticity in plate elements"]
+tolerance = 0.085
+tolerance_note = "deck criterion (complete run), |F − F_u| / F_u ≤ 8.5 %."
+
+topic = """
+A plate strip, clamped at one end, is bent by an imposed deflection of its
+free end. With an elastic, perfectly plastic material the reaction force
+tends to the limit load of the clamped section.
+"""
+
+goal = """
+Calculate the reaction force as a function of the deflection. It must
+approach the limit load F_u = σ_y·h²·b / (4L).
+"""
+
+model = """
+Strip of length L = 10 and width b = 1 in the plane (x, y), thickness
+h = L/10 = 1; DKT triangles, 20 elements along x and 2 across.
+
+| Data | Value |
+|---|---|
+| E | 2.1e11 Pa |
+| ν | 0 |
+| σ_y (perfect plasticity) | 100e6 Pa |
+
+- Boundary conditions: the edge x = 0 clamped (u_x, u_y, u_z, θ_y, θ_z).
+- Imposed deflection u_z = 0.2·t on the edge x = L.
+- Reference: F_u = 1e8 × 1² / (4 × 10) = 2.5e6 N.
+"""
+
+notes = "The 2011 document prints no result table."
+
+[[quantity]]
+key = "F_end"
+label = "reaction force at the last deflection"
+unit = "N"
+reference = 2.5e6
+castem_probe = "FCC"

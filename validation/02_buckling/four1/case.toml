@@ -1,0 +1,49 @@
+name = "four1"
+calculation_type = "MECHANICS BUCKLING. 2D FOURIER"
+castem_element = "COQ2"
+castem_version = "97' customer release"
+source = "Analytic solution."
+deck = "four1.dgibi"
+gap = ["Fourier harmonic analysis", "eigenvalue solver", "axisymmetric shell element (COQ2)"]
+tolerance = 2e-7
+tolerance_note = "deck criterion, largest relative gap of the two multipliers < 2e-5 %."
+
+topic = """
+An infinitely long cylinder under external pressure. The prestress of the
+axisymmetric harmonic (n = 0) gives the geometric stiffness; the buckling
+problem is then solved on the harmonic n = 2, first without, then with the
+stiffness of the follower pressure.
+"""
+
+goal = "Find the load multipliers λ_1 (dead pressure) and λ_2 (follower pressure)."
+
+model = """
+Fourier analysis, meridian plane. A segment of the cylinder of radius 1000 mm
+and length 100 mm, 4 COQ2 elements, thickness 1 mm.
+
+| Data | Value |
+|---|---|
+| E | 20 000 MPa |
+| ν | 0 |
+| thickness | 1 mm |
+| pressure P | 1 MPa |
+
+- Boundary conditions: symmetry of both ends.
+- Reference: λ_1 = 2e-5 / 3, λ_2 = 5e-6.
+"""
+
+notes = "The 2011 document prints no result table; the references are the deck's."
+
+[[quantity]]
+key = "lambda_1"
+label = "multiplier λ_1, dead pressure"
+unit = ""
+reference = 6.666666666666667e-6
+castem_probe = "LAMBDA1"
+
+[[quantity]]
+key = "lambda_2"
+label = "multiplier λ_2, follower pressure"
+unit = ""
+reference = 5e-6
+castem_probe = "LAMBDA2"

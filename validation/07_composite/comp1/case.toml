@@ -1,0 +1,37 @@
+name = "comp1"
+calculation_type = "MECHANICS COMPOSITE 3D"
+castem_element = "DKT"
+castem_version = "97' customer version"
+source = "Report CEA-DMT 89/184 : Modélisation des composites de type multi-couches dans CASTEM 2000."
+deck = "comp1.dgibi"
+gap = ["layered orthotropic shells (offset layers)"]
+tolerance = 0.05
+tolerance_note = "deck criterion, |u_r(PA) − u_ref| / u_ref ≤ 5 %."
+
+topic = """
+A two-layer composite cylinder, its fibres wound at ±45° about the z axis,
+is loaded by an internal pressure; its lower end is held along z. Each
+layer is a DKT shell offset by half its thickness from the mid-surface.
+"""
+
+goal = "Find the radial displacement of the point PA (1.05, 0, 0) at the bottom of the cylinder."
+
+model = """
+Cylinder of radius R = 1.05 m and height H = 1 m, total thickness 0.1 m
+(two layers of 0.05 m at offsets ±0.025 m), DKT triangles.
+
+| Data | Value |
+|---|---|
+| E_1 | 7e6 Pa |
+| internal pressure | 100 Pa |
+| fibre angles | +45°, −45° |
+
+- Reference: mean of 0.63615e-5 and 0.64702e-5 m.
+"""
+
+[[quantity]]
+key = "ur_PA"
+label = "u_r at PA"
+unit = "m"
+reference = 6.41585e-6
+castem_probe = "ur1A"

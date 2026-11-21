@@ -1,0 +1,42 @@
+name = "dy_devo8"
+calculation_type = "MECHANICS DYNAMICS 3D, IMPACT, LINKAGE POINT-MOVING CIRCLE, LINKAGE LINE-LINE-FRICTION"
+castem_element = ""
+castem_version = "97' customer version"
+source = ""
+deck = "dy_devo8.dgibi"
+gap = ["modal-basis transient dynamics with linkages (DYNE)"]
+tolerance_note = "deck criteria, largest differences below 0.0018 and 0.005 (x), 0.0012 and 0.004 (y)."
+
+topic = """
+A point hits a moving circle; the impact is computed with a point - moving
+circle linkage and with a line - line linkage with friction, and the two are
+compared.
+"""
+
+goal = "Find the displacements u_x and u_y of the point, and compare the two linkages."
+
+model = """
+| Data | Value |
+|---|---|
+| R | 0.04 m |
+| U₀ | 5 m/s |
+| V₀ | 10 m/s |
+| K_e | 1e8 N/m |
+| K_t | −100 N/m |
+"""
+
+[[quantity]]
+key = "max_x"
+label = "largest difference on u_x"
+unit = "m"
+reference = 0.0
+abs_tolerance = 0.0018
+castem_probe = "max_x"
+
+[[quantity]]
+key = "max_y"
+label = "largest difference on u_y"
+unit = "m"
+reference = 0.0
+abs_tolerance = 0.0012
+castem_probe = "max_y"

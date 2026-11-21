@@ -1,0 +1,42 @@
+name = "dy_devo3"
+calculation_type = "MECHANICS DYNAMICS 3D, IMPACT, LINKAGE CIRCLE-PLANE-FRICTION"
+castem_element = ""
+castem_version = "97' customer version"
+source = ""
+deck = "dy_devo3.dgibi"
+gap = ["modal-basis transient dynamics with linkages (DYNE)"]
+tolerance = 0.01
+tolerance_note = "deck criterion, both relative gaps ≤ 1e-2."
+
+topic = """
+A wheel of 1 m diameter, clamped between two planes, is driven by a torque;
+the linkages are circle-plane with friction.
+"""
+
+goal = "Find the rotation about the z axis."
+
+model = """
+| Data | Value |
+|---|---|
+| R | 1 m |
+| gap | −0.00025 m |
+| M_z | 1000 N·m |
+| K_e | 4e6 N/m |
+| K_t | 10·K_e / R² |
+
+- Reference: rotation 100·t² at the compared times.
+"""
+
+[[quantity]]
+key = "rot_1"
+label = "rotation, first compared time"
+unit = ""
+castem_probe = "D"
+reference_probe = "DEPREF"
+
+[[quantity]]
+key = "rot_2"
+label = "rotation, second compared time"
+unit = ""
+castem_probe = "DD"
+reference_probe = "DDPREF"

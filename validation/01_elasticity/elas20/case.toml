@@ -1,0 +1,83 @@
+name = "elas20"
+calculation_type = "MECHANICS ELASTICITY 3D"
+castem_element = "TUYAU"
+castem_version = "97' customer releas"
+source = """Test VPCS : SSLL08/90 : Modélisation des structures élastiques dans \
+CASTEM 2000. J. S. Przemieniecki, theory of matrix structural analysis \
+(New-York : Mcgraw-Hill Book Company, 1968) pp 155."""
+deck = "elas20.dgibi"
+gap = ["pipe element (TUYA)"]
+tolerance = 0.05
+tolerance_note = "deck criterion, largest relative gap of the five values ≤ 5 %."
+
+topic = """
+A pipe made of two straight parts joined by an elbow is loaded by an
+internal pressure; it is clamped at one end.
+"""
+
+goal = """
+Find the displacements at the points B, B' and A' and compare them with the
+analytical results.
+"""
+
+model = """
+In the plane (x, y): a straight part from A (0, 0, 0) to A' (0, 3.048, 0)
+(5 elements), an elbow of radius 0.61 m from A' to B' (0.61, 3.658, 0)
+(10 elements) and a straight part from B' to B (3.658, 3.658, 0)
+(5 elements).
+
+| Data | Value |
+|---|---|
+| E | 2.1e11 Pa |
+| ν | 0.3 |
+| tube radius | 0.2032 m |
+| wall thickness | 0.026187 m |
+
+- Boundary condition: A clamped.
+- Load: internal pressure 15 MPa.
+"""
+
+notes = """
+The 2011 document prints the Cast3M value of u_x(B) as 822692E-4 (the decimal
+point is lost); it is kept as printed.
+"""
+
+[[quantity]]
+key = "ux_B"
+label = "u_x at B"
+unit = "m"
+reference = 8.22e-4
+castem_2011 = 822692e-4
+castem_probe = "UXB1"
+
+[[quantity]]
+key = "uy_B"
+label = "u_y at B"
+unit = "m"
+reference = 8.22e-4
+castem_2011 = 8.22692e-4
+castem_probe = "UYB1"
+
+[[quantity]]
+key = "ux_Bp"
+label = "u_x at B'"
+unit = "m"
+reference = 1.37e-4
+castem_2011 = 1.37544e-4
+castem_probe = "UXBP1"
+
+[[quantity]]
+key = "uy_Bp"
+label = "u_y at B'"
+unit = "m"
+reference = 8.22e-4
+castem_2011 = 8.22692e-4
+castem_probe = "UYBP1"
+
+[[quantity]]
+key = "uy_Ap"
+label = "u_y at A'"
+unit = "m"
+reference = 6.85e-4
+castem_2011 = 6.85148e-4
+castem_probe = "UYAP1"

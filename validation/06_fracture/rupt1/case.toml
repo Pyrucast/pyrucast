@@ -1,0 +1,38 @@
+name = "rupt1"
+calculation_type = "MECHANICS ELASTIC-PLASTIC AXI"
+castem_element = "QUA8"
+castem_version = "97' customer version"
+source = "Test NAFEMS : Ductile Fracture Handbook, A. ZAHOOR, EPRI, 1990 : rupt1 Modélisation des structures élastiques dans CASTEM 2000."
+deck = "rupt1.dgibi"
+gap = ["stress intensity factors (G-theta)"]
+tolerance = 0.01
+tolerance_note = "deck criterion, |K − K_Zahoor| / K_Zahoor < 1 %."
+
+topic = """
+A cylinder with a circumferential crack, in linear elasticity and
+axisymmetry, is pulled axially. The stress intensity factor is computed
+from the energy release rate (G-θ method) and compared with Zahoor's
+handbook formula K = σ_t·√(πa)·F.
+"""
+
+goal = "Find the stress intensity factor K_I of the circumferential crack."
+
+model = """
+Axisymmetric, QUA8 elements; crack depth a = 0.05 m.
+
+| Data | Value |
+|---|---|
+| E | 2.1e11 Pa (2e11 Pa in the deck) |
+| ν | 0.3 |
+| a | 0.05 m |
+
+- Load: total axial force 1e6 N.
+"""
+
+[[quantity]]
+key = "K1"
+label = "K_I"
+unit = "MPa·m^½"
+reference = 1.0848
+castem_2011 = 1.0855
+castem_probe = "K_CAL"

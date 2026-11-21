@@ -1,0 +1,44 @@
+name = "joi44"
+calculation_type = "ORTHOTROPIC ELASTIC MECHANICS"
+castem_element = "QUA4, JOI4"
+castem_version = "97' customer version"
+source = "Analytical solution."
+deck = "joi44.dgibi"
+gap = ["joint elements with thermal expansion"]
+tolerance = 1e-4
+tolerance_note = "deck criterion, both relative gaps ≤ 1e-4."
+
+topic = """
+A 3D joint, clamped on its lower face and free on its upper one, is loaded
+by a temperature field, given once on the model and once on the mesh.
+"""
+
+goal = "Calculate the stress induced by the temperature: σ = k_n·α_n·ΔT."
+
+model = """
+One JOI4 joint element.
+
+| Data | Value |
+|---|---|
+| k_s1 | 4.2e10 |
+| k_s2 | 3.0e5 |
+| k_n | 4.2e20 |
+| α_n | 2.5 |
+| ΔT | 1000 |
+
+- Reference: σ = 4.2e20 × 2.5 × 1000.
+"""
+
+[[quantity]]
+key = "sigma_1"
+label = "normal stress, temperature on the model"
+unit = ""
+reference = 1.05e24
+castem_probe = "MAXCO1"
+
+[[quantity]]
+key = "sigma_2"
+label = "normal stress, temperature on the mesh"
+unit = ""
+reference = 1.05e24
+castem_probe = "MAXCO2"

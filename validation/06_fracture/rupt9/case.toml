@@ -1,0 +1,38 @@
+name = "rupt9"
+calculation_type = "MECHANICS ELASTICITY"
+castem_element = "QUA8, DIME 2"
+castem_version = "97' customer version"
+source = "Test NAFEMS : D.P.Rooke and D. J. Cartwright in Copendium of Intensity Factors HMSO (1976): rupt7 Modélisation des structures élastiques dans CASTEM 2000."
+deck = "rupt9.dgibi"
+gap = ["stress intensity factors (G-theta)"]
+tolerance = 0.02
+tolerance_note = "deck criterion, each factor within 2 % of 150.37 and −71.4."
+
+topic = """
+The oblique edge crack of rupt7, loaded by a pressure on the plate's sides;
+K_I and K_II are computed by the G-θ method.
+"""
+
+goal = "Find the stress intensity factors K_I and K_II."
+
+model = """
+QUA8 elements; the plate of rupt7 with a pressure of 10 on its two sides.
+"""
+
+notes = "The deck compares with 150.37 and −71.4 (the references of rupt7); the 2011 document gives 149.77 and −71.56."
+
+[[quantity]]
+key = "K1"
+label = "K_I"
+unit = "daN·mm^-3/2"
+reference = 149.77
+castem_2011 = 145.98
+castem_probe = "KNUM . 'I'"
+
+[[quantity]]
+key = "K2"
+label = "K_II"
+unit = "daN·mm^-3/2"
+reference = -71.56
+castem_2011 = -72.28
+castem_probe = "KNUM . 'II'"

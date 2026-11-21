@@ -1,0 +1,39 @@
+name = "dyna6"
+calculation_type = "MECHANICS DYNAMICS 3D"
+castem_element = "POUT"
+castem_version = "97' customer version"
+source = "Analytical solution : Timoshenko."
+deck = "dyna6.dgibi"
+gap = ["eigenvalue solver"]
+tolerance = 0.01
+tolerance_note = "deck criterion, each frequency within 1 % for the four eigenvalue methods."
+
+topic = """
+Bending modes of a cantilever beam. The eigenvalue operator is run in its
+three modes: in given intervals (bisection), near given values, and by the
+Lanczos method on a subspace.
+"""
+
+goal = "Find the frequencies of the first two bending modes of the beam."
+
+model = """
+Cantilever beam of length L = 2 m, section A = 0.01 m², POUT elements.
+
+- Reference: f₁ = 17.71 Hz, f₂ = 110.98 Hz (Timoshenko).
+"""
+
+notes = "The values compared here are those of the first method (intervals)."
+
+[[quantity]]
+key = "f1"
+label = "first frequency"
+unit = "Hz"
+reference = 17.71
+castem_probe = "F1"
+
+[[quantity]]
+key = "f2"
+label = "second frequency"
+unit = "Hz"
+reference = 110.98
+castem_probe = "G1"

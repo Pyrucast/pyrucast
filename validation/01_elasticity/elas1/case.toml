@@ -1,0 +1,46 @@
+name = "elas1"
+calculation_type = "MECHANICS ELASTICITY 2D AXI"
+castem_element = "COQ2"
+castem_version = "97' customer version"
+source = "Test NAFEMS : ME1 : Modélisation des structures élastiques dans CASTEM 2000."
+deck = "elas1.dgibi"
+gap = ["axisymmetric shell element (COQ2)"]
+tolerance = 0.05
+tolerance_note = "deck criterion, |u_r − 4.677| / 4.677 < 5 %."
+
+topic = """
+A hemispherical cap is loaded by an internal pressure, by its own weight and
+by a radial line load on its free edge. The three loads are turned into
+equivalent nodal forces and summed before a single solve (superposition).
+"""
+
+goal = "Find the radial displacement of the edge point B (1, 1)."
+
+model = """
+Axisymmetric, meridian plane (r, z). The cap is the arc of centre O (0, 1)
+from the pole A (0, 0) to the edge B (1, 1): radius 1 m, 100 COQ2 elements,
+thickness 0.02 m.
+
+| Data | Value |
+|---|---|
+| E | 2.1e11 Pa |
+| ν | 0.3 |
+| ρ | 7.85e4 |
+
+- Boundary conditions: u_z = 0 at B, u_r = 0 at A.
+- Loads: internal pressure 1e4 Pa; own weight under an acceleration of
+  1 m/s² along −z; radial line load of 1000 N/m on the edge B (nodal force
+  2π × 1000 N).
+"""
+
+notes = """
+The 2011 document gives ν = 0.28; the Cast3M 2026 deck uses ν = 0.3.
+"""
+
+[[quantity]]
+key = "ur_B"
+label = "u_r at B"
+unit = "µm"
+reference = 4.677
+castem_2011 = 4.6685
+castem_probe = "DR"

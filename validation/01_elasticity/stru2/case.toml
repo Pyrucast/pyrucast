@@ -1,0 +1,86 @@
+name = "stru2"
+calculation_type = "ELASTIC MECHANIC 2D, PLAN STRESS"
+castem_element = "QUA4"
+castem_version = "97' customer release"
+source = "Comparison with six others finite element codes."
+deck = "stru2.dgibi"
+tolerance = 0.05
+tolerance_note = """deck criterion, largest relative gap ≤ 5 % over u_x(A), u_x(D), \
+u_x(E), u_y(A), u_y(D) (the deck lists u_y(D) twice and leaves u_y(E) out)."""
+
+topic = """
+An orthotropic square plate, in plane stress, is clamped on one side and
+loaded by a force on the opposite side.
+"""
+
+goal = """
+Find the horizontal and vertical displacements at the centre of the plate
+(point E) and at the two free corners (points A and D).
+"""
+
+model = """
+Square plate, QUA4 elements, orthotropic material whose axes are given by a
+direction in the plane.
+
+| Data | Value |
+|---|---|
+| E_1 | 2.5737e10 Pa |
+| E_2 = E_3 | 7.377e9 Pa |
+| ν_12 = ν_23 = ν_13 | 0.31 |
+| G_12 | 2.319e9 Pa |
+
+- Boundary condition: one side clamped.
+- Load: total force 1e6 N on the opposite side.
+"""
+
+notes = """
+The 2011 document gives E_1 = 2.15737e10 Pa; the deck uses 2.5737e10 Pa.
+"""
+
+[[quantity]]
+key = "ux_A"
+label = "u_x at A"
+unit = "1e-4 m"
+reference = 1.098
+castem_2011 = 1.09961
+castem_probe = "UA / 1.E-4"
+
+[[quantity]]
+key = "uy_A"
+label = "u_y at A"
+unit = "1e-4 m"
+reference = -1.309
+castem_2011 = -1.31276
+castem_probe = "VA / 1.E-4"
+
+[[quantity]]
+key = "ux_D"
+label = "u_x at D"
+unit = "1e-4 m"
+reference = 1.003
+castem_2011 = 0.99508
+castem_probe = "UD / 1.E-4"
+
+[[quantity]]
+key = "uy_D"
+label = "u_y at D"
+unit = "1e-4 m"
+reference = -0.7134
+castem_2011 = -0.71706
+castem_probe = "VD / 1.E-4"
+
+[[quantity]]
+key = "ux_E"
+label = "u_x at E"
+unit = "1e-4 m"
+reference = 0.4768
+castem_2011 = 0.47668
+castem_probe = "UE / 1.E-4"
+
+[[quantity]]
+key = "uy_E"
+label = "u_y at E"
+unit = "1e-4 m"
+reference = -0.4965
+castem_2011 = -0.49812
+castem_probe = "VE / 1.E-4"

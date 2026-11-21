@@ -1,0 +1,42 @@
+name = "vibr10"
+calculation_type = "MECHANICS DYNAMICS, MASS UNBALANCE RESPONSE"
+castem_element = ""
+castem_version = "97' customer version"
+source = "Analytical solution."
+deck = "vibr10.dgibi"
+gap = ["harmonic response with rotating unbalance"]
+tolerance = 0.001
+tolerance_note = "deck criterion, both semi-axes within 0.1 %."
+
+topic = """
+A point of mass M1 on a stiffness K1 is excited by a rotating unbalance:
+M·ẍ + C·ẋ + K·x = F with F the unbalance force. The point describes an
+ellipse.
+"""
+
+goal = "Find the two semi-axes of the ellipse described by the point."
+
+model = """
+| Data | Value |
+|---|---|
+| M1 | 40 kg |
+| K1 | 4e5 N/m |
+| unbalance m·d | 1e-4 kg·m |
+| Ω | 19.0985 rad/s |
+
+- Reference: A = m·d·Ω² / (K1 − Ω²·M1), on y and −A on z.
+"""
+
+[[quantity]]
+key = "y_axis"
+label = "response along y"
+unit = "m"
+castem_probe = "YR1"
+reference_probe = "An1"
+
+[[quantity]]
+key = "z_axis"
+label = "response along z"
+unit = "m"
+castem_probe = "ZR1"
+reference_probe = "-1. * An1"

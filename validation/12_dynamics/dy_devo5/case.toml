@@ -1,0 +1,37 @@
+name = "dy_devo5"
+calculation_type = "MECHANICS DYNAMICS 3D, TRANSIENT RESPONSE"
+castem_element = "POUT"
+castem_version = "97' customer version"
+source = "Walter C. Hury and Moshe F. Rubinstein : Dynamics of structures (Englewood Cliffs : Prentice-Hall, Inc., 1964) p.294."
+deck = "dy_devo5.dgibi"
+gap = ["eigenvalue solver", "modal-basis transient dynamics with linkages (DYNE)"]
+
+topic = """
+A beam on elastic supports carries a triangular distributed load whose
+amplitude varies in time; the response is computed on the modal basis.
+"""
+
+goal = "Find the largest deflection of the beam at two times."
+
+model = """
+| Data | Value |
+|---|---|
+| L | 50 m |
+| K_y | 974.1/2 N/m |
+| A | 1 m² |
+| I_y = I_z | 10 m⁴ |
+"""
+
+[[quantity]]
+key = "w_1"
+label = "deflection at P2, t = 1.45"
+unit = "m"
+reference = 0.23382
+castem_probe = "FLECH1"
+
+[[quantity]]
+key = "w_2"
+label = "deflection at P2, t = 1.9"
+unit = "m"
+reference = -0.24283
+castem_probe = "FLECH2"

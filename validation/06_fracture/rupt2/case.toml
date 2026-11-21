@@ -1,0 +1,40 @@
+name = "rupt2"
+calculation_type = "ELASTIC MECHANICS"
+castem_element = "QUA8, plane strain"
+castem_version = "97' customer version"
+source = "Test NAFEMS : The use of J-integral in thermal stress crack problems International Journal of Fracture: rupt2 Modélisation des structures élastiques dans CASTEM 2000."
+deck = "rupt2.dgibi"
+gap = ["stress intensity factors (G-theta)"]
+tolerance = 0.05
+tolerance_note = "deck criterion, shape factor F = K(1 − ν)/(E·α·T₀·w·√(πa)) within 5 % of 0.514."
+
+topic = """
+An edge-cracked strip with constrained ends is loaded by a temperature that
+varies linearly through its width, zero at mid-width and T₀ on the right
+edge. The energy release rate is computed by the G-θ method and turned into
+K = √(E·G / (1 − ν²)).
+"""
+
+goal = "Find the stress intensity factor K_I of the thermal crack."
+
+model = """
+QUA8 elements, plane strain; crack length a = 100 mm, width 200 mm, height
+400 mm.
+
+| Data | Value |
+|---|---|
+| E | 20 000 daN/mm² |
+| ν | 0.3 |
+| α | 5e-6 /°C |
+| T₀ | 100 °C |
+
+- Reference: shape factor 0.514, i.e. K = 0.514·E·α·T₀·w·√(πa) / (1 − ν).
+"""
+
+[[quantity]]
+key = "K1"
+label = "K_I"
+unit = "daN·mm^-3/2"
+reference = 130.15
+castem_2011 = 125.88
+castem_probe = "K"

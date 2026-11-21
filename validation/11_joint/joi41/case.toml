@@ -1,0 +1,46 @@
+name = "joi41"
+calculation_type = "ISOTROPIC ELASTIC MECHANICS"
+castem_element = "QUA4, CUB8, JOI4"
+castem_version = "97' customer version"
+source = ""
+deck = "joi41.dgibi"
+tolerance_note = "deck criterion, both largest differences ≤ 1e-9."
+
+topic = """
+Two stacked cubes under a pressure on the upper face, computed twice: as a
+single continuous body, and with a very stiff JOI4 joint between them.
+"""
+
+goal = """
+Calculate the effect of a JOI4 joint on displacements, strains and
+stresses: with a very stiff joint, the two computations must agree.
+"""
+
+model = """
+Two CUB8 cubes; JOI4 joint of stiffness k_s = k_n = 4.2e15 between them.
+
+| Data | Value |
+|---|---|
+| E | 2.1e11 Pa |
+| ν | 0.3 |
+
+- Load: pressure 1e5 Pa on the upper face.
+"""
+
+notes = "The 2011 document prints no result table; the compared quantities are the deck's."
+
+[[quantity]]
+key = "max_du_upper"
+label = "largest displacement difference, upper cube"
+unit = "m"
+reference = 0.0
+abs_tolerance = 1e-9
+castem_probe = "maxdis"
+
+[[quantity]]
+key = "max_du_lower"
+label = "largest displacement difference, lower cube"
+unit = "m"
+reference = 0.0
+abs_tolerance = 1e-9
+castem_probe = "maxdii"

@@ -1,0 +1,60 @@
+name = "stru4"
+calculation_type = "ELASTIC MECHANIC, 3D"
+castem_element = "TUYAU"
+castem_version = "97' customer release"
+source = """Guide VPCS, Test SSLL 06/90. Solution analytique; JS Prezemieniecki; \
+Theory of matrix structural analysis, New York, MCGraw-Hill, 1968."""
+deck = "stru4.dgibi"
+gap = ["pipe element (TUYA)"]
+tolerance = 0.05
+tolerance_note = "deck criterion, largest relative gap of the three values < 5 %."
+
+topic = """
+A curved tube, clamped at one end, is bent in its plane by a force and a
+moment applied at its free end.
+"""
+
+goal = """
+Find the horizontal and vertical displacements of the free end B and its
+rotation.
+"""
+
+model = """
+Quarter circle of radius 3 m in the plane (x, y), from A (0, 3, 0) to
+B (3, 0, 0), 20 pipe elements.
+
+| Data | Value |
+|---|---|
+| E | 2e11 Pa |
+| ν | 0.3 |
+| tube radius | 0.01 m |
+| wall thickness | 0.002 m |
+
+- Boundary condition: A clamped.
+- Loads at B: F_x = 10 N, F_y = 5 N, M_z = 8 N·m.
+- Reference: curved-beam solution with I = 4.637e-9 m⁴.
+"""
+
+[[quantity]]
+key = "ux_B"
+label = "u_x at B"
+unit = "m"
+reference = 0.37908
+castem_2011 = 0.37871
+castem_probe = "UBX"
+
+[[quantity]]
+key = "uy_B"
+label = "u_y at B"
+unit = "m"
+reference = 0.24173
+castem_2011 = 0.24174
+castem_probe = "UBY"
+
+[[quantity]]
+key = "rz_B"
+label = "rotation θ_z at B"
+unit = "rad"
+reference = 0.16539
+castem_2011 = 0.16533
+castem_probe = "RBZ"

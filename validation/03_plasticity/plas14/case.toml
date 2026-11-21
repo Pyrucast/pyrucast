@@ -1,0 +1,37 @@
+name = "plas14"
+calculation_type = "MECHANICS ELASTIC PLASTIC ACIER_UNI AND BETON_UNI, MECHANICS ELASTIC FIBRE_NL FERAILLE AND FIBRE_NL BETON"
+castem_element = "QUAS, TRIS"
+castem_version = "97' customer version"
+source = ""
+deck = "plas14.dgibi"
+gap = ["multi-fibre beam sections"]
+tolerance_note = "deck criterion, |F_max − 7.72465e-2| ≤ 4e-2."
+
+topic = """
+A concrete section of 0.25 × 0.25 m (core 0.20 × 0.20 m) with four 20 mm
+steel bars and 10 mm stirrups every 7 cm, modelled by fibres: a modified
+Menegotto-Pinto law for the steel (with buckling) and a Hognestad-type law
+for the concrete (with confinement).
+"""
+
+goal = "Compute the force-displacement response of the multi-fibre column."
+
+model = """
+| Steel (ACIER_UNI) | Value |
+|---|---|
+| E | 2.03e5 |
+| ν | 0.3 |
+| yield stress | 440 |
+| ultimate strain | 0.09 |
+| ultimate stress | 760 |
+"""
+
+notes = "The 2011 document prints no result table and no goal; the reference is the deck's."
+
+[[quantity]]
+key = "F_max"
+label = "largest force of the response"
+unit = ""
+reference = 7.72465e-2
+abs_tolerance = 4e-2
+castem_probe = "maxi (extr depfor ordo) abs"

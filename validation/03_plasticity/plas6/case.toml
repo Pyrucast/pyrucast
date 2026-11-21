@@ -1,0 +1,107 @@
+name = "plas6"
+calculation_type = "MECHANICS ELASTIC PLASTIC - PLANE STRESS"
+castem_element = "QUA4"
+castem_version = "97' customer version"
+source = "R. Hill, Mathematical theory of plasticity, Oxford, Oxford Clavendon Press, 1950. Test V.P.C.S. numero SSNP11/89"
+deck = "plas6.dgibi"
+tolerance = 0.005
+tolerance_note = "deck criterion, largest relative gap of the nine moments ≤ 0.5 %."
+
+topic = """
+A rectangle in plane stress is bent by a linear distribution of imposed
+displacements on one side, the opposite side being a symmetry plane. The
+material is elastic, perfectly plastic; the load grows until the section is
+fully plastic.
+"""
+
+goal = """
+Find the bending moment carried by the loaded side at nine load levels and
+compare it with the theoretical moment.
+"""
+
+model = """
+Rectangle of width 12.5 mm (x) and height 100 mm (y, from −50 to 50 mm),
+32 QUA4 along y and 4 along x.
+
+| Data | Value |
+|---|---|
+| E | 2.1e11 Pa |
+| ν | 0.3 |
+| σ_y (perfect plasticity) | 483e6 Pa |
+
+- Boundary conditions: u_x = 0 on x = 0, u_y = 0 at the origin.
+- Imposed displacement on x = 12.5 mm: u_x = −1e-3·t·y/(50 mm), linear in y.
+- Computed times: 0.02875, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 1.
+- Moment: M = −1e-3 · ∫ y σ_xx dy along the loaded side, with σ_xx
+  extrapolated to the 33 nodes of that side and integrated by the trapezoid
+  rule, in kN·m.
+"""
+
+notes = """
+The 2011 document gives E = 2e11 Pa and states no goal; the deck uses
+E = 2.1e11 Pa. The document prints no result table; the references are the
+deck's.
+"""
+
+[[quantity]]
+key = "M_1"
+label = "bending moment at t = 0.02875"
+unit = "kN·m"
+reference = 805.0
+castem_probe = "MOM1 . 1"
+
+[[quantity]]
+key = "M_2"
+label = "bending moment at t = 0.05"
+unit = "kN·m"
+reference = 1074.0
+castem_probe = "MOM1 . 2"
+
+[[quantity]]
+key = "M_3"
+label = "bending moment at t = 0.1"
+unit = "kN·m"
+reference = 1174.0
+castem_probe = "MOM1 . 3"
+
+[[quantity]]
+key = "M_4"
+label = "bending moment at t = 0.15"
+unit = "kN·m"
+reference = 1193.0
+castem_probe = "MOM1 . 4"
+
+[[quantity]]
+key = "M_5"
+label = "bending moment at t = 0.2"
+unit = "kN·m"
+reference = 1199.0
+castem_probe = "MOM1 . 5"
+
+[[quantity]]
+key = "M_6"
+label = "bending moment at t = 0.3"
+unit = "kN·m"
+reference = 1204.0
+castem_probe = "MOM1 . 6"
+
+[[quantity]]
+key = "M_7"
+label = "bending moment at t = 0.4"
+unit = "kN·m"
+reference = 1205.0
+castem_probe = "MOM1 . 7"
+
+[[quantity]]
+key = "M_8"
+label = "bending moment at t = 0.5"
+unit = "kN·m"
+reference = 1206.0
+castem_probe = "MOM1 . 8"
+
+[[quantity]]
+key = "M_9"
+label = "bending moment at t = 1.0"
+unit = "kN·m"
+reference = 1207.5
+castem_probe = "MOM1 . 9"

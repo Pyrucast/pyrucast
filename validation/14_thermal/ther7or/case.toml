@@ -1,0 +1,39 @@
+name = "ther7or"
+calculation_type = "THERMAL STEADY STATE, 3D ORTHOTROPIC"
+castem_element = "COQ8, COQ6"
+castem_version = "97' customer version"
+source = "Dowlatyari (03/91)."
+deck = "ther7or.dgibi"
+gap = ["thermal shell elements"]
+tolerance_note = "deck criterion, largest relative gap ≤ 5 %."
+
+topic = """
+Thermal boundary conditions on orthotropic thermal shells, in three
+configurations: imposed temperature and convection; imposed temperature and
+imposed flux; imposed temperature and a volume source. The results are
+compared with isotropic elements.
+"""
+
+goal = """
+Find the temperature in the shell for each configuration and compare it with
+the isotropic elements.
+"""
+
+model = """
+| Data | Value |
+|---|---|
+| L | 6 m |
+| l | 3 m |
+| thickness | 0.5 m |
+| K_1 = K_3 | 100 W/m/°C |
+| K_2 | 1000 W/m/°C |
+| h | 15 W/m²/°C |
+"""
+
+[[quantity]]
+key = "gap_max"
+label = "largest relative gap of the temperature profiles"
+unit = ""
+reference = 0.0
+abs_tolerance = 0.05
+castem_probe = "ERMAX"

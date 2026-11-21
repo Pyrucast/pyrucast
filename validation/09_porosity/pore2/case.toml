@@ -1,0 +1,54 @@
+name = "pore2"
+calculation_type = "ELASTOPLASTIC MECHANICS - DRUCKER-PRAGER MODEL IN POROSITY - MODE AXIS"
+castem_element = "QUAP"
+castem_version = "97' customer version"
+source = "Benchmark INTERCLAY 1.4 Basic Model"
+deck = "pore2.dgibi"
+gap = ["porous media elements (QUAP)"]
+tolerance_note = "deck criteria, each largest gap ≤ 0.001."
+
+topic = """
+A porous elastoplastic thick cylinder (von Mises, associated flow) with
+thermal effects: the stress inside the hole is released and a temperature
+history is applied.
+"""
+
+goal = """
+Compute the radial and hoop stresses and the pore pressure along a radius
+and compare them with the reference profiles.
+"""
+
+model = """
+Axisymmetric porous elements (QUAP).
+
+| Data | Value |
+|---|---|
+| E | 200.13e6 Pa |
+| fluid compressibility K_f | 3000e6 Pa |
+"""
+
+notes = "The 2011 document prints no result table; the compared quantities are the deck's normalised largest gaps."
+
+[[quantity]]
+key = "gap_srr"
+label = "largest gap of the σ_rr profile"
+unit = ""
+reference = 0.0
+abs_tolerance = 1e-3
+castem_probe = "ERSIGAR"
+
+[[quantity]]
+key = "gap_stt"
+label = "largest gap of the σ_θθ profile"
+unit = ""
+reference = 0.0
+abs_tolerance = 1e-3
+castem_probe = "ERSIGAT"
+
+[[quantity]]
+key = "gap_p"
+label = "largest gap of the pore pressure profile"
+unit = ""
+reference = 0.0
+abs_tolerance = 1e-3
+castem_probe = "ERPP"

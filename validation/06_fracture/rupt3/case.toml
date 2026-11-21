@@ -1,0 +1,34 @@
+name = "rupt3"
+calculation_type = "MECHANICS ELASTIC"
+castem_element = "QUA8, plane strain"
+castem_version = "97' customer version"
+source = "Test NAFEMS : D.P.Rooke and D. J. Cartwright in Copendium of Intensity Factors HMSO (1976): rupt3 Modélisation des structures élastiques dans CASTEM 2000."
+deck = "rupt3.dgibi"
+gap = ["stress intensity factors (G-theta)"]
+tolerance = 0.05
+tolerance_note = "deck criterion, |K − K_th| / K_th < 5 %."
+
+topic = """
+Plane strain, linear elasticity: a central crack in a plate under uniform tension (a quarter is modelled). The energy release rate G is
+computed by the G-θ method and turned into K = √(E·G / (1 − ν²)), then
+compared with the analytical value.
+"""
+
+goal = "Find the stress intensity factor K_I."
+
+model = """
+QUA8 elements, plane strain; crack length a = 100 mm, half-width b = 200 mm.
+
+| Data | Value |
+|---|---|
+| E | 20 000 daN/mm² |
+| ν | 0.3 |
+"""
+
+[[quantity]]
+key = "K1"
+label = "K_I"
+unit = "daN·mm^-3/2"
+reference = 20.84
+castem_2011 = 21.02
+castem_probe = "K"

@@ -1,0 +1,56 @@
+name = "elas2"
+calculation_type = "MECHANICS ELASTICITY 3D"
+castem_element = "DKT"
+castem_version = "97' customer version"
+source = "Test NAFEMS : ME6 : Modélisation des structures élastiques dans CASTEM 2000."
+deck = "elas2.dgibi"
+tolerance = 6e-4
+tolerance_note = "deck criteria, |u_z(P3) + 1.14| / 1.14 ≤ 6e-4 and |u_x(P1)| ≤ 1e-18."
+
+topic = """
+A thin cylinder is clamped at one end and pinched by two diametrically
+opposite point loads at its mid-length. By symmetry one eighth of it is
+modelled (a quarter of the circumference over half of the length), with
+symmetry conditions on the three cut edges.
+"""
+
+goal = """
+Find the displacement u_x at the point P1 (7, 0, 0) of the clamped end and the
+displacement u_z of the loaded point P3.
+"""
+
+model = """
+Quarter cylinder of radius 7 and half-length 70 (axis y), thickness 0.1:
+the arc from P1 (7, 0, 0) to (0, 0, 7) (6 elements) is translated by 70 along
+y (30 elements), giving 360 DKT triangles.
+
+| Data | Value |
+|---|---|
+| E | 3e7 |
+| ν | 0.3 |
+| thickness | 0.1 |
+
+- Boundary conditions: the arc at y = 0 is clamped (displacements and
+  rotations); symmetry about z = 0 (u_z = θ_x = θ_y = 0), about x = 0
+  (u_x = θ_y = θ_z = 0) and about the mid-length plane y = 70
+  (u_y = θ_x = θ_z = 0).
+- Load: F_z = −2500 at P3 (0, 70, 7), the top of the mid-length section
+  (a quarter of the pinching load).
+"""
+
+[[quantity]]
+key = "ux_P1"
+label = "u_x at P1"
+unit = "cm"
+reference = 0.0
+castem_2011 = -2.1247e-19
+castem_probe = "D1X"
+abs_tolerance = 1e-18
+
+[[quantity]]
+key = "uz_P3"
+label = "u_z at P3"
+unit = "cm"
+reference = -1.14
+castem_2011 = -1.1394
+castem_probe = "D3Z"

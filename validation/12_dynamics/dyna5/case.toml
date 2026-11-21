@@ -1,0 +1,48 @@
+name = "dyna5"
+calculation_type = "MECHANICS DYNAMICS 3D, SUB-STRUCTURATION"
+castem_element = "POUT"
+castem_version = "97' customer version"
+source = "Analytical solution."
+deck = "dyna5.dgibi"
+gap = ["eigenvalue solver", "modal sub-structuring"]
+tolerance = 0.05
+tolerance_note = "deck criterion, each of the three frequencies within 5 %."
+
+topic = """
+The first frequency of a clamped-clamped beam computed by sub-structuring:
+the beam is cut into two halves, joined at Q2-Q3 described three ways (free
+- free, clamped - clamped, clamped - free).
+"""
+
+goal = "Find the first natural frequency of the beam with each method."
+
+model = """
+Beam of two halves of length 2 m each, POUT elements.
+
+| Data | Value |
+|---|---|
+| A | 0.1 m² |
+| I_y | 2.08e-7 m⁴ |
+| I_z | 3.33e-8 m⁴ |
+"""
+
+[[quantity]]
+key = "f_1"
+label = "first frequency, method 1"
+unit = "Hz"
+reference = 0.65
+castem_probe = "FREQ1"
+
+[[quantity]]
+key = "f_2"
+label = "first frequency, method 2"
+unit = "Hz"
+reference = 0.65
+castem_probe = "FREQ2"
+
+[[quantity]]
+key = "f_3"
+label = "first frequency, method 3"
+unit = "Hz"
+reference = 0.65
+castem_probe = "FREQ3"

@@ -1,0 +1,47 @@
+name = "joi45"
+calculation_type = "ORTHOTROPIC ELASTIC MECHANICS"
+castem_element = "QUA4, JOI4"
+castem_version = "97' customer version"
+source = "Analytical solution."
+deck = "joi45.dgibi"
+gap = ["orthotropic joint with material axes"]
+tolerance = 1e-3
+tolerance_note = "deck criterion, both relative gaps ≤ 1e-3."
+
+topic = """
+A 3D joint, clamped on its lower face, carries a shear load on its upper
+face along the direction O-P1 at 55° from x, its first orthotropic axis.
+"""
+
+goal = """
+Calculate the displacement along the load, the strains, the stresses and the
+nodal forces from the integration of the stresses.
+"""
+
+model = """
+One JOI4 joint element of area A = 4, orthotropic axes at 55° from x.
+
+| Data | Value |
+|---|---|
+| k_s1 | 4.2e10 |
+| k_s2 | 4.2e8 |
+| k_n | 4.2e20 |
+
+- Load: total force F = 1e5 along O-P1.
+- Reference: δ = F / (k·A) along O-P1, i.e. δ_x = δ·cos 55° and
+  δ_y = δ·sin 55°.
+"""
+
+[[quantity]]
+key = "ux"
+label = "u_x of the upper face"
+unit = ""
+reference = 3.416e-7
+castem_probe = "DEPIAX"
+
+[[quantity]]
+key = "uy"
+label = "u_y of the upper face"
+unit = ""
+reference = 4.875e-7
+castem_probe = "DEPIAY"

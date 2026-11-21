@@ -1,0 +1,42 @@
+name = "flam1"
+calculation_type = "MECHANICS BUCKLING. 2D PLANE STRESS"
+castem_element = "COQ2"
+castem_version = "97' customer version"
+source = "Analytical solution."
+deck = "flam1.dgibi"
+gap = ["eigenvalue solver", "axisymmetric shell element (COQ2)"]
+tolerance = 1e-5
+tolerance_note = "deck criterion, |λ − 41.123| / 41.123 < 1e-3 %."
+
+topic = """
+Euler buckling of a strip clamped at one end and compressed by an axial force
+at its free end.
+"""
+
+goal = "Find the critical load multiplier λ of the first buckling mode."
+
+model = """
+Plane stress. A straight line of length 10 mm from (50, 0) to (50, 10),
+COQ2 elements at a mesh density of 1 mm, thickness 1 mm.
+
+| Data | Value |
+|---|---|
+| E | 20 000 MPa |
+| ν | 0.3 |
+| thickness | 1 mm |
+| load F | 1 N |
+
+- Boundary condition: (50, 0) clamped.
+- Load: F_y = −1 N at the free end (50, 10).
+- Solution: linear stress state, geometric stiffness, then the first
+  eigenvalue of the buckling problem between 0.001 and 100.
+"""
+
+notes = "The 2011 document prints no result table; the reference is the deck's."
+
+[[quantity]]
+key = "lambda_1"
+label = "critical load multiplier λ"
+unit = ""
+reference = 41.123
+castem_probe = "LA1"

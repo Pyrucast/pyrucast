@@ -1,0 +1,48 @@
+name = "vsur1"
+calculation_type = "ISOTROPIC ELASTIC MECHANIC"
+castem_element = "COQ2"
+castem_version = "97' customer release"
+source = ""
+deck = "vsur1.dgibi"
+gap = ["axisymmetric shell element (COQ2)", "surface vector operator (VSUR)"]
+
+topic = """
+Check of the operator that builds, on axisymmetric shell elements, the field
+of surface vectors (normal times jacobian) and the field of unit normals.
+"""
+
+goal = """
+Test the VSUR operator with COQ2 elements: the norm of the surface vector
+must equal the jacobian, and the normals must have unit length.
+"""
+
+model = """
+Axisymmetric, meridian plane: the arc of centre (0, 10) from (0, 0) to
+(10, 10), 10 COQ2 elements. No material, no load.
+"""
+
+notes = "The 2011 document prints no result table; the references are the deck's."
+
+[[quantity]]
+key = "norm_minus_jacobian"
+label = "max |‖v‖² − J²|"
+unit = ""
+reference = 0.0
+abs_tolerance = 1e-6
+castem_probe = "res1"
+
+[[quantity]]
+key = "normal_min"
+label = "min ‖n‖²"
+unit = ""
+reference = 1.0
+abs_tolerance = 1e-6
+castem_probe = "res2"
+
+[[quantity]]
+key = "normal_max"
+label = "max ‖n‖²"
+unit = ""
+reference = 1.0
+abs_tolerance = 1e-6
+castem_probe = "res3"

@@ -1,0 +1,36 @@
+name = "vibr6"
+calculation_type = "MECHANICS DYNAMICS 3D, COMPOUND EIGEN SHAPES"
+castem_element = "TUYA"
+castem_version = "97' customer version"
+source = "Model of Paidoussis & Ortoja-Starzewski."
+deck = "vibr6.dgibi"
+gap = ["complex eigenmodes under axial flow", "pipe element (TUYA)"]
+tolerance = 0.05
+tolerance_note = "deck criterion, critical velocity within 5 % of 25 m/s."
+
+topic = """
+Complex modes of a pinned-pinned rod in an external axial flow, computed for
+flow velocities from 0 to 120 m/s; the rod buckles by divergence at a
+critical velocity.
+"""
+
+goal = "Find the real and imaginary parts of the frequencies against the flow velocity."
+
+model = """
+| Data | Value |
+|---|---|
+| L | 2 m |
+| R | 1e-3 m |
+| thickness | 1e-3 m |
+| ρ | 4000 kg/m³ |
+| E | 1e10 Pa |
+| ν | 0 |
+| fluid ρ | 1000 kg/m³ |
+"""
+
+[[quantity]]
+key = "v_crit"
+label = "critical (divergence) velocity"
+unit = "m/s"
+reference = 25.0
+castem_probe = "Vcrit"

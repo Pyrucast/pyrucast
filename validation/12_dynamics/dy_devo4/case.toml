@@ -1,0 +1,41 @@
+name = "dy_devo4"
+calculation_type = "MECHANICS DYNAMICS 3D, IMPACT, LINKAGE SECTION-SECTION-OUTSIDE"
+castem_element = "POUT"
+castem_version = "97' customer version"
+source = ""
+deck = "dy_devo4.dgibi"
+gap = ["modal-basis transient dynamics with linkages (DYNE)"]
+tolerance = 0.2
+tolerance_note = "deck criterion, each value at most 1.2 times the reference (one-sided)."
+
+topic = """
+A cantilever beam with a mass at its tip, deflected by a force then
+released, hits a plane; two linkage types are compared.
+"""
+
+goal = "Find the impact force and the displacement u_x at t = 0.4 s."
+
+model = """
+| Data | Value |
+|---|---|
+| L | 0.9 m |
+| tip mass | 2 kg |
+| A | 1.1e-6 m² |
+| I_y = I_z | 8.33e-10 m⁴ |
+"""
+
+notes = "The compared values are those of the second linkage type."
+
+[[quantity]]
+key = "force"
+label = "impact force"
+unit = ""
+reference = 0.59178
+castem_probe = "R_FC"
+
+[[quantity]]
+key = "ux"
+label = "u_x at t = 0.4 s"
+unit = ""
+reference = 0.13598
+castem_probe = "R_DE"

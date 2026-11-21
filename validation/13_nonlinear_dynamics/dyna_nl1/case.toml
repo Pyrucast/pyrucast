@@ -1,0 +1,46 @@
+name = "dyna_nl1"
+calculation_type = "MECHANICS 2D, NON LINEAR GEOMETRICAL DYNAMICS"
+castem_element = "BARR"
+castem_version = "97' customer version"
+source = ""
+deck = "dyna_nl1.dgibi"
+gap = ["point masses"]
+tolerance_note = "deck criteria, amplitude within 0.1 % and period within 0.5 %."
+
+topic = """
+A Duffing-type oscillator: a prestressed bar, clamped at one end, carries a
+mass at its free end; the free end is pulled sideways, then released, and
+oscillates freely in large displacements.
+"""
+
+goal = "Find the amplitude and the period of the free oscillations."
+
+model = """
+Plane stress, BARR element of length 1 m with a mass of 250 kg at its free
+end.
+
+| Data | Value |
+|---|---|
+| L | 1 m |
+| initial deflection δ | 0.2 m |
+| A | 1 m² |
+| E | 1e7 Pa |
+| ν | 0.3 |
+| ρ (bar) | 0 |
+"""
+
+[[quantity]]
+key = "amplitude"
+label = "amplitude of the free end"
+unit = "m"
+reference = 0.2
+tolerance = 0.001
+castem_probe = "maxuy"
+
+[[quantity]]
+key = "period"
+label = "period"
+unit = "s"
+reference = 0.2648
+tolerance = 0.005
+castem_probe = "tp"

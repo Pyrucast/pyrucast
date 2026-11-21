@@ -1,0 +1,56 @@
+name = "norton_cis1"
+calculation_type = "ISOTROPIC ELASTIC MECHANICS - 2D - PLANE STRAIN"
+castem_element = "QUA4"
+castem_version = "97' customer version"
+source = ""
+deck = "norton_cis1.dgibi"
+tolerance = 0.0025
+tolerance_note = """deck criterion, at every computed time the creep strain and the \
+shear stress within 0.25 % of the analytical values."""
+
+topic = """
+A square of a Norton creep material, in plane strain, is loaded in pure shear
+by tangential forces on two opposite sides, applied almost instantly then
+held constant.
+"""
+
+goal = """
+Test the Norton creep model: the shear creep strain and the shear stress
+must follow the analytical solution in time.
+"""
+
+model = """
+One QUA4 square; u_y = 0 at every node, u_x = 0 on the lower side.
+
+| Data | Value |
+|---|---|
+| E | 2.1e11 Pa |
+| ν | 0.3 |
+| Norton A (AF1) | 1e-45 |
+| Norton n (AF2) | 5 |
+| time exponent m (AF3) | 1.2 |
+| SMAX | 2.1e8 |
+
+- Load: tangential force 7e7 on the upper side, −7e7 on the lower one,
+  reached at t = 1e-4 and held up to t = 20.
+- Creep law: ε̇_eq = A·σ_eq^n·m·t^(m−1), i.e. ε_eq = A·σ_eq^n·t^m at
+  constant stress.
+- Analytical solution: γ_p = √3·A·(√3·τ)^n·t^m and
+  τ_xy = G·(γ − γ_p) with G = E / (2(1 + ν)).
+"""
+
+notes = "The 2011 document prints no result table; the references are the deck's formulas."
+
+[[quantity]]
+key = "gamma_p_end"
+label = "shear creep strain γ_p at t = 20"
+unit = ""
+castem_probe = "EXTR def10 (DIME def10)"
+reference_probe = "EXTR def_th2 (DIME def_th2)"
+
+[[quantity]]
+key = "sxy_end"
+label = "shear stress σ_xy at t = 20"
+unit = "Pa"
+castem_probe = "EXTR sigm10 (DIME sigm10)"
+reference_probe = "EXTR sig_th2 (DIME sig_th2)"

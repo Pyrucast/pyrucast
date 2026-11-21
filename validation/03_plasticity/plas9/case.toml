@@ -1,0 +1,48 @@
+name = "plas9"
+calculation_type = "MECHANICS ELASTIC PLASTIC - DRUCKER-PRAGER'S MATERIAL"
+castem_element = "CUB8"
+castem_version = "97' customer version"
+source = ""
+deck = "plas9.dgibi"
+
+topic = """
+A parallelepiped of a Drucker-Prager material with negative hardening is
+pulled by an imposed displacement of one face; the uniaxial stress-strain
+curve is compared with the exact one.
+"""
+
+goal = """
+Compare the computed uniaxial curve σ_xx(ε_xx) with the exact solution
+over the whole loading.
+"""
+
+model = """
+A Drucker-Prager block in series with a block of an elastic material of
+negligible stiffness, CUB8 elements.
+
+| Data | Drucker-Prager block | elastic block |
+|---|---|---|
+| E | 40 000 | 2e-3 |
+| ν | 0.21 | 0 |
+| α = γ = η | 0.441 | |
+| β = δ = μ | 1.02 | |
+| K = K_L | 2 | |
+| H | −10 000 | |
+
+- Imposed displacement u_x = 1.5e-4·t on one face; computed times 0 to 4 by
+  steps of 0.1.
+- Exact curve: σ = E·ε while ε < K / ((α + β)·E), then
+  σ = (K + H·m·ε) / ((α + β) + H·m / E), floored at 0, with
+  m = √(2α² + β²) / (α + β).
+- Compared quantity: max |σ − σ_exact| / K over the computed times.
+"""
+
+notes = "The 2011 document prints no result table; the reference is the deck's."
+
+[[quantity]]
+key = "curve_gap"
+label = "max |σ − σ_exact| / K over the curve"
+unit = ""
+reference = 0.0
+abs_tolerance = 5e-5
+castem_probe = "RESI1"

@@ -1,0 +1,47 @@
+name = "rupt6"
+calculation_type = "MECHANICS ELASTIC"
+castem_element = "CU20, 3D"
+castem_version = "97' customer version"
+source = "Test NAFEMS : D.P.Rooke and D. J. Cartwright in Copendium of Intensity Factors HMSO (1976) : rupt6 Modélisation des structures élastiques dans CASTEM 2000."
+deck = "rupt6.dgibi"
+gap = ["stress intensity factors (G-theta)"]
+tolerance_note = "deck criterion of its SIF procedure, within 5.5 % at the surface node and 11 % at the middle node."
+
+topic = """
+A circular plane crack inside an infinite cylinder under axial tension. By
+symmetry a 15° sector of half of the cylinder is modelled. K is computed at
+the crack front by displacement extrapolation (SIF) and by the G-θ method.
+"""
+
+goal = "Find K_I at the surface node and at the middle node of the crack front."
+
+model = """
+CU20 elements, 3D sector; crack radius 8 mm, cylinder radius 100 mm.
+
+| Data | Value |
+|---|---|
+| E | 20 000 daN/mm² |
+| ν | 0.3 |
+
+- Load: imposed axial displacement on the end face.
+"""
+
+notes = "The Cast3M 2026 values are the G-θ ones; the deck checks them against 638.47."
+
+[[quantity]]
+key = "K1_top"
+label = "K_I at the surface node"
+unit = "daN·mm^-3/2"
+reference = 607.41
+castem_2011 = 638.47
+tolerance = 0.055
+castem_probe = "KSOM"
+
+[[quantity]]
+key = "K1_mid"
+label = "K_I at the middle node"
+unit = "daN·mm^-3/2"
+reference = 580.48
+castem_2011 = 638.47
+tolerance = 0.11
+castem_probe = "KMIL"
