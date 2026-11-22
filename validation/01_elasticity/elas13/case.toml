@@ -6,13 +6,14 @@ source = """Test VPCS : SSLL16/89 : Modélisation des structures élastiques dan
 CASTEM 2000. M. Courtand P. Lebelle Formulaire du béton armé T.2 Paris \
 Eyrolles 1976."""
 dgibi = "elas13.dgibi"
-gap = ["spring supports (APPU)"]
+pyrucast = "`model.bernoulli(fes)` on a foundation `model.boundary_transfer` whose stiffness is lumped, SEG2"
 tolerance = 0.05
 tolerance_note = "criterion of the `.dgibi` file, largest relative gap of the four values ≤ 5 %."
 
 topic = """
 A beam with pinned ends rests on an elastic foundation and carries a point
-load at mid-span.
+load at mid-span, a distributed load along its length and opposite moments
+at its ends.
 """
 
 goal = """
@@ -21,9 +22,10 @@ deflection and the bending moment at the centre D (0, 0, 0).
 """
 
 model = """
-Beam along x from A (−2.48, 0, 0) to B (2.48, 0, 0), POUT elements; the
-foundation is made of elastic supports of stiffness K = 840 000 attached to
-the nodes.
+Beam along x from A (−L/2, 0, 0) to B (L/2, 0, 0), L = π·√10 / 2 ≈ 4.967 m,
+8 POUT elements, on a foundation of stiffness K = 840 000 N/m per metre. The
+`.dgibi` file spreads the foundation on nodal springs (`APPUI`) of K·L/16 at
+both ends of each element.
 
 | Data | Value |
 |---|---|
@@ -34,13 +36,22 @@ the nodes.
 | torsion constant | 1000 |
 
 - Boundary conditions: u_x = u_y = 0 at A and B; u_z = θ_x = 0 everywhere.
-- Load: F_y = −10 kN at D.
+- Loads: F_y = −10 kN at D; −5000 N/m along the beam, as nodal forces of
+  −5000·L/16 at both ends of each element; M_z = −15 000 N·m at A and
+  +15 000 N·m at B.
 """
 
 notes = """
 The 2011 document prints the deflection reference as −4.233E3 m and the
 Cast3M value as −4.38085E3 m (exponent sign lost); the reference used here is
 the `.dgibi` file's −4.23326e-3 m, the 2011 value is kept as printed.
+
+pyrucast models the foundation as a stiffness distributed along the beam
+(`boundary_transfer`, `h_u_y = K`) and lumps it on the diagonal, which gives
+the `.dgibi` file's nodal springs: the four values are Cast3M 2026's to
+round-off. Without lumping, the distributed foundation gives
+θ_z(A) = −3.1675e-3 rad, F_y(A) = 11 528 N, u_y(D) = −4.4044e-3 m and
+M(D) = 33 595 N·m, within the same 5 % of the reference.
 """
 
 [[quantity]]

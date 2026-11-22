@@ -32,7 +32,7 @@ python validation/make_document.py    # this document
 
 ## Summary
 
-86 cases: 20 computed by pyrucast, 66 not computable yet, 0 pending.
+86 cases: 21 computed by pyrucast, 65 not computable yet, 0 pending.
 
 | Chapter | Case | Status | Largest gap to the reference | Largest gap pyrucast / Cast3M 2026 |
 |---|---|---|---|---|
@@ -43,7 +43,7 @@ python validation/make_document.py    # this document
 | Elasticity | [elas7](#elas7) | gap | missing: axisymmetric shell element (COQ2) | |
 | Elasticity | [elas8](#elas8) | run, OUTSIDE tolerance | 7.85 % | 6.9e-02 |
 | Elasticity | [elas11](#elas11) | run, within tolerance | 0.0973 % | 1.6e-02 |
-| Elasticity | [elas13](#elas13) | gap | missing: spring supports (APPU) | |
+| Elasticity | [elas13](#elas13) | run, within tolerance | 3.53 % | 5.9e-14 |
 | Elasticity | [stru2](#stru2) | run, within tolerance | 0.789 % | 2.3e-14 |
 | Elasticity | [stru4](#stru4) | gap | missing: pipe element (TUYA) | |
 | Elasticity | [elas20](#elas20) | gap | missing: pipe element (TUYA) | |
@@ -165,7 +165,6 @@ Features pyrucast lacks for the cases it cannot compute yet, by number of cases 
 | orthotropic joint with material axes | [joi45](#joi45) | 1 |
 | plasticity in plate elements | [plas8](#plas8) | 1 |
 | rate-independent kinematic hardening | [thpl1](#thpl1) | 1 |
-| spring supports (APPU) | [elas13](#elas13) | 1 |
 | surface vector operator (VSUR) | [vsur1](#vsur1) | 1 |
 | thermal shell elements | [ther7or](#ther7or) | 1 |
 | two-inelastic-strain damage law (DDI) | [ddi](#ddi) | 1 |
@@ -187,7 +186,6 @@ What writing the computed cases showed: an operator or an option pyrucast lacks 
 | `mpc`: one coefficient per term for every relation; relations whose coefficients differ need one `mpc` each | [plas1](#plas1) | 1 |
 | an ellipse, or the projection of a line onto a plane (Cast3M `PROJ`) | [elas8](#elas8) | 1 |
 | local sub-stepping of rate-dependent laws at the Gauss points (stiff Norton exponents) | [chaboche2](#chaboche2) | 1 |
-| two laws on one support (materials in parallel on the same cells) | [plas9](#plas9) | 1 |
 
 ## Elasticity
 
@@ -1144,23 +1142,25 @@ if __name__ == "__main__":
 | Test name | elas13 |
 | Calculation type | MECHANICS ELASTICITY 3D AXI |
 | Finite element type (Cast3M) | POUT |
-| pyrucast model | not available — missing: spring supports (APPU) |
+| pyrucast model | `model.bernoulli(fes)` on a foundation `model.boundary_transfer` whose stiffness is lumped, SEG2 |
 | Reference | Test VPCS : SSLL16/89 : Modélisation des structures élastiques dans CASTEM 2000. M. Courtand P. Lebelle Formulaire du béton armé T.2 Paris Eyrolles 1976. |
 | Cast3M version of the 2011 document | 97' customer releas |
 | Cast3M 2026 `.dgibi` file | `dgibi/elas13.dgibi` |
 | Folder | [`01_elasticity/elas13/`](01_elasticity/elas13/) |
 
 **Topic.** A beam with pinned ends rests on an elastic foundation and carries a point
-load at mid-span.
+load at mid-span, a distributed load along its length and opposite moments
+at its ends.
 
 **Goal.** Find the rotation and the reaction at the end A (−2.48, 0, 0), and the
 deflection and the bending moment at the centre D (0, 0, 0).
 
 **Model description.**
 
-Beam along x from A (−2.48, 0, 0) to B (2.48, 0, 0), POUT elements; the
-foundation is made of elastic supports of stiffness K = 840 000 attached to
-the nodes.
+Beam along x from A (−L/2, 0, 0) to B (L/2, 0, 0), L = π·√10 / 2 ≈ 4.967 m,
+8 POUT elements, on a foundation of stiffness K = 840 000 N/m per metre. The
+`.dgibi` file spreads the foundation on nodal springs (`APPUI`) of K·L/16 at
+both ends of each element.
 
 | Data | Value |
 |---|---|
@@ -1171,22 +1171,128 @@ the nodes.
 | torsion constant | 1000 |
 
 - Boundary conditions: u_x = u_y = 0 at A and B; u_z = θ_x = 0 everywhere.
-- Load: F_y = −10 kN at D.
+- Loads: F_y = −10 kN at D; −5000 N/m along the beam, as nodal forces of
+  −5000·L/16 at both ends of each element; M_z = −15 000 N·m at A and
+  +15 000 N·m at B.
 
 **Notes.** The 2011 document prints the deflection reference as −4.233E3 m and the
 Cast3M value as −4.38085E3 m (exponent sign lost); the reference used here is
 the `.dgibi` file's −4.23326e-3 m, the 2011 value is kept as printed.
 
+pyrucast models the foundation as a stiffness distributed along the beam
+(`boundary_transfer`, `h_u_y = K`) and lumps it on the diagonal, which gives
+the `.dgibi` file's nodal springs: the four values are Cast3M 2026's to
+round-off. Without lumping, the distributed foundation gives
+θ_z(A) = −3.1675e-3 rad, F_y(A) = 11 528 N, u_y(D) = −4.4044e-3 m and
+M(D) = 33 595 N·m, within the same 5 % of the reference.
+
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| rotation θ_z at A (rad) | -0.003045 | -0.0031525 (-3.53 %) | -0.0031525 (-3.53 %) | not available |  |
-| reaction F_y at A (N) | 11674 | 11559 (-0.985 %) | 11558.9 (-0.986 %) | not available |  |
-| deflection u_y at D (m) | -0.00423326 | -4380.85 (-1.03e+08 %) | -0.00438085 (-3.49 %) | not available |  |
-| bending moment at D (N·m) | 33840 | 33407 (-1.28 %) | 33407.2 (-1.28 %) | not available |  |
+| rotation θ_z at A (rad) | -0.003045 | -0.0031525 (-3.53 %) | -0.0031525 (-3.53 %) | -0.0031525 | -3.53 % |
+| reaction F_y at A (N) | 11674 | 11559 (-0.985 %) | 11558.9 (-0.986 %) | 11558.9 | -0.986 % |
+| deflection u_y at D (m) | -0.00423326 | -4380.85 (-1.03e+08 %) | -0.00438085 (-3.49 %) | -0.00438085 | -3.49 % |
+| bending moment at D (N·m) | 33840 | 33407 (-1.28 %) | 33407.2 (-1.28 %) | 33407.2 | -1.28 % |
 
 Acceptance: criterion of the `.dgibi` file, largest relative gap of the four values ≤ 5 %.
+
+pyrucast: the 4 checked quantities are within tolerance.
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""elas13 — pinned beam on an elastic foundation, Bernoulli beam on SEG2.
+
+Problem: a beam along x from A (−L/2, 0) to B (L/2, 0), L = π·√10 / 2,
+E = 2e11, A = 1000, I = 1e-4, pinned at A and B (u_x = u_y = 0), rests on a
+Winkler foundation of stiffness K = 840 000 N/m per metre. It carries
+−10 kN at the centre D, −5000 N/m along its length, and the end moments
+M_z = −15 000 N·m at A and +15 000 N·m at B. Reference: the rotation and
+the reaction at A, the deflection and the bending moment at D.
+
+The `.dgibi` file turns the foundation into nodal springs K·L/(2·n) at both
+ends of each of its n cells (`APPUI`), and the distributed load into nodal
+forces the same way. Here the foundation is `model.boundary_transfer` on
+the beam's line, `h_u_y = K`, whose stiffness `lump` gathers on the
+diagonal: the same nodal springs. The loads are the same nodal forces.
+
+Running::
+
+    python validation/01_elasticity/elas13/run.py
+"""
+
+import math
+
+import pyrucast as pc
+
+E, AREA, INERTIA = 2e11, 1000.0, 1e-4
+K = 840_000.0  # foundation stiffness, N/m per metre
+LENGTH = math.pi * math.sqrt(10.0) / 2.0
+N_CELLS = 8
+F_D = -10_000.0  # point load at D
+Q = -5000.0  # distributed load, N/m
+M_END = 15_000.0  # end moments, −M_END at A, +M_END at B
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    coords = pc.Coords(2)
+    a = coords.add_node([-LENGTH / 2.0, 0.0])
+    b = coords.add_node([LENGTH / 2.0, 0.0])
+    line = pc.mesh.line(a, b, N_CELLS)
+    d = line.nearest_node([0.0, 0.0])
+
+    beam = pc.model.bernoulli(pc.FiniteElementSpace(line, interpolation="HERMITE3"))
+    foundation = pc.model.boundary_transfer(pc.FiniteElementSpace(line), beam, ["u_y"])
+    pins = pc.mesh.poi1_from_nodes([a, b])
+    supports = pc.model.dirichlet(pins, beam, "u_x") | pc.model.dirichlet(
+        pins, beam, "u_y"
+    )
+    materials = pc.element_field.material_field(
+        beam | foundation | supports,
+        [("E", E), ("A", AREA), ("I", INERTIA), ("h_u_y", K), ("a_ext_u_y", 0.0)],
+    )
+    stiffness = (
+        pc.matrix.stiffness(beam | supports, materials)
+        + pc.matrix.stiffness(foundation, materials).lump()
+    )
+
+    # The `.dgibi` file's loads: Q·L/(2n) at both ends of each cell.
+    nodal = Q * LENGTH / (2.0 * N_CELLS)
+    load = pc.NodeField(line, ["f_y", "m_z"])
+    for i in range(line.cell_count):
+        for k in range(2):
+            node = line.node(0, i, k)
+            load[0].set_value(node, "f_y", load.value(node, "f_y") + nodal)
+    load[0].set_value(d, "f_y", load.value(d, "f_y") + F_D)
+    load[0].set_value(a, "m_z", -M_END)
+    load[0].set_value(b, "m_z", M_END)
+
+    u = pc.solver.solve(stiffness, load)
+    reactions = -pc.node_field.internal_forces(
+        supports, pc.element_field.initial_state(supports, materials), u, materials
+    )
+    strain = pc.element_field.strain(beam, u, materials)
+    forces = pc.element_field.integrate_behavior(
+        beam, strain, materials, pc.element_field.initial_state(beam, materials)
+    )
+    at_d = pc.node_field.project(forces, line, pc.mesh.poi1_from_nodes([d]))
+
+    return {
+        "rz_A": u.value(a, "r_z"),
+        "fy_A": reactions.value(a, "f_y"),
+        "uy_D": u.value(d, "u_y"),
+        "mz_D": at_d.value(d, "M"),
+    }
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ### stru2
 
@@ -2762,13 +2868,12 @@ plateau K / (α + β) instead of softening to zero. The gap measured is that
 plateau against the exact curve's zero.
 
 The `.dgibi` file adds, on the same cell, an elastic material of stiffness 2e-3 in
-parallel; pyrucast refuses two laws carrying each their own E on one support,
-and the script leaves it out (its stress stays below 1e-6).
+parallel. The script puts it on a second FE space of the same mesh, each law
+reading its own `E` on its own space; it moves the gap by 2e-9.
 
 **Improvement points.**
 
 - Drucker-Prager with two surfaces: pyrucast's interpolation driven by H·p departs from Cast3M when K_L < K, or when K_L = K with H ≠ 0
-- two laws on one support (materials in parallel on the same cells)
 
 #### Results
 
@@ -2776,7 +2881,7 @@ and the script leaves it out (its stress stays below 1e-6).
 |---|---|---|---|---|---|
 | max |σ − σ_exact| / K over the curve | 0 | — | 2.646e-09 (Δ = 2.6e-09) | 0.684463 | Δ = 0.68 |
 
-pyrucast OUTSIDE tolerance: curve_gap: |0.6844626967830254 - 0.0| > 5e-05
+pyrucast OUTSIDE tolerance: curve_gap: |0.6844626990935798 - 0.0| > 5e-05
 
 #### pyrucast figures
 
@@ -2801,10 +2906,10 @@ Reference: the exact uniaxial curve,
 with m = √(2α² + β²) / (α + β). Compared: max |σ − σ_exact| / K over the
 computed times (the `.dgibi` file's test).
 
-The `.dgibi` file adds, on the same cell, an elastic material of stiffness 2e-3 in
-parallel. pyrucast refuses two laws carrying each their own E on one support;
-that material's stress stays below 2e-3 × 6e-4 ≈ 1e-6, under what the test
-reads (5e-5·K), so it is left out.
+The `.dgibi` file adds, on the same cell, an elastic material of stiffness
+2e-3 in parallel, which keeps the tangent invertible once the stress has
+softened to zero. It is `model.elasticity` on a second FE space of the same
+mesh: each law reads its own `E` on its own space.
 
 Running::
 
@@ -2837,16 +2942,20 @@ def main(out: str | None = None) -> dict[str, float]:
 
     fes = pc.FiniteElementSpace(block)
     law = pc.model.drucker_prager(fes, "full_3d")
+    parallel = pc.model.elasticity(pc.FiniteElementSpace(block), "full_3d")
     pull = pc.model.dirichlet(face_x1, law, "u_x")
     model = (
         law
+        | parallel
         | pc.model.dirichlet(face_x0, law, "u_x")
         | pc.model.dirichlet(face_y0, law, "u_y")
         | pc.model.dirichlet(face_z0, law, "u_z")
         | pull
     )
     materials = pc.element_field.material_field(
-        model,
+        parallel, [("E", 2e-3), ("nu", 0.0)]
+    ) | pc.element_field.material_field(
+        law,
         [
             ("E", E),
             ("nu", NU),
