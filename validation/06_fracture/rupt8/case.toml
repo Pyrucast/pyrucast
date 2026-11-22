@@ -4,7 +4,7 @@ castem_element = "TRI3, 3D"
 castem_version = "97' customer version"
 source = "Test NAFEMS : D.P.Rooke and D. J. Cartwright in Copendium of Intensity Factors HMSO (1976): rupt8 Modélisation des structures élastiques dans CASTEM 2000."
 dgibi = "rupt8.dgibi"
-gap = ["stress intensity factors (G-theta)"]
+gap = ["stress intensity factors (G-theta)", "layered shells (offset layers)"]
 tolerance = 0.05
 tolerance_note = "criterion of the `.dgibi` file, |K − K_th| / K_th < 5 %."
 
@@ -23,7 +23,12 @@ TRI3 elements; half crack length 0.3, half width 1, thickness 0.001.
 | E | 2e11 Pa |
 """
 
-notes = "The `.dgibi` file repeats the G-θ computation three times; the value is the last one."
+notes = """
+The `.dgibi` file repeats the G-θ computation three times; the value is the last one.
+The plate is a DKT shell. The cells within three layers of the crack tip carry
+a stack of 41 DKT layers, each with its thickness and offset (`EPAI`, `EXCE`);
+each G-θ computation reads one of these cells through `ELEMENT_MULTICOUCHE`.
+"""
 
 [[quantity]]
 key = "K1"

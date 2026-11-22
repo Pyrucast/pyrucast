@@ -82,7 +82,7 @@ python validation/make_document.py    # this document
 | Fracture mechanics | [rupt5](#rupt5) | gap | missing: stress intensity factors (G-theta) | |
 | Fracture mechanics | [rupt6](#rupt6) | gap | missing: stress intensity factors (G-theta) | |
 | Fracture mechanics | [rupt7](#rupt7) | gap | missing: stress intensity factors (G-theta) | |
-| Fracture mechanics | [rupt8](#rupt8) | gap | missing: stress intensity factors (G-theta) | |
+| Fracture mechanics | [rupt8](#rupt8) | gap | missing: stress intensity factors (G-theta); layered shells (offset layers) | |
 | Fracture mechanics | [rupt9](#rupt9) | gap | missing: stress intensity factors (G-theta) | |
 | Composite | [comp1](#comp1) | gap | missing: layered orthotropic shells (offset layers) | |
 | Composite | [comp2](#comp2) | gap | missing: layered orthotropic shells (offset layers) | |
@@ -113,7 +113,7 @@ python validation/make_document.py    # this document
 | Dynamics | [dy_devo8](#dy_devo8) | gap | missing: modal-basis transient dynamics with linkages (DYNE) | |
 | Dynamics | [dyne01](#dyne01) | gap | missing: modal-basis transient dynamics with linkages (DYNE) | |
 | Dynamics | [vibr2](#vibr2) | gap | missing: eigenvalue solver | |
-| Non linear dynamics | [dyna_nl1](#dyna_nl1) | gap | missing: point masses | |
+| Non linear dynamics | [dyna_nl1](#dyna_nl1) | gap | missing: constant added mass in `step_by_step` (Cast3M `MASSE_CONSTANTE`) | |
 | Non linear dynamics | [dyna_nl3](#dyna_nl3) | gap | missing: large-displacement beam and shell dynamics | |
 | Thermal analysis | [ther2](#ther2) | run, within tolerance | 0.267 % | 1.1e-03 |
 | Thermal analysis | [ther7or](#ther7or) | gap | missing: thermal shell elements | |
@@ -151,6 +151,7 @@ Features pyrucast lacks for the cases it cannot compute yet, by number of cases 
 | beam plasticity (global law) | [plas13](#plas13) | 1 |
 | complex eigenmodes under axial flow | [vibr6](#vibr6) | 1 |
 | concrete plasticity law (BETON) | [beton](#beton) | 1 |
+| constant added mass in `step_by_step` (Cast3M `MASSE_CONSTANTE`) | [dyna_nl1](#dyna_nl1) | 1 |
 | fluid-structure interaction | [fsi4](#fsi4) | 1 |
 | generalized plane strain | [plas11](#plas11) | 1 |
 | harmonic response with rotating unbalance | [vibr10](#vibr10) | 1 |
@@ -158,11 +159,11 @@ Features pyrucast lacks for the cases it cannot compute yet, by number of cases 
 | joint element on its own, with normal and shear stiffnesses in its own frame (JOI2, JOI4) | [joi22](#joi22) | 1 |
 | joint elements with thermal expansion | [joi44](#joi44) | 1 |
 | large-displacement beam and shell dynamics | [dyna_nl3](#dyna_nl3) | 1 |
+| layered shells (offset layers) | [rupt8](#rupt8) | 1 |
 | modal sub-structuring | [dyna5](#dyna5) | 1 |
 | multi-fibre beam sections | [plas14](#plas14) | 1 |
 | orthotropic joint with material axes | [joi45](#joi45) | 1 |
 | plasticity in plate elements | [plas8](#plas8) | 1 |
-| point masses | [dyna_nl1](#dyna_nl1) | 1 |
 | rate-independent kinematic hardening | [thpl1](#thpl1) | 1 |
 | spring supports (APPU) | [elas13](#elas13) | 1 |
 | surface vector operator (VSUR) | [vsur1](#vsur1) | 1 |
@@ -178,14 +179,11 @@ What writing the computed cases showed: an operator or an option pyrucast lacks 
 | nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`) | [elas4](#elas4), [elas8](#elas8), [elas11](#elas11), [plas7](#plas7) | 4 |
 | B-bar (selective integration) against the volumetric locking of QUA4/QUA8 in incompressible plastic flow | [plas7](#plas7), [chaboche2](#chaboche2) | 2 |
 | Drucker-Prager with two surfaces: pyrucast's interpolation driven by H·p departs from Cast3M when K_L < K, or when K_L = K with H ≠ 0 | [plas5](#plas5), [plas9](#plas9) | 2 |
-| `Mesh`: no accessor for its nodes (`mesh.node(0, i, 0)` over the cells of a POI1 mesh) | [plas6](#plas6), [plas7](#plas7) | 2 |
 | `convert` / `extrude` to TRI3: alternating diagonals (Cast3M's translation alternates them) | [elas2](#elas2), [elas3](#elas3) | 2 |
 | `dirichlet`: a node blocked twice for the same unknown (two supports meeting) makes the matrix singular, and the LU error does not name the cause | [elas2](#elas2), [elas3](#elas3) | 2 |
-| `model.drucker_prager` docstring: the friction is the `friction` component, not `alpha` | [plas5](#plas5), [plas9](#plas9) | 2 |
-| `project` of a field at the Gauss points: the cell a node shared by several cells is read in cannot be chosen | [elas4](#elas4), [plas7](#plas7) | 2 |
 | `transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords) | [elas8](#elas8), [elas11](#elas11) | 2 |
 | graded lines and extrusions (Cast3M `DINI`/`DFIN`, mesh density) | [elas3](#elas3), [ther-perm](#ther-perm) | 2 |
-| Kirchhoff quadrangle shell (DKQ): 4 % stiffer than Cast3M's COQ4 on elas4, to look into | [elas4](#elas4) | 1 |
+| Kirchhoff quadrangle shell (DKQ): 4 % stiffer than Cast3M's COQ4 on elas4, to look into (GitHub issue #26) | [elas4](#elas4) | 1 |
 | `mpc`: one coefficient per term for every relation; relations whose coefficients differ need one `mpc` each | [plas1](#plas1) | 1 |
 | an ellipse, or the projection of a line onto a plane (Cast3M `PROJ`) | [elas8](#elas8) | 1 |
 | local sub-stepping of rate-dependent laws at the Gauss points (stiff Norton exponents) | [chaboche2](#chaboche2) | 1 |
@@ -606,9 +604,8 @@ pyrucast's DKQ than in Cast3M's COQ4.
 
 **Improvement points.**
 
-- Kirchhoff quadrangle shell (DKQ): 4 % stiffer than Cast3M's COQ4 on elas4, to look into
+- Kirchhoff quadrangle shell (DKQ): 4 % stiffer than Cast3M's COQ4 on elas4, to look into (GitHub issue #26)
 - nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)
-- `project` of a field at the Gauss points: the cell a node shared by several cells is read in cannot be chosen
 
 #### Results
 
@@ -2180,7 +2177,6 @@ K / (2α + β). Cast3M's stops at the ultimate surface's apex, the reference.
 **Improvement points.**
 
 - Drucker-Prager with two surfaces: pyrucast's interpolation driven by H·p departs from Cast3M when K_L < K, or when K_L = K with H ≠ 0
-- `model.drucker_prager` docstring: the friction is the `friction` component, not `alpha`
 
 #### Results
 
@@ -2343,10 +2339,6 @@ The pyrucast moment is that of the support forces on the loaded side,
 Σ y·F_x, exact by equilibrium; Cast3M's integrates y·σ_xx along the side with
 σ_xx extrapolated to the nodes and averaged between cells. The two estimates
 differ by the error of that integration, which grows with the plastic zone.
-
-**Improvement points.**
-
-- `Mesh`: no accessor for its nodes (`mesh.node(0, i, 0)` over the cells of a POI1 mesh)
 
 #### Results
 
@@ -2529,8 +2521,6 @@ reads the node in one cell, which shows it.
 
 - B-bar (selective integration) against the volumetric locking of QUA4/QUA8 in incompressible plastic flow
 - nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)
-- `project` of a field at the Gauss points: the cell a node shared by several cells is read in cannot be chosen
-- `Mesh`: no accessor for its nodes (`mesh.node(0, i, 0)` over the cells of a POI1 mesh)
 
 #### Results
 
@@ -2779,7 +2769,6 @@ and the script leaves it out (its stress stays below 1e-6).
 
 - Drucker-Prager with two surfaces: pyrucast's interpolation driven by H·p departs from Cast3M when K_L < K, or when K_L = K with H ≠ 0
 - two laws on one support (materials in parallel on the same cells)
-- `model.drucker_prager` docstring: the friction is the `friction` component, not `alpha`
 
 #### Results
 
@@ -4106,7 +4095,7 @@ Acceptance: criterion of the `.dgibi` file on the G-θ values, |K_I| within 1 % 
 | Test name | rupt8 |
 | Calculation type | MECHANICS ELASTICITY |
 | Finite element type (Cast3M) | TRI3, 3D |
-| pyrucast model | not available — missing: stress intensity factors (G-theta) |
+| pyrucast model | not available — missing: stress intensity factors (G-theta); layered shells (offset layers) |
 | Reference | Test NAFEMS : D.P.Rooke and D. J. Cartwright in Copendium of Intensity Factors HMSO (1976): rupt8 Modélisation des structures élastiques dans CASTEM 2000. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 `.dgibi` file | `dgibi/rupt8.dgibi` |
@@ -4126,6 +4115,9 @@ TRI3 elements; half crack length 0.3, half width 1, thickness 0.001.
 | E | 2e11 Pa |
 
 **Notes.** The `.dgibi` file repeats the G-θ computation three times; the value is the last one.
+The plate is a DKT shell. The cells within three layers of the crack tip carry
+a stack of 41 DKT layers, each with its thickness and offset (`EPAI`, `EXCE`);
+each G-θ computation reads one of these cells through `ELEMENT_MULTICOUCHE`.
 
 #### Results
 
@@ -5707,7 +5699,7 @@ Acceptance: criterion of the `.dgibi` file, each frequency within 2 %.
 | Test name | dyna_nl1 |
 | Calculation type | MECHANICS 2D, NON LINEAR GEOMETRICAL DYNAMICS |
 | Finite element type (Cast3M) | BARR |
-| pyrucast model | not available — missing: point masses |
+| pyrucast model | not available — missing: constant added mass in `step_by_step` (Cast3M `MASSE_CONSTANTE`) |
 | Reference | no source cited in the original document |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 `.dgibi` file | `dgibi/dyna_nl1.dgibi` |
@@ -5732,6 +5724,10 @@ end.
 | E | 1e7 Pa |
 | ν | 0.3 |
 | ρ (bar) | 0 |
+
+**Notes.** The end mass is a constant mass matrix added to the bar's, whose density is
+zero. A `Matrix.block` on the end node builds it, but `step_by_step` takes its
+mass from the model alone and has no input for a mass of its own.
 
 #### Results
 

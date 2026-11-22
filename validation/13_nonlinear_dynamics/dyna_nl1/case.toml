@@ -4,7 +4,7 @@ castem_element = "BARR"
 castem_version = "97' customer version"
 source = ""
 dgibi = "dyna_nl1.dgibi"
-gap = ["point masses"]
+gap = ["constant added mass in `step_by_step` (Cast3M `MASSE_CONSTANTE`)"]
 tolerance_note = "criteria of the `.dgibi` file, amplitude within 0.1 % and period within 0.5 %."
 
 topic = """
@@ -27,6 +27,12 @@ end.
 | E | 1e7 Pa |
 | ν | 0.3 |
 | ρ (bar) | 0 |
+"""
+
+notes = """
+The end mass is a constant mass matrix added to the bar's, whose density is
+zero. A `Matrix.block` on the end node builds it, but `step_by_step` takes its
+mass from the model alone and has no input for a mass of its own.
 """
 
 [[quantity]]

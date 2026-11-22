@@ -47,9 +47,8 @@ pyrucast's DKQ than in Cast3M's COQ4.
 """
 
 improvements = [
-    "Kirchhoff quadrangle shell (DKQ): 4 % stiffer than Cast3M's COQ4 on elas4, to look into",
+    "Kirchhoff quadrangle shell (DKQ): 4 % stiffer than Cast3M's COQ4 on elas4, to look into (GitHub issue #26)",
     "nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)",
-    "`project` of a field at the Gauss points: the cell a node shared by several cells is read in cannot be chosen",
 ]
 
 [[quantity]]

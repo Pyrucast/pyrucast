@@ -50,7 +50,6 @@ K / (2α + β). Cast3M's stops at the ultimate surface's apex, the reference.
 
 improvements = [
     "Drucker-Prager with two surfaces: pyrucast's interpolation driven by H·p departs from Cast3M when K_L < K, or when K_L = K with H ≠ 0",
-    "`model.drucker_prager` docstring: the friction is the `friction` component, not `alpha`",
 ]
 
 [[quantity]]
