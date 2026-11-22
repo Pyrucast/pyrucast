@@ -6,8 +6,8 @@
 //!   as a field), [`divergence`](fn@divergence) (the nodal `∇·` of a
 //!   per-element field), [`restrict`](fn@restrict) /
 //!   [`restrict_like`](fn@restrict_like), [`merge`](fn@merge),
-//!   [`consolidate`](fn@consolidate), [`sum_to_nodes`](fn@sum_to_nodes) (a
-//!   one-value-per-cell field summed at the nodes),
+//!   [`consolidate`](fn@consolidate), [`to_nodes`](fn@to_nodes) (a field
+//!   at the Gauss points brought to the nodes, by average or sum),
 //!   [`project_node`](fn@project_node) / [`project_element`](fn@project_element)
 //!   (a field read at the nodes of another mesh: interpolated, or fitted cell
 //!   by cell from the Gauss points);
@@ -33,7 +33,7 @@ pub mod methods;
 pub mod positions;
 pub mod project;
 pub mod restrict;
-pub mod sum_to_nodes;
+pub mod to_nodes;
 
 pub use consolidate::consolidate;
 pub use divergence::divergence;
@@ -44,4 +44,4 @@ pub use merge::merge;
 pub use positions::positions;
 pub use project::{project_element, project_node};
 pub use restrict::{restrict, restrict_like};
-pub use sum_to_nodes::sum_to_nodes;
+pub use to_nodes::{to_nodes, Reduction};

@@ -1,8 +1,8 @@
 """Operators producing a field at the nodes — mirror of ``ops::node_field``.
 
 Derivations (a mesh's coordinates, the divergence of a field by elements,
-the nodal sum of a per-cell field, restriction, projection onto another
-mesh, merging) and nodal assembly (imposed flux, and both sides of the
+a field at the Gauss points brought to the nodes, restriction, projection
+onto another mesh, merging) and nodal assembly (imposed flux, and both sides of the
 balance `Σ f_int = Σ f_ext` whose gap is the residual). Solving
 also produces a nodal field, but keeps its own module:
 ``pyrucast.solver``.
@@ -18,7 +18,7 @@ from ._pyrucast import (
     merge,
     positions,
     project,
-    sum_to_nodes,
+    to_nodes,
 )
 from ._pyrucast import (
     mask_node as mask,
@@ -41,5 +41,5 @@ __all__ = [
     "project",
     "restrict",
     "restrict_like",
-    "sum_to_nodes",
+    "to_nodes",
 ]

@@ -3,6 +3,7 @@
 
 use crate::aggregate::Aggregate;
 use crate::handle::Handle;
+use crate::ops::node_field::Reduction;
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::mesh::PyMesh;
 use crate::py::model::PyModel;
@@ -385,30 +386,44 @@ pub fn divergence(field: PyRef<PyElementField>, prefix: &str) -> PyResult<PyNode
     Ok(PyNodeField { inner: nf })
 }
 
-/// Gather a field of one point per cell at the nodes, by summation.
+/// Bring a field at the Gauss points to the nodes of its cells.
 ///
-/// Each node receives, per component, the sum of the values of the cells it
-/// belongs to — across zones too. It is not a smoothing: no average, no weight.
-/// Applied to the cell measures of `pyrucast.element_field.cell_integral`, it
-/// gives the volume each node stands for.
+/// The inverse way of `pyrucast.element_field.interp_to_gauss`. Each cell fits
+/// its Gauss values over its own nodes — the least-squares fit local to the
+/// cell that `pyrucast.node_field.project` reads; a cell with fewer Gauss
+/// points than nodes gives every node their mean, so a field of one point per
+/// cell gives each node the cell's value. A node then receives, per component,
+/// what the cells around it give, across zones too:
+///
+/// | `reduction` | a node receives |
+/// |---|---|
+/// | `"average"` (default) | the mean over the cells around it that carry the component — 0 where none does |
+/// | `"sum"` | the sum over the cells around it |
+///
+/// The average is the value a reader expects at a node: a field interpolated
+/// from the nodes comes back exactly, and the jumps between cells are smoothed
+/// out. The sum gathers per-cell contributions: applied to the cell measures of
+/// `pyrucast.element_field.cell_integral`, it gives the volume each node stands
+/// for.
 ///
 /// # Parameters
 ///
-/// - `field`: an `ElementField` with one point per cell, built on a space with
-///   the `REDUCED` quadrature.
+/// - `field`: the field at the Gauss points.
+/// - `reduction`: `"average"` or `"sum"`.
 ///
 /// # Returns
 ///
-/// A `NodeField` with the components of `field`.
+/// A `NodeField` with the components of `field`, on the nodes of its cells.
 ///
 /// # Raises
 ///
-/// `RuntimeError` if a zone of `field` has more than one point per cell.
+/// `ValueError` for an unknown `reduction`.
 #[py_op(method_on = PyElementField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn sum_to_nodes(field: PyRef<PyElementField>) -> PyResult<PyNodeField> {
-    let nf = crate::ops::node_field::sum_to_nodes(&field.inner)?;
+#[pyo3(signature = (field, reduction = Reduction::Average))]
+pub fn to_nodes(field: PyRef<PyElementField>, reduction: Reduction) -> PyResult<PyNodeField> {
+    let nf = crate::ops::node_field::to_nodes(&field.inner, reduction)?;
     Ok(PyNodeField { inner: nf })
 }
 

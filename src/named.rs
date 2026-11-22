@@ -221,6 +221,7 @@ named_enum!(
     crate::containers::matrix::Symmetry,
     crate::containers::matrix::DofOrdering,
     crate::ops::mesh::arrays::NodeOrder,
+    crate::ops::node_field::Reduction,
     crate::ops::solver::SolveMethod,
     crate::ops::solver::Verbosity,
     crate::ops::solver::RelationMethod,

@@ -297,7 +297,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::element_field::strain, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::stress_measure, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::rotate_frame, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::node_field::sum_to_nodes, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::node_field::to_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(
         py::ops::element_field::beam_deformation,
         m

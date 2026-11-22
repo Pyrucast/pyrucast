@@ -529,7 +529,7 @@ pub fn strain(
 ///
 /// `v_e = Σ_g f(g)·|J|·w_g`, with the field's own quadrature, the `2πr`
 /// included on a body of revolution. Integrating `1` gives the measure of every
-/// cell; `pyrucast.node_field.sum_to_nodes` then gathers it at the nodes.
+/// cell; `pyrucast.node_field.to_nodes(…, "sum")` then gathers it at the nodes.
 ///
 /// # Parameters
 ///

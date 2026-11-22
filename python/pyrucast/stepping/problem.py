@@ -180,8 +180,8 @@ def describe_problem(data, options):
                 FiniteElementSpace(cells), [(name, 1.0) for name in force_names]
             )
             centres = FiniteElementSpace(cells, quadrature="REDUCED")
-            volumes = node_field.sum_to_nodes(
-                element_field.cell_integral(ones, centres)
+            volumes = node_field.to_nodes(
+                element_field.cell_integral(ones, centres), "sum"
             )
             weights = (volumes + 1e-300) ** -0.5
         strain_measure = _strain_measure(

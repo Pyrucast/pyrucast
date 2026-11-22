@@ -284,21 +284,29 @@ assert abs(vm[0].value(0, 0, "von_mises") - math.sqrt(120e6**2 + 3 * 40e6**2)) <
 attendu = math.sqrt((0.4 + 0.5) * 120e6**2 + 2 * 2.0 * 40e6**2)
 assert abs(hill[0].value(0, 0, "von_mises") - attendu) < 1e-3
 
-# ── intégrale par maille, somme aux nœuds ──────────────────
+# ── intégrale par maille, ramener aux nœuds ────────────────
 
 _, mesh, fes, n = _plaque()
 un = pyrucast.ElementField(fes, ["un"])
 un[0].set_uniform("un", 1.0)
-# ANCHOR: node_field-sum_to_nodes
+# ANCHOR: node_field-to_nodes
 # One point per cell, at its centroid: where per-cell values live.
 centres = pyrucast.FiniteElementSpace(mesh, quadrature="REDUCED")
 aires = pyrucast.element_field.cell_integral(un, centres)  # ∫ 1 = the cell's area
 # Each node receives the sum over the cells around it.
-volumes = pyrucast.node_field.sum_to_nodes(aires)
-# ANCHOR_END: node_field-sum_to_nodes
+volumes = pyrucast.node_field.to_nodes(aires, "sum")
+# A field that jumps from one cell to the next, read at the nodes: by default,
+# the mean of the cells around each node.
+s = pyrucast.ElementField(fes, ["s"])
+s[0].set_cell_uniform(0, "s", 1.0)
+s[0].set_cell_uniform(1, "s", 5.0)
+lu = s.to_nodes()
+# ANCHOR_END: node_field-to_nodes
 assert abs(aires[0].value(1, 0, "un") - 1.0) < 1e-12
 assert abs(volumes.value(n[1], "un") - 2.0) < 1e-12  # shared by both cells
 assert abs(volumes.value(n[0], "un") - 1.0) < 1e-12
+assert abs(lu.value(n[1], "s") - 3.0) < 1e-12  # shared: (1 + 5) / 2
+assert abs(lu.value(n[2], "s") - 5.0) < 1e-12
 
 # ── B du modèle : l'entrée de chaque loi ───────────────────
 

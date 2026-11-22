@@ -152,7 +152,6 @@ __all__ = [
     "strain",
     "stress_measure",
     "sub_material_field",
-    "sum_to_nodes",
     "sweep",
     "sweep_solid",
     "symmetry_line",
@@ -164,6 +163,7 @@ __all__ = [
     "thermal_strain",
     "timoshenko",
     "to_arrays",
+    "to_nodes",
     "to_poi1",
     "to_quadratic",
     "transfinite",
@@ -812,7 +812,7 @@ class ElementField:
         
         `v_e = Σ_g f(g)·|J|·w_g`, with the field's own quadrature, the `2πr`
         included on a body of revolution. Integrating `1` gives the measure of every
-        cell; `pyrucast.node_field.sum_to_nodes` then gathers it at the nodes.
+        cell; `pyrucast.node_field.to_nodes(…, "sum")` then gathers it at the nodes.
         
         # Parameters
         
@@ -1126,27 +1126,40 @@ class ElementField:
         
         `RuntimeError` if `field` carries no `prefix` of either rank, or both.
         """
-    def sum_to_nodes(self) -> NodeField:
+    def to_nodes(self, reduction: builtins.str = 'average') -> NodeField:
         r"""
-        Gather a field of one point per cell at the nodes, by summation.
+        Bring a field at the Gauss points to the nodes of its cells.
         
-        Each node receives, per component, the sum of the values of the cells it
-        belongs to — across zones too. It is not a smoothing: no average, no weight.
-        Applied to the cell measures of `pyrucast.element_field.cell_integral`, it
-        gives the volume each node stands for.
+        The inverse way of `pyrucast.element_field.interp_to_gauss`. Each cell fits
+        its Gauss values over its own nodes — the least-squares fit local to the
+        cell that `pyrucast.node_field.project` reads; a cell with fewer Gauss
+        points than nodes gives every node their mean, so a field of one point per
+        cell gives each node the cell's value. A node then receives, per component,
+        what the cells around it give, across zones too:
+        
+        | `reduction` | a node receives |
+        |---|---|
+        | `"average"` (default) | the mean over the cells around it that carry the component — 0 where none does |
+        | `"sum"` | the sum over the cells around it |
+        
+        The average is the value a reader expects at a node: a field interpolated
+        from the nodes comes back exactly, and the jumps between cells are smoothed
+        out. The sum gathers per-cell contributions: applied to the cell measures of
+        `pyrucast.element_field.cell_integral`, it gives the volume each node stands
+        for.
         
         # Parameters
         
-        - `field`: an `ElementField` with one point per cell, built on a space with
-          the `REDUCED` quadrature.
+        - `field`: the field at the Gauss points.
+        - `reduction`: `"average"` or `"sum"`.
         
         # Returns
         
-        A `NodeField` with the components of `field`.
+        A `NodeField` with the components of `field`, on the nodes of its cells.
         
         # Raises
         
-        `RuntimeError` if a zone of `field` has more than one point per cell.
+        `ValueError` for an unknown `reduction`.
         """
 
 @typing.final
@@ -6346,7 +6359,7 @@ def cell_integral(field: ElementField, target: FiniteElementSpace) -> ElementFie
     
     `v_e = Σ_g f(g)·|J|·w_g`, with the field's own quadrature, the `2πr`
     included on a body of revolution. Integrating `1` gives the measure of every
-    cell; `pyrucast.node_field.sum_to_nodes` then gathers it at the nodes.
+    cell; `pyrucast.node_field.to_nodes(…, "sum")` then gathers it at the nodes.
     
     # Parameters
     
@@ -9798,29 +9811,6 @@ def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequen
     physics that needs no material (a constraint).
     """
 
-def sum_to_nodes(field: ElementField) -> NodeField:
-    r"""
-    Gather a field of one point per cell at the nodes, by summation.
-    
-    Each node receives, per component, the sum of the values of the cells it
-    belongs to — across zones too. It is not a smoothing: no average, no weight.
-    Applied to the cell measures of `pyrucast.element_field.cell_integral`, it
-    gives the volume each node stands for.
-    
-    # Parameters
-    
-    - `field`: an `ElementField` with one point per cell, built on a space with
-      the `REDUCED` quadrature.
-    
-    # Returns
-    
-    A `NodeField` with the components of `field`.
-    
-    # Raises
-    
-    `RuntimeError` if a zone of `field` has more than one point per cell.
-    """
-
 def sweep(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
     Fill the space between two line meshes with `n_layers` layers of cells.
@@ -10139,6 +10129,42 @@ def to_arrays(groups: dict, *, node_fields: typing.Sequence[NodeField] = [], ele
     - `TypeError` if a value of `groups` is not a `Mesh`.
     - `ValueError` if `order` is unknown.
     - `RuntimeError` if the groups do not all lie on one `Coords`.
+    """
+
+def to_nodes(field: ElementField, reduction: builtins.str = 'average') -> NodeField:
+    r"""
+    Bring a field at the Gauss points to the nodes of its cells.
+    
+    The inverse way of `pyrucast.element_field.interp_to_gauss`. Each cell fits
+    its Gauss values over its own nodes — the least-squares fit local to the
+    cell that `pyrucast.node_field.project` reads; a cell with fewer Gauss
+    points than nodes gives every node their mean, so a field of one point per
+    cell gives each node the cell's value. A node then receives, per component,
+    what the cells around it give, across zones too:
+    
+    | `reduction` | a node receives |
+    |---|---|
+    | `"average"` (default) | the mean over the cells around it that carry the component — 0 where none does |
+    | `"sum"` | the sum over the cells around it |
+    
+    The average is the value a reader expects at a node: a field interpolated
+    from the nodes comes back exactly, and the jumps between cells are smoothed
+    out. The sum gathers per-cell contributions: applied to the cell measures of
+    `pyrucast.element_field.cell_integral`, it gives the volume each node stands
+    for.
+    
+    # Parameters
+    
+    - `field`: the field at the Gauss points.
+    - `reduction`: `"average"` or `"sum"`.
+    
+    # Returns
+    
+    A `NodeField` with the components of `field`, on the nodes of its cells.
+    
+    # Raises
+    
+    `ValueError` for an unknown `reduction`.
     """
 
 def to_poi1(mesh: Mesh) -> Mesh:
