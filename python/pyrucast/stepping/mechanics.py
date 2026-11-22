@@ -99,7 +99,7 @@ def step_data(data, problem, state, start, t_end, temperature, options):
     if temperature is not None and "alpha" in materials.components():
         at_points = element_field.interp_to_gauss(temperature["T"], problem.fespace)
         imposed_strain = element_field.thermal_strain(
-            at_points, materials, problem.fespace, options.t_ref, problem.strain_measure
+            problem.mechanics_domain, at_points, materials, options.t_ref
         )
     return StepData(
         t_start=start.time,

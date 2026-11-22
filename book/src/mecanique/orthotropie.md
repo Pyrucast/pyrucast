@@ -62,9 +62,10 @@ C\'\_{pqrs} = R_{pi}\\,R_{qj}\\,R_{rk}\\,R_{sl}\\,C_{ijkl},
 \qquad R = \big[\\,V_1\ \ V_2\ \ V_1\times V_2\\,\big],
 \\]
 
-puis réduit à la cinématique : le bloc `[xx, yy, xy]` en déformations planes,
-sa condensation sur \\(\varepsilon_{zz}\\) en contraintes planes, le bloc
-`[rr, zz, θθ, rz]` en axisymétrie. En cisaillement de l'ingénieur, le passage
+puis réduit à la cinématique : le bloc `[xx, yy, zz, xy]` en déformations
+planes et en axisymétrie (`[rr, zz, θθ, rz]`), le même bloc condensé sur
+\\(\varepsilon_{zz}\\) en contraintes planes, dont la ligne et la colonne `zz`
+sont alors nulles. En cisaillement de l'ingénieur, le passage
 Voigt ↔ tenseur ne porte aucun facteur, et la rotation d'ordre 4 n'a aucune
 convention à retenir.
 

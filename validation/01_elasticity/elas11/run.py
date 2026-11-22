@@ -72,7 +72,7 @@ def main(out: str | None = None) -> dict[str, float]:
         "X", "T"
     ) + pc.node_field.positions(solid, ["Y"]).rename_component("Y", "T")
     eps_th = pc.element_field.thermal_strain(
-        pc.element_field.interp_to_gauss(temperature, fes), materials, fes, T_REF
+        model, pc.element_field.interp_to_gauss(temperature, fes), materials, T_REF
     )
     sigma_th = pc.element_field.elastic_stress(model, eps_th, materials)
     forces = (

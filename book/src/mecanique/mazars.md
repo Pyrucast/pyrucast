@@ -57,14 +57,17 @@ d'itération d'un Newton modifié. La loi n'a pas de tangente.
 
 Selon la cinématique :
 
-| | `plane_stress`, `plane_strain` | `axisymmetric` | `full_3d` |
-|---|---|---|---|
-| primales | `u_x`, `u_y` | `u_x`, `u_y` | `u_x`, `u_y`, `u_z` |
-| duales | `f_x`, `f_y` | `f_x`, `f_y` | `f_x`, `f_y`, `f_z` |
-| entrée du comportement | `eps_xx`, `eps_yy`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` |
-| contrainte | `sigma_xx`, `sigma_yy`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_yz`, `sigma_xz`, `sigma_xy` |
+| | `plane_stress`, `plane_strain`, `axisymmetric` | `full_3d` |
+|---|---|---|
+| primales | `u_x`, `u_y` | `u_x`, `u_y`, `u_z` |
+| duales | `f_x`, `f_y` | `f_x`, `f_y`, `f_z` |
+| entrée du comportement | `eps_xx`, `eps_yy`, `eps_zz`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` |
+| contrainte | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_yz`, `sigma_xz`, `sigma_xy` |
 
-En axisymétrie, `eps_zz` et `sigma_zz` sont les composantes orthoradiales.
+En 2D, `eps_zz` et `sigma_zz` sont les composantes hors plan. En contraintes
+planes, `sigma_zz` est nul et la loi calcule elle-même la déformation hors
+plan. En déformations planes, `eps_zz` vaut zéro hors dilatation thermique.
+En axisymétrie, ce sont les composantes orthoradiales.
 
 La sortie du comportement est la contrainte, suivie de l'état :
 

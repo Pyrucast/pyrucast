@@ -30,6 +30,7 @@ use crate::handle::Handle;
 use crate::models::continuum::{elastic, voigt};
 use crate::models::kernel;
 use crate::models::symmetry::elastic_constitutive_into;
+use crate::models::tensor::Kinematics;
 
 /// Which way the operator is applied. Private: each public function is one
 /// direction, and this only lets them share the zone driver.
@@ -47,14 +48,16 @@ enum Direction {
 /// - `strain` carries the strain in **tensor** convention, the layout of
 ///   [`deformation`](fn@crate::ops::element_field::deformation) and
 ///   [`thermal_strain`](fn@crate::ops::element_field::thermal_strain)
-///   (`eps_xx`, `eps_xy`, … ; the hoop `eps_zz` on a body of revolution);
+///   (`eps_xx`, `eps_xy`, … ; in 2-D the out-of-plane `eps_zz`, the hoop on a
+///   body of revolution);
 /// - `materials` carries each law's elastic constants (`E`, `nu` for an
 ///   isotropic one, the orthotropic or anisotropic set otherwise), resolved
 ///   zone by zone by those components alone — a plasticity's `sigma_y` need
 ///   not be there.
 ///
 /// Returns one zone per continuum sub-model, its components the stresses that
-/// law writes (`sigma_xx`, `sigma_yy`, `sigma_xy` in plane stress). `D` is the
+/// law writes (`sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` in 2-D — `sigma_zz`
+/// zero in plane stress, whatever `eps_zz` says). `D` is the
 /// operator of [`Behavior::elastic_operator`](crate::models::Behavior::elastic_operator): for a damage law, the undamaged
 /// one.
 ///
@@ -80,7 +83,8 @@ enum Direction {
 /// // plays no part in it.
 /// let plaque = model::plasticity_perfect(&fes, Kinematics::PlaneStress, StrainMeasure::Linear)?;
 /// let materiau = element_field::material_field(&plaque, &[("E", 200.0), ("nu", 0.0), ("sigma_y", 1.0)])?;
-/// let eps = ElementField::new(&fes, vec!["eps_xx".into(), "eps_xy".into(), "eps_yy".into()])?;
+/// let eps = ElementField::new(
+///     &fes, vec!["eps_xx".into(), "eps_xy".into(), "eps_yy".into(), "eps_zz".into()])?;
 /// eps.get(0)?.write().set_uniform("eps_xx", 1e-3)?;
 /// // Far beyond the yield stress, yet purely elastic: σ = E·ε with ν = 0.
 /// let sigma = element_field::elastic_stress(&plaque, &eps, &materiau)?;
@@ -103,8 +107,10 @@ pub fn elastic_stress(
 /// will do); `materials` the elastic constants, as for `elastic_stress`. The
 /// result is in **tensor** convention, the layout of
 /// [`deformation`](fn@crate::ops::element_field::deformation), so it subtracts
-/// from a strain component for component. In plane stress the out-of-plane
-/// `eps_zz`, which the plane law never reads, is not written.
+/// from a strain component for component. In plane stress `eps_zz` is the
+/// out-of-plane strain the stress causes, `−ν(σ_xx + σ_yy)/E` for an isotropic
+/// law: the inverse runs on the material's full compliance, `σ_zz = 0` being
+/// a stress like the others.
 ///
 /// Errors when `D` is singular at a point (`E = 0`, say): the stress then has no
 /// elastic strain to go back to.
@@ -130,13 +136,15 @@ pub fn elastic_stress(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// let plaque = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
 /// let materiau = element_field::material_field(&plaque, &[("E", 100.0), ("nu", 0.25)])?;
-/// let sigma = ElementField::new(&fes, vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()])?;
+/// let sigma = ElementField::new(
+///     &fes, vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_zz".into(), "sigma_xy".into()])?;
 /// sigma.get(0)?.write().set_uniform("sigma_xx", 1.0)?;
 /// let eps = element_field::elastic_strain(&plaque, &sigma, &materiau)?;
-/// // Uniaxial plane stress: ε_xx = σ/E, ε_yy = −νσ/E.
+/// // Uniaxial plane stress: ε_xx = σ/E, ε_yy = ε_zz = −νσ/E.
 /// let e = eps.get(0)?;
 /// assert!((e.read().value(0, 0, "eps_xx")? - 0.01).abs() < 1e-14);
 /// assert!((e.read().value(0, 0, "eps_yy")? + 0.0025).abs() < 1e-14);
+/// assert!((e.read().value(0, 0, "eps_zz")? + 0.0025).abs() < 1e-14);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn elastic_strain(
@@ -198,7 +206,15 @@ fn apply(
         let mat_idx = material
             .read()
             .resolve_components(&contract_refs, "elastic: material")?;
-        let n_normal = voigt::normal_count(space_dim, kinematics);
+        // The operator each direction applies, chosen once for the zone. The
+        // stress is the law's own `D`; the strain inverts the **full**
+        // compliance — in plane stress the condensed `D` has a zero `zz` row
+        // and no inverse, while `σ_zz = 0` is a stress like the others whose
+        // strain the uncondensed (plane-strain) matrix gives back.
+        let operator = match (direction, kinematics) {
+            (Direction::Strain, Kinematics::PlaneStress) => Kinematics::PlaneStrain,
+            _ => kinematics,
+        };
 
         let zone = kernel::element_pointwise(
             &fespace,
@@ -211,12 +227,12 @@ fn apply(
             |_geom, _g, row, _prev, mat_row, out| {
                 let mut d = [[0.0_f64; 6]; 6];
                 let v = elastic_constitutive_into(
-                    mat_row, &mat_idx, symmetry, kinematics, space_dim, &mut d,
+                    mat_row, &mat_idx, symmetry, operator, space_dim, &mut d,
                 )?;
                 match direction {
                     Direction::Stress => {
                         // Tensor strain → engineering Voigt, the convention `D` is in.
-                        let eps = voigt::read_voigt_strain(row, &in_idx, space_dim, kinematics);
+                        let eps = voigt::read_voigt_strain(row, &in_idx);
                         for (r, slot) in out.iter_mut().enumerate().take(v) {
                             *slot = (0..v).map(|c| d[r][c] * eps[c]).sum();
                         }
@@ -229,7 +245,11 @@ fn apply(
                         solve_voigt(&mut d, &mut x, v)?;
                         // Engineering shears back to tensor convention.
                         for (r, slot) in out.iter_mut().enumerate().take(v) {
-                            *slot = if r < n_normal { x[r] } else { 0.5 * x[r] };
+                            *slot = if r < voigt::NORMAL_COUNT {
+                                x[r]
+                            } else {
+                                0.5 * x[r]
+                            };
                         }
                     }
                 }
@@ -368,7 +388,7 @@ mod tests {
     #[test]
     fn stress_is_the_linear_law_in_every_kinematics() {
         let iso = [("E", 210e3), ("nu", 0.3)];
-        let plane = ["eps_xx", "eps_xy", "eps_yy"];
+        let plane = ["eps_xx", "eps_xy", "eps_yy", "eps_zz"];
         for k in [Kinematics::PlaneStress, Kinematics::PlaneStrain] {
             matches_the_linear_law(
                 &tri3(2, false),
@@ -414,7 +434,7 @@ mod tests {
             Kinematics::PlaneStrain,
             MaterialSymmetry::Orthotropic,
             &ortho,
-            &["eps_xx", "eps_xy", "eps_yy"],
+            &["eps_xx", "eps_xy", "eps_yy", "eps_zz"],
         );
     }
 
@@ -425,8 +445,8 @@ mod tests {
         for (fes, k, names) in [
             (
                 tri3(2, false),
-                Kinematics::PlaneStress,
-                vec!["eps_xx", "eps_xy", "eps_yy"],
+                Kinematics::PlaneStrain,
+                vec!["eps_xx", "eps_xy", "eps_yy", "eps_zz"],
             ),
             (
                 tri3(2, true),
@@ -455,6 +475,34 @@ mod tests {
         }
     }
 
+    /// In plane stress the round trip gives back the in-plane strain, and in
+    /// place of the `eps_zz` the stress never read, the out-of-plane strain
+    /// `σ_zz = 0` implies: `−ν/(1−ν)·(ε_xx + ε_yy)`.
+    #[test]
+    fn plane_stress_strain_is_the_out_of_plane_one_of_its_stress() {
+        let fes = tri3(2, false);
+        let nu = 0.3;
+        let m = model::elasticity(
+            &fes,
+            Kinematics::PlaneStress,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear,
+        )
+        .unwrap();
+        let mat = material_field(&m, &[("E", 210e3), ("nu", nu)]).unwrap();
+        let eps = strain(&fes, &["eps_xx", "eps_xy", "eps_yy", "eps_zz"]);
+        let back = elastic_strain(&m, &elastic_stress(&m, &eps, &mat).unwrap(), &mat).unwrap();
+        let (b, e) = (back.get(0).unwrap(), eps.get(0).unwrap());
+        let (b, e) = (b.read(), e.read());
+        for name in ["eps_xx", "eps_xy", "eps_yy"] {
+            let (x, y) = (b.value(0, 0, name).unwrap(), e.value(0, 0, name).unwrap());
+            assert!((x - y).abs() < 1e-15, "{name}: {x} ≠ {y}");
+        }
+        let in_plane = e.value(0, 0, "eps_xx").unwrap() + e.value(0, 0, "eps_yy").unwrap();
+        let ezz = b.value(0, 0, "eps_zz").unwrap();
+        assert!((ezz + nu / (1.0 - nu) * in_plane).abs() < 1e-15, "{ezz}");
+    }
+
     /// A zero modulus leaves no elastic strain to go back to.
     #[test]
     fn singular_operator_is_an_error() {
@@ -467,7 +515,7 @@ mod tests {
         )
         .unwrap();
         let mat = material_field(&m, &[("E", 0.0), ("nu", 0.3)]).unwrap();
-        let sigma = strain(&fes, &["sigma_xx", "sigma_yy", "sigma_xy"]);
+        let sigma = strain(&fes, &["sigma_xx", "sigma_yy", "sigma_zz", "sigma_xy"]);
         let err = elastic_strain(&m, &sigma, &mat).unwrap_err();
         assert!(format!("{err}").contains("singular"), "{err}");
     }

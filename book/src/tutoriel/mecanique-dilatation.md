@@ -48,7 +48,7 @@ Chaque terme correspond à un objet du script :
 | Terme | pyrucast |
 |---|---|
 | \\( T \\) aux points de Gauss | `pc.element_field.interp_to_gauss(temperature, fes)` |
-| \\( \varepsilon\_{\text{th}} = \alpha\\,(T - T\_{\text{ref}})\\,I \\) | `pc.element_field.thermal_strain(t_gauss, materiaux, fes, T_REF)`, qui lit `alpha` dans le champ matériau |
+| \\( \varepsilon\_{\text{th}} = \alpha\\,(T - T\_{\text{ref}})\\,I \\) | `pc.element_field.thermal_strain(modele, t_gauss, materiaux, T_REF)`, qui lit `alpha` dans le champ matériau |
 | \\( [C]\\,\varepsilon\_{\text{th}} \\) | `pc.element_field.elastic_stress(modele, eps_th, materiaux)` |
 | \\( \int_V [B]^T [C]\\,\varepsilon\_{\text{th}} \\, dV \\) | `pc.node_field.divergence(sigma_th, "sigma")` |
 | \\( \sigma = [C](\varepsilon - \varepsilon\_{\text{th}}) \\) | `pc.element_field.elastic_stress(modele, deformation - eps_th, materiaux)` |

@@ -68,18 +68,27 @@ pub(crate) fn material_contract(
 
 /// Isotropic constitutive (Voigt) matrix `D` from `E`, `nu` and the kinematics.
 ///
+/// In 2-D it is `4 × 4` over `[xx, yy, zz, xy]`. Plane strain and the body of
+/// revolution share the same matrix — three coupled normal directions and one
+/// shear — and differ only by what the strain's `zz` holds. Plane stress
+/// condenses the out-of-plane normal: its `zz` row and column are zero, so
+/// `σ_zz = 0` whatever `ε_zz` it is given.
+///
 /// ```
 /// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::continuum::elastic;
 /// // Plane stress: σ_zz = 0, the out-of-plane compliance is condensed.
-/// // Plane strain: ε_zz = 0, the material is **stiffer**.
+/// // Plane strain: ε_zz is prescribed, the material is **stiffer**.
 /// let cp = elastic::constitutive(210e3, 0.3, Kinematics::PlaneStress, 2);
 /// let dp = elastic::constitutive(210e3, 0.3, Kinematics::PlaneStrain, 2);
 /// assert!(dp[0][0] > cp[0][0]);
-/// // En contraintes planes, D₀₀ = E/(1−ν²).
+/// // Plane stress: D₀₀ = E/(1−ν²), and the zz row is zero.
 /// assert!((cp[0][0] - 210e3 / (1.0 - 0.09)).abs() < 1e-6);
+/// assert!(cp[2].iter().all(|&d| d == 0.0));
+/// // Plane strain and the body of revolution: one and the same matrix.
+/// assert_eq!(dp, elastic::constitutive(210e3, 0.3, Kinematics::Axisymmetric, 2));
 /// // The shear block is μ in both cases (engineering Voigt).
-/// assert!((cp[2][2] - dp[2][2]).abs() < 1e-6);
+/// assert!((cp[3][3] - dp[3][3]).abs() < 1e-6);
 /// ```
 pub fn constitutive(e: f64, nu: f64, kinematics: Kinematics, space_dim: usize) -> Vec<Vec<f64>> {
     let mut d = [[0.0_f64; 6]; 6];
@@ -93,6 +102,11 @@ pub fn constitutive(e: f64, nu: f64, kinematics: Kinematics, space_dim: usize) -
 /// The form a constitutive kernel calls: at most thirty-six numbers, on the
 /// stack. Building two levels of `Vec` for them is nothing once per assembly and
 /// a great deal once per Gauss point of every iteration.
+///
+/// Only the non-zero entries of the kinematics' pattern are written — the
+/// plane-stress `zz` row and column, the uncoupled shears are not: the buffer
+/// starts zeroed and keeps one kinematics, as every caller has it (one buffer
+/// per zone or per point).
 /// ```
 /// # use pyrucast::models::continuum::elastic;
 /// # use pyrucast::models::tensor::Kinematics;
@@ -100,7 +114,7 @@ pub fn constitutive(e: f64, nu: f64, kinematics: Kinematics, space_dim: usize) -
 /// // combien de lignes et de colonnes ont été remplies.
 /// let mut d = [[0.0_f64; 6]; 6];
 /// let v = elastic::constitutive_into(210_000.0, 0.3, Kinematics::PlaneStress, 2, &mut d);
-/// assert_eq!(v, 3);
+/// assert_eq!(v, 4);
 /// let attendu = elastic::constitutive(210_000.0, 0.3, Kinematics::PlaneStress, 2);
 /// assert_eq!(d[0][..v], attendu[0][..]);
 /// ```
@@ -113,27 +127,20 @@ pub fn constitutive_into(
 ) -> usize {
     match (space_dim, kinematics) {
         (2, Kinematics::PlaneStress) => {
+            // Voigt order [xx, yy, zz, xy]; the `zz` row and column stay zero.
             let c = e / (1.0 - nu * nu);
             d[0][0] = c;
             d[0][1] = c * nu;
             d[1][0] = c * nu;
             d[1][1] = c;
-            d[2][2] = c * (1.0 - nu) / 2.0;
-            3
+            d[3][3] = c * (1.0 - nu) / 2.0;
+            4
         }
-        (2, Kinematics::PlaneStrain) => {
-            let c = e / ((1.0 + nu) * (1.0 - 2.0 * nu));
-            d[0][0] = c * (1.0 - nu);
-            d[0][1] = c * nu;
-            d[1][0] = c * nu;
-            d[1][1] = c * (1.0 - nu);
-            d[2][2] = c * (1.0 - 2.0 * nu) / 2.0;
-            3
-        }
-        (2, Kinematics::Axisymmetric) => {
-            // Voigt order [rr, zz, θθ, rz]: the three normal directions are
-            // mutually orthogonal, so the 3×3 normal block is the isotropic one
-            // (as in plane strain, with θθ restored) and `rz` is the lone shear.
+        (2, _) => {
+            // Plane strain and the body of revolution, Voigt order
+            // [xx, yy, zz, xy] — [rr, zz, θθ, rz] for the latter: the three
+            // normal directions are mutually orthogonal, so the 3×3 normal
+            // block is the isotropic one and `xy` is the lone shear.
             let c = e / ((1.0 + nu) * (1.0 - 2.0 * nu));
             let (d_n, d_off) = (c * (1.0 - nu), c * nu);
             for i in 0..3 {

@@ -100,7 +100,7 @@ print(round(u.value(haut_droit, "u_y"), 12))  # -0.00015 = −ν·S/E
 eps = pyrucast.element_field.strain(modele, u, materiaux)
 repos = pyrucast.element_field.initial_state(modele, materiaux)
 sigma = pyrucast.element_field.integrate_behavior(modele, eps, materiaux, repos)
-print(sigma.components())  # ['sigma_xx', 'sigma_yy', 'sigma_xy']
+print(sigma.components())  # ['sigma_xx', 'sigma_yy', 'sigma_zz', 'sigma_xy']
 print(round(sigma[0].value(0, 0, "sigma_xx"), 9))  # 100.0
 # ANCHOR_END: model-elasticity
 

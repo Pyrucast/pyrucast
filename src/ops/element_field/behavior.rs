@@ -72,7 +72,7 @@ use crate::models::Behavior;
 /// // in, a stress comes out. In linear elasticity,
 /// // σ_xx = E/(1−ν²)·ε_xx.
 /// let mut eps = ElementField::new(&fes,
-///     vec!["eps_xx".into(), "eps_yy".into(), "eps_xy".into()])?;
+///     vec!["eps_xx".into(), "eps_yy".into(), "eps_zz".into(), "eps_xy".into()])?;
 /// eps.get(0)?.write().set_uniform("eps_xx", 1e-3)?;
 /// // Le premier pas part de l'état de repos.
 /// let repos = element_field::behavior::initial_state(&modele, &materiaux)?;

@@ -89,7 +89,7 @@ fn check_continuum_dimensions(label: &str, space_dim: usize, ref_dim: usize) -> 
 /// // The modelling, independently of any law: it is what names the strains
 /// // the kernel will read.
 /// let c = Continuum::new(fes.get(0)?, Kinematics::PlaneStress, "Elasticity")?;
-/// assert_eq!(c.strain_reads(), ["eps_xx", "eps_yy", "eps_xy"]);
+/// assert_eq!(c.strain_reads(), ["eps_xx", "eps_yy", "eps_zz", "eps_xy"]);
 /// // And it is what refuses a kinematics impossible in that space.
 /// assert!(Continuum::new(fes.get(0)?, Kinematics::Full3D, "Elasticity").is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -226,8 +226,8 @@ impl Continuum {
     /// let c = Continuum::new(fes.get(0)?, Kinematics::PlaneStrain, "Elasticity")?
     ///     .with_measure(StrainMeasure::GreenLagrange, "Elasticity")?;
     /// // The law reads E and writes S: each component says what it holds.
-    /// assert_eq!(c.strain_reads(), ["E_xx", "E_yy", "E_xy"]);
-    /// assert_eq!(c.stress_names(), ["S_xx", "S_yy", "S_xy"]);
+    /// assert_eq!(c.strain_reads(), ["E_xx", "E_yy", "E_zz", "E_xy"]);
+    /// assert_eq!(c.stress_names(), ["S_xx", "S_yy", "S_zz", "S_xy"]);
     /// // F is no strain a law reads.
     /// let plain = Continuum::new(fes.get(0)?, Kinematics::PlaneStrain, "Elasticity")?;
     /// assert!(plain.with_measure(StrainMeasure::Gradient, "Elasticity").is_err());
@@ -417,12 +417,13 @@ impl Continuum {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
     /// # let c = Continuum::new(fes.get(0)?, Kinematics::PlaneStress, "Elasticity")?;
-    /// // Three components in the plane; axisymmetry adds the hoop.
-    /// assert_eq!(c.strain_reads(), ["eps_xx", "eps_yy", "eps_xy"]);
+    /// // Four components in 2-D: the out-of-plane `zz` joins the plane ones
+    /// // (the hoop on a body of revolution).
+    /// assert_eq!(c.strain_reads(), ["eps_xx", "eps_yy", "eps_zz", "eps_xy"]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn strain_reads(&self) -> Vec<String> {
-        voigt::strain_reads(self.measure.prefix(), self.space_dim, self.kinematics)
+        voigt::strain_reads(self.measure.prefix(), self.space_dim)
     }
 
     /// The stress components a law of this modelling writes, in Voigt order,
@@ -444,11 +445,11 @@ impl Continuum {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
     /// # let c = Continuum::new(fes.get(0)?, Kinematics::PlaneStress, "Elasticity")?;
-    /// assert_eq!(c.stress_names(), ["sigma_xx", "sigma_yy", "sigma_xy"]);
+    /// assert_eq!(c.stress_names(), ["sigma_xx", "sigma_yy", "sigma_zz", "sigma_xy"]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn stress_names(&self) -> Vec<String> {
-        voigt_names(self.stress_prefix(), self.space_dim, self.kinematics)
+        voigt_names(self.stress_prefix(), self.space_dim)
     }
 
     /// What a continuum-mechanics **matrix** kernel reads from the state field,
@@ -826,7 +827,7 @@ impl Continuum {
     /// # let materiaux = element_field::material_field(
     /// #     &modele, &[("E", 210_000.0), ("nu", 0.3)])?;
     /// # let eps = ElementField::new(
-    /// #     &fes, vec!["eps_xx".into(), "eps_yy".into(), "eps_xy".into()])?;
+    /// #     &fes, vec!["eps_xx".into(), "eps_yy".into(), "eps_zz".into(), "eps_xy".into()])?;
     /// // End to end: the tangent of a linear law **is** its stiffness, and it
     /// // reaches it by the common path — without any field of moduli having
     /// // been materialised to carry it there.
@@ -878,7 +879,7 @@ impl Continuum {
         let n_nodes = geom.n_nodes;
         let space_dim = geom.space_dim;
         let dofs = space_dim * n_nodes;
-        let v = voigt_size(space_dim, self.kinematics);
+        let v = voigt_size(space_dim);
         // Same stack buffers as `element_stiffness`, outside the loop.
         let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
         let mut b: VoigtRows = [[0.0; MAX_CELL_DOFS]; 6];

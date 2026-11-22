@@ -24,22 +24,19 @@
 //! — the convention of every law (see [`Behavior`]),
 //! which keeps the stress secant when the moduli depend on temperature. With
 //! constant moduli it is the incremental `σ(A) + C:Δε`. The output echoes the
-//! full-3-D `ε(B)` (and, in 2-D, the out-of-plane `σ_zz`) so it is a complete
-//! `prev` for the next step.
+//! full-3-D `ε(B)` so it is a complete `prev` for the next step.
 //!
 //! State is always carried in **full 3-D** (six `eps_p_*` components) regardless
 //! of the 2-D/3-D kinematics, which keeps the radial return identical across plane
 //! stress / plane strain / axisymmetric / solid; only the input strain
-//! reconstruction and the output stress projection differ.
+//! reconstruction and the output stress projection differ — the one index map
+//! `[xx, yy, zz, xy] → [xx, yy, zz, yz, xz, xy]` of every 2-D kinematics.
 //!
-//! **Axisymmetric** therefore costs almost nothing here: the hoop `ε_θθ = u_r/r`
-//! is *measured* by
-//! [`crate::ops::element_field::deformation`](fn@crate::ops::element_field::deformation), not
-//! assumed, so `ε(B)` is
-//! fully known (no out-of-plane solve, unlike plane stress) and the whole
-//! specialisation is the index map `[rr, zz, θθ, rz] → [xx, yy, zz, xy]`. Note
-//! that `σ_zz` is then part of the Voigt dual and must **not** be echoed as extra
-//! state.
+//! In 2-D the `zz` the law reads is fully known in plane strain (the
+//! out-of-plane strain, zero from the displacement) and on a body of revolution
+//! (the hoop `ε_θθ = u_r/r`, *measured* by
+//! [`crate::ops::element_field::deformation`](fn@crate::ops::element_field::deformation));
+//! plane stress reads past it and solves it so that `σ_zz = 0`.
 //!
 //! Following the locked architecture decision — non-linear algorithms are
 //! orchestrated in Python, not in Rust — the Newton
@@ -64,9 +61,9 @@ use crate::handle::Handle;
 use crate::models::continuum::Continuum;
 use crate::models::owned_components;
 use crate::models::symmetry::MaterialSymmetry;
-use crate::models::tensor::voigt_stress;
 use crate::models::tensor::Kinematics;
 use crate::models::tensor::{dual_name, primal_name};
+use crate::models::tensor::{stress_count, voigt_slots, voigt_stress};
 use crate::models::ZoneLayout;
 use crate::models::{
     Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
@@ -96,28 +93,15 @@ fn state_names() -> Vec<String> {
 
 /// Extra state echoed for the incremental montage so the output is a **complete
 /// `prev`**: the full-3-D end-of-step strain `ε(B)` (six components, so `ε(A)`
-/// is recoverable next step) and — in 2-D only — the out-of-plane stress `zz`
-/// that the Voigt dual omits (so `σ(A)` is fully recoverable). In 3-D the Voigt
-/// dual already carries all six stresses. Each under the name of what it holds:
-/// the measure the law reads (`eps`, `E`, `H`) and its dual (`sigma`, `S`, `T`).
+/// is recoverable next step), under the name of the measure the law reads
+/// (`eps`, `E`, `H`). The stress needs no echo: its Voigt dual carries every
+/// non-zero component, the out-of-plane `zz` included in 2-D.
 fn echo_names(continuum: &Continuum) -> Vec<String> {
     let strain = continuum.measure().prefix();
-    let mut v: Vec<String> = TENSOR_SUFFIXES
+    TENSOR_SUFFIXES
         .iter()
         .map(|s| format!("{strain}_{s}"))
-        .collect();
-    if echoes_sigma_zz(continuum.space_dim(), continuum.kinematics()) {
-        v.push(format!("{}_zz", continuum.stress_prefix()));
-    }
-    v
-}
-
-/// Whether `σ_zz` must be echoed as extra state. Only the **plane** 2-D models
-/// need it: their Voigt dual stops at `[xx, yy, xy]`. Axisymmetric already
-/// carries `sigma_zz` (the hoop) in its dual, so echoing it would emit the same
-/// component name twice.
-fn echoes_sigma_zz(space_dim: usize, kinematics: Kinematics) -> bool {
-    space_dim == 2 && !kinematics.is_axisymmetric()
+        .collect()
 }
 
 /// Elastoplasticity on an FE subspace, under one yield law ([`PlasticLaw`]).
@@ -228,16 +212,13 @@ impl Plasticity {
         let d = self.continuum.space_dim();
         let params = MatParams::new(material, &lay.material, &lay.optional_material);
 
-        // End-of-step strain ε(B).
-        let eps_b = read_tensor(
-            deformation,
-            &lay.deformation,
-            strain_slots(d, self.continuum.kinematics()),
-        );
+        // End-of-step strain ε(B), and the Voigt slots it shares with σ.
+        let slots = voigt_slots(d);
+        let eps_b = read_tensor(deformation, &lay.deformation, slots);
 
         // The state at A, in `state_reads` order: ε(A), σ(A), ε_p(A), p, then
         // the law's own variables.
-        let n_stress = stress_slots(d, self.continuum.kinematics()).len();
+        let n_stress = slots.len();
         let (i_sigma, i_eps_p, i_p, i_vars) = (6, 6 + n_stress, 12 + n_stress, 13 + n_stress);
         let mut vars = [0.0_f64; MAX_INTERNAL_VARS];
         let n_vars = lay.state.len() - i_vars;
@@ -246,11 +227,7 @@ impl Plasticity {
         }
         let prev_state = PrevState {
             eps: read_tensor(prev, &lay.state[..6], &[0, 1, 2, 3, 4, 5]),
-            sigma: read_tensor(
-                prev,
-                &lay.state[i_sigma..],
-                stress_slots(d, self.continuum.kinematics()),
-            ),
+            sigma: read_tensor(prev, &lay.state[i_sigma..], slots),
             eps_p: read_tensor(prev, &lay.state[i_eps_p..], &[0, 1, 2, 3, 4, 5]),
             p: prev[lay.state[i_p] as usize],
             vars: &vars[..n_vars],
@@ -475,9 +452,9 @@ impl Behavior for Plasticity {
     }
 
     /// Incremental radial-return at one Gauss point. Output layout =
-    /// stress (Voigt, `v`) + plastic strain `eps_p` (full 3-D tensor, 6) +
-    /// cumulated plastic strain `p` (1) + echoed strain `ε(B)` (full 3-D, 6)
-    /// [+ `sigma_zz` in 2-D], matching `stress_names ++ state_names ++ echo_names`.
+    /// stress (Voigt, `v`: 4 in 2-D, 6 in 3-D) + plastic strain `eps_p` (full
+    /// 3-D tensor, 6) + cumulated plastic strain `p` (1) + echoed strain `ε(B)`
+    /// (full 3-D, 6), matching `stress_names ++ state_names ++ echo_names`.
     fn deformation_reads(&self) -> Vec<String> {
         self.continuum.strain_reads()
     }
@@ -487,21 +464,13 @@ impl Behavior for Plasticity {
     }
 
     /// What the law reads back from the state at A: the echoed strain ε(A), the
-    /// stress σ(A) (the Voigt dual plus the echoed `σ_zz` of the plane models),
-    /// the plastic strain ε_p(A), the cumulated `p`, then the law's own
-    /// variables — a **subset of what this same physics wrote** last step, so a
-    /// missing one is a real inconsistency, caught once per zone.
+    /// stress σ(A) (its Voigt dual), the plastic strain ε_p(A), the cumulated
+    /// `p`, then the law's own variables — a **subset of what this same physics
+    /// wrote** last step, so a missing one is a real inconsistency, caught once
+    /// per zone.
     fn state_reads(&self) -> Vec<String> {
-        let d = self.continuum.space_dim();
-        let strain = self.continuum.measure().prefix();
-        let mut v: Vec<String> = TENSOR_SUFFIXES
-            .iter()
-            .map(|s| format!("{strain}_{s}"))
-            .collect();
+        let mut v = echo_names(&self.continuum);
         v.extend(self.continuum.stress_names());
-        if echoes_sigma_zz(d, self.continuum.kinematics()) {
-            v.push(format!("{}_zz", self.continuum.stress_prefix()));
-        }
         v.extend(state_names());
         v.extend(self.law.internal_names());
         v
@@ -525,7 +494,6 @@ impl Behavior for Plasticity {
             material,
             |params, eps_b, prev_state| {
                 let d = self.continuum.space_dim();
-                let n_stress = stress_slots(d, self.continuum.kinematics()).len();
                 let (step, eps_b_full) = self.law.as_law().incremental_step(
                     eps_b,
                     prev_state,
@@ -534,22 +502,18 @@ impl Behavior for Plasticity {
                     dt,
                 )?;
 
-                let v = n_stress - usize::from(echoes_sigma_zz(d, self.continuum.kinematics()));
+                let v = stress_count(d);
                 for r in 0..v {
-                    out[r] = voigt_stress(&step.sigma, d, self.continuum.kinematics(), r);
+                    out[r] = voigt_stress(&step.sigma, d, r);
                 }
                 out[v..v + 6].copy_from_slice(&step.eps_p); // ε_p(B)
                 out[v + 6] = step.p; // p(B)
-                                     // Echo the full-3-D end-of-step strain ε(B), so `prev` carries ε(A) next
-                                     // step (in plane stress this includes the solved out-of-plane ε_zz).
+
+                // Echo the full-3-D end-of-step strain ε(B), so `prev` carries
+                // ε(A) next step (in plane stress this includes the solved
+                // out-of-plane ε_zz).
                 out[v + 7..v + 13].copy_from_slice(&eps_b_full);
-                // The plane 2-D duals omit σ_zz; echo it so σ(A) is fully recoverable.
-                // Axisymmetric already carries it (the hoop), so it must not be echoed.
-                let mut base = v + 13;
-                if echoes_sigma_zz(d, self.continuum.kinematics()) {
-                    out[base] = step.sigma[2];
-                    base += 1;
-                }
+                let base = v + 13;
                 // The law's own internal variables, right after the common state.
                 for (i, value) in step.internal().iter().enumerate() {
                     out[base + i] = *value;
@@ -626,39 +590,6 @@ impl Behavior for Plasticity {
 // components and the full-3-D state the laws work in.
 
 // ─── Field <-> array plumbing ────────────────────────────────────────────────
-
-/// Reconstruct the full 3-D **tensor** strain from the deformation input.
-/// Plane strain forces the out-of-plane components to zero; plane stress leaves
-/// `eps_zz` as the trial elastic guess (it is overwritten by the return map).
-/// Which slots of the full 3-D tensor the **strain** of this kinematics spans,
-/// in the order [`Continuum::strain_reads`](crate::models::continuum::Continuum::strain_reads) declares them.
-///
-/// Plane models span `[xx, yy, xy]`; axisymmetry adds the *measured* hoop
-/// `θθ`; a solid spans all six. The slots left out stay zero — `ε_yz`/`ε_xz`
-/// vanish by axial symmetry, and `ε_zz` is either zero (plane strain) or solved
-/// by the law (plane stress).
-fn strain_slots(space_dim: usize, kinematics: Kinematics) -> &'static [usize] {
-    if space_dim == 2 && kinematics.is_axisymmetric() {
-        &[0, 1, 2, 5]
-    } else if space_dim == 2 {
-        &[0, 1, 5]
-    } else {
-        &[0, 1, 2, 3, 4, 5]
-    }
-}
-
-/// Which slots of the full 3-D tensor the **stress** carried by the state spans:
-/// the Voigt dual of the kinematics, plus the echoed `σ_zz` of the plane models.
-/// The rest is zero by the plane assumptions.
-fn stress_slots(space_dim: usize, kinematics: Kinematics) -> &'static [usize] {
-    if space_dim == 2 && kinematics.is_axisymmetric() {
-        &[0, 1, 2, 5]
-    } else if space_dim == 2 {
-        &[0, 1, 5, 2] // [xx, yy, xy] then the echoed zz
-    } else {
-        &[0, 1, 2, 3, 4, 5]
-    }
-}
 
 /// Scatter a row's values into a full 3-D tensor, by slot.
 ///
@@ -841,24 +772,52 @@ mod tests {
         let (e, nu, sy) = (210_000.0, 0.3, 1e9); // huge σ_y ⇒ stays elastic
         let mat = material(&pl, e, nu, sy);
         let eps0 = 1e-3;
-        let mut strain = SubElementField::new(
-            pl.continuum.fespace(),
-            vec!["eps_xx".into(), "eps_xy".into(), "eps_yy".into()],
-        )
-        .unwrap();
+        let mut strain =
+            SubElementField::new(pl.continuum.fespace(), pl.continuum.strain_reads()).unwrap();
         strain.set_uniform("eps_xx", eps0).unwrap();
+        // An out-of-plane strain plane stress reads past: it solves its own.
+        strain.set_uniform("eps_zz", 0.5).unwrap();
         let strain = Handle::new(strain);
         let out = pl
             .integrate_behavior(&strain, &rest(&pl, &mat), &mat, 0.0)
             .unwrap();
-        // Linear plane stress uniaxial-strain: σ_xx = E/(1-ν²)·ε, σ_yy = ν·σ_xx.
+        // Linear plane stress uniaxial-strain: σ_xx = E/(1-ν²)·ε, σ_yy = ν·σ_xx,
+        // and the solved ε_zz = −ν/(1−ν)·ε echoed in the state.
         let c = e / (1.0 - nu * nu);
         for g in 0..out.gauss_count() {
             assert!((out.value(0, g, "sigma_xx").unwrap() - c * eps0).abs() < 1e-3);
             assert!((out.value(0, g, "sigma_yy").unwrap() - c * nu * eps0).abs() < 1e-3);
-            // σ_zz is not an output in 2-D; verify via the von Mises plateau is
-            // not triggered (elastic) — covered above. Out-of-plane handled
-            // internally.
+            assert!(out.value(0, g, "sigma_zz").unwrap().abs() < 1e-6);
+            let ezz = -nu / (1.0 - nu) * eps0;
+            assert!((out.value(0, g, "eps_zz").unwrap() - ezz).abs() < 1e-12);
+        }
+    }
+
+    /// Plane strain reads the out-of-plane strain and answers with `σ_zz` in its
+    /// Voigt dual, third of `[xx, yy, zz, xy]`: an elastic `εzz = −10⁻⁴` alone
+    /// gives the Lamé stresses `σxx = σyy = −λ·10⁻⁴`, `σzz = −(λ + 2μ)·10⁻⁴`.
+    #[test]
+    fn plane_strain_reads_eps_zz_and_writes_sigma_zz_in_its_dual() {
+        let pl = unit_quad(Kinematics::PlaneStrain);
+        let (e, nu, sy) = (210_000.0, 0.3, 1e9); // stays elastic
+        let mat = material(&pl, e, nu, sy);
+        let mut strain =
+            SubElementField::new(pl.continuum.fespace(), pl.continuum.strain_reads()).unwrap();
+        strain.set_uniform("eps_zz", -1e-4).unwrap();
+        let out = pl
+            .integrate_behavior(&Handle::new(strain), &rest(&pl, &mat), &mat, 0.0)
+            .unwrap();
+        let comps = pl.behavior_output_components();
+        assert_eq!(comps[..4], ["sigma_xx", "sigma_yy", "sigma_zz", "sigma_xy"]);
+        assert_eq!(comps.iter().filter(|c| *c == "sigma_zz").count(), 1);
+        let (lambda, mu) = crate::models::continuum::elastic::lame(e, nu);
+        for g in 0..out.gauss_count() {
+            let at = |c: &str| out.value(0, g, c).unwrap();
+            assert!((at("sigma_xx") + lambda * 1e-4).abs() < 1e-9);
+            assert!((at("sigma_yy") + lambda * 1e-4).abs() < 1e-9);
+            assert!((at("sigma_zz") + (lambda + 2.0 * mu) * 1e-4).abs() < 1e-9);
+            assert!(at("sigma_xy").abs() < 1e-12);
+            assert!((at("eps_zz") + 1e-4).abs() < 1e-18);
         }
     }
 

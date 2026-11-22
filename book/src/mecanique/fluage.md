@@ -104,14 +104,17 @@ fluage tertiaire. \\(D\\) ne décroît jamais et s'arrête à `D_c`.
 
 Selon la cinématique :
 
-| | `plane_stress`, `plane_strain` | `axisymmetric` | `full_3d` |
-|---|---|---|---|
-| primales | `u_x`, `u_y` | `u_x`, `u_y` | `u_x`, `u_y`, `u_z` |
-| duales | `f_x`, `f_y` | `f_x`, `f_y` | `f_x`, `f_y`, `f_z` |
-| entrée du comportement | `eps_xx`, `eps_yy`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` |
-| contrainte | `sigma_xx`, `sigma_yy`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_yz`, `sigma_xz`, `sigma_xy` |
+| | `plane_stress`, `plane_strain`, `axisymmetric` | `full_3d` |
+|---|---|---|
+| primales | `u_x`, `u_y` | `u_x`, `u_y`, `u_z` |
+| duales | `f_x`, `f_y` | `f_x`, `f_y`, `f_z` |
+| entrée du comportement | `eps_xx`, `eps_yy`, `eps_zz`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` |
+| contrainte | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_yz`, `sigma_xz`, `sigma_xy` |
 
-En axisymétrie, `eps_zz` et `sigma_zz` sont les composantes orthoradiales.
+En 2D, `eps_zz` et `sigma_zz` sont les composantes hors plan. En contraintes
+planes, `sigma_zz` est nul et la loi calcule elle-même la déformation hors
+plan. En déformations planes, `eps_zz` vaut zéro hors dilatation thermique.
+En axisymétrie, ce sont les composantes orthoradiales.
 
 La sortie du comportement est la contrainte, suivie d'un état commun aux
 cinq lois, puis de l'état propre à chacune :
@@ -119,7 +122,7 @@ cinq lois, puis de l'état propre à chacune :
 | | |
 |---|---|
 | matériau facultatif | `rho`, `alpha` |
-| état commun | la déformation plastique `eps_p_xx`, `eps_p_yy`, `eps_p_zz`, `eps_p_yz`, `eps_p_xz`, `eps_p_xy` ; la déformation plastique cumulée `p` ; la déformation totale `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` ; et, en `plane_stress` et `plane_strain`, `sigma_zz` |
+| état commun | la déformation plastique `eps_p_xx`, `eps_p_yy`, `eps_p_zz`, `eps_p_yz`, `eps_p_xz`, `eps_p_xy` ; la déformation plastique cumulée `p` ; la déformation totale `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` |
 | état relu (`prev`) | toute la sortie du pas précédent |
 
 | loi | matériau requis | état propre, après l'état commun |

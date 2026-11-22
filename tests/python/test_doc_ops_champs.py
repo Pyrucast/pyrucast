@@ -228,16 +228,19 @@ _, mesh, fes, n = _plaque()
 # Uniform stretch λ = 1.1 along x: u_x = 0.1·x.
 u = _champ_nodal(mesh, n, ["u_x", "u_y"], [[0.1 * p.position()[0], 0.0] for p in n])
 # ANCHOR: element_field-deformation
-# Linearized strain, the default: eps_xx, eps_xy, eps_yy.
+# Linearized strain, the default: eps_xx, eps_xy, eps_yy, and in 2-D the
+# out-of-plane eps_zz (0 here: the plane displacement leaves z alone).
 eps = pyrucast.element_field.deformation(u, fes)
 # Finite measures share the call; each has its own prefix.
 E = pyrucast.element_field.deformation(u, fes, "green_lagrange")  # E_xx…
-F = pyrucast.element_field.deformation(u, fes, "F")  # F_xx, F_xy, F_yx, F_yy
+F = pyrucast.element_field.deformation(u, fes, "F")  # F_xx, F_xy, F_yx, F_yy, F_zz
 H = pyrucast.element_field.deformation(u, fes, "hencky")  # H_xx…
 # ANCHOR_END: element_field-deformation
 assert abs(eps[0].value(0, 0, "eps_xx") - 0.1) < 1e-12
 assert abs(E[0].value(0, 0, "E_xx") - 0.105) < 1e-12
-assert F[0].components() == ["F_xx", "F_xy", "F_yx", "F_yy"]
+assert F[0].components() == ["F_xx", "F_xy", "F_yx", "F_yy", "F_zz"]
+assert F[0].value(0, 0, "F_zz") == 1.0
+assert eps[0].value(0, 0, "eps_zz") == 0.0
 assert abs(F[0].value(0, 0, "F_xx") - 1.1) < 1e-12
 assert abs(H[0].value(0, 0, "H_xx") - math.log(1.1)) < 1e-12
 
@@ -248,7 +251,7 @@ plasticite = pyrucast.model.plasticity_perfect(fes, "plane_stress")
 materiaux = pyrucast.element_field.material_field(
     plasticite, [("E", 200e9), ("nu", 0.0), ("sigma_y", 1e6)]
 )
-dilatation = pyrucast.ElementField(fes, ["eps_xx", "eps_xy", "eps_yy"])
+dilatation = pyrucast.ElementField(fes, ["eps_xx", "eps_xy", "eps_yy", "eps_zz"])
 dilatation[0].set_uniform("eps_xx", 1e-3)
 # ANCHOR: element_field-elastic_stress
 # The stress an imposed strain would cause if nothing yielded: D:ε.
@@ -261,7 +264,9 @@ assert abs(retour[0].value(0, 0, "eps_xx") - 1e-3) < 1e-15
 
 # ── contrainte équivalente ─────────────────────────────────
 
-contraintes = pyrucast.ElementField(fes, ["sigma_xx", "sigma_yy", "sigma_xy"])
+contraintes = pyrucast.ElementField(
+    fes, ["sigma_xx", "sigma_yy", "sigma_zz", "sigma_xy"]
+)
 contraintes[0].set_uniform("sigma_xx", 120e6)
 contraintes[0].set_uniform("sigma_xy", 40e6)
 # ANCHOR: element_field-von_mises
@@ -323,7 +328,7 @@ etat = couple.integrate_behavior(eps, materiaux, repos)  # the laws
 f_int = couple.internal_forces(etat, solution, materiaux)  # Bᵀ: back to the nodes
 # ANCHOR_END: element_field-strain
 assert [z.components() for z in eps] == [
-    ["eps_xx", "eps_xy", "eps_yy"],
+    ["eps_xx", "eps_xy", "eps_yy", "eps_zz"],
     ["grad_T_x", "grad_T_y"],
 ]
 assert abs(eps[1].value(0, 0, "grad_T_x") - 10.0) < 1e-12

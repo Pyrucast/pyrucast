@@ -47,15 +47,15 @@ u = _mouvement(maillage, noeuds, [[c60, -s60], [s60, c60]])
 
 # ANCHOR: rotation
 # A rigid rotation of 60°: the strain, the stress and the forces are zero.
-E = solide.strain(u, materiaux)  # E_xx, E_xy, E_yy
+E = solide.strain(u, materiaux)  # E_xx, E_xy, E_yy, E_zz
 repos = solide.initial_state(materiaux)  # l'état de départ de la loi
-S = solide.integrate_behavior(E, materiaux, repos)  # S_xx, S_xy, S_yy
+S = solide.integrate_behavior(E, materiaux, repos)  # S_xx, S_yy, S_zz, S_xy
 F = pc.element_field.deformation(u, fes, "gradient")
 P = pc.element_field.stress_measure(S, F, "pk1")  # P = F S
 f_int = solide.internal_forces(P, u, materiaux)  # ∫ P·∇₀N dV₀
 # ANCHOR_END: rotation
-assert [z.components() for z in E] == [["E_xx", "E_xy", "E_yy"]]
-assert [z.components() for z in S] == [["S_xx", "S_yy", "S_xy"]]
+assert [z.components() for z in E] == [["E_xx", "E_xy", "E_yy", "E_zz"]]
+assert [z.components() for z in S] == [["S_xx", "S_yy", "S_zz", "S_xy"]]
 for zone in E:
     for nom in ("E_xx", "E_xy", "E_yy"):
         assert abs(zone.value(0, 0, nom)) < 1e-14
@@ -114,7 +114,7 @@ hencky = pc.model.elasticity(fes, "plane_strain", strain_measure="hencky")
 T = hencky.integrate_behavior(
     hencky.strain(etire, materiaux), materiaux, hencky.initial_state(materiaux)
 )
-assert [z.components() for z in T] == [["T_xx", "T_yy", "T_xy"]]
+assert [z.components() for z in T] == [["T_xx", "T_yy", "T_zz", "T_xy"]]
 F = pc.element_field.deformation(etire, fes, "gradient")
 P = pc.element_field.stress_measure(T, F, "pk1")
 lame, mu = 100.0 * 0.3 / (1.3 * 0.4), 100.0 / 2.6

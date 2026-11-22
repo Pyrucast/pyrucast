@@ -14,20 +14,26 @@ use serde::{Deserialize, Serialize};
 
 /// Which 2-D assumption (or 3-D solid) to use for the constitutive matrix.
 ///
+/// Every 2-D kinematics carries the same four Voigt components
+/// `[xx, yy, zz, xy]`; what differs is what `zz` holds — zero stress in plane
+/// stress, zero strain in plane strain, the hoop on a body of revolution.
+///
 /// ```
 /// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::continuum::elastic;
-/// // The chosen kinematics decides the number of Voigt components.
-/// assert_eq!(elastic::constitutive(210e3, 0.3, Kinematics::PlaneStress, 2).len(), 3);
+/// // Four Voigt components in 2-D, whatever the assumption; six in 3-D.
+/// assert_eq!(elastic::constitutive(210e3, 0.3, Kinematics::PlaneStress, 2).len(), 4);
 /// assert_eq!(elastic::constitutive(210e3, 0.3, Kinematics::Axisymmetric, 2).len(), 4);
 /// assert_eq!(elastic::constitutive(210e3, 0.3, Kinematics::Full3D, 3).len(), 6);
 /// ```
 /// # use pyrucast::models::tensor::Kinematics;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Kinematics {
-    /// 2-D plane stress (thin plate loaded in its plane).
+    /// 2-D plane stress (thin plate loaded in its plane): `σzz = 0`, and the
+    /// law solves the out-of-plane `εzz` it reads past.
     PlaneStress,
-    /// 2-D plane strain (long prismatic body, `εzz = 0`).
+    /// 2-D plane strain (long prismatic body): the displacement gives
+    /// `εzz = 0`, and `σzz` follows from the law.
     PlaneStrain,
     /// 2-D meridian plane of a body of revolution: four Voigt components, the
     /// hoop strain `ε_θθ = u_r / r` among them. Requires an axisymmetric
@@ -89,11 +95,25 @@ impl crate::named::Named for Kinematics {
 /// Axis suffixes for the vector components, indexed by spatial direction.
 const AXES: [&str; 3] = ["x", "y", "z"];
 
-/// Where each **axisymmetric** Voigt slot `[rr, zz, θθ, rz]` sits in the full
-/// 3-D order [`TENSOR_SUFFIXES`] (`[xx, yy, zz, yz, xz, xy]`). The whole
-/// axisymmetric specialisation of this law is this one index map: the state and
-/// the radial return stay full 3-D, only the projection in and out changes.
-const AXI_TO_3D: [usize; 4] = [0, 1, 2, 5];
+/// Where each 2-D Voigt slot `[xx, yy, zz, xy]` sits in the full 3-D order
+/// `[xx, yy, zz, yz, xz, xy]` — for every 2-D kinematics alike. The whole 2-D
+/// specialisation of a law is this one index map: its state and its return map
+/// stay full 3-D, only the projection in and out changes; `yz` and `xz` vanish
+/// by the plane (or axial) symmetry.
+pub(crate) const VOIGT_2D: [usize; 4] = [0, 1, 2, 5];
+
+/// The 3-D slots, in their own order: the identity map of a solid.
+pub(crate) const VOIGT_3D: [usize; 6] = [0, 1, 2, 3, 4, 5];
+
+/// Which slots of the full 3-D order the Voigt components of a `space_dim`
+/// continuum fill, in their order: [`VOIGT_2D`] or [`VOIGT_3D`].
+pub(crate) fn voigt_slots(space_dim: usize) -> &'static [usize] {
+    if space_dim == 2 {
+        &VOIGT_2D
+    } else {
+        &VOIGT_3D
+    }
+}
 
 pub(crate) fn primal_name(a: usize) -> String {
     format!("u_{}", AXES[a])
@@ -103,54 +123,34 @@ pub(crate) fn dual_name(a: usize) -> String {
     format!("f_{}", AXES[a])
 }
 
-/// Project the full 3-D stress to the kinematics's Voigt slot `r`.
-/// 2-D order is `[xx, yy, xy]`; 3-D is the full `[xx, yy, zz, yz, xz, xy]`.
-pub(crate) fn voigt_stress(
-    sigma: &[f64; 6],
-    space_dim: usize,
-    kinematics: Kinematics,
-    r: usize,
-) -> f64 {
-    if space_dim == 2 && kinematics.is_axisymmetric() {
-        sigma[AXI_TO_3D[r]]
-    } else if space_dim == 2 {
-        match r {
-            0 => sigma[0],
-            1 => sigma[1],
-            _ => sigma[5],
-        }
-    } else {
-        sigma[r]
-    }
+/// Project the full 3-D stress to the Voigt slot `r` of a `space_dim`
+/// continuum: 2-D order `[xx, yy, zz, xy]`, 3-D the full
+/// `[xx, yy, zz, yz, xz, xy]`.
+pub(crate) fn voigt_stress(sigma: &[f64; 6], space_dim: usize, r: usize) -> f64 {
+    sigma[voigt_slots(space_dim)[r]]
 }
 
 /// How many stress components [`voigt_names`] lists — the same answer without
-/// building the list.
+/// building the list: 4 in 2-D, 6 in 3-D.
 ///
 /// A behaviour kernel needs the *count* at every Gauss point (to know where its
 /// state variables start) and never the names; allocating a `Vec<String>` to
-/// read its length was one allocation per point.
-pub(crate) fn stress_count(space_dim: usize, kinematics: Kinematics) -> usize {
-    match (space_dim, kinematics) {
-        (2, Kinematics::Axisymmetric) => 4,
-        (2, _) => 3,
-        _ => 6,
-    }
+/// read its length would be one allocation per point.
+pub(crate) fn stress_count(space_dim: usize) -> usize {
+    voigt_slots(space_dim).len()
 }
 
 /// The Voigt components of a symmetric tensor of the continuum under `prefix`,
-/// in the order the laws' indices assume: `[xx, yy, xy]` in plane 2-D,
-/// `[xx, yy, zz, xy]` on a body of revolution (`zz` the hoop), the six
-/// `[xx, yy, zz, yz, xz, xy]` in 3-D — the hoop `θθ` named `zz` after Cast3M
-/// (`x = r`, `y = z`). The strain a law reads and the stress it writes share
-/// this layout, each under its own name.
-pub(crate) fn voigt_names(prefix: &str, space_dim: usize, kinematics: Kinematics) -> Vec<String> {
-    let suffixes: &[&str] = match (space_dim, kinematics) {
-        (2, Kinematics::Axisymmetric) => &["xx", "yy", "zz", "xy"],
-        (2, _) => &["xx", "yy", "xy"],
-        _ => &["xx", "yy", "zz", "yz", "xz", "xy"],
-    };
-    suffixes.iter().map(|s| format!("{prefix}_{s}")).collect()
+/// in the order the laws' indices assume: `[xx, yy, zz, xy]` in 2-D — the
+/// out-of-plane `zz`, the hoop `θθ` on a body of revolution (`x = r`,
+/// `y = z`) — and the six `[xx, yy, zz, yz, xz, xy]` in 3-D. The strain a law
+/// reads and the stress it writes share this layout, each under its own name.
+pub(crate) fn voigt_names(prefix: &str, space_dim: usize) -> Vec<String> {
+    const SUFFIXES: [&str; 6] = ["xx", "yy", "zz", "yz", "xz", "xy"];
+    voigt_slots(space_dim)
+        .iter()
+        .map(|&s| format!("{prefix}_{}", SUFFIXES[s]))
+        .collect()
 }
 
 /// First invariant `I₁ = tr(σ)`.

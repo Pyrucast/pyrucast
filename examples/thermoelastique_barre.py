@@ -88,7 +88,7 @@ def _displacement(solution, c, grid):
 def _solve_thermal(model, materials, fes, c, grid):
     """ε_th → charge thermique → u → σ = D:(ε(u) − ε_th)."""
     eps_th = pyrucast.element_field.thermal_strain(
-        _uniform_temperature(c, grid, fes, T_REF + DT), materials, fes, T_REF
+        model, _uniform_temperature(c, grid, fes, T_REF + DT), materials, T_REF
     )
     sig_th = pyrucast.element_field.integrate_behavior(
         model, eps_th, materials, pyrucast.element_field.initial_state(model, materials)
