@@ -313,8 +313,7 @@ x, y, z). On note \\(H = \nabla u\\) et \\(F = I + H\\) :
 Chaque mesure a son **préfixe** : on ne peut pas en lire une à la place d'une
 autre. Une mesure symétrique produit une composante `<préfixe>_<ai><aj>` par
 entrée indépendante `i ≤ j`. Le gradient `F`, qui n'est pas symétrique, les
-produit toutes (9 en 3D, 4 en 2D). En 2D, la direction hors plan n'est pas
-déformée (\\(F_{zz} = 1\\)) et ses entrées ne sont pas produites.
+produit toutes (9 en 3D, 4 en 2D).
 
 La mesure linéarisée est en convention **tenseur**
 (`eps_xy = ½(∂u_x/∂y + ∂u_y/∂x)`, **pas** le cisaillement ingénieur `γ`).
@@ -322,11 +321,13 @@ C'est l'entrée du comportement de l'[élasticité](../mecanique/elasticite.md).
 Les mesures finies valent zéro (ou \\(I\\) pour `C` et `b`) sous une
 rotation rigide finie, contrairement à `eps`.
 
-Sur un sous-espace [axisymétrique](../coords.md#repère-de-révolution), une
-composante `<préfixe>_zz` est ajoutée. C'est l'entrée **orthoradiale**,
-construite sur \\(H_{\theta\theta} = u_r / r\\), que le gradient méridien ne
-peut pas exprimer : `eps_zz = u_r / r`, `F_zz = 1 + u_r / r`… (cf.
-[Axisymétrie](../mecanique/elasticite.md#théorie)).
+En 2D, une composante `<préfixe>_zz` est ajoutée (sauf à `J`) : l'entrée
+**hors plan**. Dans le plan, le déplacement ne déforme pas cette direction :
+`eps_zz = 0`, \\(F_{zz} = 1\\). Sur un sous-espace
+[axisymétrique](../coords.md#repère-de-révolution), c'est l'entrée
+**orthoradiale**, construite sur \\(H_{\theta\theta} = u_r / r\\), que le
+gradient méridien ne peut pas exprimer : `eps_zz = u_r / r`,
+`F_zz = 1 + u_r / r`… (cf. [Axisymétrie](../mecanique/elasticite.md#théorie)).
 
 Une transformation dégénérée (\\(\det F = 0\\)) donne des valeurs non
 finies pour Hencky et Almansi : rien n'est vérifié au point de Gauss.
@@ -342,7 +343,7 @@ Green–Lagrange et Hencky se calculent sans broncher sur une maille retournée.
 {{#include ../../../tests/python/test_doc_ops_champs.py:element_field-deformation}}
 ```
 
-### `thermal_strain(temperature, materials, fespace, t_ref, measure="linear")` → `ElementField`
+### `thermal_strain(model, temperature, materials, t_ref)` → `ElementField`
 
 {{#pyalgo element_field.thermal_strain}}
 
@@ -353,22 +354,30 @@ thermomécanique **non couplée** :
 \varepsilon_{th} = \alpha\\,(T - T_{ref})\\,\big[\\,1,1,(1),0,0,0\\,\big].
 \\]
 
-`temperature` est un champ **par éléments** portant `"T"` (p. ex. produit par
-`interp_to_gauss`) ; `alpha` est lu dans le champ matériau, où il voyage comme
-composante **facultative** de l'élasticité (à côté de `E`/`nu`, cf.
-[Élasticité](../mecanique/elasticite.md)). La sortie a **exactement la même
-disposition** que `deformation` (composantes normales à `α·ΔT`, cisaillements
-nuls — y compris l'orthoradiale `eps_zz` en axisymétrique, un solide de
-révolution se dilatant aussi circonférentiellement), si bien que
-`deformation(u, fespace) - thermal_strain(...)` donne la
-déformation mécanique `ε(u) − ε_th`. Aucun couplage n'est fait ici :
-l'utilisateur compose la charge thermique et la contrainte réelle
-`σ = D:(ε − ε_th)` à partir des briques (`integrate_behavior`,
-`internal_forces`) — cf. l'[exemple thermomécanique](../mecanique/elasticite.md#théorie).
+Une zone par loi continue du modèle (élasticité, plasticité, endommagement),
+sur son espace EF ; un sous-modèle sans loi continue (conduction, barre,
+poutre, contrainte) n'en produit pas. `temperature` est un champ **par
+éléments** portant `"T"` (p. ex. produit par `interp_to_gauss`) ; `alpha` est
+lu dans le champ matériau, où il voyage comme composante **facultative** des
+lois continues (à côté de `E`/`nu`, cf. [Élasticité](../mecanique/elasticite.md)).
 
-`measure` est la mesure que lit la loi : la même dilatation y est donnée
-exactement, `½((1 + αΔT)² − 1)` en Green–Lagrange (`E_*`), `ln(1 + αΔT)` en
-Hencky (`H_*`) — cf. [Grandes transformations](../mecanique/grandes-transformations.md).
+La sortie a **exactement la même disposition** que ce que `strain` donne à la
+loi : composantes normales à `α·ΔT`, cisaillements nuls et, en 2D, la
+composante hors plan `eps_zz`. Elle vaut `α·ΔT` en déformations planes (un
+corps long se dilate aussi dans sa longueur, que la cinématique bloque) et en
+axisymétrie (un solide de révolution se dilate aussi circonférentiellement) ;
+elle est nulle en contraintes planes, où la loi calcule elle-même la
+déformation hors plan sous \\(\sigma_{zz} = 0\\). Ainsi
+`strain(model, u) - thermal_strain(model, ...)` donne la déformation
+mécanique `ε(u) − ε_th`. Aucun couplage n'est fait ici : l'utilisateur compose
+la charge thermique et la contrainte réelle `σ = D:(ε − ε_th)` à partir des
+briques (`elastic_stress`, `integrate_behavior`, `internal_forces`) — cf.
+l'[exemple thermomécanique](../mecanique/elasticite.md#théorie).
+
+Le modèle donne aussi la mesure que lit chaque loi : la même dilatation y est
+donnée exactement, `½((1 + αΔT)² − 1)` en Green–Lagrange (`E_*`),
+`ln(1 + αΔT)` en Hencky (`H_*`), sous les noms que lit la loi — cf.
+[Grandes transformations](../mecanique/grandes-transformations.md).
 
 ### `elastic_stress(model, strain, materials)` / `elastic_strain(model, stress, materials)` → `ElementField`
 
@@ -396,8 +405,11 @@ contrainte à la déformation élastique qui la porte sous d'autres modules
 (`(D⁻¹ₙ₊₁ − D⁻¹ₙ) σₙ` quand le matériau varie avec la température).
 
 L'entrée et la sortie en déformation sont en convention **tensorielle**,
-disposition de `deformation` et `thermal_strain` ; en contraintes planes,
-`elastic_strain` n'écrit pas `eps_zz`, que la loi plane ne lit pas. Une zone par
+disposition de `deformation` et `thermal_strain`. En contraintes planes,
+`elastic_stress` donne `sigma_zz = 0` quel que soit `eps_zz`, et
+`elastic_strain` écrit dans `eps_zz` la déformation hors plan que cause la
+contrainte, `−ν(σ_xx + σ_yy)/E` en isotrope : \\(\sigma_{zz} = 0\\) s'inverse
+avec la souplesse complète du matériau. Une zone par
 sous-modèle continu ; un sous-modèle sans opérateur élastique (conduction,
 barre, poutre, contrainte) n'en produit pas. `elastic_strain` échoue là où `D`
 est singulier (un module nul).
@@ -427,14 +439,16 @@ Avec \\( F = G = H = 1/2 \\) et \\( L = M = N = 3/2 \\), c'est von Mises,
 \\( \sqrt{3 J\_2} \\) — la valeur par défaut. `stress` porte les contraintes
 qu'écrivent les lois (`sigma_xx`, … : la sortie d'`elastic_stress` ou l'état
 d'`integrate_behavior` conviennent, quoi qu'ils portent d'autre). Le **modèle**
-dit lesquelles lire, car elles dépendent de la cinématique :
+dit quelles zones portent une contrainte de milieu continu ; leur dimension dit
+quelles composantes lire :
 
-| cinématique | composantes lues | prises nulles |
+| dimension | composantes lues | prises nulles |
 |---|---|---|
-| `full_3d` | les six `sigma_*` | — |
-| `plane_stress` | `sigma_xx`, `sigma_yy`, `sigma_xy` | `zz`, `yz`, `xz` |
-| `plane_strain` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `yz`, `xz` |
-| `axisymmetric` | `sigma_xx`, `sigma_yy`, `sigma_zz` (orthoradiale), `sigma_xy` | `yz`, `xz` |
+| 3D | les six `sigma_*` | — |
+| 2D (toute cinématique) | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `yz`, `xz` |
+
+En 2D, `sigma_zz` est la contrainte hors plan — nulle en contraintes planes —
+ou l'orthoradiale en axisymétrie.
 
 Le résultat a une zone par sous-modèle continu, sur ses points de Gauss, et une
 seule composante, `von_mises`. Elle n'existe pas en méthode : elle ne

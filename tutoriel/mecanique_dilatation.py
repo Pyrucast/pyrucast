@@ -131,7 +131,7 @@ def main() -> None:
     #      ε_th = α (T − T_ref), the stress it would give were nothing in its
     #      way, [C] ε_th, and its nodal forces ∫ [B]ᵀ [C] ε_th dV.
     t_gauss = pc.element_field.interp_to_gauss(temperature, fes)
-    eps_th = pc.element_field.thermal_strain(t_gauss, materiaux, fes, T_REF)
+    eps_th = pc.element_field.thermal_strain(modele, t_gauss, materiaux, T_REF)
     sigma_th = pc.element_field.elastic_stress(modele, eps_th, materiaux)
     force_th = (
         pc.node_field.divergence(sigma_th, "sigma")

@@ -570,7 +570,7 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 /// // Elasticity: its tangent is constant, and the stiffness comes back —
 /// // without any modulus field having been materialized to carry it there.
 /// let strain = ElementField::new(
-///     &fes, vec!["eps_xx".into(), "eps_yy".into(), "eps_xy".into()]).unwrap();
+///     &fes, vec!["eps_xx".into(), "eps_yy".into(), "eps_zz".into(), "eps_xy".into()]).unwrap();
 /// let repos = element_field::behavior::initial_state(&model, &materials).unwrap();
 /// let kt = matrix::tangent(&model, &materials, &strain, &repos, None).unwrap();
 /// let k = matrix::stiffness(&model, &materials).unwrap();

@@ -96,7 +96,7 @@ NO_METHOD = {
     "beam_deformation": "exige déplacements + rotations",
     "shell_deformation": "requires the six shell DOFs, and the formulation",
     "thermal_strain": "requires a temperature, and alpha in the material",
-    "von_mises": "requires the stress components sigma_* its model's kinematics reads",
+    "von_mises": "requires the stress components sigma_* of its model's dimension",
     "stress_measure": "requires a stress named after its measure (sigma_*, tau_*, P_*, "
     "S_* or T_*) and a deformation gradient F_*",
     "rotate_frame": "turns the material axes V1*/V2* of a material field, and requires a "

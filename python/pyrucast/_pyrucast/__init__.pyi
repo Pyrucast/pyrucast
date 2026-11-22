@@ -3330,15 +3330,18 @@ class Model:
         - `model`: the sub-models whose elastic operator to apply.
         - `strain`: the strain at the Gauss points, in tensor convention — the layout
           of `pyrucast.element_field.deformation` and
-          `pyrucast.element_field.thermal_strain`.
+          `pyrucast.element_field.thermal_strain`; in 2-D `eps_zz` with the
+          in-plane ones.
         - `materials`: the material field; only each law's elastic constants are read
           (`E`, `nu` when isotropic).
         
         # Returns
         
         An `ElementField` with one zone per continuum sub-model, its components the
-        stresses the law writes. A sub-model with no elastic operator (conduction,
-        bar, beam, constraint) contributes none.
+        stresses the law writes — in 2-D `sigma_xx`, `sigma_yy`, `sigma_zz`,
+        `sigma_xy`, `sigma_zz` zero in plane stress whatever `eps_zz` says. A
+        sub-model with no elastic operator (conduction, bar, beam, constraint)
+        contributes none.
         
         # Raises
         
@@ -3363,7 +3366,9 @@ class Model:
         
         An `ElementField` in tensor convention, the layout of
         `pyrucast.element_field.deformation`, so it subtracts from a strain component
-        for component. In plane stress the out-of-plane `eps_zz` is not written.
+        for component. In plane stress `eps_zz` is the out-of-plane strain the
+        stress causes, `−ν(σ_xx + σ_yy)/E` when isotropic: `σ_zz = 0` is inverted
+        with the material's full compliance.
         
         # Raises
         
@@ -6843,8 +6848,7 @@ def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str
     A symmetric measure gives one component `<prefix>_<ai><aj>` per independent
     entry `i ≤ j`; the gradient `F`, not symmetric, gives them all. The linear
     measure is in tensor convention, `eps_xy = ½(∂u_x/∂y + ∂u_y/∂x)`, not the
-    engineering shear `γ`. In 2-D the out-of-plane direction is not deformed and
-    its entries are not produced.
+    engineering shear `γ`.
     
     # Parameters
     
@@ -6855,9 +6859,10 @@ def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str
     
     # Returns
     
-    An `ElementField` on `fespace` with the components of the measure. On an
-    axisymmetric space, the hoop entry `<prefix>_zz`, built on `H_θθ = u_r / r`,
-    is appended.
+    An `ElementField` on `fespace` with the components of the measure. In 2-D
+    the out-of-plane entry `<prefix>_zz` is appended (but to `J`): in the plane
+    the displacement does not deform that direction (`eps_zz = 0`, `F_zz = 1`);
+    on an axisymmetric space it is the hoop entry, built on `H_θθ = u_r / r`.
     
     # Raises
     
@@ -7084,7 +7089,9 @@ def elastic_strain(model: Model, stress: ElementField, materials: ElementField) 
     
     An `ElementField` in tensor convention, the layout of
     `pyrucast.element_field.deformation`, so it subtracts from a strain component
-    for component. In plane stress the out-of-plane `eps_zz` is not written.
+    for component. In plane stress `eps_zz` is the out-of-plane strain the
+    stress causes, `−ν(σ_xx + σ_yy)/E` when isotropic: `σ_zz = 0` is inverted
+    with the material's full compliance.
     
     # Raises
     
@@ -7107,15 +7114,18 @@ def elastic_stress(model: Model, strain: ElementField, materials: ElementField) 
     - `model`: the sub-models whose elastic operator to apply.
     - `strain`: the strain at the Gauss points, in tensor convention — the layout
       of `pyrucast.element_field.deformation` and
-      `pyrucast.element_field.thermal_strain`.
+      `pyrucast.element_field.thermal_strain`; in 2-D `eps_zz` with the
+      in-plane ones.
     - `materials`: the material field; only each law's elastic constants are read
       (`E`, `nu` when isotropic).
     
     # Returns
     
     An `ElementField` with one zone per continuum sub-model, its components the
-    stresses the law writes. A sub-model with no elastic operator (conduction,
-    bar, beam, constraint) contributes none.
+    stresses the law writes — in 2-D `sigma_xx`, `sigma_yy`, `sigma_zz`,
+    `sigma_xy`, `sigma_zz` zero in plane stress whatever `eps_zz` says. A
+    sub-model with no elastic operator (conduction, bar, beam, constraint)
+    contributes none.
     
     # Raises
     
@@ -10008,41 +10018,48 @@ def tanh(field: typing.Any) -> typing.Any:
     `TypeError` if `field` is none of the four field types.
     """
 
-def thermal_strain(temperature: ElementField, materials: ElementField, fespace: FiniteElementSpace, t_ref: builtins.float, measure: builtins.str = 'linear') -> ElementField:
+def thermal_strain(model: Model, temperature: ElementField, materials: ElementField, t_ref: builtins.float) -> ElementField:
     r"""
-    Thermal strain `ε_th = α·(T − t_ref)` at the Gauss points of `fespace`.
+    Thermal strain `ε_th = α·(T − t_ref)` of every continuum law of `model`.
     
-    The strain of free dilation, for uncoupled thermomechanics. Its layout is the
-    one of `pyrucast.element_field.deformation` — normal components `α·ΔT`, zero
-    shears, the hoop `eps_zz` included on a body of revolution —, so
-    `deformation(u, fespace) - thermal_strain(...)` is the mechanical strain
-    `ε(u) − ε_th`. No coupling is done here: the thermal load and the stress
-    `σ = D:(ε − ε_th)` are built from the other operators.
+    The strain of free dilation at the Gauss points, for uncoupled
+    thermomechanics, written as each law reads its strain: its layout is the one
+    `pyrucast.element_field.strain` gives that law — normal components `α·ΔT`,
+    zero shears, and in 2-D the out-of-plane `eps_zz` —, so
+    `strain(model, u) - thermal_strain(model, ...)` is the mechanical strain
+    `ε(u) − ε_th`. No coupling is done here: the
+    thermal load and the stress `σ = D:(ε − ε_th)` are built from the other
+    operators.
+    
+    The model gives, law by law:
+    
+    - the strain measure the law reads, `linear`, `green_lagrange` or `hencky`:
+      the dilation of stretch `1 + α·ΔT` is given exactly in it — `α·ΔT`,
+      `½((1 + α·ΔT)² − 1)`, `ln(1 + α·ΔT)` — under its names (`eps_*`, `E_*`,
+      `H_*`);
+    - its kinematics: in 2-D `eps_zz` dilates in plane strain and on a body of
+      revolution (the hoop), and is zero in plane stress, where the law solves
+      its own out-of-plane strain.
     
     # Parameters
     
+    - `model`: the laws whose thermal strain to build.
     - `temperature`: a field at the Gauss points carrying `"T"`, for instance
       from `pyrucast.element_field.interp_to_gauss`.
-    - `materials`: the material field; `alpha` is read on `fespace`, an optional
-      component of the elasticity next to `E` and `nu`.
-    - `fespace`: the FE space whose Gauss points to use.
+    - `materials`: the material field; `alpha` is read on each law's FE space,
+      an optional component of the continuum laws next to `E` and `nu`.
     - `t_ref`: the reference temperature, where the strain is zero.
-    - `measure`: the strain the law reads, `"linear"`, `"green_lagrange"` or
-      `"hencky"`. The dilation of stretch `1 + α·ΔT` is given exactly in it —
-      `α·ΔT`, `½((1 + α·ΔT)² − 1)`, `ln(1 + α·ΔT)` — under its names (`eps_*`,
-      `E_*`, `H_*`).
     
     # Returns
     
-    An `ElementField` on `fespace`, the strain tensor under the names of
-    `measure`.
+    An `ElementField` with one zone per continuum law (elasticity, plasticity,
+    damage), on its FE space. A sub-model with no continuum law (a conduction,
+    a bar, a beam, a constraint) contributes no zone.
     
     # Raises
     
-    - `RuntimeError` if `materials` has no zone on `fespace` carrying `alpha`, if
-      `temperature` lacks `"T"`, or for a `measure` that is not a strain a law
-      reads (`"gradient"`, `"jacobian"`, …).
-    - `ValueError` for an unknown `measure`.
+    - `RuntimeError` if `materials` has no zone carrying `alpha` on a continuum
+      law's FE space, or if `temperature` lacks `"T"` there.
     """
 
 def timoshenko(fespace: FiniteElementSpace) -> Model:
@@ -10401,18 +10418,20 @@ def von_mises(model: Model, stress: ElementField, coefficients: typing.Sequence[
     
     `σ_eq² = F(σyy − σzz)² + G(σzz − σxx)² + H(σxx − σyy)² + 2Lσyz² + 2Mσxz² + 2Nσxy²`
     
-    The model says which components to read, as they depend on the kinematics:
+    The model says which zones carry a continuum stress; their dimension says
+    which components to read:
     
-    | kinematics | components read | taken as zero |
+    | dimension | components read | taken as zero |
     |---|---|---|
-    | `full_3d` | the six `sigma_*` | — |
-    | `plane_stress` | `sigma_xx`, `sigma_yy`, `sigma_xy` | `zz`, `yz`, `xz` |
-    | `plane_strain` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `yz`, `xz` |
-    | `axisymmetric` | `sigma_xx`, `sigma_yy`, `sigma_zz` (hoop), `sigma_xy` | `yz`, `xz` |
+    | 3-D | the six `sigma_*` | — |
+    | 2-D (every kinematics) | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `yz`, `xz` |
+    
+    In 2-D `sigma_zz` is the out-of-plane stress — zero in plane stress — or the
+    hoop on a body of revolution.
     
     # Parameters
     
-    - `model`: the continuum sub-models whose kinematics say what to read.
+    - `model`: the continuum sub-models whose stress to read.
     - `stress`: the stresses the laws write (`sigma_xx`, …); the output of
       `pyrucast.element_field.elastic_stress` or the state of
       `pyrucast.element_field.integrate_behavior` will do, whatever else they
@@ -10429,8 +10448,7 @@ def von_mises(model: Model, stress: ElementField, coefficients: typing.Sequence[
     
     `RuntimeError` for coefficients that let the form go negative (each of `L`,
     `M`, `N`, `F + G`, `G + H`, `H + F`, `FG + GH + HF` must be `≥ 0`), and for a
-    stress missing a component its kinematics reads — in plane strain, a stress
-    without `sigma_zz`, which plastic laws carry and an elastic stress does not.
+    stress missing a component its dimension reads.
     """
 
 def xtx(x: typing.Any, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:

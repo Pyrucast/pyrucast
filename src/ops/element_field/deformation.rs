@@ -222,13 +222,14 @@ fn euler_almansi(h: &Matrix3<f64>) -> Matrix3<f64> {
 /// displacement along x, y, z. The result has one component
 /// `<prefix>_<ai><aj>` per produced entry ([`StrainMeasure::prefix`]):
 /// `i ≤ j` for a symmetric measure, in order `xx, xy, …, yy, …`; every
-/// `(i, j)`, row-major, for the gradient `F`. In 2-D, the out-of-plane
-/// direction is undeformed (`F_zz = 1`) and its entries are not produced.
+/// `(i, j)`, row-major, for the gradient `F`.
 ///
-/// On an [axisymmetric](crate::coords::Coords::axisymmetric) subspace a
-/// component `<prefix>_zz` is appended: the **hoop** entry, built on
-/// `H_θθ = u_r / r`, which the meridian gradient cannot express
-/// (`eps_zz = u_r / r`, `F_zz = 1 + u_r / r`, …).
+/// In 2-D a component `<prefix>_zz` is appended, the out-of-plane entry. In
+/// the plane the displacement does not deform that direction (`H_zz = 0`:
+/// `eps_zz = 0`, `F_zz = 1`, …); on an
+/// [axisymmetric](crate::coords::Coords::axisymmetric) subspace it is the
+/// **hoop** entry, built on `H_θθ = u_r / r`, which the meridian gradient cannot
+/// express (`eps_zz = u_r / r`, `F_zz = 1 + u_r / r`, …).
 ///
 /// [`Jacobian`](StrainMeasure::Jacobian) produces the one component `J`,
 /// `det F` (the hoop stretch included on a body of revolution): a cell turned
@@ -317,10 +318,7 @@ pub(crate) fn deformation_zone(
     // Everything is settled here, once per zone: the Gauss loop below
     // neither tests nor allocates.
     kernel::require_field_basis(sub, "shape values")?;
-    let (space_dim, axisymmetric) = {
-        let s = sub.read();
-        (s.space_dim(), s.is_axisymmetric())
-    };
+    let space_dim = sub.read().space_dim();
     if components.len() != space_dim {
         return Err(PyrucastError::Message(format!(
             "deformation: the displacement field carries {} component(s) but the FE \
@@ -342,11 +340,11 @@ pub(crate) fn deformation_zone(
                 slots.push((i, j));
             }
         }
-        // On a body of revolution the hoop entry is an independent component.
-        // It is appended last and named `zz` (Cast3M's naming, x = r and y =
-        // z), free of clashes since the meridian plane only spans x and y. It
-        // is one more table entry, not a branch at the Gauss point.
-        if axisymmetric {
+        // In 2-D the out-of-plane entry is appended last and named `zz` — the
+        // hoop on a body of revolution (x = r, y = z), free of clashes since
+        // the meridian plane only spans x and y. It is one more table entry,
+        // not a branch at the Gauss point.
+        if space_dim == 2 {
             slots.push((2, 2));
         }
         let names = slots
@@ -483,18 +481,22 @@ mod tests {
         let strain = deformation(&u, &fes, StrainMeasure::Linear).unwrap();
         {
             let s = strain.get(0).unwrap().read();
-            assert_eq!(
-                s.components(),
-                &[
-                    "eps_xx".to_string(),
-                    "eps_xy".to_string(),
-                    "eps_yy".to_string()
-                ]
-            );
+            assert_eq!(s.components(), ["eps_xx", "eps_xy", "eps_yy", "eps_zz"]);
             for g in 0..s.gauss_count() {
                 assert!((s.value(0, g, "eps_xx").unwrap() - 2.0).abs() < 1e-12);
                 assert!((s.value(0, g, "eps_yy").unwrap() - 3.0).abs() < 1e-12);
                 assert!((s.value(0, g, "eps_xy").unwrap() - 0.3).abs() < 1e-12);
+                // The plane displacement leaves the out-of-plane direction alone.
+                assert_eq!(s.value(0, g, "eps_zz").unwrap(), 0.0);
+            }
+        }
+        // F_zz = 1: the out-of-plane direction is not stretched.
+        let f = deformation(&u, &fes, StrainMeasure::Gradient).unwrap();
+        {
+            let f = f.get(0).unwrap().read();
+            assert_eq!(f.components(), ["F_xx", "F_xy", "F_yx", "F_yy", "F_zz"]);
+            for g in 0..f.gauss_count() {
+                assert_eq!(f.value(0, g, "F_zz").unwrap(), 1.0);
             }
         }
     }
@@ -678,18 +680,20 @@ mod tests {
                 .components()
                 .to_vec()
         };
+        // In 2-D the out-of-plane `zz` closes every list but that of `J`.
         assert_eq!(
             names(StrainMeasure::Gradient),
-            ["F_xx", "F_xy", "F_yx", "F_yy"]
+            ["F_xx", "F_xy", "F_yx", "F_yy", "F_zz"]
         );
         assert_eq!(
             names(StrainMeasure::GreenLagrange),
-            ["E_xx", "E_xy", "E_yy"]
+            ["E_xx", "E_xy", "E_yy", "E_zz"]
         );
         assert_eq!(
             names(StrainMeasure::LeftCauchyGreen),
-            ["b_xx", "b_xy", "b_yy"]
+            ["b_xx", "b_xy", "b_yy", "b_zz"]
         );
+        assert_eq!(names(StrainMeasure::Jacobian), ["J"]);
         let (u, fes) = homogeneous(&[[0.0; 3]; 3], 3, false);
         let gradient = deformation(&u, &fes, StrainMeasure::Gradient).unwrap();
         assert_eq!(gradient.get(0).unwrap().read().components().len(), 9);

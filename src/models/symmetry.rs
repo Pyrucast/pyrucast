@@ -49,7 +49,7 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
 use crate::error::{PyrucastError, Result};
 use crate::models::continuum::elastic;
-use crate::models::tensor::Kinematics;
+use crate::models::tensor::{Kinematics, VOIGT_2D};
 use nalgebra::{Matrix3, Vector3};
 use serde::{Deserialize, Serialize};
 
@@ -696,7 +696,7 @@ fn anisotropic_stiffness(v: impl Fn(usize) -> f64) -> [[f64; 6]; 6] {
 /// // short-circuits to the closed forms, so nothing changes for it.
 /// let d = symmetry::elastic_constitutive(
 ///     &iso, 0, MaterialSymmetry::Isotropic, Kinematics::PlaneStress, 2)?;
-/// assert_eq!(d.len(), 3);
+/// assert_eq!(d.len(), 4);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn elastic_constitutive(
@@ -745,7 +745,7 @@ pub fn elastic_constitutive(
 /// let v = symmetry::elastic_constitutive_into(
 ///     mat.point_values(0, 0)?, &idx, MaterialSymmetry::Isotropic,
 ///     Kinematics::PlaneStress, 2, &mut d)?;
-/// assert_eq!(v, 3);
+/// assert_eq!(v, 4);
 /// assert!((d[0][0] - 210_000.0 / (1.0 - 0.09)).abs() < 1e-6);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -780,10 +780,11 @@ pub fn elastic_constitutive_into(
     ))
 }
 
-/// Reduce a full-3-D engineering-Voigt matrix to the kinematics's `v×v` matrix: the
-/// `[xx, yy, xy]` block for plane strain, its **static condensation** on `ε_zz`
-/// (so `σ_zz = 0`) for plane stress, the `[rr, zz, θθ, rz]` block for
-/// axisymmetric, the full `6×6` for the solid.
+/// Reduce a full-3-D engineering-Voigt matrix to the kinematics's `v×v` matrix:
+/// the `[xx, yy, zz, xy]` block for plane strain and for the body of
+/// revolution (`[rr, zz, θθ, rz]`), the same block **statically condensed** on
+/// `ε_zz` for plane stress (so `σ_zz = 0`: its `zz` row and column are zero),
+/// the full `6×6` for the solid.
 ///
 /// Shared by the anisotropic constitutive path and by the consistent tangent of
 /// the non-linear laws — the reduction is a property of the *kinematics*, not of
@@ -814,7 +815,7 @@ pub fn elastic_constitutive_into(
 /// // the 6×6 — hence it being shared with the nonlinear tangents.
 /// let d = symmetry::orthotropic_from_constants(
 ///     [210e3, 210e3, 210e3], [0.3, 0.3, 0.3], [80769.0, 80769.0, 80769.0])?;
-/// assert_eq!(symmetry::reduce_to_model(&d, Kinematics::PlaneStrain).len(), 3);
+/// assert_eq!(symmetry::reduce_to_model(&d, Kinematics::PlaneStrain).len(), 4);
 /// assert_eq!(symmetry::reduce_to_model(&d, Kinematics::Full3D).len(), 6);
 /// // Plane stress: static condensation on ε_zz, hence σ_zz = 0 — the (0,0)
 /// // term is **smaller** there than in plane strain.
@@ -844,7 +845,7 @@ pub fn reduce_to_model(d3: &[[f64; 6]; 6], kinematics: Kinematics) -> Vec<Vec<f6
 ///     [210e3, 210e3, 210e3], [0.3, 0.3, 0.3], [80_769.0, 80_769.0, 80_769.0])?;
 /// let mut d = [[0.0_f64; 6]; 6];
 /// let v = symmetry::reduce_to_model_into(&d3, Kinematics::PlaneStrain, &mut d);
-/// assert_eq!(v, 3);
+/// assert_eq!(v, 4);
 /// let attendu = symmetry::reduce_to_model(&d3, Kinematics::PlaneStrain);
 /// assert_eq!(d[0][..v], attendu[0][..]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -854,44 +855,40 @@ pub fn reduce_to_model_into(
     kinematics: Kinematics,
     out: &mut [[f64; 6]; 6],
 ) -> usize {
-    /// Where each axisymmetric Voigt slot `[rr, zz, θθ, rz]` sits in the 3-D order.
-    const AXI_TO_3D: [usize; 4] = [0, 1, 2, 5];
-    /// The in-plane slots `[xx, yy, xy]`.
-    const PLANE: [usize; 3] = [0, 1, 5];
     match kinematics {
-        // Axisymmetric: the plain [rr, zz, θθ, rz] sub-block. No condensation —
-        // all four strains are prescribed (the hoop is measured, not assumed).
-        Kinematics::Axisymmetric => {
-            for (a, &i) in AXI_TO_3D.iter().enumerate() {
-                for (b, &j) in AXI_TO_3D.iter().enumerate() {
+        // Plane strain and the body of revolution: the plain [xx, yy, zz, xy]
+        // sub-block. No condensation — all four strains are prescribed (the
+        // out-of-plane one is zero, the hoop is measured).
+        Kinematics::PlaneStrain | Kinematics::Axisymmetric => {
+            for (a, &i) in VOIGT_2D.iter().enumerate() {
+                for (b, &j) in VOIGT_2D.iter().enumerate() {
                     out[a][b] = d3[i][j];
                 }
             }
-            AXI_TO_3D.len()
+            VOIGT_2D.len()
         }
         Kinematics::Full3D => {
             *out = *d3;
             6
         }
-        Kinematics::PlaneStrain => {
-            for (a, &i) in PLANE.iter().enumerate() {
-                for (b, &j) in PLANE.iter().enumerate() {
-                    out[a][b] = d3[i][j];
-                }
-            }
-            PLANE.len()
-        }
         Kinematics::PlaneStress => {
-            // Condense the out-of-plane normal `zz` (index 2) so σ_zz = 0:
-            // D2[i][j] = D3[i][j] − D3[i][2]·D3[2][j]/D3[2][2].
+            /// The in-plane slots of the 2-D Voigt vector, with their 3-D index.
+            const IN_PLANE: [(usize, usize); 3] = [(0, 0), (1, 1), (3, 5)];
+            // Condense the out-of-plane normal `zz` (3-D index 2) so σ_zz = 0:
+            // D2[i][j] = D3[i][j] − D3[i][2]·D3[2][j]/D3[2][2] on the in-plane
+            // slots; the `zz` row and column of the 4×4 are zero.
             let z = 2usize;
             let dzz = d3[z][z];
-            for (a, &i) in PLANE.iter().enumerate() {
-                for (b, &j) in PLANE.iter().enumerate() {
+            for &(a, i) in &IN_PLANE {
+                for &(b, j) in &IN_PLANE {
                     out[a][b] = d3[i][j] - d3[i][z] * d3[z][j] / dzz;
                 }
             }
-            PLANE.len()
+            for k in 0..VOIGT_2D.len() {
+                out[2][k] = 0.0;
+                out[k][2] = 0.0;
+            }
+            VOIGT_2D.len()
         }
     }
 }
@@ -1194,14 +1191,36 @@ mod tests {
         let (e, nu) = (210e9, 0.3);
         let reduced = reduce_to_model(&isotropic_6x6(e, nu), Kinematics::PlaneStress);
         let expect = elastic::constitutive(e, nu, Kinematics::PlaneStress, 2);
-        for i in 0..3 {
-            for j in 0..3 {
+        assert_eq!(reduced.len(), 4);
+        for i in 0..4 {
+            for j in 0..4 {
                 assert!(
                     (reduced[i][j] - expect[i][j]).abs() < 1e-3,
                     "slot ({i},{j}): {} vs {}",
                     reduced[i][j],
                     expect[i][j]
                 );
+            }
+        }
+        // σ_zz = 0 whatever ε_zz: the `zz` row and column are exactly zero.
+        for k in 0..4 {
+            assert_eq!(reduced[2][k], 0.0);
+            assert_eq!(reduced[k][2], 0.0);
+        }
+    }
+
+    #[test]
+    fn plane_strain_and_revolution_share_the_four_by_four_block() {
+        // Both prescribe the four strains [xx, yy, zz, xy]: the reduction is the
+        // plain sub-block of the solid stiffness, the isotropic closed form.
+        let (e, nu) = (210e9, 0.3);
+        let d3 = isotropic_6x6(e, nu);
+        let plane = reduce_to_model(&d3, Kinematics::PlaneStrain);
+        assert_eq!(plane, reduce_to_model(&d3, Kinematics::Axisymmetric));
+        let expect = elastic::constitutive(e, nu, Kinematics::PlaneStrain, 2);
+        for i in 0..4 {
+            for j in 0..4 {
+                assert!((plane[i][j] - expect[i][j]).abs() < 1e-3, "({i},{j})");
             }
         }
     }

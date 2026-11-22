@@ -44,17 +44,20 @@ où \\(t\\) est la traction imposée sur le bord \\(\Gamma_N\\).
 
 Avec \\(u \approx \sum_i N_i\\,u_i\\), la déformation s'écrit
 \\(\varepsilon = B\\,u_e\\). En 2-D,
-\\(\varepsilon = [\varepsilon_{xx}, \varepsilon_{yy}, \gamma_{xy}]\\) et le bloc
-du nœud \\(i\\) est
+\\(\varepsilon = [\varepsilon_{xx}, \varepsilon_{yy}, \varepsilon_{zz}, \gamma_{xy}]\\)
+— quelle que soit la cinématique — et le bloc du nœud \\(i\\) est
 
 \\[
 B_i = \begin{bmatrix}
 \partial_x N_i & 0 \\\\
 0 & \partial_y N_i \\\\
+0 & 0 \\\\
 \partial_y N_i & \partial_x N_i
 \end{bmatrix};
 \\]
 
+le déplacement d'un modèle plan ne déforme pas la direction hors plan : la
+ligne \\(zz\\) est nulle (l'axisymétrie la remplit, voir plus bas) ;
 en 3-D, \\(\varepsilon = [\varepsilon_{xx}, \varepsilon_{yy}, \varepsilon_{zz}, \gamma_{yz}, \gamma_{xz}, \gamma_{xy}]\\)
 avec un bloc de six lignes de même forme. La raideur et la masse de l'élément
 sont
@@ -71,21 +74,24 @@ intégrées aux points de Gauss, où le matériau est lu.
 coefficient de Poisson :
 
 - `plane_stress` (\\(\sigma_{zz} = 0\\)), avec \\(c = E/(1-\nu^2)\\) :
-  \\(D = c\\,[[1, \nu, 0], [\nu, 1, 0], [0, 0, (1-\nu)/2]]\\) ;
-- `plane_strain` (\\(\varepsilon_{zz} = 0\\)), avec
-  \\(c = E/((1+\nu)(1-2\nu))\\) :
-  \\(D = c\\,[[1-\nu, \nu, 0], [\nu, 1-\nu, 0], [0, 0, (1-2\nu)/2]]\\) ;
+  \\(D = c\\,[[1, \nu, 0, 0], [\nu, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, (1-\nu)/2]]\\),
+  la ligne et la colonne \\(zz\\) nulles : la loi ne lit pas
+  \\(\varepsilon_{zz}\\), elle calcule la déformation hors plan ;
+- `plane_strain` (\\(\varepsilon_{zz}\\) imposée, nulle hors dilatation
+  thermique), avec \\(c = E/((1+\nu)(1-2\nu))\\) : le bloc normal \\(3\times3\\)
+  de \\(c(1-\nu)\\) sur la diagonale et \\(c\nu\\) ailleurs, sur
+  \\([xx, yy, zz]\\), et \\(G = c\\,(1-2\nu)/2\\) sur \\(xy\\) ;
+- `axisymmetric`, la même matrice que `plane_strain`, sur
+  \\([rr, zz, \theta\theta, rz]\\) ;
 - `full_3d`, même \\(c\\) : le bloc normal \\(3\times3\\) de
   \\(c(1-\nu)\\) sur la diagonale et \\(c\nu\\) ailleurs, et
-  \\(G = c\\,(1-2\nu)/2\\) sur les trois cisaillements ;
-- `axisymmetric`, même \\(c\\) : le bloc normal isotrope sur
-  \\([rr, zz, \theta\theta]\\) et \\(G\\) sur \\(rz\\).
+  \\(G\\) sur les trois cisaillements.
 
 **Axisymétrie.** Un solide de révolution se maille dans son plan méridien
 \\((r, z)\\). Deux choses changent. La mesure d'intégration devient
 \\(2\pi r\\,|J|\\), pour toutes les intégrales (raideur, masse, forces) ; c'est
 la géométrie qui l'apporte, pas la physique. Et la déformation orthoradiale
-\\(\varepsilon_{\theta\theta} = u_r / r\\) ajoute une ligne à \\(B\\),
+\\(\varepsilon_{\theta\theta} = u_r / r\\) remplit la ligne \\(zz\\) de \\(B\\),
 \\([N_i/r,\\; 0]\\) ; elle est rangée dans `eps_zz`. Les points de Gauss étant
 intérieurs aux mailles, \\(r > 0\\) même pour une maille qui touche l'axe.
 
@@ -100,23 +106,28 @@ f_{th} = \int_\Omega B^{\mathsf T} D\\,\varepsilon_{th}\\,d\Omega .
 \\]
 
 `alpha` est une composante facultative du matériau ;
-`pyrucast.element_field.thermal_strain(temperature, materiaux, fespace, t_ref)`
+`pyrucast.element_field.thermal_strain(modele, temperature, materiaux, t_ref)`
 calcule \\(\varepsilon_{th}\\) aux points de Gauss depuis une température
 portée aux points de Gauss par `interp_to_gauss` ; `integrate_behavior` puis
-`internal_forces` en tirent la charge thermique.
+`internal_forces` en tirent la charge thermique. En déformations planes, la
+dilatation porte aussi sur `eps_zz` : la cinématique bloque l'allongement hors
+plan, qui revient dans le plan sous forme de contrainte `sigma_zz`.
 
 ## Variables
 
 Isotrope, en petites déformations, selon la cinématique :
 
-| | `plane_stress`, `plane_strain` | `axisymmetric` | `full_3d` |
-|---|---|---|---|
-| primales | `u_x`, `u_y` | `u_x`, `u_y` | `u_x`, `u_y`, `u_z` |
-| duales | `f_x`, `f_y` | `f_x`, `f_y` | `f_x`, `f_y`, `f_z` |
-| entrée du comportement | `eps_xx`, `eps_yy`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` |
-| sortie du comportement | `sigma_xx`, `sigma_yy`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_yz`, `sigma_xz`, `sigma_xy` |
+| | `plane_stress`, `plane_strain`, `axisymmetric` | `full_3d` |
+|---|---|---|
+| primales | `u_x`, `u_y` | `u_x`, `u_y`, `u_z` |
+| duales | `f_x`, `f_y` | `f_x`, `f_y`, `f_z` |
+| entrée du comportement | `eps_xx`, `eps_yy`, `eps_zz`, `eps_xy` | `eps_xx`, `eps_yy`, `eps_zz`, `eps_yz`, `eps_xz`, `eps_xy` |
+| sortie du comportement | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_yz`, `sigma_xz`, `sigma_xy` |
 
-En axisymétrie, `eps_zz` et `sigma_zz` sont les composantes orthoradiales.
+En 2D, `eps_zz` et `sigma_zz` sont les composantes hors plan. En contraintes
+planes, `sigma_zz` est nul et la loi calcule elle-même la déformation hors
+plan. En déformations planes, `eps_zz` vaut zéro hors dilatation thermique.
+En axisymétrie, ce sont les composantes orthoradiales.
 
 | | |
 |---|---|

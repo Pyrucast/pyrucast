@@ -11,10 +11,8 @@
 //! With `F = G = H = ½` and `L = M = N = 3/2` it is von Mises, `√(3 J₂)`
 //! ([`VON_MISES`], the default).
 //!
-//! The stress components a field carries depend on the kinematics, which only
-//! the model knows: a plane-stress field has no `sigma_zz` because it is zero,
-//! a plane-strain one may lack it although it is not. The model is therefore
-//! the first argument, as for
+//! Which zones carry a continuum stress, and on which FE space, only the model
+//! knows. The model is therefore the first argument, as for
 //! [`elastic_stress`](fn@crate::ops::element_field::elastic_stress).
 
 use crate::aggregate::Aggregate;
@@ -24,7 +22,6 @@ use crate::containers::model::Model;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::kernel;
-use crate::models::tensor::Kinematics;
 
 /// Hill's coefficients `[F, G, H, L, M, N]` that give von Mises: `½` on the
 /// normal differences, `3/2` on the shears.
@@ -41,14 +38,13 @@ pub const VON_MISES: [f64; 6] = [0.5, 0.5, 0.5, 1.5, 1.5, 1.5];
 /// Name of the one component [`von_mises`] writes.
 const OUTPUT: &str = "von_mises";
 
-/// Slots of the full stress `[xx, yy, zz, yz, xz, xy]` that a kinematics
-/// carries, with the names it carries them under. The slots it leaves out are
-/// zero: `zz`, `yz`, `xz` in plane stress, `yz`, `xz` in plane strain and on a
-/// body of revolution (whose `zz` is the hoop).
-fn carried(space_dim: usize, kinematics: Kinematics) -> &'static [(usize, &'static str)] {
-    match (space_dim, kinematics) {
-        (2, Kinematics::PlaneStress) => &[(0, "sigma_xx"), (1, "sigma_yy"), (5, "sigma_xy")],
-        (2, _) => &[
+/// Slots of the full stress `[xx, yy, zz, yz, xz, xy]` that a continuum of
+/// dimension `space_dim` carries, with the names it carries them under. In 2-D
+/// the slots left out, `yz` and `xz`, are zero; `zz` is the out-of-plane
+/// stress — zero in plane stress — or the hoop on a body of revolution.
+fn carried(space_dim: usize) -> &'static [(usize, &'static str)] {
+    match space_dim {
+        2 => &[
             (0, "sigma_xx"),
             (1, "sigma_yy"),
             (2, "sigma_zz"),
@@ -72,15 +68,16 @@ fn carried(space_dim: usize, kinematics: Kinematics) -> &'static [(usize, &'stat
 /// `stress` carries the stresses the laws write (`sigma_xx`, …): the state of
 /// [`integrate_behavior`](fn@crate::ops::element_field::behavior::integrate) or
 /// the output of [`elastic_stress`](fn@crate::ops::element_field::elastic_stress)
-/// will do, whatever else they carry. The kinematics of each sub-model says
+/// will do, whatever else they carry. The dimension of each sub-model says
 /// which components to read:
 ///
-/// | kinematics | read | taken as zero |
+/// | dimension | read | taken as zero |
 /// |---|---|---|
-/// | `full_3d` | the six `sigma_*` | — |
-/// | `plane_stress` | `sigma_xx`, `sigma_yy`, `sigma_xy` | `zz`, `yz`, `xz` |
-/// | `plane_strain` | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `yz`, `xz` |
-/// | `axisymmetric` | `sigma_xx`, `sigma_yy`, `sigma_zz` (the hoop), `sigma_xy` | `yz`, `xz` |
+/// | 3-D | the six `sigma_*` | — |
+/// | 2-D (every kinematics) | `sigma_xx`, `sigma_yy`, `sigma_zz`, `sigma_xy` | `yz`, `xz` |
+///
+/// In 2-D `sigma_zz` is the out-of-plane stress — zero in plane stress — or
+/// the hoop on a body of revolution.
 ///
 /// Returns one zone per continuum sub-model, on its FE space and Gauss points,
 /// with the single component `"von_mises"`. A sub-model with no continuum
@@ -90,8 +87,7 @@ fn carried(space_dim: usize, kinematics: Kinematics) -> &'static [(usize, &'stat
 /// - coefficients for which the form can be negative: each of `L`, `M`, `N`,
 ///   `F + G`, `G + H`, `H + F` and `FG + GH + HF` must be `≥ 0`, and all finite;
 /// - no zone of `stress` on a sub-model's FE space carrying the components its
-///   kinematics reads — in plane strain, a stress without `sigma_zz` (the
-///   plasticity laws carry it; an elastic stress does not).
+///   dimension reads.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -113,7 +109,8 @@ fn carried(space_dim: usize, kinematics: Kinematics) -> &'static [(usize, &'stat
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// let plaque = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
-/// let sigma = ElementField::new(&fes, vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()])?;
+/// let sigma = ElementField::new(
+///     &fes, vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_zz".into(), "sigma_xy".into()])?;
 /// sigma.get(0)?.write().set_uniform("sigma_xy", 100.0)?;
 /// // Pure shear: von Mises is √3 times the shear stress.
 /// let vm = element_field::von_mises(&plaque, &sigma, &VON_MISES)?;
@@ -142,31 +139,17 @@ pub fn von_mises(
         let zone = {
             let sub = sub_model.read();
             sub.as_kind().as_behavior().and_then(|b| {
-                b.elastic_operator().map(|(continuum, _)| {
-                    (
-                        continuum.fespace(),
-                        continuum.space_dim(),
-                        continuum.kinematics(),
-                    )
-                })
+                b.elastic_operator()
+                    .map(|(continuum, _)| (continuum.fespace(), continuum.space_dim()))
             })
         };
-        let Some((fespace, space_dim, kinematics)) = zone else {
+        let Some((fespace, space_dim)) = zone else {
             continue; // no continuum stress: no zone
         };
 
-        let reads = carried(space_dim, kinematics);
+        let reads = carried(space_dim);
         let names: Vec<String> = reads.iter().map(|&(_, name)| name.to_string()).collect();
-        let input =
-            stress
-                .sub_for_fespace_with(&fespace, &names)
-                .map_err(|e| match kinematics {
-                    Kinematics::PlaneStrain => PyrucastError::Message(format!(
-                    "von_mises: a plane-strain stress needs `sigma_zz`, which is not zero there \
-                     (the plasticity laws carry it, an elastic stress does not) — {e}"
-                )),
-                    _ => e,
-                })?;
+        let input = stress.sub_for_fespace_with(&fespace, &names)?;
         // Where each carried component sits in the input row, resolved once.
         let refs: Vec<&str> = reads.iter().map(|&(_, name)| name).collect();
         let at = input
@@ -217,6 +200,7 @@ mod tests {
     use crate::coords::Coords;
     use crate::models::symmetry::MaterialSymmetry;
     use crate::models::tensor;
+    use crate::models::tensor::Kinematics;
     use crate::ops::element_field::StrainMeasure;
     use crate::ops::model;
 
@@ -313,7 +297,11 @@ mod tests {
     fn plane_stress_agrees_with_3d_when_sigma_zz_is_zero() {
         let (xx, yy, xy) = (80.0, -25.0, 40.0);
         let plane = tri3();
-        let s2 = stress(&plane, &["sigma_xx", "sigma_yy", "sigma_xy"], &[xx, yy, xy]);
+        let s2 = stress(
+            &plane,
+            &["sigma_xx", "sigma_yy", "sigma_zz", "sigma_xy"],
+            &[xx, yy, 0.0, xy],
+        );
         let vm2 = von_mises(&solid(&plane, Kinematics::PlaneStress), &s2, &VON_MISES).unwrap();
         let space = tet4();
         let s3 = stress(&space, &FULL, &[xx, yy, 0.0, 0.0, 0.0, xy]);

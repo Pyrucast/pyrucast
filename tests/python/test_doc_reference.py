@@ -213,12 +213,14 @@ chaud = pyrucast.element_field.interp_to_gauss(
     _nodal(n, ["T"], lambda node: 120.0), fes
 )
 # ANCHOR: element_field-thermal_strain
-# Heated from 20 to 120: a free dilation α·ΔT = 10⁻³ in every direction.
-eps_th = pyrucast.element_field.thermal_strain(chaud, materiaux, fes, 20.0)
-print(eps_th.components())  # ['eps_xx', 'eps_xy', 'eps_yy']
+# Heated from 20 to 120: a free dilation α·ΔT = 10⁻³ in the plane; a plate in
+# plane stress leaves its thickness to the law (eps_zz = 0).
+eps_th = pyrucast.element_field.thermal_strain(modele, chaud, materiaux, 20.0)
+print(eps_th.components())  # ['eps_xx', 'eps_xy', 'eps_yy', 'eps_zz']
 # ANCHOR_END: element_field-thermal_strain
 assert _close(eps_th[0].value(0, 0, "eps_xx"), 1e-3)
 assert _close(eps_th[0].value(0, 0, "eps_xy"), 0.0)
+assert eps_th[0].value(0, 0, "eps_zz") == 0.0
 
 sigma = pyrucast.element_field.elastic_stress(modele, eps_th, materiaux)
 # ANCHOR: element_field-elastic_strain
@@ -249,7 +251,7 @@ assert len(materiau) == 1 and sorted(materiau.components()) == ["E", "k"]
 # ANCHOR: element_field-initial_state
 # The rest state of an elastic model: every stress at zero.
 repos = pyrucast.element_field.initial_state(modele, materiaux)
-print(repos.components())  # ['sigma_xx', 'sigma_yy', 'sigma_xy']
+print(repos.components())  # ['sigma_xx', 'sigma_yy', 'sigma_zz', 'sigma_xy']
 # ANCHOR_END: element_field-initial_state
 assert repos[0].value(0, 0, "sigma_xx") == 0.0
 

@@ -27,9 +27,11 @@
 //! mechanics has no strain increment; only `κ` is history.
 //!
 //! The equivalent strain is built from the **principal strains of the full 3-D
-//! tensor**, so the 2-D models differ only in how that tensor is reconstructed:
-//! plane strain forces `ε_zz = 0`, plane stress derives it, and **axisymmetric**
-//! reads the measured hoop `ε_θθ = u_r/r`.
+//! tensor**, so the 2-D models differ only in how that tensor is reconstructed
+//! from the four components `[xx, yy, zz, xy]` they read: plane strain takes the
+//! out-of-plane `ε_zz` given (zero from the displacement, minus the thermal
+//! dilation), plane stress derives it from the in-plane pair, and
+//! **axisymmetric** reads the measured hoop `ε_θθ = u_r/r`.
 //!
 //! As for plasticity, the Newton loop driving the load increments lives in
 //! Python, not in Rust; this module provides the point-wise update only.
@@ -54,7 +56,7 @@ use crate::models::plasticity::law::MAX_INTERNAL_VARS;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::tensor::Kinematics;
 use crate::models::tensor::{dual_name, primal_name};
-use crate::models::tensor::{stress_count, voigt_stress};
+use crate::models::tensor::{stress_count, voigt_slots, voigt_stress};
 use crate::models::ZoneLayout;
 use crate::models::{
     Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
@@ -354,9 +356,9 @@ impl Behavior for Damage {
         }
 
         let update = self.law.update(&eps, &vars[..n_vars], &read, d)?;
-        let v = stress_count(d, self.continuum.kinematics());
+        let v = stress_count(d);
         for r in 0..v {
-            out[r] = voigt_stress(&update.sigma, d, self.continuum.kinematics(), r);
+            out[r] = voigt_stress(&update.sigma, d, r);
         }
         out[v] = update.damage;
         for (i, value) in update.internal().iter().enumerate() {
@@ -376,8 +378,9 @@ impl Behavior for Damage {
 
 /// The full 3-D strain a damage law sees, from the deformation row.
 ///
-/// Plane stress derives the out-of-plane `ε_zz` from the in-plane pair (there is
-/// no law solve here — damage is secant); axisymmetry reads the *measured* hoop.
+/// Every 2-D kinematics reads the four components `[xx, yy, zz, xy]`; plane
+/// stress then replaces the `ε_zz` it was given by the one the in-plane pair
+/// implies (there is no law solve here — damage is secant).
 fn read_strain(
     deformation: &[f64],
     idx: &[u32],
@@ -386,14 +389,7 @@ fn read_strain(
     kinematics: Kinematics,
 ) -> [f64; 6] {
     let mut eps = [0.0; 6];
-    let slots: &[usize] = if space_dim == 2 && kinematics.is_axisymmetric() {
-        &[0, 1, 2, 5]
-    } else if space_dim == 2 {
-        &[0, 1, 5]
-    } else {
-        &[0, 1, 2, 3, 4, 5]
-    };
-    for (r, &slot) in slots.iter().enumerate() {
+    for (r, &slot) in voigt_slots(space_dim).iter().enumerate() {
         eps[slot] = deformation[idx[r] as usize];
     }
     if space_dim == 2 && kinematics == Kinematics::PlaneStress {
@@ -456,11 +452,8 @@ mod tests {
     }
 
     fn strain_field(mz: &Damage, eps_xx: f64) -> Handle<SubElementField> {
-        let mut s = SubElementField::new(
-            mz.continuum.fespace(),
-            vec!["eps_xx".into(), "eps_xy".into(), "eps_yy".into()],
-        )
-        .unwrap();
+        let mut s =
+            SubElementField::new(mz.continuum.fespace(), mz.continuum.strain_reads()).unwrap();
         s.set_uniform("eps_xx", eps_xx).unwrap();
         Handle::new(s)
     }
@@ -489,6 +482,34 @@ mod tests {
         for g in 0..out.gauss_count() {
             assert!(out.value(0, g, "damage").unwrap().abs() < 1e-14);
             assert!((out.value(0, g, "sigma_xx").unwrap() - c * eps0).abs() < 1e-6);
+        }
+    }
+
+    /// Below the threshold, the out-of-plane stress the law writes is that of
+    /// the kinematics: `σ_zz = ν(σ_xx + σ_yy)` in plane strain, zero in plane
+    /// stress.
+    #[test]
+    fn undamaged_sigma_zz_follows_the_kinematics() {
+        let nu = 0.2;
+        for kinematics in [Kinematics::PlaneStrain, Kinematics::PlaneStress] {
+            let mz = unit_quad(kinematics);
+            let mat = material(&mz);
+            let out = mz
+                .integrate_behavior(&strain_field(&mz, 1e-5), &rest(&mz, &mat), &mat, 0.0)
+                .unwrap();
+            for g in 0..out.gauss_count() {
+                let at = |c: &str| out.value(0, g, c).unwrap();
+                assert!(at("damage").abs() < 1e-14);
+                let expect = match kinematics {
+                    Kinematics::PlaneStrain => nu * (at("sigma_xx") + at("sigma_yy")),
+                    _ => 0.0,
+                };
+                assert!(
+                    (at("sigma_zz") - expect).abs() < 1e-12,
+                    "{kinematics:?}: σ_zz = {} ≠ {expect}",
+                    at("sigma_zz")
+                );
+            }
         }
     }
 

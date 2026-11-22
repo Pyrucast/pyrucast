@@ -297,12 +297,7 @@ impl Behavior for Elasticity {
         _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let strain = voigt::read_voigt_strain(
-            deformation,
-            &lay.deformation,
-            self.continuum.space_dim(),
-            self.continuum.kinematics(),
-        );
+        let strain = voigt::read_voigt_strain(deformation, &lay.deformation);
         let mat = MatRead::new(material, &lay.material, &lay.optional_material);
         // **Static** dispatch: a `match` on a `Copy` enumeration costs
         // rien et laisse le noyau s'inliner. Ce qu'on a mesuré, et non supposé :
@@ -423,8 +418,44 @@ mod tests {
         let c = e / (1.0 - nu * nu);
         assert!((d[0][0] - c).abs() < 1e-12);
         assert!((d[0][1] - c * nu).abs() < 1e-12);
-        assert!((d[2][2] - c * (1.0 - nu) / 2.0).abs() < 1e-12);
-        assert!((d[2][2] - e / (2.0 * (1.0 + nu))).abs() < 1e-12); // = G
+        assert!((d[3][3] - c * (1.0 - nu) / 2.0).abs() < 1e-12);
+        assert!((d[3][3] - e / (2.0 * (1.0 + nu))).abs() < 1e-12); // = G
+                                                                   // The out-of-plane normal is condensed: its row and column are zero.
+        assert!(d[2].iter().all(|&x| x == 0.0));
+        assert!(d.iter().all(|row| row[2] == 0.0));
+    }
+
+    /// The same out-of-plane strain `εzz = −1`, alone, read by the two plane
+    /// laws: plane strain answers with the Lamé stresses `σxx = σyy = −λ`,
+    /// `σzz = −(λ + 2μ)`; plane stress reads past it, `σ = 0`.
+    #[test]
+    fn plane_strain_reads_the_out_of_plane_strain_plane_stress_does_not() {
+        let (e, nu) = (1.0, 0.3);
+        let (lambda, mu) = elastic::lame(e, nu);
+        let stress = |kinematics| {
+            let el = unit_quad(kinematics);
+            let fes = el.continuum.fespace();
+            let mut mat = SubElementField::new(fes.clone(), vec!["E".into(), "nu".into()]).unwrap();
+            mat.set_uniform("E", e).unwrap();
+            mat.set_uniform("nu", nu).unwrap();
+            let mat = Handle::new(mat);
+            let mut strain = SubElementField::new(fes, el.continuum.strain_reads()).unwrap();
+            strain.set_uniform("eps_zz", -1.0).unwrap();
+            el.integrate_behavior(&Handle::new(strain), &rest(&el, &mat), &mat, 0.0)
+                .unwrap()
+        };
+        let dp = stress(Kinematics::PlaneStrain);
+        let cp = stress(Kinematics::PlaneStress);
+        for g in 0..dp.gauss_count() {
+            let at = |s: &SubElementField, c: &str| s.value(0, g, c).unwrap();
+            assert!((at(&dp, "sigma_xx") + lambda).abs() < 1e-12);
+            assert!((at(&dp, "sigma_yy") + lambda).abs() < 1e-12);
+            assert!((at(&dp, "sigma_zz") + lambda + 2.0 * mu).abs() < 1e-12);
+            assert!(at(&dp, "sigma_xy").abs() < 1e-12);
+            for c in ["sigma_xx", "sigma_yy", "sigma_zz", "sigma_xy"] {
+                assert_eq!(at(&cp, c), 0.0, "{c}");
+            }
+        }
     }
 
     /// COMP: uniaxial tensor strain `εxx = ε₀` in plane stress gives
@@ -441,7 +472,12 @@ mod tests {
 
         let mut strain = SubElementField::new(
             el.continuum.fespace(),
-            vec!["eps_xx".into(), "eps_xy".into(), "eps_yy".into()],
+            vec![
+                "eps_xx".into(),
+                "eps_xy".into(),
+                "eps_yy".into(),
+                "eps_zz".into(),
+            ],
         )
         .unwrap();
         strain.set_uniform("eps_xx", eps0).unwrap();
@@ -455,6 +491,7 @@ mod tests {
             assert!((out.value(0, g, "sigma_xx").unwrap() - c * eps0).abs() < 1e-9);
             assert!((out.value(0, g, "sigma_yy").unwrap() - c * nu * eps0).abs() < 1e-9);
             assert!(out.value(0, g, "sigma_xy").unwrap().abs() < 1e-9);
+            assert_eq!(out.value(0, g, "sigma_zz").unwrap(), 0.0);
         }
     }
 

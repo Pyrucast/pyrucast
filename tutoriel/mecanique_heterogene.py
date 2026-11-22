@@ -133,7 +133,7 @@ def main() -> None:
     # FR — Les mêmes lignes qu'à la page précédente : seul α a changé.
     # EN — The same lines as on the previous page: only α has changed.
     t_gauss = pc.element_field.interp_to_gauss(temperature, fes)
-    eps_th = pc.element_field.thermal_strain(t_gauss, materiaux, fes, T_REF)
+    eps_th = pc.element_field.thermal_strain(modele, t_gauss, materiaux, T_REF)
     sigma_th = pc.element_field.elastic_stress(modele, eps_th, materiaux)
     force_th = (
         pc.node_field.divergence(sigma_th, "sigma")

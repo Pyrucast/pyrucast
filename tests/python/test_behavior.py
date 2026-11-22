@@ -127,11 +127,13 @@ def test_deformation_linearized_strain_2d():
 
     strain = pyrucast.element_field.deformation(u, fes)
     sub = strain[0]
-    assert sub.components() == ["eps_xx", "eps_xy", "eps_yy"]
+    assert sub.components() == ["eps_xx", "eps_xy", "eps_yy", "eps_zz"]
     for g in range(sub.gauss_count):
         assert abs(sub.value(0, g, "eps_xx") - 2.0) < 1e-10
         assert abs(sub.value(0, g, "eps_yy") - 3.0) < 1e-10
         assert abs(sub.value(0, g, "eps_xy") - 0.3) < 1e-10
+        # A plane displacement leaves the out-of-plane direction alone.
+        assert sub.value(0, g, "eps_zz") == 0.0
 
 
 def test_a_domain_without_a_law_has_a_subspace_but_no_behavior():

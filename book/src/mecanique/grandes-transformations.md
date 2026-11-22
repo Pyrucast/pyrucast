@@ -38,9 +38,9 @@ sait pourtant produire) et Hencky en contraintes planes, où `ln C` demande
 
 La dilatation thermique suit la mesure :
 [`thermal_strain`](../algorithmes/champs.md)
-reçoit `measure` et donne l'étirement isotrope `1 + αΔT` exactement dans
-chacune — `αΔT`, `½((1 + αΔT)² − 1)`, `ln(1 + αΔT)` — sous les noms que lit
-la loi.
+lit sur le modèle la mesure de chaque loi et donne l'étirement isotrope
+`1 + αΔT` exactement dans chacune — `αΔT`, `½((1 + αΔT)² − 1)`,
+`ln(1 + αΔT)` — sous les noms que lit la loi.
 
 ## Une rotation rigide ne déforme rien
 

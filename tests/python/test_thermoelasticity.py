@@ -7,9 +7,18 @@ forms on a plane-stress bar heated by ΔT:
 
 - fully constrained in x (both ends clamped) ⇒ σ_xx = −E·α·ΔT, σ_yy = 0;
 - free to expand (rollers only) ⇒ σ ≈ 0 and u = α·ΔT·(x, y).
+
+Then the out-of-plane direction, on a unit QUA4 with E = 1, ν = 0.3 and
+α·ΔT = 1: a plate in plane stress leaves its thickness free, a long body in
+plane strain holds it, so its dilation along z is blocked and comes back in
+the plane — ε_xx = (1+ν)/(1−ν) held in y, 1+ν free, with σ_zz the stress that
+holds it. Each case is computed twice: by ``stepping.step_by_step`` from a
+prescribed temperature, and by the bricks (thermal load, solve,
+``strain − thermal_strain``, law).
 """
 
 import pyrucast
+import pytest
 
 E, NU, ALPHA = 210_000.0, 0.3, 1e-5
 T_REF, DT = 20.0, 100.0
@@ -104,7 +113,7 @@ def test_fully_constrained_bar_thermal_stress():
         model, [("E", E), ("nu", NU), ("alpha", ALPHA)]
     )
     eps_th = pyrucast.element_field.thermal_strain(
-        _uniform_temperature(c, grid, fes, T_REF + DT), materials, fes, T_REF
+        model, _uniform_temperature(c, grid, fes, T_REF + DT), materials, T_REF
     )
 
     f_th = _thermal_load(model, materials, eps_th, fes)
@@ -143,7 +152,7 @@ def test_free_bar_expands_without_stress():
         model, [("E", E), ("nu", NU), ("alpha", ALPHA)]
     )
     eps_th = pyrucast.element_field.thermal_strain(
-        _uniform_temperature(c, grid, fes, T_REF + DT), materials, fes, T_REF
+        model, _uniform_temperature(c, grid, fes, T_REF + DT), materials, T_REF
     )
 
     f_th = _thermal_load(model, materials, eps_th, fes)
@@ -170,3 +179,171 @@ def test_free_bar_expands_without_stress():
             for cell in range(sub.cell_count):
                 for comp in ("sigma_xx", "sigma_yy", "sigma_xy"):
                     assert abs(sub.value(cell, g, comp)) < 1e-6
+
+
+# ── Out of plane: plane strain holds the thickness, plane stress frees it ────
+
+NU_Z = 0.3
+#: (kinematics, hold) → (u_x of the right side, {stress: value}), E = α·ΔT = 1.
+OUT_OF_PLANE = {
+    ("plane_strain", "y"): (
+        (1 + NU_Z) / (1 - NU_Z),
+        {
+            "sigma_xx": 0.0,
+            "sigma_yy": -1 / (1 - NU_Z),
+            "sigma_zz": -1 / (1 - NU_Z),
+            "sigma_xy": 0.0,
+        },
+    ),
+    ("plane_strain", "free"): (
+        1 + NU_Z,
+        {"sigma_xx": 0.0, "sigma_yy": 0.0, "sigma_zz": -1.0, "sigma_xy": 0.0},
+    ),
+    ("plane_stress", "y"): (
+        1 + NU_Z,
+        {"sigma_xx": 0.0, "sigma_yy": -1.0, "sigma_zz": 0.0, "sigma_xy": 0.0},
+    ),
+    ("plane_stress", "free"): (
+        1.0,
+        {"sigma_xx": 0.0, "sigma_yy": 0.0, "sigma_zz": 0.0, "sigma_xy": 0.0},
+    ),
+}
+
+
+def _unit_square(kinematics, hold, law="elasticity"):
+    """One QUA4 on [0, 1]², held in x on its left side and in y on its bottom
+    (``hold="free"``), on every node (``"y"``), or held everywhere (``"all"``).
+    Returns ``(mesh, fes, nodes, model)``."""
+    c = pyrucast.Coords(2)
+    nodes = [c.add_node(xy) for xy in ([0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0])]
+    mesh = pyrucast.Mesh(c, "QUA4")
+    mesh.unit().add_cell(nodes)
+    fes = pyrucast.FiniteElementSpace(mesh)
+    if law == "elasticity":
+        solid = pyrucast.model.elasticity(fes, kinematics)
+    else:
+        solid = pyrucast.model.plasticity_perfect(fes, kinematics)
+    left, bottom = [nodes[0], nodes[3]], [nodes[0], nodes[1]]
+    held_x = nodes if hold == "all" else left
+    held_y = bottom if hold == "free" else nodes
+    model = solid | _clamp(solid, held_x, "u_x") | _clamp(solid, held_y, "u_y")
+    return mesh, fes, nodes, model
+
+
+def _heated(mesh, value):
+    field = pyrucast.NodeField(mesh, ["T"])
+    for zone in field:
+        zone.add_to_component("T", value)
+    return field
+
+
+def _check(u, stress, nodes, expected):
+    u_x, sigma = expected
+    for node in (nodes[1], nodes[2]):
+        assert u.value(node, "u_x") == pytest.approx(u_x, rel=1e-12)
+    for name, value in sigma.items():
+        assert stress.max(name) == pytest.approx(value, abs=1e-12)
+        assert stress.min(name) == pytest.approx(value, abs=1e-12)
+
+
+@pytest.mark.parametrize("case", sorted(OUT_OF_PLANE))
+def test_out_of_plane_dilation_by_step_by_step(case):
+    kinematics, hold = case
+    mesh, _fes, nodes, model = _unit_square(kinematics, hold)
+    materials = pyrucast.element_field.material_field(
+        model, [("E", 1.0), ("nu", NU_Z), ("alpha", 1.0)]
+    )
+    data = {
+        "model": model,
+        "times": [0.0, 1.0],
+        "materials": materials,
+        "temperature": pyrucast.Evolution(
+            [(0.0, _heated(mesh, 0.0)), (1.0, _heated(mesh, 1.0))]
+        ),
+        "t_ref": 0.0,
+    }
+    pyrucast.stepping.step_by_step(data)
+    last = data["results"][-1]
+    _check(last["displacement"], last["behaviour"], nodes, OUT_OF_PLANE[case])
+
+
+@pytest.mark.parametrize("case", sorted(OUT_OF_PLANE))
+def test_out_of_plane_dilation_by_the_bricks(case):
+    kinematics, hold = case
+    mesh, fes, nodes, model = _unit_square(kinematics, hold)
+    materials = pyrucast.element_field.material_field(
+        model, [("E", 1.0), ("nu", NU_Z), ("alpha", 1.0)]
+    )
+    heat = pyrucast.element_field.interp_to_gauss(_heated(mesh, 1.0), fes)
+    eps_th = pyrucast.element_field.thermal_strain(model, heat, materials, 0.0)
+    # In plane strain the thickness dilates; in plane stress the law solves it.
+    assert eps_th.max("eps_zz") == (1.0 if kinematics == "plane_strain" else 0.0)
+    f_th = (
+        pyrucast.node_field.divergence(
+            pyrucast.element_field.elastic_stress(model, eps_th, materials), "sigma"
+        )
+        .rename_component("div_sigma_x", "f_x")
+        .rename_component("div_sigma_y", "f_y")
+    )
+    u = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), f_th)
+    sigma = pyrucast.element_field.integrate_behavior(
+        model,
+        pyrucast.element_field.strain(model, u, materials) - eps_th,
+        materials,
+        pyrucast.element_field.initial_state(model, materials),
+    )
+    _check(u, sigma, nodes, OUT_OF_PLANE[case])
+
+
+def test_von_mises_reads_the_out_of_plane_stress_of_an_elastic_plane_strain():
+    """Held in y, heated: σ_xx = 0, σ_yy = σ_zz = −1/(1−ν) — a uniaxial state
+    along y and z alike, whose von Mises is |σ_yy|."""
+    mesh, fes, _nodes, model = _unit_square("plane_strain", "y")
+    materials = pyrucast.element_field.material_field(
+        model, [("E", 1.0), ("nu", NU_Z), ("alpha", 1.0)]
+    )
+    heat = pyrucast.element_field.interp_to_gauss(_heated(mesh, 1.0), fes)
+    eps_th = pyrucast.element_field.thermal_strain(model, heat, materials, 0.0)
+    f_th = (
+        pyrucast.node_field.divergence(
+            pyrucast.element_field.elastic_stress(model, eps_th, materials), "sigma"
+        )
+        .rename_component("div_sigma_x", "f_x")
+        .rename_component("div_sigma_y", "f_y")
+    )
+    u = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), f_th)
+    sigma = pyrucast.element_field.integrate_behavior(
+        model,
+        pyrucast.element_field.strain(model, u, materials) - eps_th,
+        materials,
+        pyrucast.element_field.initial_state(model, materials),
+    )
+    vm = pyrucast.element_field.von_mises(model, sigma)
+    assert vm.max("von_mises") == pytest.approx(1 / (1 - NU_Z), rel=1e-12)
+    assert vm.min("von_mises") == pytest.approx(1 / (1 - NU_Z), rel=1e-12)
+
+
+def test_a_heated_plane_strain_body_held_everywhere_stays_hydrostatic():
+    """Held on every node in plane strain, heated: the three normal stresses are
+    the same −E·α·ΔT/(1−2ν) — a hydrostatic state, which no von Mises surface
+    sees, so even a tiny σ_y leaves the law elastic. Without the out-of-plane
+    dilation σ_zz would differ, and the law would yield."""
+    mesh, _fes, _nodes, model = _unit_square("plane_strain", "all", law="plasticity")
+    materials = pyrucast.element_field.material_field(
+        model, [("E", 1.0), ("nu", NU_Z), ("sigma_y", 1e-3), ("alpha", 1.0)]
+    )
+    data = {
+        "model": model,
+        "times": [0.0, 1.0],
+        "materials": materials,
+        "temperature": pyrucast.Evolution(
+            [(0.0, _heated(mesh, 0.0)), (1.0, _heated(mesh, 1.0))]
+        ),
+        "t_ref": 0.0,
+    }
+    pyrucast.stepping.step_by_step(data)
+    state = data["results"][-1]["behaviour"]
+    for name in ("sigma_xx", "sigma_yy", "sigma_zz"):
+        assert state.max(name) == pytest.approx(-1 / (1 - 2 * NU_Z), rel=1e-12)
+        assert state.min(name) == pytest.approx(-1 / (1 - 2 * NU_Z), rel=1e-12)
+    assert state.max("p") == 0.0
