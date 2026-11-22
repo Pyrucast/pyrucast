@@ -118,7 +118,7 @@ python validation/make_document.py    # this document
 | Thermal analysis | [ther2](#ther2) | run, within tolerance | 0.267 % | 1.1e-03 |
 | Thermal analysis | [ther7or](#ther7or) | gap | missing: thermal shell elements | |
 | Thermal analysis | [ther-perm](#ther-perm) | run, within tolerance | 1.97e-08 %; Δ = 5.3e-10 | 1.7e-07 |
-| Thermo-mechanics | [thme1](#thme1) | run, within tolerance | 1.79 % | 1.0e-05 |
+| Thermo-mechanics | [thme1](#thme1) | run, within tolerance | 1.79 % | 2.5e-15 |
 | Thermo-mechanics | [thpl1](#thpl1) | gap | missing: rate-independent kinematic hardening | |
 | Magneto-static | [Ac2d93](#ac2d93) | gap | missing: magnetostatics | |
 | Magneto-static | [Ac3d93](#ac3d93) | gap | missing: magnetostatics | |
@@ -189,7 +189,6 @@ What writing the computed cases showed: an operator or an option pyrucast lacks 
 | `mpc`: one coefficient per term for every relation; relations whose coefficients differ need one `mpc` each | [plas1](#plas1) | 1 |
 | an ellipse, or the projection of a line onto a plane (Cast3M `PROJ`) | [elas8](#elas8) | 1 |
 | local sub-stepping of rate-dependent laws at the Gauss points (stiff Norton exponents) | [chaboche2](#chaboche2) | 1 |
-| plane-strain thermal strain: no out-of-plane component α·ΔT | [thme1](#thme1) | 1 |
 | two laws on one support (materials in parallel on the same cells) | [plas9](#plas9) | 1 |
 
 ## Elasticity
@@ -1104,7 +1103,7 @@ def main(out: str | None = None) -> dict[str, float]:
         "X", "T"
     ) + pc.node_field.positions(solid, ["Y"]).rename_component("Y", "T")
     eps_th = pc.element_field.thermal_strain(
-        pc.element_field.interp_to_gauss(temperature, fes), materials, fes, T_REF
+        model, pc.element_field.interp_to_gauss(temperature, fes), materials, T_REF
     )
     sigma_th = pc.element_field.elastic_stress(model, eps_th, materials)
     forces = (
@@ -6232,15 +6231,11 @@ Bar of length l = 0.1, plane strain, QUA8 elements.
   erf(0.1/(2√(a t))), a = k/(ρc).
 - Computed times: 10 to 150 by 10.
 
-**Notes.** The temperatures of pyrucast and Cast3M 2026 agree to round-off, on the same
-mesh. Their displacements differ by about ν (here 1e-5): in plane strain,
-pyrucast's thermal strain has no out-of-plane component α·ΔT, so a uniformly
-heated element held along y stretches by α·ΔT/(1 − ν) instead of
-α·ΔT·(1 + ν)/(1 − ν). With ν = 1e-5 the effect stays at that level here.
-
-**Improvement points.**
-
-- plane-strain thermal strain: no out-of-plane component α·ΔT
+**Notes.** The temperatures and the displacements of pyrucast and Cast3M 2026 agree to
+round-off, on the same mesh. In plane strain both dilate the out-of-plane
+direction too (α·ΔT on `eps_zz`, held by the kinematics), so a uniformly
+heated element held along y stretches by α·ΔT·(1 + ν)/(1 − ν); with ν = 1e-5
+here, leaving that component out would only show at the 1e-5 level.
 
 #### Results
 
@@ -6249,9 +6244,9 @@ heated element held along y stretches by α·ΔT/(1 − ν) instead of
 | T at x = 0.08, t = 80 (°C) | 227.88 | — | 223.804 (-1.79 %) | 223.804 | -1.79 % |
 | T at x = 0.08, t = 100 (°C) | 251.85 | — | 248.66 (-1.27 %) | 248.66 | -1.27 % |
 | T at x = 0.08, t = 150 (°C) | 291.3 | — | 290.089 (-0.416 %) | 290.089 | -0.416 % |
-| u_x at x = 0.08, t = 80 | 3.04069e-05 | — | 3.00681e-05 (-1.11 %) | 3.00678e-05 | -1.12 % |
-| u_x at x = 0.08, t = 100 | 3.90251e-05 | — | 3.87249e-05 (-0.769 %) | 3.87246e-05 | -0.77 % |
-| u_x at x = 0.08, t = 150 | 5.76962e-05 | — | 5.82925e-05 (+1.03 %) | 5.82919e-05 | +1.03 % |
+| u_x at x = 0.08, t = 80 | 3.04069e-05 | — | 3.00681e-05 (-1.11 %) | 3.00681e-05 | -1.11 % |
+| u_x at x = 0.08, t = 100 | 3.90251e-05 | — | 3.87249e-05 (-0.769 %) | 3.87249e-05 | -0.769 % |
+| u_x at x = 0.08, t = 150 | 5.76962e-05 | — | 5.82925e-05 (+1.03 %) | 5.82925e-05 | +1.03 % |
 
 Acceptance: criterion of the `.dgibi` file, gaps within 2 % over the second half of the computed times (t ≥ 80).
 

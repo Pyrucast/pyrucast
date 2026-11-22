@@ -39,16 +39,12 @@ Bar of length l = 0.1, plane strain, QUA8 elements.
 """
 
 notes = """
-The temperatures of pyrucast and Cast3M 2026 agree to round-off, on the same
-mesh. Their displacements differ by about ν (here 1e-5): in plane strain,
-pyrucast's thermal strain has no out-of-plane component α·ΔT, so a uniformly
-heated element held along y stretches by α·ΔT/(1 − ν) instead of
-α·ΔT·(1 + ν)/(1 − ν). With ν = 1e-5 the effect stays at that level here.
+The temperatures and the displacements of pyrucast and Cast3M 2026 agree to
+round-off, on the same mesh. In plane strain both dilate the out-of-plane
+direction too (α·ΔT on `eps_zz`, held by the kinematics), so a uniformly
+heated element held along y stretches by α·ΔT·(1 + ν)/(1 − ν); with ν = 1e-5
+here, leaving that component out would only show at the 1e-5 level.
 """
-
-improvements = [
-    "plane-strain thermal strain: no out-of-plane component α·ΔT",
-]
 
 [[quantity]]
 key = "T_80"
