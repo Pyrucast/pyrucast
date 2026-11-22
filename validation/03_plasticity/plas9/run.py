@@ -12,10 +12,10 @@ Reference: the exact uniaxial curve,
 with m = √(2α² + β²) / (α + β). Compared: max |σ − σ_exact| / K over the
 computed times (the `.dgibi` file's test).
 
-The `.dgibi` file adds, on the same cell, an elastic material of stiffness 2e-3 in
-parallel. pyrucast refuses two laws carrying each their own E on one support;
-that material's stress stays below 2e-3 × 6e-4 ≈ 1e-6, under what the test
-reads (5e-5·K), so it is left out.
+The `.dgibi` file adds, on the same cell, an elastic material of stiffness
+2e-3 in parallel, which keeps the tangent invertible once the stress has
+softened to zero. It is `model.elasticity` on a second FE space of the same
+mesh: each law reads its own `E` on its own space.
 
 Running::
 
@@ -48,16 +48,20 @@ def main(out: str | None = None) -> dict[str, float]:
 
     fes = pc.FiniteElementSpace(block)
     law = pc.model.drucker_prager(fes, "full_3d")
+    parallel = pc.model.elasticity(pc.FiniteElementSpace(block), "full_3d")
     pull = pc.model.dirichlet(face_x1, law, "u_x")
     model = (
         law
+        | parallel
         | pc.model.dirichlet(face_x0, law, "u_x")
         | pc.model.dirichlet(face_y0, law, "u_y")
         | pc.model.dirichlet(face_z0, law, "u_z")
         | pull
     )
     materials = pc.element_field.material_field(
-        model,
+        parallel, [("E", 2e-3), ("nu", 0.0)]
+    ) | pc.element_field.material_field(
+        law,
         [
             ("E", E),
             ("nu", NU),

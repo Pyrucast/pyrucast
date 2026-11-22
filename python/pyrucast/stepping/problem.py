@@ -174,10 +174,12 @@ def describe_problem(data, options):
             # (Σ cell measures around each node + ε)^-½ on every force: the
             # weight that puts residuals at comparable scales before they are
             # combined.
-            ones = ElementField(fespace, [(name, 1.0) for name in force_names])
-            centres = FiniteElementSpace(
-                fespace.mesh().deduplicate(), quadrature="REDUCED"
+            # On the cells of the domain, each once: two laws may share a mesh.
+            cells = fespace.mesh().deduplicate()
+            ones = ElementField(
+                FiniteElementSpace(cells), [(name, 1.0) for name in force_names]
             )
+            centres = FiniteElementSpace(cells, quadrature="REDUCED")
             volumes = node_field.sum_to_nodes(
                 element_field.cell_integral(ones, centres)
             )

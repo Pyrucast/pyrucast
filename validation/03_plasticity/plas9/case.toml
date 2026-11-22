@@ -49,13 +49,12 @@ plateau K / (α + β) instead of softening to zero. The gap measured is that
 plateau against the exact curve's zero.
 
 The `.dgibi` file adds, on the same cell, an elastic material of stiffness 2e-3 in
-parallel; pyrucast refuses two laws carrying each their own E on one support,
-and the script leaves it out (its stress stays below 1e-6).
+parallel. The script puts it on a second FE space of the same mesh, each law
+reading its own `E` on its own space; it moves the gap by 2e-9.
 """
 
 improvements = [
     "Drucker-Prager with two surfaces: pyrucast's interpolation driven by H·p departs from Cast3M when K_L < K, or when K_L = K with H ≠ 0",
-    "two laws on one support (materials in parallel on the same cells)",
 ]
 
 [[quantity]]
