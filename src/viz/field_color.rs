@@ -252,7 +252,7 @@ impl SubmeshFieldCtx<'_> {
                     gauss.push(zone.get(cell, g, ci)?);
                 }
                 let mut nodal = vec![0.0; fit.nodes_per_cell()];
-                fit.nodal_values_into(&gauss, &mut nodal);
+                fit.nodal_values_into(&gauss, 1, &mut nodal);
                 Ok(nodal)
             }
         }

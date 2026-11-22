@@ -68,23 +68,29 @@ impl CellFit {
         }
     }
 
-    /// Nodes per cell of the space: the length [`nodal_values_into`] writes.
+    /// Nodes per cell of the space: per component, the number of values
+    /// [`nodal_values_into`] writes.
     ///
     /// [`nodal_values_into`]: Self::nodal_values_into
     pub(crate) fn nodes_per_cell(&self) -> usize {
         self.map.nrows()
     }
 
-    /// The cell's nodal values from its Gauss values, `M f`, written into
-    /// `out` (length [`nodes_per_cell`](Self::nodes_per_cell)) — no allocation,
+    /// The cell's nodal values from its Gauss values, `M F`, for `n_comp`
+    /// components at once: `cell` holds them Gauss point by Gauss point
+    /// (`cell[g·n_comp + c]`, the layout of a zone's values), `out` receives
+    /// them node by node (`out[i·n_comp + c]`, length
+    /// [`nodes_per_cell`](Self::nodes_per_cell)` · n_comp`) — no allocation,
     /// no branch.
-    pub(crate) fn nodal_values_into(&self, gauss: &[f64], out: &mut [f64]) {
-        for (i, slot) in out.iter_mut().enumerate() {
-            *slot = gauss
-                .iter()
-                .enumerate()
-                .map(|(g, f)| self.map[(i, g)] * f)
-                .sum();
+    pub(crate) fn nodal_values_into(&self, cell: &[f64], n_comp: usize, out: &mut [f64]) {
+        for (i, node) in out.chunks_exact_mut(n_comp).enumerate() {
+            node.fill(0.0);
+            for (g, point) in cell.chunks_exact(n_comp).enumerate() {
+                let m = self.map[(i, g)];
+                for (slot, f) in node.iter_mut().zip(point) {
+                    *slot += m * f;
+                }
+            }
         }
     }
 }
@@ -110,24 +116,30 @@ mod tests {
         FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap()
     }
 
-    /// Gauss values sampled from nodal values come back to them exactly.
+    /// Gauss values sampled from nodal values come back to them exactly — two
+    /// components at once, interleaved Gauss point by Gauss point in, node by
+    /// node out.
     #[test]
     fn an_interpolated_field_comes_back_exactly() {
         let fes = tri3_space();
         let zone = fes.get(0).unwrap();
         let s = zone.read();
         let fit = CellFit::for_space(&s).unwrap();
-        let nodal = [1.0, 2.0, 4.0];
-        let gauss: Vec<f64> = (0..s.gauss_count())
-            .map(|g| {
-                let n = s.n_at_g(g).unwrap();
-                (0..3).map(|i| n[i] * nodal[i]).sum()
-            })
-            .collect();
-        let mut out = vec![0.0; fit.nodes_per_cell()];
-        fit.nodal_values_into(&gauss, &mut out);
-        for (v, t) in out.iter().zip(nodal) {
-            assert!((v - t).abs() < 1e-10, "{out:?} ≠ {nodal:?}");
+        let nodal = [[1.0, -3.0], [2.0, 5.0], [4.0, 0.5]];
+        let mut cell = Vec::new();
+        for g in 0..s.gauss_count() {
+            let n = s.n_at_g(g).unwrap();
+            for c in 0..2 {
+                cell.push((0..3).map(|i| n[i] * nodal[i][c]).sum::<f64>());
+            }
+        }
+        let mut out = vec![0.0; fit.nodes_per_cell() * 2];
+        fit.nodal_values_into(&cell, 2, &mut out);
+        for (i, node) in nodal.iter().enumerate() {
+            for (c, t) in node.iter().enumerate() {
+                let v = out[i * 2 + c];
+                assert!((v - t).abs() < 1e-10, "{out:?} ≠ {nodal:?}");
+            }
         }
     }
 
@@ -136,10 +148,10 @@ mod tests {
     fn an_under_determined_fit_falls_back_to_the_mean() {
         let fit = CellFit::mean(3, 2);
         let mut out = [0.0; 3];
-        fit.nodal_values_into(&[2.0, 4.0], &mut out);
+        fit.nodal_values_into(&[2.0, 4.0], 1, &mut out);
         assert_eq!(out, [3.0, 3.0, 3.0]);
         // No Gauss point at all: 0.
-        CellFit::mean(3, 0).nodal_values_into(&[], &mut out);
+        CellFit::mean(3, 0).nodal_values_into(&[], 1, &mut out);
         assert_eq!(out, [0.0, 0.0, 0.0]);
     }
 }

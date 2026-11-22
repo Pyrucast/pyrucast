@@ -247,7 +247,7 @@ pub fn project_element(
                         for (g, slot) in gauss.iter_mut().enumerate() {
                             *slot = host.values[first + g * host.stride + i];
                         }
-                        host.fit.nodal_values_into(gauss, nodal);
+                        host.fit.nodal_values_into(gauss, 1, nodal);
                         out[k] = weights.iter().zip(nodal.iter()).map(|(w, v)| w * v).sum();
                     }
                 }
