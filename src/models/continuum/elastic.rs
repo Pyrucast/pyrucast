@@ -82,7 +82,7 @@ pub(crate) fn material_contract(
 /// let cp = elastic::constitutive(210e3, 0.3, Kinematics::PlaneStress, 2);
 /// let dp = elastic::constitutive(210e3, 0.3, Kinematics::PlaneStrain, 2);
 /// assert!(dp[0][0] > cp[0][0]);
-/// // En contraintes planes, D₀₀ = E/(1−ν²), et la ligne zz est nulle.
+/// // Plane stress: D₀₀ = E/(1−ν²), and the zz row is zero.
 /// assert!((cp[0][0] - 210e3 / (1.0 - 0.09)).abs() < 1e-6);
 /// assert!(cp[2].iter().all(|&d| d == 0.0));
 /// // Plane strain and the body of revolution: one and the same matrix.
