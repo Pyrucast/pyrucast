@@ -284,7 +284,7 @@ les opérateurs décrits plus haut, présents sur les quatre classes.
   union ne passe pas, puisque son `finalize` vérifie ou fond le résultat
   entier. Les opérateurs qui empilent des contributions partielles avant de
   les additionner nœud à nœud (divergence, forces internes et externes,
-  `sum_to_nodes`) ne vérifient pas la deuxième règle en chemin : ce ne sont
+  `to_nodes`) ne vérifient pas la deuxième règle en chemin : ce ne sont
   pas encore des champs.
 
 Le contrat ne dit pas ce qu'est une ligne — un nœud pour `SubNodeField`, un

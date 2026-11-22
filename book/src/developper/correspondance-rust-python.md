@@ -207,7 +207,7 @@ Les mailleurs longs (`triangulate_surface`, `pave_surface`, `grid_surface`,
 | `mask(field: &NodeField, band: &Band, components: Option<Vec<String>>) -> NodeField` / `mask_sub(sub: &SubNodeField, band: &Band, components: Option<Vec<String>>) -> SubNodeField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> NodeField` (champ `0/1` de même structure ; sucre `field >= x`). Accepte aussi un `SubNodeField` |
 | `internal_forces(model: &Model, state: &ElementField, solution: &NodeField, materials: &ElementField) -> NodeField` | `internal_forces(model, state, solution, materials) -> NodeField`, aussi `model.internal_forces(state, solution, materials)` |
 | `external_forces(model: &Model, materials: &ElementField) -> NodeField` | `external_forces(model, materials) -> NodeField` |
-| `sum_to_nodes(field: &ElementField) -> NodeField` | `sum_to_nodes(field) -> NodeField` (champ à un point par maille ; chaque nœud reçoit la somme des mailles qui le touchent) |
+| `to_nodes(field: &ElementField, reduction: Reduction) -> NodeField` | `to_nodes(field, reduction="average") -> NodeField`, aussi `field.to_nodes(reduction="average")` (chaque maille ajuste ses valeurs de Gauss sur ses propres nœuds ; chaque nœud reçoit la moyenne, ou la somme, des mailles qui le touchent) |
 
 `internal_forces` (`∫ Bᵀ σ`) et `external_forces` sont des **assemblages**,
 mais leur résultat est un vecteur nodal et non un opérateur : on se range

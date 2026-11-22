@@ -169,7 +169,7 @@ maillage. Deux cas :
 Tout ce qui pose quelque chose aux nœuds d'un maillage passe par lui :
 `NodeField(mesh, …)`, les supports des matrices d'un modèle — donc le résultat
 de `solve(K, f)` et le produit `K * x` —, `pyrucast.node_field.restrict(champ,
-mesh)`, les sorties de `divergence` et de `sum_to_nodes`, et une contrainte
+mesh)`, les sorties de `divergence` et de `to_nodes`, et une contrainte
 `pyrucast.model.dirichlet` posée sur une zone seule.
 
 ```python

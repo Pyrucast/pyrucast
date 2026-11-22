@@ -171,7 +171,7 @@ champs](algorithmes/champs.md) et [`pyrucast.node_field`](reference/node_field.m
 | Famille | Opérateurs |
 |---|---|
 | géométrie | `positions(maillage)`, les coordonnées des nœuds, une composante par axe |
-| d'un champ aux points de Gauss | `divergence`, `sum_to_nodes` |
+| d'un champ aux points de Gauss | `divergence`, `to_nodes` |
 | assemblage | `internal_forces`, `external_forces` |
 | d'un champ aux nœuds | `restrict`, `restrict_like`, `project`, `merge`, `consolidate`, `mask` |
 
@@ -204,7 +204,7 @@ caches des zones de maillage (détaillés dans
   première demande puis rendu tel quel — ou la zone elle-même, pour une zone
   POI1 qui ne cite chaque nœud qu'une fois. C'est lui qui donne le même
   support à `NodeField(maillage, …)`, à `restrict(…, maillage)`, à la solution
-  de `solve` et aux sorties de `divergence` et de `sum_to_nodes` sur ce
+  de `solve` et aux sorties de `divergence` et de `to_nodes` sur ce
   maillage : ils se combinent nœud à nœud. Il épargne aussi le dédoublonnage
   des nœuds de la zone à chaque nouveau champ ;
 - **l'index des nœuds**, gardé par le support : la table « nœud → ligne »,

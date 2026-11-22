@@ -197,7 +197,7 @@ zone, puisqu'un sous-espace porte chaque composante dans une seule zone ; avec
 Ces champs sont ensuite **consommés** par l'assemblage (`stiffness`, `mass`,
 `tangent`, `internal_forces`, `external_forces`, cf.
 [`pyrucast.matrix`](reference/matrix.md)), ramenés aux nœuds (`divergence`,
-`sum_to_nodes`), tracés (`plot`) ou exportés (`pyrucast.export.to_arrays(…,
+`to_nodes`), tracés (`plot`) ou exportés (`pyrucast.export.to_arrays(…,
 element_fields=[…])`).
 
 ```python
@@ -215,7 +215,7 @@ calcule qu'une fois vit sur l'espace éléments finis qui le porte :
   de l'espace ;
 - la **coloration des mailles** : des groupes de mailles qui ne partagent aucun
   nœud. Elle sert aux opérateurs qui accumulent des contributions de mailles
-  sur les nœuds (l'assemblage d'une matrice, `divergence`, `sum_to_nodes`,
+  sur les nœuds (l'assemblage d'une matrice, `divergence`, `to_nodes`,
   `internal_forces`, `external_forces`) :
   les mailles d'un même groupe s'écrivent en parallèle sans conflit. Elle est
   calculée au premier de ces calculs, puis resert à tous les suivants sur ce

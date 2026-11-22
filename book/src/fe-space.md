@@ -187,7 +187,7 @@ Deux choses, gardées dans chaque sous-espace pour toute sa durée de vie :
   l'assemblage des matrices (`matrix.stiffness`, `matrix.mass`,
   `matrix.tangent`…) et dans les opérateurs qui accumulent aux nœuds
   (`node_field.internal_forces`, `node_field.external_forces`,
-  `node_field.divergence`, `node_field.sum_to_nodes`). La calculer demande un
+  `node_field.divergence`, `node_field.to_nodes`). La calculer demande un
   passage sur toute la connectivité ; la garder évite de le refaire à chaque
   appel, alors qu'un calcul non linéaire réassemble à chaque itération. Elle ne
   dépend que de la connectivité, que le sceau fige.

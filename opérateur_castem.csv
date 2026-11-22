@@ -91,7 +91,7 @@ Champs - dérivation;SIGM;Contraintes à partir des déformations;integrate_beha
 Champs - dérivation;REAC;Réactions nodales;−internal_forces(model.filter(constraint), état, solution, matériau) (−Cᵀλ aux nœuds contraints)
 Champs - extraction;EXCO;Extrait/renomme une composante d'un champ;filter_components (extraction, str ou liste) / rename_component (renommage)
 Champs - extraction;DEPL;Extrait le champ de déplacement;NodeField
-Champs - extraction;CHAN (CHAM);Change le support d'un champ (Gauss <-> nœuds);interp_to_gauss (nœuds -> Gauss) / divergence (Gauss -> nœuds) / node_field.consolidate
+Champs - extraction;CHAN (CHAM);Change le support d'un champ (Gauss <-> nœuds);interp_to_gauss (nœuds -> Gauss) / to_nodes (Gauss -> nœuds) / node_field.consolidate
 Champs - extraction;ELNO;Passe un champ des points de Gauss aux nœuds;divergence (partiel)
 Champs - extraction;REDU;Restreint un champ à un sous-maillage;node_field.restrict (champ aux nœuds) / element_field.restrict (champ aux points de Gauss, sur un espace) / finite_element_space.restrict (modèle réduit à un maillage)
 Champs - extraction;PROI;Projette un champ aux nœuds d'une autre géométrie par les fonctions de forme;node_field.project (interpolé par les mailles de mesh aux nœuds de target, 0 hors de mesh, tol=1e-6 ; un champ aux points de Gauss est lu par l'ajustement propre à chaque maille, sans moyenne entre mailles ; syntaxe GEO2 seule, ni 'MINI' ni 'POLY')
@@ -99,7 +99,8 @@ Champs - extraction;;Reprojette un champ sur le support et les composantes d'un 
 Champs - assemblage;NOMC;Renomme les composantes;rename_component
 Champs - assemblage;PLUS (chp);Fusionne / additionne des champs;merge / union (|)
 Champs - réduction;INTG 'ELEM';Intégrale d'un champ maille par maille;cell_integral (résultat sur un espace à un point par maille, quadrature REDUCED)
-Champs - manipulation;CHAN 'CHPO' 'SOMM';Champ par élément vers champ nodal par somme des mailles autour de chaque nœud;sum_to_nodes (champ à un point par maille)
+Champs - manipulation;CHAN 'NOEUD' puis CHAN 'CHPO' ('MOYE');Champ par élément vers champ nodal : valeurs de chaque maille extrapolées à ses nœuds, puis moyenne des mailles autour de chaque nœud;to_nodes (reduction="average", le défaut)
+Champs - manipulation;CHAN 'CHPO' 'SOMM';Champ par élément vers champ nodal par somme des mailles autour de chaque nœud;to_nodes(…, "sum")
 Champs - réduction;RESU;Résultante d'un champ;—
 Champs - réduction;MAXI;Maximum d'un champ;NodeField.max / ElementField.max
 Champs - réduction;MINI;Minimum d'un champ;NodeField.min / ElementField.min

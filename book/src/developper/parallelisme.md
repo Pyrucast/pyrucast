@@ -123,7 +123,7 @@ sans machinerie supplémentaire : seul le noyau numérique lit plusieurs géomé
 Les **dispersions aux nœuds** — `ops::node_field::divergence`,
 `ops::node_field::internal_forces` (`∫ Bᵀ σ`), `ops::node_field::external_forces`
 (dont la charge répartie `∫ φ N` du modèle `flux`) et
-`ops::node_field::sum_to_nodes` — procèdent toutes de la même façon : chaque
+`ops::node_field::to_nodes` — procèdent toutes de la même façon : chaque
 cellule calcule sa contribution locale, puis l'accumule dans ses nœuds. Elles
 passent toutes par le **même driver** `kernel::scatter_to_nodes` (« intègre un
 noyau élémentaire et disperse aux nœuds »), qui s'appuie sur

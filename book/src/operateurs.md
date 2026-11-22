@@ -150,7 +150,7 @@ node_field.restrict node_field.restrict_like finite_element_space.restrict
 element_field.restrict element_field.restrict_like node_field.project
 node_field.merge node_field.consolidate element_field.consolidate
 node_field.mask element_field.mask
-node_field.sum_to_nodes}}
+node_field.to_nodes}}
 
 ### Mesurer
 

@@ -509,11 +509,11 @@ accumulé par nœud. C'est l'opérateur `Bᵀ`, transposé du gradient : il vér
 ponctuelles de `∇·F` (pas de projection L²). Le rang de la grandeur se lit à
 ses noms : voir [`node_field.divergence`](../reference/node_field.md#node_field-divergence).
 
-### `cell_integral(field, target)` → `ElementField` et `sum_to_nodes(field)` → `NodeField`
+### `cell_integral(field, target)` → `ElementField` et `to_nodes(field, reduction)` → `NodeField`
 
-{{#pyalgo element_field.cell_integral node_field.sum_to_nodes}}
+{{#pyalgo element_field.cell_integral node_field.to_nodes}}
 
-Deux briques par maille (Cast3M `INTG 'ELEM'` et `CHAN 'CHPO' 'SOMM'`) :
+Deux briques par maille (Cast3M `INTG 'ELEM'`, puis `CHAN 'NOEUD'` et `CHAN 'CHPO'`) :
 
 - `element_field.cell_integral` intègre chaque composante **maille par maille**,
   avec la quadrature du champ d'entrée :
@@ -521,9 +521,17 @@ Deux briques par maille (Cast3M `INTG 'ELEM'` et `CHAN 'CHPO' 'SOMM'`) :
   sur `target`, un espace **à un point par maille** du même maillage —
   `FiniteElementSpace(mesh, quadrature="REDUCED")`, un seul point au barycentre,
   le support `'GRAVITE'` de Cast3M ;
-- `node_field.sum_to_nodes` rassemble un tel champ aux nœuds par **somme** :
-  chaque nœud reçoit `Σ_{e ∋ i} v_e`, la somme des valeurs des mailles qui le
-  touchent, zones confondues. Ce n'est pas un lissage : ni moyenne ni poids.
+- `node_field.to_nodes` ramène un champ aux points de Gauss sur les nœuds.
+  Chaque maille ajuste ses valeurs de Gauss sur ses propres nœuds, par moindres
+  carrés sur ses fonctions de forme ; une maille qui a moins de points que de
+  nœuds donne à chacun la moyenne de ses points, donc un champ à un point par
+  maille donne à chaque nœud la valeur de la maille. Chaque nœud combine
+  ensuite ce que lui donnent les mailles qui le touchent, zones confondues :
+  - `"average"` (par défaut) : la **moyenne** des mailles qui portent la
+    composante, 0 là où aucune ne la porte. C'est la valeur qu'on attend en un
+    nœud : un champ interpolé depuis les nœuds revient exactement, et les sauts
+    d'une maille à l'autre sont adoucis ;
+  - `"sum"` : la **somme** `Σ_{e ∋ i} v_e`, sans moyenne ni poids.
 
 Intégrer `1` donne la mesure de chaque maille ; la sommer aux nœuds donne le
 volume que représente chaque nœud — le poids d'un solveur incrémental pour
@@ -531,7 +539,7 @@ mettre ses résidus à une échelle comparable (l'accélération d'Anderson pond
 par `(Σ_e |Ω_e|)^{-1/2}`).
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_champs.py:node_field-sum_to_nodes}}
+{{#include ../../../tests/python/test_doc_ops_champs.py:node_field-to_nodes}}
 ```
 
 ### `beam_deformation(field, fespace, material)` → `ElementField`
