@@ -12,12 +12,13 @@ Mesh: the `.dgibi` file's regular grid of 32 × 4 QUA4.
 The moment is taken from the support forces on the loaded side, Σ y·F_x, in
 the `.dgibi` file's unit of 1e4 N·m: exact by equilibrium. The `.dgibi` file integrates y·σ_xx along that side, with
 σ_xx extrapolated to the nodes and averaged between cells; the two estimates
-differ by the error of that integration. The stresses are read by `project`
-in one cell holding the node, from its Gauss points.
+differ by the error of that integration. The stresses at the nodes are
+`to_nodes`'s: the mean of what the cells around each node give, as the
+`.dgibi` file reads them.
 
 Running::
 
-    python validation/03_plasticity/plas6/run.py
+    python validation/03_plasticity/plas7/run.py
 """
 
 import os
@@ -85,16 +86,13 @@ def main(out: str | None = None) -> dict[str, float]:
             moment += node.position()[1] * reactions.value(node, "f_x")
         values[f"M_{k}"] = moment / MOMENT_UNIT
 
-    # σ_xx at A and at the second node of the side, read in one cell each.
+    # σ_xx at A and at the second node of the side, averaged over the cells
+    # around each.
     point_a = rectangle.nearest_node([WIDTH, HALF_HEIGHT])
     point_2 = rectangle.nearest_node(
         [WIDTH, HALF_HEIGHT - 2.0 * HALF_HEIGHT / N_HEIGHT]
     )
-    stress = pc.node_field.project(
-        data["results"][-1]["behaviour"],
-        rectangle,
-        pc.mesh.poi1_from_nodes([point_a, point_2]),
-    )
+    stress = pc.node_field.to_nodes(data["results"][-1]["behaviour"]["sigma_xx"])
     values["sxx_A"] = stress.value(point_a, "sigma_xx") / 1e6
     values["sxx_A2"] = stress.value(point_2, "sigma_xx") / 1e6
 

@@ -14,7 +14,8 @@ elliptic lines are placed here. `transfinite` puts the QUA8 mid-nodes on the
 chords; the `.dgibi` file's are on the ellipses. The QUA4 patch and the outer line
 are made quadratic together, so that they share their mid-nodes.
 
-σ_yy at D is read in the only cell holding D, from that cell's Gauss points.
+σ_yy at D is what `to_nodes` gives there: D belongs to a single cell, whose
+Gauss values are fitted over its nodes.
 
 Running::
 
@@ -90,7 +91,7 @@ def main(out: str | None = None) -> dict[str, float]:
 
     strain = pc.element_field.strain(model, u, materials)
     stress = pc.element_field.elastic_stress(model, strain, materials)
-    at_d = pc.node_field.project(stress, membrane, pc.mesh.poi1_from_nodes([pd]))
+    at_d = pc.node_field.to_nodes(stress)
 
     if out:
         membrane.plot(title="elas8 — QUA8 mesh", save=os.path.join(out, "mesh.svg"))

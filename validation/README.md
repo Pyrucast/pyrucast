@@ -39,7 +39,7 @@ python validation/make_document.py    # this document
 | Elasticity | [elas1](#elas1) | gap | missing: axisymmetric shell element (COQ2) | |
 | Elasticity | [elas2](#elas2) | run, OUTSIDE tolerance | 0.153 %; Δ = 0 | 2.0e-03 |
 | Elasticity | [elas3](#elas3) | run, OUTSIDE tolerance | 0.321 % | 3.5e-03 |
-| Elasticity | [elas4](#elas4) | run, OUTSIDE tolerance | 5.59 % | 3.9e-02 |
+| Elasticity | [elas4](#elas4) | run, within tolerance | 0.363 % | 3.9e-02 |
 | Elasticity | [elas7](#elas7) | gap | missing: axisymmetric shell element (COQ2) | |
 | Elasticity | [elas8](#elas8) | run, OUTSIDE tolerance | 7.85 % | 6.9e-02 |
 | Elasticity | [elas11](#elas11) | run, within tolerance | 0.0973 % | 1.6e-02 |
@@ -175,7 +175,6 @@ What writing the computed cases showed: an operator or an option pyrucast lacks 
 
 | Point | Cases | Count |
 |---|---|---|
-| nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`) | [elas4](#elas4), [elas8](#elas8), [elas11](#elas11), [plas7](#plas7) | 4 |
 | B-bar (selective integration) against the volumetric locking of QUA4/QUA8 in incompressible plastic flow | [plas7](#plas7), [chaboche2](#chaboche2) | 2 |
 | Drucker-Prager with two surfaces: pyrucast's interpolation driven by H·p departs from Cast3M when K_L < K, or when K_L = K with H ≠ 0 | [plas5](#plas5), [plas9](#plas9) | 2 |
 | `convert` / `extrude` to TRI3: alternating diagonals (Cast3M's translation alternates them) | [elas2](#elas2), [elas3](#elas3) | 2 |
@@ -186,6 +185,8 @@ What writing the computed cases showed: an operator or an option pyrucast lacks 
 | `mpc`: one coefficient per term for every relation; relations whose coefficients differ need one `mpc` each | [plas1](#plas1) | 1 |
 | an ellipse, or the projection of a line onto a plane (Cast3M `PROJ`) | [elas8](#elas8) | 1 |
 | local sub-stepping of rate-dependent laws at the Gauss points (stiff Norton exponents) | [chaboche2](#chaboche2) | 1 |
+| nodal stresses at a node of a single QUA8 cell: Cast3M's extrapolation (`CHAN NOEUD`) and pyrucast's least-squares fit (`to_nodes`) differ, to look into | [elas8](#elas8) | 1 |
+| σ_xx at the corner A, a node of a single cell: the `.dgibi` file's `CHAN 'CHPO'` on the Gauss stresses gives 547.2 MPa, which neither pyrucast's fit (`to_nodes`, 996.7) nor the cell mean (557.7) reproduces, to look into | [plas7](#plas7) | 1 |
 
 ## Elasticity
 
@@ -596,25 +597,24 @@ COQ4 quadrilaterals.
 `.dgibi` file applies 1.2 MN·m with 600 kN per flange. The `.dgibi` file reads the axial
 stress as the SMYY component of the shell stresses averaged through the
 thickness (CALP 'MOYEN'), extrapolated to the nodes and averaged between the
-two cells that share A; pyrucast reads N_yy / h in one of them. On the same
+two cells that share A; pyrucast does the same with N_yy / h (`to_nodes`). On the same
 mesh, the tip deflection u_z, compared with no reference, is 4 % smaller in
 pyrucast's DKQ than in Cast3M's COQ4.
 
 **Improvement points.**
 
 - Kirchhoff quadrangle shell (DKQ): 4 % stiffer than Cast3M's COQ4 on elas4, to look into (GitHub issue #26)
-- nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)
 
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| σ_xx at A, mid-surface (MPa) | -108 | -112.73 (-4.38 %) | -112.727 (-4.38 %) | -114.036 | -5.59 % |
+| σ_xx at A, mid-surface (MPa) | -108 | -112.73 (-4.38 %) | -112.727 (-4.38 %) | -108.392 | -0.363 % |
 | u_z at the tip (10, 0, 0), no reference (m) | — | — | -0.0316979 | -0.0304768 |  |
 
 Acceptance: criterion of the `.dgibi` file, |σ_xx(A) + 108| / 108 ≤ 5 %.
 
-pyrucast OUTSIDE tolerance: sxx_A: -114.03623937937851 vs -108.0, beyond 0.05
+pyrucast: the 1 checked quantities are within tolerance.
 
 #### pyrucast figures
 
@@ -638,8 +638,9 @@ The mesh is the Cast3M `.dgibi` file's: the section line (2 elements per segment
 extruded along x in 16 layers, 96 QUA4. Each cell's first edge runs along
 the section line, so the local y axis of the shell is the beam's axis and
 the axial stress on the mid-surface is N_yy / h, as the `.dgibi` file reads SMYY. A
-lies on the edge of the first flange, between two cells; `project` reads it
-in one of them, from that cell's Gauss points.
+lies on the edge of the first flange, between two cells; `to_nodes` gives it
+the mean of what the Gauss points of the two cells give there, as the
+`.dgibi` file reads it.
 
 Running::
 
@@ -695,7 +696,7 @@ def main(out: str | None = None) -> dict[str, float]:
     forces = pc.element_field.integrate_behavior(
         model, strain, materials, pc.element_field.initial_state(model, materials)
     )
-    at_a = pc.node_field.project(forces, surface, pc.mesh.poi1_from_nodes([point_a]))
+    at_a = pc.node_field.to_nodes(forces)
 
     if out:
         surface.plot(title="elas4 — QUA4 mesh", save=os.path.join(out, "mesh.svg"))
@@ -805,7 +806,8 @@ nodes as the `.dgibi` file does, but puts the QUA8 mid-nodes of the elliptic edg
 the chords, where the `.dgibi` file puts them on the ellipses; σ_yy at D, where the
 inner ellipse is the most curved, is sensitive to it. Cast3M also reads the
 stress at a node differently: it extrapolates the Gauss values of the cell to
-its nodes, pyrucast evaluates their least-squares fit. With mid-nodes placed
+its nodes, pyrucast evaluates their least-squares fit (`to_nodes`); D belongs to a
+single cell, so no average between cells enters. With mid-nodes placed
 on the ellipses, the two codes give the same displacements and the same
 Gauss stresses to round-off.
 
@@ -813,7 +815,7 @@ Gauss stresses to round-off.
 
 - an ellipse, or the projection of a line onto a plane (Cast3M `PROJ`)
 - `transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords)
-- nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)
+- nodal stresses at a node of a single QUA8 cell: Cast3M's extrapolation (`CHAN NOEUD`) and pyrucast's least-squares fit (`to_nodes`) differ, to look into
 
 #### Results
 
@@ -824,7 +826,7 @@ Gauss stresses to round-off.
 
 Acceptance: criterion of the `.dgibi` file, |σ_yy(D) − 92.7| / 92.7 ≤ 1 %.
 
-pyrucast OUTSIDE tolerance: syy_D: 99.97533666117648 vs 92.7, beyond 0.01
+pyrucast OUTSIDE tolerance: syy_D: 99.97533666117653 vs 92.7, beyond 0.01
 
 #### pyrucast figures
 
@@ -853,7 +855,8 @@ elliptic lines are placed here. `transfinite` puts the QUA8 mid-nodes on the
 chords; the `.dgibi` file's are on the ellipses. The QUA4 patch and the outer line
 are made quadratic together, so that they share their mid-nodes.
 
-σ_yy at D is read in the only cell holding D, from that cell's Gauss points.
+σ_yy at D is what `to_nodes` gives there: D belongs to a single cell, whose
+Gauss values are fitted over its nodes.
 
 Running::
 
@@ -929,7 +932,7 @@ def main(out: str | None = None) -> dict[str, float]:
 
     strain = pc.element_field.strain(model, u, materials)
     stress = pc.element_field.elastic_stress(model, strain, materials)
-    at_d = pc.node_field.project(stress, membrane, pc.mesh.poi1_from_nodes([pd]))
+    at_d = pc.node_field.to_nodes(stress)
 
     if out:
         membrane.plot(title="elas8 — QUA8 mesh", save=os.path.join(out, "mesh.svg"))
@@ -1000,7 +1003,6 @@ pyrucast gives Cast3M's u_r(B) to round-off.
 **Improvement points.**
 
 - `transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords)
-- nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)
 
 #### Results
 
@@ -1039,7 +1041,7 @@ SEG2 lines and puts the QUA8 mid-nodes on the chords; the `.dgibi` file's are on
 arcs.
 
 In pyrucast's axisymmetric coordinates x is r and y is z: the axial stress
-is `sigma_yy`. It is read in the only cell holding A, from its Gauss points.
+is `sigma_yy`. `to_nodes` gives it at A, which belongs to a single cell.
 
 Running::
 
@@ -1110,7 +1112,7 @@ def main(out: str | None = None) -> dict[str, float]:
 
     strain = pc.element_field.strain(model, u, materials)
     stress = pc.element_field.elastic_stress(model, strain, materials) - sigma_th
-    at_a = pc.node_field.project(stress, solid, pc.mesh.poi1_from_nodes([pa]))
+    at_a = pc.node_field.to_nodes(stress)
 
     if out:
         solid.plot(title="elas11 — QUA8 mesh", save=os.path.join(out, "mesh.svg"))
@@ -2619,14 +2621,17 @@ differ by the error of that integration, which grows with the plastic zone.
 
 In the fully plastic state the Gauss stresses of both codes oscillate from
 point to point, well above 2σ_y/√3 (the full-integration QUA4 locks in an
-incompressible plastic flow). Cast3M averages between neighbouring cells the
-values extrapolated to a node, which smooths the oscillation out; pyrucast
-reads the node in one cell, which shows it.
+incompressible plastic flow). Both codes average between neighbouring cells
+what they give a node, which smooths the oscillation out: at the second node
+of the side they agree within 4e-5. The corner A belongs to a single cell, and
+nothing smooths it there: the `.dgibi` file applies `CHAN 'CHPO'` to the
+Gauss stresses directly and gives 547.2 MPa, where pyrucast's fit gives
+996.7 MPa and the cell's mean 557.7 MPa.
 
 **Improvement points.**
 
 - B-bar (selective integration) against the volumetric locking of QUA4/QUA8 in incompressible plastic flow
-- nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)
+- σ_xx at the corner A, a node of a single cell: the `.dgibi` file's `CHAN 'CHPO'` on the Gauss stresses gives 547.2 MPa, which neither pyrucast's fit (`to_nodes`, 996.7) nor the cell mean (557.7) reproduces, to look into
 
 #### Results
 
@@ -2640,13 +2645,11 @@ reads the node in one cell, which shows it.
 | bending moment at t = 0.5 (1e4 N·m) | 139.3 | — | 142.712 (+2.45 %) | 140.424 | +0.807 % |
 | bending moment at t = 1.0 (1e4 N·m) | 139.4 | — | 146.289 (+4.94 %) | 141.784 | +1.71 % |
 | σ_xx at A (12.5, 50) mm, t = 1 (MPa) | 543.4 | — | 547.236 (+0.706 %) | 996.705 | +83.4 % |
-| σ_xx at the second node of the loaded edge (y = 46.875 mm), t = 1 (MPa) | 557.7 | — | 557.745 (+0.00805 %) | 118.706 | -78.7 % |
+| σ_xx at the second node of the loaded edge (y = 46.875 mm), t = 1 (MPa) | 557.7 | — | 557.745 (+0.00805 %) | 557.757 | +0.0102 % |
 
 Acceptance: criterion of the `.dgibi` file, largest relative gap of the nine values ≤ 5 %.
 
-pyrucast OUTSIDE tolerance: sxx_A: 996.7051027453901 vs 543.4, beyond 0.05
-
-pyrucast OUTSIDE tolerance: sxx_A2: 118.70559401777976 vs 557.7, beyond 0.05
+pyrucast OUTSIDE tolerance: sxx_A: 996.7051027453914 vs 543.4, beyond 0.05
 
 #### pyrucast figures
 
@@ -2671,12 +2674,13 @@ Mesh: the `.dgibi` file's regular grid of 32 × 4 QUA4.
 The moment is taken from the support forces on the loaded side, Σ y·F_x, in
 the `.dgibi` file's unit of 1e4 N·m: exact by equilibrium. The `.dgibi` file integrates y·σ_xx along that side, with
 σ_xx extrapolated to the nodes and averaged between cells; the two estimates
-differ by the error of that integration. The stresses are read by `project`
-in one cell holding the node, from its Gauss points.
+differ by the error of that integration. The stresses at the nodes are
+`to_nodes`'s: the mean of what the cells around each node give, as the
+`.dgibi` file reads them.
 
 Running::
 
-    python validation/03_plasticity/plas6/run.py
+    python validation/03_plasticity/plas7/run.py
 """
 
 import os
@@ -2744,16 +2748,13 @@ def main(out: str | None = None) -> dict[str, float]:
             moment += node.position()[1] * reactions.value(node, "f_x")
         values[f"M_{k}"] = moment / MOMENT_UNIT
 
-    # σ_xx at A and at the second node of the side, read in one cell each.
+    # σ_xx at A and at the second node of the side, averaged over the cells
+    # around each.
     point_a = rectangle.nearest_node([WIDTH, HALF_HEIGHT])
     point_2 = rectangle.nearest_node(
         [WIDTH, HALF_HEIGHT - 2.0 * HALF_HEIGHT / N_HEIGHT]
     )
-    stress = pc.node_field.project(
-        data["results"][-1]["behaviour"],
-        rectangle,
-        pc.mesh.poi1_from_nodes([point_a, point_2]),
-    )
+    stress = pc.node_field.to_nodes(data["results"][-1]["behaviour"]["sigma_xx"])
     values["sxx_A"] = stress.value(point_a, "sigma_xx") / 1e6
     values["sxx_A2"] = stress.value(point_2, "sigma_xx") / 1e6
 

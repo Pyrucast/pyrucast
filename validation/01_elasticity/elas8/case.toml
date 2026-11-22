@@ -39,7 +39,8 @@ nodes as the `.dgibi` file does, but puts the QUA8 mid-nodes of the elliptic edg
 the chords, where the `.dgibi` file puts them on the ellipses; σ_yy at D, where the
 inner ellipse is the most curved, is sensitive to it. Cast3M also reads the
 stress at a node differently: it extrapolates the Gauss values of the cell to
-its nodes, pyrucast evaluates their least-squares fit. With mid-nodes placed
+its nodes, pyrucast evaluates their least-squares fit (`to_nodes`); D belongs to a
+single cell, so no average between cells enters. With mid-nodes placed
 on the ellipses, the two codes give the same displacements and the same
 Gauss stresses to round-off.
 """
@@ -47,7 +48,7 @@ Gauss stresses to round-off.
 improvements = [
     "an ellipse, or the projection of a line onto a plane (Cast3M `PROJ`)",
     "`transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords)",
-    "nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)",
+    "nodal stresses at a node of a single QUA8 cell: Cast3M's extrapolation (`CHAN NOEUD`) and pyrucast's least-squares fit (`to_nodes`) differ, to look into",
 ]
 
 [[quantity]]

@@ -48,14 +48,17 @@ differ by the error of that integration, which grows with the plastic zone.
 
 In the fully plastic state the Gauss stresses of both codes oscillate from
 point to point, well above 2σ_y/√3 (the full-integration QUA4 locks in an
-incompressible plastic flow). Cast3M averages between neighbouring cells the
-values extrapolated to a node, which smooths the oscillation out; pyrucast
-reads the node in one cell, which shows it.
+incompressible plastic flow). Both codes average between neighbouring cells
+what they give a node, which smooths the oscillation out: at the second node
+of the side they agree within 4e-5. The corner A belongs to a single cell, and
+nothing smooths it there: the `.dgibi` file applies `CHAN 'CHPO'` to the
+Gauss stresses directly and gives 547.2 MPa, where pyrucast's fit gives
+996.7 MPa and the cell's mean 557.7 MPa.
 """
 
 improvements = [
     "B-bar (selective integration) against the volumetric locking of QUA4/QUA8 in incompressible plastic flow",
-    "nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)",
+    "σ_xx at the corner A, a node of a single cell: the `.dgibi` file's `CHAN 'CHPO'` on the Gauss stresses gives 547.2 MPa, which neither pyrucast's fit (`to_nodes`, 996.7) nor the cell mean (557.7) reproduces, to look into",
 ]
 
 [[quantity]]

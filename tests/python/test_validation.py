@@ -34,7 +34,6 @@ EXPECTED_FAILURES = {
     "file alternates it; the criterion (6e-4) is tighter than that",
     "elas3": "the layers are even (no graded extrusion) and the diagonals alike; "
     "the criterion is 4e-4",
-    "elas4": "the DKQ shell is 4 % stiffer than Cast3M's COQ4",
     "elas8": "`transfinite` puts the QUA8 mid-nodes of the ellipses on the chords",
     "plas5": "the two-surface Drucker-Prager stays on its initial surface",
     "plas7": "a stress read at a node in one cell shows the locked QUA4's "

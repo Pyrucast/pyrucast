@@ -9,8 +9,9 @@ The mesh is the Cast3M `.dgibi` file's: the section line (2 elements per segment
 extruded along x in 16 layers, 96 QUA4. Each cell's first edge runs along
 the section line, so the local y axis of the shell is the beam's axis and
 the axial stress on the mid-surface is N_yy / h, as the `.dgibi` file reads SMYY. A
-lies on the edge of the first flange, between two cells; `project` reads it
-in one of them, from that cell's Gauss points.
+lies on the edge of the first flange, between two cells; `to_nodes` gives it
+the mean of what the Gauss points of the two cells give there, as the
+`.dgibi` file reads it.
 
 Running::
 
@@ -66,7 +67,7 @@ def main(out: str | None = None) -> dict[str, float]:
     forces = pc.element_field.integrate_behavior(
         model, strain, materials, pc.element_field.initial_state(model, materials)
     )
-    at_a = pc.node_field.project(forces, surface, pc.mesh.poi1_from_nodes([point_a]))
+    at_a = pc.node_field.to_nodes(forces)
 
     if out:
         surface.plot(title="elas4 — QUA4 mesh", save=os.path.join(out, "mesh.svg"))

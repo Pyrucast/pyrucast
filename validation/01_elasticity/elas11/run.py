@@ -13,7 +13,7 @@ SEG2 lines and puts the QUA8 mid-nodes on the chords; the `.dgibi` file's are on
 arcs.
 
 In pyrucast's axisymmetric coordinates x is r and y is z: the axial stress
-is `sigma_yy`. It is read in the only cell holding A, from its Gauss points.
+is `sigma_yy`. `to_nodes` gives it at A, which belongs to a single cell.
 
 Running::
 
@@ -84,7 +84,7 @@ def main(out: str | None = None) -> dict[str, float]:
 
     strain = pc.element_field.strain(model, u, materials)
     stress = pc.element_field.elastic_stress(model, strain, materials) - sigma_th
-    at_a = pc.node_field.project(stress, solid, pc.mesh.poi1_from_nodes([pa]))
+    at_a = pc.node_field.to_nodes(stress)
 
     if out:
         solid.plot(title="elas11 — QUA8 mesh", save=os.path.join(out, "mesh.svg"))

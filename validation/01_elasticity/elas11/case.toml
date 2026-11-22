@@ -46,7 +46,6 @@ pyrucast gives Cast3M's u_r(B) to round-off.
 
 improvements = [
     "`transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords)",
-    "nodal stresses: extrapolation of the Gauss values to the nodes and average between the cells sharing a node (Cast3M `CHAN NOEUD` then `CHAN CHPO`)",
 ]
 
 [[quantity]]
