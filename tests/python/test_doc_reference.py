@@ -190,13 +190,25 @@ assert positif.value(n[2], "v") == 1.0
 
 _, mesh, fes, n = _plaque()
 temperature = _nodal(n, ["T"], lambda node: 10.0 * node.position()[0])
+displacement = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(n), ["u_x", "u_y"])
+for node in n:
+    x, y = node.position()
+    displacement[0].set_value(node, "u_x", 2.0 * x + 0.5 * y)
+    displacement[0].set_value(node, "u_y", 0.1 * x + 3.0 * y)
 # ANCHOR: element_field-gradient
 # T = 10·x: its gradient at every Gauss point is (10, 0).
 grad = pyrucast.element_field.gradient(temperature, fes)
 print(grad.components())  # ['grad_T_x', 'grad_T_y']
+# u_x = 2x + 0.5y, u_y = 0.1x + 3y is a vector: its gradient is a tensor,
+# row = component, column = derivative.
+grad_u = pyrucast.element_field.gradient(displacement, fes)
+print(grad_u.components())  # ['grad_u_xx', 'grad_u_xy', 'grad_u_yx', 'grad_u_yy']
 # ANCHOR_END: element_field-gradient
 assert _close(grad[0].value(0, 0, "grad_T_x"), 10.0, 1e-9)
 assert _close(grad[0].value(0, 0, "grad_T_y"), 0.0, 1e-9)
+assert grad_u.components() == ["grad_u_xx", "grad_u_xy", "grad_u_yx", "grad_u_yy"]
+assert _close(grad_u[0].value(0, 0, "grad_u_xy"), 0.5, 1e-9)
+assert _close(grad_u[0].value(0, 0, "grad_u_yx"), 0.1, 1e-9)
 
 # ANCHOR: element_field-interp_to_gauss
 # The nodal temperature carried to the Gauss points, same component.

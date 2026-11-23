@@ -289,7 +289,21 @@ Gradient d'un champ nodal aux points de Gauss, cellule par cellule :
 \nabla f = \sum_i f_i\\, \nabla N_i \quad \text{évalué en chaque } \xi_g.
 \\]
 
-Une composante de sortie `<comp>_<axe>` par couple (composante d'entrée, axe).
+Le rang de chaque composante se lit sur les noms du champ :
+
+| Le champ porte | Le gradient a |
+|---|---|
+| un vecteur `u` : `u_x, u_y` (et `u_z` en 3D), dans n'importe quel ordre | son tenseur `grad_u_ij = ∂u_i/∂x_j`, rangé par lignes (ligne = composante, colonne = dérivée) : `grad_u_xx, grad_u_xy, grad_u_yx, grad_u_yy` en 2D, neuf composantes en 3D |
+| en plus, sur un espace axisymétrique | le terme circonférentiel `grad_u_zz = u_r / r`, placé après toutes les dérivées |
+| toute autre composante, comme `T` | une composante par axe : `grad_T_x, grad_T_y` |
+
+En axisymétrie, `x` est le rayon `r` : un anneau de matière qui s'éloigne de
+l'axe de `u_r` s'allonge autour de lui de `u_r / r`. Ce terme est celui que
+`deformation` met dans `F_zz = 1 + u_r / r` ; un scalaire n'en a pas.
+
+Un gradient scalaire est ce que lit une thermique (`grad_T_x`, `grad_T_y`). Un
+gradient de vecteur est un tenseur, que `tensor_dot`, `tensor_ddot` et
+`divergence` lisent sous le nom `grad_u`.
 
 ### `deformation(u, fespace, measure="linear")` → `ElementField`
 

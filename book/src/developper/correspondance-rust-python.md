@@ -226,7 +226,7 @@ par la sortie.
 
 | Rust (`ops::element_field::…`) | Python (`pyrucast.element_field.…`) |
 |---|---|
-| `gradient(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `gradient(field, fespace) -> ElementField` |
+| `gradient(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `gradient(field, fespace) -> ElementField` (un vecteur `u_x, u_y(, u_z)` donne son tenseur `grad_u_ij`, plus `grad_u_zz = u_r/r` en axisymétrie ; un scalaire `T` donne `grad_T_x, grad_T_y`) |
 | `deformation(u: &NodeField, fespace: &FiniteElementSpace, measure: StrainMeasure) -> ElementField` | `deformation(u, fespace, measure="linear") -> ElementField` (`StrainMeasure` passe par son nom : `"linear"`, `"gradient"`, `"green_lagrange"`, `"right_cauchy_green"`, `"left_cauchy_green"`, `"hencky"`, `"euler_almansi"`, `"jacobian"`) |
 | `interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `interp_to_gauss(field, fespace) -> ElementField` |
 | `thermal_strain(model: &Model, temperature: &ElementField, material: &ElementField, t_ref: f64) -> ElementField` | `thermal_strain(model, temperature, materials, t_ref) -> ElementField` (la dilatation exacte dans la mesure et la cinématique de chaque loi) |
