@@ -434,6 +434,28 @@ parent→sub coercion that accompanies it) — the exception described above. Th
 rule applies uniformly to the four aggregates and is meant to be carried by the
 `impl_aggregate!` / `impl_aggregate_pymethods!` macros.
 
+### One zone at a time: `*_zone` and `subfespace`
+
+An operator on aggregates (`gradient`, `deformation`, `divergence`, …) loops
+over the zones and hands each one to a function that processes **a single
+zone**. Three rules keep these functions recognizable:
+
+- **Name**: the operator's name followed by `_zone` — `gradient_zone`,
+  `deformation_zone`, `divergence_zone`, `dilation_zone` — never a `subspace_`
+  prefix.
+- **Parameter**: a `&Handle<SubFiniteElementSpace>` parameter is called
+  `subfespace`, in the one-zone functions as in the `models::kernel` drivers
+  they call. `sub` could be a zone of a field as well as a subspace, and
+  `fespace` names the aggregate `&FiniteElementSpace`. A parameter named after
+  its role (`target`, `support`) keeps that name.
+- **Argument order**: the aggregate operator puts the field first, because it
+  is the subject of the method (`field.gradient(fespace)`). The one-zone
+  function puts the subspace first, as the drivers it calls do
+  (`nodal_pointwise(subfespace, field, reads, …)`,
+  `element_pointwise(subfespace, …)`, `cellwise(subfespace, …)`), and as
+  `strain`, which walks the laws, each with its own subspace, and hands them all
+  the same view of the field. Each layer stays consistent with its neighbours.
+
 ## A macro is justified by its number of expansions
 
 Writing a macro costs more than writing the method it generates: it does not

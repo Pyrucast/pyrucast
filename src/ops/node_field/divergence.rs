@@ -1,21 +1,26 @@
-//! Weak divergence of a per-element **vector** field — the adjoint of
+//! Weak divergence of a per-element **vector or tensor** field — the adjoint of
 //! [`crate::ops::element_field::gradient`](fn@crate::ops::element_field::gradient).
 //!
 //! Where `gradient` maps a nodal field to its gradient at the Gauss points
-//! (`∇f = Σ_i f_i ∇N_i`), `divergence` maps a per-element vector field `F`
-//! (given at the Gauss points) back to a [`NodeField`]:
+//! (`∇f = Σ_i f_i ∇N_i`), `divergence` maps a per-element quantity `A` (given
+//! at the Gauss points) back to a [`NodeField`]:
 //!
 //! ```text
-//! d_i = ∫_Ω ∇N_i · F dΩ  ≈  Σ_cell Σ_g (∇N_i · F)|_g · |J|_g · w_g
+//! d_i = ∫_Ω ∇N_i · A dΩ  ≈  Σ_cell Σ_g (∇N_i · A)|_g · |J|_g · w_g
 //! ```
 //!
 //! accumulated per node. This is the **discrete divergence operator** `Bᵀ`,
 //! the transpose of the gradient operator: for a nodal field `f`, it satisfies
-//! `⟨∇f, F⟩ = ⟨f, div F⟩`. By integration by parts it equals
-//! `∮ N_i F·n − ∫ N_i (∇·F)` — the consistent (weak) nodal divergence, no mass
-//! solve. The input field must carry exactly `space_dim` components, taken in
-//! order as `F_x, F_y, F_z`; each input subspace yields one output zone with a
-//! single `"div"` component.
+//! `⟨∇f, A⟩ = ⟨f, div A⟩`. By integration by parts it equals
+//! `∮ N_i A·n − ∫ N_i (∇·A)` — the consistent (weak) nodal divergence, no mass
+//! solve.
+//!
+//! The quantity is named by a prefix, and its rank is read off the names the
+//! field carries: `A_x, A_y(, A_z)` is a vector, whose divergence is the single
+//! component `div_A`; `A_xx, A_xy, A_yy, …` is a symmetric tensor, read whole
+//! when it also carries `A_yx`, and on an axisymmetric space with its hoop term
+//! `A_zz`; its divergence is a vector, `div_A_x, div_A_y(, div_A_z)`. Each input
+//! subspace yields one output zone.
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
@@ -33,9 +38,12 @@ use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::kernel::{self, CellGeom};
 use crate::ops::element_field::gradient::AXES;
 
-/// Weak divergence `div F` of a per-element vector `field` (see the module
-/// docs), as a [`NodeField`] of component `"div"` — a node shared by several
-/// input subspaces receives the **sum** of their contributions.
+/// Weak divergence `div A` of the quantity `prefix` carried by `field` (see
+/// the module docs), as a [`NodeField`]: `div_A` for a vector, `div_A_x,
+/// div_A_y(, div_A_z)` for a tensor — a node shared by several input subspaces
+/// receives the **sum** of their contributions.
+///
+/// Errors: `field` carries no `prefix` of either rank, or both.
 ///
 /// This is the scalar case of the `Bᵀ` scatter, so it delegates to the shared
 /// driver [`crate::models::kernel::scatter_to_nodes`] (with `B` = the gradient
@@ -189,8 +197,8 @@ fn divergence_zone(field: &Handle<SubElementField>, prefix: &str) -> Result<SubN
     )
 }
 
-/// Element kernel of the weak divergence: `fe[i] = Σ_g (∇N_i · F_g) |J| w`, the
-/// single output component `"div"` per node (`n_dual = 1`). It is the transpose
+/// Element kernel of the weak divergence of a vector: `fe[i] = Σ_g (∇N_i · F_g)
+/// |J| w`, the single output component `div_<prefix>` per node (`n_dual = 1`). It is the transpose
 /// of the gradient, so it plugs into the
 /// [`crate::models::kernel::scatter_to_nodes`] driver exactly like a physics'
 /// `internal_force_element`.
