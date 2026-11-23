@@ -358,6 +358,77 @@ pub fn rotate_frame(
     Ok(PyElementField { inner: ef })
 }
 
+/// Single contraction `A·B` of two tensors, at every Gauss point.
+///
+/// `(A·B)_ij = Σ_k A_ik B_kj`. Each tensor is read off its names: `A_xx, A_xy, A_yy` is symmetric, read
+/// whole when `A_yx` is there too. In 2-D, `A_zz` is required on an
+/// axisymmetric space and read on a plane one when the field carries it; an
+/// absent `A_zz` counts as 0. The fields are paired by FE subspace: one zone
+/// per subspace both carry, in the order of `a`.
+///
+/// # Parameters
+///
+/// - `a`, `b`: the fields carrying the two tensors; they may be the same field.
+/// - `a_prefix`, `b_prefix`: the names of the tensors, `A` and `B`.
+/// - `prefix`: the name of the product.
+///
+/// # Returns
+///
+/// A new `ElementField`: the whole tensor `prefix`, row by row (`p_xx, p_xy,
+/// p_yx, p_yy` in 2-D, nine components in 3-D), followed by `p_zz` when both
+/// tensors carry their `zz` term. The order of the operands counts.
+///
+/// # Raises
+///
+/// `RuntimeError` if, on a subspace both fields carry, a zone does not carry its
+/// tensor, or several zones could.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn tensor_dot(
+    a: PyRef<PyElementField>,
+    b: PyRef<PyElementField>,
+    a_prefix: &str,
+    b_prefix: &str,
+    prefix: &str,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::element_field::tensor_dot(&a.inner, &b.inner, a_prefix, b_prefix, prefix)?;
+    Ok(PyElementField { inner: ef })
+}
+
+/// Double contraction `A:B` of two tensors, at every Gauss point.
+///
+/// `A:B = Σ_ij A_ij B_ij`. The tensors are read and the fields paired as in `tensor_dot`. An
+/// off-diagonal term stored once in a symmetric tensor stands for two entries,
+/// so it counts twice; the `zz` terms count when both tensors carry them. The
+/// trace of `A` is `A:I`, with `I` a uniform field carrying `I_xx = I_yy = I_zz
+/// = 1` and `I_xy = 0`.
+///
+/// # Parameters
+///
+/// - `a`, `b`: the fields carrying the two tensors; they may be the same field.
+/// - `a_prefix`, `b_prefix`: the names of the tensors, `A` and `B`.
+///
+/// # Returns
+///
+/// A new `ElementField` with the single component `"tensor_ddot"`. `A:B = B:A`:
+/// the operands may come in either order.
+///
+/// # Raises
+///
+/// `RuntimeError` if, on a subspace both fields carry, a zone does not carry its
+/// tensor, or several zones could.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn tensor_ddot(
+    a: PyRef<PyElementField>,
+    b: PyRef<PyElementField>,
+    a_prefix: &str,
+    b_prefix: &str,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::element_field::tensor_ddot(&a.inner, &b.inner, a_prefix, b_prefix)?;
+    Ok(PyElementField { inner: ef })
+}
+
 /// Elastic stress `σ = D:ε` of `strain`, for each continuum sub-model of `model`.
 ///
 /// `D` is the operator each law predicts with, not the response of the law

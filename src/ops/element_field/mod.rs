@@ -15,6 +15,8 @@
 //!   its inverse [`elastic_strain`](fn@elastic_strain) (Cast3M `ELAS`);
 //! - *equivalent stress* — [`von_mises`](fn@von_mises), von Mises or Hill's
 //!   anisotropic form;
+//! - *tensor contractions* — [`tensor_dot`](fn@tensor_dot) `A·B` and
+//!   [`tensor_ddot`](fn@tensor_ddot) `A:B`, at every Gauss point;
 //! - *material data* — [`material_field`](fn@material_field) & co., the
 //!   per-zone coefficients the assemblers read, and
 //!   [`rotate_frame`](fn@rotate_frame), their axes turned with the part;
@@ -32,6 +34,7 @@ pub mod beam_deformation;
 pub mod behavior;
 pub mod cell_integral;
 pub mod consolidate;
+pub mod contraction;
 pub mod deformation;
 pub mod elastic;
 pub(crate) mod fit;
@@ -52,6 +55,7 @@ pub use beam_deformation::beam_deformation;
 pub use behavior::initial_state;
 pub use cell_integral::cell_integral;
 pub use consolidate::{check_unique_component_per_support, consolidate};
+pub use contraction::{tensor_ddot, tensor_dot};
 pub use deformation::{deformation, StrainMeasure};
 pub use elastic::{elastic_strain, elastic_stress};
 pub use gradient::gradient;

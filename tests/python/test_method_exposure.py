@@ -103,6 +103,8 @@ NO_METHOD = {
     "deformation gradient F_*",
     "merge": "symmetric — `a | b` is already its form",
     "psca": "symmetric — order does not matter",
+    "tensor_dot": "two tensors, neither the subject of the other — like xty",
+    "tensor_ddot": "symmetric — order does not matter",
 }
 
 PYI = pathlib.Path(pyrucast.__file__).parent / "_pyrucast" / "__init__.pyi"

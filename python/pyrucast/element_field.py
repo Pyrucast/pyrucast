@@ -4,8 +4,9 @@
 Kinematics (gradient, strain and its structural variants, interpolation to the
 Gauss points, thermal expansion), the model's own strain operator ``strain``,
 the elastic operator both ways, the equivalent stress (von Mises, Hill), the
-conversion between stress measures,
-material data, the integration of the constitutive law and its rest state.
+conversion between stress measures, the single and double contractions of two
+tensors, material data, the integration of the constitutive law and its rest
+state.
 """
 
 from ._pyrucast import (
@@ -25,6 +26,8 @@ from ._pyrucast import (
     strain,
     stress_measure,
     sub_material_field,
+    tensor_ddot,
+    tensor_dot,
     thermal_strain,
     von_mises,
 )
@@ -62,6 +65,8 @@ __all__ = [
     "strain",
     "stress_measure",
     "sub_material_field",
+    "tensor_ddot",
+    "tensor_dot",
     "thermal_strain",
     "von_mises",
 ]
