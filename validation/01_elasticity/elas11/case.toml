@@ -36,17 +36,25 @@ notes = """
 The 2011 document gives the goal as σ_zz(A) = 105 MPa and the result table as
 σ_yy(A) = −105 MPa; the `.dgibi` file compares σ_zz with −105 MPa.
 
-`transfinite` puts the QUA8 mid-nodes of the arcs on the chords, where the
-`.dgibi` file puts them on the arcs. Cast3M's thermal stress operator also replaces
-the temperature of a mid-node of a quadratic cell by the mean of its edge's
-corners, which differs from r + z on the arcs' mid-nodes; pyrucast heats every
-node to r + z. With the `.dgibi` file's mid-nodes and its averaged temperatures,
-pyrucast gives Cast3M's u_r(B) to round-off.
+The mesh is the `.dgibi` file's, the mid-nodes of the arcs on the arcs. Cast3M's
+thermal stress operator replaces the temperature of a mid-node of a quadratic
+cell by the mean of its edge's corners, which differs from r + z on the arcs'
+mid-nodes; pyrucast heats every node to r + z, which a QUA8 reproduces
+exactly. With the averaged temperatures, pyrucast gives Cast3M's u_r(B) to
+round-off and its σ_zz(A) to 0.012 % (the rest is the reading at the node A):
+the 0.10 point between the two codes on σ_zz(A), 1.592 % from the reference
+for pyrucast and 1.490 % for Cast3M, is the temperature's.
+
+Both are about 1.5 % from −105 MPa because the mesh is coarse. Refined, with
+the exact geometry and temperature, pyrucast's σ_zz(A) goes from +1.592 %
+(2 × 10 QUA8) to +0.395 % (4 × 20) and −0.182 % (8 × 40): the error of
+discretisation, divided by 4 at the first refinement, towards about
+−105.2 MPa — the NAFEMS target of −105 MPa is itself rounded. Mid-nodes on
+the chords give −0.097 % on the 2 × 10 mesh, a compensation of errors that
+refining undoes (−0.078 %, then −0.314 %).
 """
 
-improvements = [
-    "`transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords)",
-]
+improvements = []
 
 [[quantity]]
 key = "szz_A"

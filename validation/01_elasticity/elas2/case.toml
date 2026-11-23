@@ -40,13 +40,17 @@ y (30 elements), giving 360 DKT triangles.
 """
 
 notes = """
-The nodes are the `.dgibi` file's; the triangles are not: `convert` cuts every
-quadrangle along the same diagonal, the `.dgibi` file's translation alternates it.
-The `.dgibi` file's criterion, 6e-4 from the reference, was set on Cast3M's own mesh.
+The mesh is the `.dgibi` file's: `extrude` into TRI3 alternates the diagonal of
+the triangles from one quadrangle to the next along the arc, as its translation
+does. On this same mesh pyrucast's DKT gives u_z(P3) = −1.139058 and Cast3M's
+−1.139427, 3.2e-4 apart: pyrucast is 0.083 % from the reference, Cast3M 0.050 %,
+under a criterion of 6e-4 the `.dgibi` file set on its own result. The difference
+between the two DKT elements is followed by issue #26, with the comparison of
+the quadrangle shells on elas4.
 """
 
 improvements = [
-    "`convert` / `extrude` to TRI3: alternating diagonals (Cast3M's translation alternates them)",
+    "DKT shell: u_z(P3) 3.2e-4 away from Cast3M's DKT on the same mesh (issue #26)",
     "`dirichlet`: a node blocked twice for the same unknown (two supports meeting) makes the matrix singular, and the LU error does not name the cause",
 ]
 

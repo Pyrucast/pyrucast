@@ -5,11 +5,10 @@ mid-length by two opposite point loads. One eighth is modelled: a quarter of
 the circumference over half the length, with symmetry conditions on the cut
 edges. Reference: u_z = −1.14 under the load, u_x = 0 at the clamped point P1.
 
-Mesh: the `.dgibi` file's nodes, the quarter arc (6 elements, every 15°) extruded by
-70 along y in 30 layers, each quadrangle cut into two triangles by
-`convert`. `convert` cuts every quadrangle along the same diagonal; the
-`.dgibi` file's translation in TRI3 alternates it from one quadrangle to the next
-along the arc.
+Mesh: the `.dgibi` file's, the quarter arc (6 elements, every 15°) extruded by
+70 along y in 30 layers straight into TRI3: each quadrangle is cut into two
+triangles, the diagonal alternating from one quadrangle to the next along the
+arc, as the `.dgibi` file's translation in TRI3 does.
 
 Running::
 
@@ -32,9 +31,7 @@ def main(out: str | None = None) -> dict[str, float]:
     p1 = coords.add_node([RADIUS, 0.0, 0.0])
     p2 = coords.add_node([0.0, 0.0, RADIUS])
     arc = pc.mesh.arc(p1, centre, p2, N_ARC)
-    surface = pc.mesh.convert(
-        pc.mesh.extrude(arc, [0.0, HALF_LENGTH, 0.0], N_LENGTH), "TRI3"
-    )
+    surface = pc.mesh.extrude(arc, [0.0, HALF_LENGTH, 0.0], N_LENGTH, "TRI3")
     p3 = surface.nearest_node([0.0, HALF_LENGTH, RADIUS])
 
     clamped = pc.mesh.points_on_plane(surface, [0.0, 0.0, 0.0], [0.0, 1.0, 0.0])

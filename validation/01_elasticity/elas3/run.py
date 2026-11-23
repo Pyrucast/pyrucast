@@ -6,11 +6,11 @@ modelled: a quarter of the circumference over half the length, with symmetry
 conditions on the cut edges. Reference: u_z = −0.452 under the load.
 
 Mesh: the quarter arc (10 elements, every 9°) extruded along y in 7
-layers, each quadrangle cut into two triangles by `convert`, as in the `.dgibi` file,
-with two differences: the `.dgibi` file lets its mesh density (0.75) place the
-layers, slightly closer towards the loaded section, where `extrude` spaces
-them evenly; and `convert` cuts every quadrangle along the same diagonal,
-where the `.dgibi` file alternates it along the arc.
+layers straight into TRI3, the diagonal of the triangles alternating from one
+quadrangle to the next along the arc, as in the `.dgibi` file, with one
+difference: the `.dgibi` file lets its mesh density (0.75) place the layers,
+slightly closer towards the loaded section, where `extrude` spaces them
+evenly.
 
 Running::
 
@@ -34,9 +34,7 @@ def main(out: str | None = None) -> dict[str, float]:
     p1 = coords.add_node([RADIUS, 0.0, 0.0])
     p2 = coords.add_node([0.0, 0.0, RADIUS])
     arc = pc.mesh.arc(p1, centre, p2, N_ARC)
-    surface = pc.mesh.convert(
-        pc.mesh.extrude(arc, [0.0, HALF_LENGTH, 0.0], N_LAYERS), "TRI3"
-    )
+    surface = pc.mesh.extrude(arc, [0.0, HALF_LENGTH, 0.0], N_LAYERS, "TRI3")
     p3 = surface.nearest_node([0.0, HALF_LENGTH, RADIUS])
 
     plane_z0 = pc.mesh.points_on_plane(surface, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])

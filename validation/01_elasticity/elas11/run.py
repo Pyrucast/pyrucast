@@ -5,12 +5,12 @@ a conical part and a cylindrical part — is heated to T = r + z (°C), with
 α = 2.3e-4 /°C and the reference temperature 0; u_z = 0 on its two flat
 faces. Reference: the axial stress at A (1, 0) is σ_zz = −105 MPa.
 
-The QUA8 mesh has the `.dgibi` file's boundary lines: 2 elements across and 10 along
-the meridian (4 on the arcs of 30°, 2 on the arc from 30° to 45°, 4 on the
-cone and on the inner straight part, 2 on the outer cylinder), filled by
-`transfinite` as the `.dgibi` file's mesher does. `transfinite` takes straight-sided
-SEG2 lines and puts the QUA8 mid-nodes on the chords; the `.dgibi` file's are on the
-arcs.
+The QUA8 mesh has the `.dgibi` file's boundary lines, SEG3: 2 elements across and 10
+along the meridian (4 on the arcs of 30°, 2 on the arc from 30° to 45°, 4 on
+the cone and on the inner straight part, 2 on the outer cylinder), filled by
+`transfinite` as the `.dgibi` file's mesher does: the mid-nodes of the arcs are on
+the arcs, those inside at the middle of their chords. The temperature is
+r + z at every node, mid-nodes included.
 
 In pyrucast's axisymmetric coordinates x is r and y is z: the axial stress
 is `sigma_yy`. `to_nodes` gives it at A, which belongs to a single cell.
@@ -43,19 +43,19 @@ def main(out: str | None = None) -> dict[str, float]:
     ph = coords.add_node([0.7071, 1.79])
     pi = coords.add_node([1.0, 1.79])
     # The four sides, counter-clockwise, as in the `.dgibi` file.
-    bottom = pc.mesh.line(pa, pb, 2)
+    bottom = pc.mesh.line(pa, pb, 2, "SEG3")
     outer = pc.mesh.consolidate(
-        pc.mesh.arc(pb, origin, pd, 4)
-        | pc.mesh.line(pd, pg, 4)
-        | pc.mesh.line(pg, pi, 2)
+        pc.mesh.arc(pb, origin, pd, 4, "SEG3")
+        | pc.mesh.line(pd, pg, 4, "SEG3")
+        | pc.mesh.line(pg, pi, 2, "SEG3")
     )
-    top = pc.mesh.line(pi, ph, 2)
+    top = pc.mesh.line(pi, ph, 2, "SEG3")
     inner = pc.mesh.consolidate(
-        pc.mesh.line(ph, pe, 4)
-        | pc.mesh.arc(pe, origin, pc_, 2)
-        | pc.mesh.arc(pc_, origin, pa, 4)
+        pc.mesh.line(ph, pe, 4, "SEG3")
+        | pc.mesh.arc(pe, origin, pc_, 2, "SEG3")
+        | pc.mesh.arc(pc_, origin, pa, 4, "SEG3")
     )
-    solid = pc.mesh.transfinite(bottom, outer, top, inner, "QUA8")
+    solid = pc.mesh.transfinite(bottom, outer, top, inner)
     flat_faces = pc.mesh.consolidate(
         pc.mesh.points_on_line(solid, [1.0, 0.0], [1.4, 0.0])
         | pc.mesh.points_on_line(solid, [0.7071, 1.79], [1.0, 1.79])

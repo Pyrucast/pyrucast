@@ -37,12 +37,12 @@ python validation/make_document.py    # this document
 | Chapter | Case | Status | Largest gap to the reference | Largest gap pyrucast / Cast3M 2026 |
 |---|---|---|---|---|
 | Elasticity | [elas1](#elas1) | gap | missing: axisymmetric shell element (COQ2) | |
-| Elasticity | [elas2](#elas2) | run, OUTSIDE tolerance | 0.153 %; Δ = 0 | 2.0e-03 |
-| Elasticity | [elas3](#elas3) | run, OUTSIDE tolerance | 0.321 % | 3.5e-03 |
+| Elasticity | [elas2](#elas2) | run, OUTSIDE tolerance | 0.0827 %; Δ = 0 | 3.2e-04 |
+| Elasticity | [elas3](#elas3) | run, within tolerance | 0.018 % | 1.2e-04 |
 | Elasticity | [elas4](#elas4) | run, within tolerance | 0.363 % | 3.9e-02 |
 | Elasticity | [elas7](#elas7) | gap | missing: axisymmetric shell element (COQ2) | |
-| Elasticity | [elas8](#elas8) | run, OUTSIDE tolerance | 7.85 % | 6.9e-02 |
-| Elasticity | [elas11](#elas11) | run, within tolerance | 0.0973 % | 1.6e-02 |
+| Elasticity | [elas8](#elas8) | run, within tolerance | 0.841 % | 7.2e-04 |
+| Elasticity | [elas11](#elas11) | run, within tolerance | 1.59 % | 1.0e-03 |
 | Elasticity | [elas13](#elas13) | run, within tolerance | 3.53 % | 5.9e-14 |
 | Elasticity | [stru2](#stru2) | run, within tolerance | 0.789 % | 2.3e-14 |
 | Elasticity | [stru4](#stru4) | gap | missing: pipe element (TUYA) | |
@@ -177,10 +177,9 @@ What writing the computed cases showed: an operator or an option pyrucast lacks 
 |---|---|---|
 | B-bar (selective integration) against the volumetric locking of QUA4/QUA8 in incompressible plastic flow | [plas7](#plas7), [chaboche2](#chaboche2) | 2 |
 | Drucker-Prager with two surfaces: pyrucast's interpolation driven by H·p departs from Cast3M when K_L < K, or when K_L = K with H ≠ 0 | [plas5](#plas5), [plas9](#plas9) | 2 |
-| `convert` / `extrude` to TRI3: alternating diagonals (Cast3M's translation alternates them) | [elas2](#elas2), [elas3](#elas3) | 2 |
 | `dirichlet`: a node blocked twice for the same unknown (two supports meeting) makes the matrix singular, and the LU error does not name the cause | [elas2](#elas2), [elas3](#elas3) | 2 |
-| `transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords) | [elas8](#elas8), [elas11](#elas11) | 2 |
 | graded lines and extrusions (Cast3M `DINI`/`DFIN`, mesh density) | [elas3](#elas3), [ther-perm](#ther-perm) | 2 |
+| DKT shell: u_z(P3) 3.2e-4 away from Cast3M's DKT on the same mesh (issue #26) | [elas2](#elas2) | 1 |
 | Kirchhoff quadrangle shell (DKQ): 4 % stiffer than Cast3M's COQ4 on elas4, to look into (GitHub issue #26) | [elas4](#elas4) | 1 |
 | `mpc`: one coefficient per term for every relation; relations whose coefficients differ need one `mpc` each | [plas1](#plas1) | 1 |
 | an ellipse, or the projection of a line onto a plane (Cast3M `PROJ`) | [elas8](#elas8) | 1 |
@@ -280,13 +279,17 @@ y (30 elements), giving 360 DKT triangles.
 - Load: F_z = −2500 at P3 (0, 70, 7), the top of the mid-length section
   (a quarter of the pinching load).
 
-**Notes.** The nodes are the `.dgibi` file's; the triangles are not: `convert` cuts every
-quadrangle along the same diagonal, the `.dgibi` file's translation alternates it.
-The `.dgibi` file's criterion, 6e-4 from the reference, was set on Cast3M's own mesh.
+**Notes.** The mesh is the `.dgibi` file's: `extrude` into TRI3 alternates the diagonal of
+the triangles from one quadrangle to the next along the arc, as its translation
+does. On this same mesh pyrucast's DKT gives u_z(P3) = −1.139058 and Cast3M's
+−1.139427, 3.2e-4 apart: pyrucast is 0.083 % from the reference, Cast3M 0.050 %,
+under a criterion of 6e-4 the `.dgibi` file set on its own result. The difference
+between the two DKT elements is followed by issue #26, with the comparison of
+the quadrangle shells on elas4.
 
 **Improvement points.**
 
-- `convert` / `extrude` to TRI3: alternating diagonals (Cast3M's translation alternates them)
+- DKT shell: u_z(P3) 3.2e-4 away from Cast3M's DKT on the same mesh (issue #26)
 - `dirichlet`: a node blocked twice for the same unknown (two supports meeting) makes the matrix singular, and the LU error does not name the cause
 
 #### Results
@@ -294,11 +297,11 @@ The `.dgibi` file's criterion, 6e-4 from the reference, was set on Cast3M's own 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
 | u_x at P1 (cm) | 0 | -2.1247e-19 (Δ = -2.1e-19) | 0 (Δ = 0) | 0 | Δ = 0 |
-| u_z at P3 (cm) | -1.14 | -1.1394 (+0.0526 %) | -1.13943 (+0.0503 %) | -1.14175 | -0.153 % |
+| u_z at P3 (cm) | -1.14 | -1.1394 (+0.0526 %) | -1.13943 (+0.0503 %) | -1.13906 | +0.0827 % |
 
 Acceptance: criteria of the `.dgibi` file, |u_z(P3) + 1.14| / 1.14 ≤ 6e-4 and |u_x(P1)| ≤ 1e-18.
 
-pyrucast OUTSIDE tolerance: uz_P3: -1.1417491751788946 vs -1.14, beyond 0.0006
+pyrucast OUTSIDE tolerance: uz_P3: -1.139057676908149 vs -1.14, beyond 0.0006
 
 #### pyrucast figures
 
@@ -318,11 +321,10 @@ mid-length by two opposite point loads. One eighth is modelled: a quarter of
 the circumference over half the length, with symmetry conditions on the cut
 edges. Reference: u_z = −1.14 under the load, u_x = 0 at the clamped point P1.
 
-Mesh: the `.dgibi` file's nodes, the quarter arc (6 elements, every 15°) extruded by
-70 along y in 30 layers, each quadrangle cut into two triangles by
-`convert`. `convert` cuts every quadrangle along the same diagonal; the
-`.dgibi` file's translation in TRI3 alternates it from one quadrangle to the next
-along the arc.
+Mesh: the `.dgibi` file's, the quarter arc (6 elements, every 15°) extruded by
+70 along y in 30 layers straight into TRI3: each quadrangle is cut into two
+triangles, the diagonal alternating from one quadrangle to the next along the
+arc, as the `.dgibi` file's translation in TRI3 does.
 
 Running::
 
@@ -345,9 +347,7 @@ def main(out: str | None = None) -> dict[str, float]:
     p1 = coords.add_node([RADIUS, 0.0, 0.0])
     p2 = coords.add_node([0.0, 0.0, RADIUS])
     arc = pc.mesh.arc(p1, centre, p2, N_ARC)
-    surface = pc.mesh.convert(
-        pc.mesh.extrude(arc, [0.0, HALF_LENGTH, 0.0], N_LENGTH), "TRI3"
-    )
+    surface = pc.mesh.extrude(arc, [0.0, HALF_LENGTH, 0.0], N_LENGTH, "TRI3")
     p3 = surface.nearest_node([0.0, HALF_LENGTH, RADIUS])
 
     clamped = pc.mesh.points_on_plane(surface, [0.0, 0.0, 0.0], [0.0, 1.0, 0.0])
@@ -437,24 +437,23 @@ Quarter cylinder of radius 4.953 and half-length 5.175 (axis y), thickness
   section.
 
 **Notes.** The `.dgibi` file places its 7 layers by its mesh density, slightly closer towards the
-loaded section, and alternates the diagonals of its triangles; pyrucast's
-layers are even and its diagonals all alike.
+loaded section, where pyrucast's layers are even; both alternate the diagonal
+of the triangles from one quadrangle to the next along the arc.
 
 **Improvement points.**
 
 - graded lines and extrusions (Cast3M `DINI`/`DFIN`, mesh density)
-- `convert` / `extrude` to TRI3: alternating diagonals (Cast3M's translation alternates them)
 - `dirichlet`: a node blocked twice for the same unknown (two supports meeting) makes the matrix singular, and the LU error does not name the cause
 
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| u_z at P3 (cm) | -0.452 | -0.45214 (-0.031 %) | -0.452137 (-0.0303 %) | -0.45055 | +0.321 % |
+| u_z at P3 (cm) | -0.452 | -0.45214 (-0.031 %) | -0.452137 (-0.0303 %) | -0.452081 | -0.018 % |
 
 Acceptance: criterion of the `.dgibi` file, |u_z(P3) + 0.452| / 0.452 ≤ 4e-4.
 
-pyrucast OUTSIDE tolerance: uz_P3: -0.4505498830241352 vs -0.452, beyond 0.0004
+pyrucast: the 1 checked quantities are within tolerance.
 
 #### pyrucast figures
 
@@ -475,11 +474,11 @@ modelled: a quarter of the circumference over half the length, with symmetry
 conditions on the cut edges. Reference: u_z = −0.452 under the load.
 
 Mesh: the quarter arc (10 elements, every 9°) extruded along y in 7
-layers, each quadrangle cut into two triangles by `convert`, as in the `.dgibi` file,
-with two differences: the `.dgibi` file lets its mesh density (0.75) place the
-layers, slightly closer towards the loaded section, where `extrude` spaces
-them evenly; and `convert` cuts every quadrangle along the same diagonal,
-where the `.dgibi` file alternates it along the arc.
+layers straight into TRI3, the diagonal of the triangles alternating from one
+quadrangle to the next along the arc, as in the `.dgibi` file, with one
+difference: the `.dgibi` file lets its mesh density (0.75) place the layers,
+slightly closer towards the loaded section, where `extrude` spaces them
+evenly.
 
 Running::
 
@@ -503,9 +502,7 @@ def main(out: str | None = None) -> dict[str, float]:
     p1 = coords.add_node([RADIUS, 0.0, 0.0])
     p2 = coords.add_node([0.0, 0.0, RADIUS])
     arc = pc.mesh.arc(p1, centre, p2, N_ARC)
-    surface = pc.mesh.convert(
-        pc.mesh.extrude(arc, [0.0, HALF_LENGTH, 0.0], N_LAYERS), "TRI3"
-    )
+    surface = pc.mesh.extrude(arc, [0.0, HALF_LENGTH, 0.0], N_LAYERS, "TRI3")
     p3 = surface.nearest_node([0.0, HALF_LENGTH, RADIUS])
 
     plane_z0 = pc.mesh.points_on_plane(surface, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
@@ -801,32 +798,30 @@ straight edge has 4 elements.
 - Boundary conditions: symmetry about x = 0 (u_x = 0) and y = 0 (u_y = 0).
 - Load: outward pressure of 10 MPa on the outer elliptic edge.
 
-**Notes.** The boundary nodes are the `.dgibi` file's. Inside, `transfinite` places the corner
-nodes as the `.dgibi` file does, but puts the QUA8 mid-nodes of the elliptic edges on
-the chords, where the `.dgibi` file puts them on the ellipses; σ_yy at D, where the
-inner ellipse is the most curved, is sensitive to it. Cast3M also reads the
-stress at a node differently: it extrapolates the Gauss values of the cell to
-its nodes, pyrucast evaluates their least-squares fit (`to_nodes`); D belongs to a
-single cell, so no average between cells enters. With mid-nodes placed
-on the ellipses, the two codes give the same displacements and the same
-Gauss stresses to round-off.
+**Notes.** The boundary nodes are the `.dgibi` file's, the mid-nodes of the ellipses included.
+Inside, `transfinite` places the nodes as the `.dgibi` file's mesher does: the corners
+by the transfinite interpolation, the mid-nodes at the middle of their chords.
+The two codes give the same displacements to round-off (u_y(B) agrees to 7
+digits). Cast3M reads the stress at a node differently: it extrapolates the
+Gauss values of the cell to its nodes, pyrucast evaluates their least-squares
+fit (`to_nodes`); D belongs to a single cell, so no average between cells
+enters. σ_yy(D) is 0.841 % from the reference for pyrucast, 0.914 % for Cast3M.
 
 **Improvement points.**
 
 - an ellipse, or the projection of a line onto a plane (Cast3M `PROJ`)
-- `transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords)
 - nodal stresses at a node of a single QUA8 cell: Cast3M's extrapolation (`CHAN NOEUD`) and pyrucast's least-squares fit (`to_nodes`) differ, to look into
 
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| σ_yy at D (MPa) | 92.7 | 93.548 (+0.915 %) | 93.5476 (+0.914 %) | 99.9753 | +7.85 % |
-| u_y at B (0, 2.75), no reference (m) | — | — | 0.000545846 | 0.000542939 |  |
+| σ_yy at D (MPa) | 92.7 | 93.548 (+0.915 %) | 93.5476 (+0.914 %) | 93.48 | +0.841 % |
+| u_y at B (0, 2.75), no reference (m) | — | — | 0.000545846 | 0.000545846 |  |
 
 Acceptance: criterion of the `.dgibi` file, |σ_yy(D) − 92.7| / 92.7 ≤ 1 %.
 
-pyrucast OUTSIDE tolerance: syy_D: 99.97533666117653 vs 92.7, beyond 0.01
+pyrucast: the 1 checked quantities are within tolerance.
 
 #### pyrucast figures
 
@@ -846,14 +841,15 @@ x²/3.25² + y²/2.75² = 1, symmetric about x = 0 and y = 0, is pulled by a
 uniform outward pressure of 10 MPa on its outer edge. Reference:
 σ_yy = 92.7 MPa at the point D (2, 0).
 
-The QUA8 mesh has the `.dgibi` file's boundary lines: 6 elements along each ellipse
-(a node at every 15° of the ellipse's parameter), 4 across, the straight
-sides cut at 1.583 on x = 0 and at 2.417 on y = 0, filled by `transfinite`
-as the `.dgibi` file's mesher does. pyrucast has no ellipse, nor the projection of a
-circle onto a plane that the `.dgibi` file uses to draw one: the nodes of the two
-elliptic lines are placed here. `transfinite` puts the QUA8 mid-nodes on the
-chords; the `.dgibi` file's are on the ellipses. The QUA4 patch and the outer line
-are made quadratic together, so that they share their mid-nodes.
+The QUA8 mesh has the `.dgibi` file's boundary lines: 6 SEG3 elements along each
+ellipse (a corner at every 15° of the ellipse's parameter, a mid-node halfway,
+on the ellipse), 4 across, the straight sides cut at 1.583 on x = 0 and at
+2.417 on y = 0, filled by `transfinite` as the `.dgibi` file's mesher does: the
+mid-nodes of the ellipses are the lines' own, those inside sit at the middle
+of their chords. pyrucast has no ellipse, nor the projection of a circle onto a
+plane that the `.dgibi` file uses to draw one: the nodes of the two elliptic lines
+are placed here. The pressure acts on the outer elliptic line itself, whose
+nodes the patch shares.
 
 σ_yy at D is what `to_nodes` gives there: D belongs to a single cell, whose
 Gauss values are fitted over its nodes.
@@ -879,36 +875,35 @@ Y_CUT, X_CUT = 1.583, 2.417  # where the straight sides change their line
 def main(out: str | None = None) -> dict[str, float]:
     coords = pc.Coords(2)
     # The two elliptic lines, counter-clockwise around the membrane: the outer
-    # one from y = 0 to x = 0, the inner one from x = 0 to y = 0.
+    # one from y = 0 to x = 0, the inner one from x = 0 to y = 0. A node at
+    # every half step of the parameter: the corners at the even ones, the
+    # mid-nodes at the odd ones.
     outer_nodes, inner_nodes = [], []
-    for k in range(N_ARC + 1):
-        phi = math.pi / 2.0 * k / N_ARC
+    for k in range(2 * N_ARC + 1):
+        phi = math.pi / 2.0 * k / (2 * N_ARC)
         outer_nodes.append(
             coords.add_node([A_OUT * math.cos(phi), B_OUT * math.sin(phi)])
         )
         inner_nodes.append(
             coords.add_node([A_IN * math.sin(phi), B_IN * math.cos(phi)])
         )
-    outer = pc.Mesh(coords, "SEG2")
-    inner = pc.Mesh(coords, "SEG2")
-    for k in range(N_ARC):
-        outer.unit().add_cell([outer_nodes[k], outer_nodes[k + 1]])
-        inner.unit().add_cell([inner_nodes[k], inner_nodes[k + 1]])
+    outer = pc.Mesh(coords, "SEG3")
+    inner = pc.Mesh(coords, "SEG3")
+    for k in range(0, 2 * N_ARC, 2):
+        outer.unit().add_cell([outer_nodes[k], outer_nodes[k + 2], outer_nodes[k + 1]])
+        inner.unit().add_cell([inner_nodes[k], inner_nodes[k + 2], inner_nodes[k + 1]])
     pc_, pb = outer_nodes[0], outer_nodes[-1]
     pa, pd = inner_nodes[0], inner_nodes[-1]
     cut_y0 = coords.add_node([X_CUT, 0.0])
     cut_x0 = coords.add_node([0.0, Y_CUT])
     side_y0 = pc.mesh.consolidate(
-        pc.mesh.line(pd, cut_y0, 2) | pc.mesh.line(cut_y0, pc_, 2)
+        pc.mesh.line(pd, cut_y0, 2, "SEG3") | pc.mesh.line(cut_y0, pc_, 2, "SEG3")
     )
     side_x0 = pc.mesh.consolidate(
-        pc.mesh.line(pb, cut_x0, 2) | pc.mesh.line(cut_x0, pa, 2)
+        pc.mesh.line(pb, cut_x0, 2, "SEG3") | pc.mesh.line(cut_x0, pa, 2, "SEG3")
     )
-    patch = pc.mesh.transfinite(side_y0, outer, side_x0, inner)
-    quadratic = pc.mesh.to_quadratic(patch | outer)
-    membrane, outer_edge = pc.Mesh.empty(), pc.Mesh.empty()
-    membrane.add_sub(quadratic[0])
-    outer_edge.add_sub(quadratic[1])
+    membrane = pc.mesh.transfinite(side_y0, outer, side_x0, inner)
+    outer_edge = outer
 
     fes = pc.FiniteElementSpace(membrane)
     elasticity = pc.model.elasticity(fes, "plane_stress")
@@ -993,23 +988,29 @@ Meridian plane (r, z), QUA8 elements (fine mesh of the `.dgibi` file, K = 2).
 **Notes.** The 2011 document gives the goal as σ_zz(A) = 105 MPa and the result table as
 σ_yy(A) = −105 MPa; the `.dgibi` file compares σ_zz with −105 MPa.
 
-`transfinite` puts the QUA8 mid-nodes of the arcs on the chords, where the
-`.dgibi` file puts them on the arcs. Cast3M's thermal stress operator also replaces
-the temperature of a mid-node of a quadratic cell by the mean of its edge's
-corners, which differs from r + z on the arcs' mid-nodes; pyrucast heats every
-node to r + z. With the `.dgibi` file's mid-nodes and its averaged temperatures,
-pyrucast gives Cast3M's u_r(B) to round-off.
+The mesh is the `.dgibi` file's, the mid-nodes of the arcs on the arcs. Cast3M's
+thermal stress operator replaces the temperature of a mid-node of a quadratic
+cell by the mean of its edge's corners, which differs from r + z on the arcs'
+mid-nodes; pyrucast heats every node to r + z, which a QUA8 reproduces
+exactly. With the averaged temperatures, pyrucast gives Cast3M's u_r(B) to
+round-off and its σ_zz(A) to 0.012 % (the rest is the reading at the node A):
+the 0.10 point between the two codes on σ_zz(A), 1.592 % from the reference
+for pyrucast and 1.490 % for Cast3M, is the temperature's.
 
-**Improvement points.**
-
-- `transfinite`: QUA8 mid-nodes on curved sides (it takes SEG2 sides and puts the mid-nodes on the chords)
+Both are about 1.5 % from −105 MPa because the mesh is coarse. Refined, with
+the exact geometry and temperature, pyrucast's σ_zz(A) goes from +1.592 %
+(2 × 10 QUA8) to +0.395 % (4 × 20) and −0.182 % (8 × 40): the error of
+discretisation, divided by 4 at the first refinement, towards about
+−105.2 MPa — the NAFEMS target of −105 MPa is itself rounded. Mid-nodes on
+the chords give −0.097 % on the 2 × 10 mesh, a compensation of errors that
+refining undoes (−0.078 %, then −0.314 %).
 
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| σ_zz at A (MPa) | -105 | -103.34 (+1.58 %) | -103.436 (+1.49 %) | -105.102 | -0.0973 % |
-| u_r at B (1.4, 0), no reference (m) | — | — | 0.000766758 | 0.000765887 |  |
+| σ_zz at A (MPa) | -105 | -103.34 (+1.58 %) | -103.436 (+1.49 %) | -103.328 | +1.59 % |
+| u_r at B (1.4, 0), no reference (m) | — | — | 0.000766758 | 0.000767139 |  |
 
 Acceptance: criterion of the `.dgibi` file, |σ_zz(A) + 105| / 105 ≤ 2 %.
 
@@ -1033,12 +1034,12 @@ a conical part and a cylindrical part — is heated to T = r + z (°C), with
 α = 2.3e-4 /°C and the reference temperature 0; u_z = 0 on its two flat
 faces. Reference: the axial stress at A (1, 0) is σ_zz = −105 MPa.
 
-The QUA8 mesh has the `.dgibi` file's boundary lines: 2 elements across and 10 along
-the meridian (4 on the arcs of 30°, 2 on the arc from 30° to 45°, 4 on the
-cone and on the inner straight part, 2 on the outer cylinder), filled by
-`transfinite` as the `.dgibi` file's mesher does. `transfinite` takes straight-sided
-SEG2 lines and puts the QUA8 mid-nodes on the chords; the `.dgibi` file's are on the
-arcs.
+The QUA8 mesh has the `.dgibi` file's boundary lines, SEG3: 2 elements across and 10
+along the meridian (4 on the arcs of 30°, 2 on the arc from 30° to 45°, 4 on
+the cone and on the inner straight part, 2 on the outer cylinder), filled by
+`transfinite` as the `.dgibi` file's mesher does: the mid-nodes of the arcs are on
+the arcs, those inside at the middle of their chords. The temperature is
+r + z at every node, mid-nodes included.
 
 In pyrucast's axisymmetric coordinates x is r and y is z: the axial stress
 is `sigma_yy`. `to_nodes` gives it at A, which belongs to a single cell.
@@ -1071,19 +1072,19 @@ def main(out: str | None = None) -> dict[str, float]:
     ph = coords.add_node([0.7071, 1.79])
     pi = coords.add_node([1.0, 1.79])
     # The four sides, counter-clockwise, as in the `.dgibi` file.
-    bottom = pc.mesh.line(pa, pb, 2)
+    bottom = pc.mesh.line(pa, pb, 2, "SEG3")
     outer = pc.mesh.consolidate(
-        pc.mesh.arc(pb, origin, pd, 4)
-        | pc.mesh.line(pd, pg, 4)
-        | pc.mesh.line(pg, pi, 2)
+        pc.mesh.arc(pb, origin, pd, 4, "SEG3")
+        | pc.mesh.line(pd, pg, 4, "SEG3")
+        | pc.mesh.line(pg, pi, 2, "SEG3")
     )
-    top = pc.mesh.line(pi, ph, 2)
+    top = pc.mesh.line(pi, ph, 2, "SEG3")
     inner = pc.mesh.consolidate(
-        pc.mesh.line(ph, pe, 4)
-        | pc.mesh.arc(pe, origin, pc_, 2)
-        | pc.mesh.arc(pc_, origin, pa, 4)
+        pc.mesh.line(ph, pe, 4, "SEG3")
+        | pc.mesh.arc(pe, origin, pc_, 2, "SEG3")
+        | pc.mesh.arc(pc_, origin, pa, 4, "SEG3")
     )
-    solid = pc.mesh.transfinite(bottom, outer, top, inner, "QUA8")
+    solid = pc.mesh.transfinite(bottom, outer, top, inner)
     flat_faces = pc.mesh.consolidate(
         pc.mesh.points_on_line(solid, [1.0, 0.0], [1.4, 0.0])
         | pc.mesh.points_on_line(solid, [0.7071, 1.79], [1.0, 1.79])

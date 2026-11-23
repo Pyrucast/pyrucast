@@ -30,11 +30,8 @@ DOCUMENT = _load(ROOT / "make_document.py", "validation_make_document")
 CASES = sorted(p.parent for p in ROOT.glob("*/*/run.py"))
 
 EXPECTED_FAILURES = {
-    "elas2": "`convert` cuts the quadrangles along one diagonal, the `.dgibi` "
-    "file alternates it; the criterion (6e-4) is tighter than that",
-    "elas3": "the layers are even (no graded extrusion) and the diagonals alike; "
-    "the criterion is 4e-4",
-    "elas8": "`transfinite` puts the QUA8 mid-nodes of the ellipses on the chords",
+    "elas2": "on the `.dgibi` file's mesh, pyrucast's DKT is 3.2e-4 from Cast3M's "
+    "(issue #26); the criterion (6e-4) leaves Cast3M itself 1e-4 of margin",
     "plas5": "the two-surface Drucker-Prager stays on its initial surface",
     "plas7": "a stress read at a node in one cell shows the locked QUA4's "
     "oscillation (no nodal averaging, no B-bar)",
