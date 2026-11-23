@@ -4094,9 +4094,17 @@ class NodeField:
         Gradient `∇f` of a field at the nodes, at the Gauss points of `fespace`.
         
         `∇f = Σ_i f_i ∇N_i`, evaluated at each Gauss point, cell by cell. The
-        operator is geometric and knows no physics; its result feeds
-        `pyrucast.element_field.integrate_behavior` (heat conduction reads
-        `grad_T_*`). A node the field does not define reads zero.
+        operator is geometric and knows no physics. A node the field does not
+        define reads zero. The rank of each component is read off the names:
+        
+        | the field carries | the gradient has |
+        |---|---|
+        | a vector `u`: `u_x, u_y` (and `u_z` in 3-D), in any order | its tensor `grad_u_ij = ∂u_i/∂x_j`, row by row: `grad_u_xx, grad_u_xy, grad_u_yx, grad_u_yy`; on an axisymmetric space, also the circumferential (hoop) term `grad_u_zz = u_x / r` |
+        | any other component, as `T` | one component per axis: `grad_T_x, grad_T_y` |
+        
+        A scalar gradient feeds `pyrucast.element_field.integrate_behavior` (heat
+        conduction reads `grad_T_*`); a vector gradient is a tensor that
+        `tensor_dot`, `tensor_ddot` and `divergence` read under the name `grad_u`.
         
         # Parameters
         
@@ -4105,8 +4113,13 @@ class NodeField:
         
         # Returns
         
-        An `ElementField` on `fespace`, with one component `grad_<name>_<axis>` per
-        pair of input component and spatial axis (`grad_T_x`, `grad_T_y`, …).
+        An `ElementField` on `fespace`: the scalar and tensor components above,
+        the circumferential terms last.
+        
+        # Raises
+        
+        `RuntimeError` if a vector needs its circumferential term on a
+        `MODEL_EMBEDDED` subspace, which has no field basis to interpolate it.
         """
     def interp_to_gauss(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
@@ -7548,9 +7561,17 @@ def gradient(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
     Gradient `∇f` of a field at the nodes, at the Gauss points of `fespace`.
     
     `∇f = Σ_i f_i ∇N_i`, evaluated at each Gauss point, cell by cell. The
-    operator is geometric and knows no physics; its result feeds
-    `pyrucast.element_field.integrate_behavior` (heat conduction reads
-    `grad_T_*`). A node the field does not define reads zero.
+    operator is geometric and knows no physics. A node the field does not
+    define reads zero. The rank of each component is read off the names:
+    
+    | the field carries | the gradient has |
+    |---|---|
+    | a vector `u`: `u_x, u_y` (and `u_z` in 3-D), in any order | its tensor `grad_u_ij = ∂u_i/∂x_j`, row by row: `grad_u_xx, grad_u_xy, grad_u_yx, grad_u_yy`; on an axisymmetric space, also the circumferential (hoop) term `grad_u_zz = u_x / r` |
+    | any other component, as `T` | one component per axis: `grad_T_x, grad_T_y` |
+    
+    A scalar gradient feeds `pyrucast.element_field.integrate_behavior` (heat
+    conduction reads `grad_T_*`); a vector gradient is a tensor that
+    `tensor_dot`, `tensor_ddot` and `divergence` read under the name `grad_u`.
     
     # Parameters
     
@@ -7559,8 +7580,13 @@ def gradient(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
     
     # Returns
     
-    An `ElementField` on `fespace`, with one component `grad_<name>_<axis>` per
-    pair of input component and spatial axis (`grad_T_x`, `grad_T_y`, …).
+    An `ElementField` on `fespace`: the scalar and tensor components above,
+    the circumferential terms last.
+    
+    # Raises
+    
+    `RuntimeError` if a vector needs its circumferential term on a
+    `MODEL_EMBEDDED` subspace, which has no field basis to interpolate it.
     """
 
 def grid_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, prefer_quads: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
