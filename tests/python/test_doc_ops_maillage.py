@@ -209,9 +209,25 @@ side4 = pyrucast.mesh.line(p3, p0, 2)  # left,   2 elements (= side2)
 
 surf = pyrucast.mesh.transfinite(side1, side2, side3, side4)
 print(surf.element_types(), surf.cell_count)  # ['QUA4'] 8
+
+# Between SEG3 sides — here two arcs about the origin and two straight lines —
+# the default is QUA8, and the arcs' own mid-nodes are kept on the border.
+o = c.add_node([0.0, 0.0])
+r1, r2 = c.add_node([1.0, 0.0]), c.add_node([2.0, 0.0])
+s2, s1 = c.add_node([0.0, 2.0]), c.add_node([0.0, 1.0])
+couronne = pyrucast.mesh.transfinite(
+    pyrucast.mesh.line(r1, r2, 2, "SEG3"),
+    pyrucast.mesh.arc(r2, o, s2, 4, "SEG3"),
+    pyrucast.mesh.line(s2, s1, 2, "SEG3"),
+    pyrucast.mesh.arc(s1, o, r1, 4, "SEG3"),
+)
+print(couronne.element_types(), couronne.cell_count)  # ['QUA8'] 8
 # ANCHOR_END: mesh-transfinite
 assert surf.element_types() == ["QUA4"]
 assert surf.cell_count == 8
+assert couronne.element_types() == ["QUA8"] and couronne.cell_count == 8
+# The mid-node of the first cell's edge on the inner arc (local 7) is on it.
+assert abs(math.hypot(*couronne.node(0, 0, 7).position()) - 1.0) < 1e-12
 
 # ── Transformations: translation, rotation, symmetry ────────────────────────
 

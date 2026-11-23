@@ -27,7 +27,7 @@ use crate::handle::Handle;
 /// (local index 2) sitting between its two corners. The cells must follow
 /// each other (the end of cell `j` is the start of cell `j + 1`), as
 /// `line`, `arc`, `circle`, `border` and `consolidate` lay them out.
-fn line_row(conn: &[NodeId], et: ElementType, n_elems: usize) -> Vec<NodeId> {
+pub(super) fn line_row(conn: &[NodeId], et: ElementType, n_elems: usize) -> Vec<NodeId> {
     let npc = et.nodes_per_cell();
     let mut row = Vec::with_capacity(if npc == 3 {
         2 * n_elems + 1

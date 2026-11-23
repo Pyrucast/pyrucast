@@ -1004,19 +1004,26 @@ pub fn sweep(
     Ok(PyMesh { inner: mesh })
 }
 
-/// A structured surface bounded by four SEG2 sides, by transfinite interpolation.
+/// A structured surface bounded by four sides, by transfinite interpolation.
 ///
-/// The generalization of `pyrucast.mesh.sweep` from two lines to four (a Coons
-/// patch).
+/// The generalization of `pyrucast.mesh.sweep` from two lines to four: the interior
+/// corners blend the two opposite sides in each direction (a Coons patch), which
+/// reproduces the sides exactly on the border whatever their shape. Between SEG3
+/// sides, the sides' own mid-nodes are reused, so a patch bounded by arcs follows
+/// them; an interior mid-node sits at the middle of the chord between its corners.
 ///
 /// # Parameters
 ///
-/// - `side1`, `side2`, `side3`, `side4`: the four sides, forming a closed
-///   contour `side1 → side2 → side3 → side4 → side1`, each ending on the start
-///   node of the next. `side1`/`side3` and `side2`/`side4` are the two pairs of
-///   **opposite** sides, each with the same cell count.
-/// - `element_type`: `"QUA4"` (the default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
-///   `"TRI6"` — the same conversion path as `pyrucast.mesh.sweep`.
+/// - `side1`, `side2`, `side3`, `side4`: the four sides, four SEG2 lines or four
+///   SEG3 lines, forming a closed contour `side1 → side2 → side3 → side4 → side1`,
+///   each ending on the start node of the next. `side1`/`side3` and
+///   `side2`/`side4` are the two pairs of **opposite** sides, each with the same
+///   cell count.
+/// - `element_type`: the type of every cell, as for `pyrucast.mesh.sweep` —
+///   `"QUA4"`, `"TRI3"`, `"QUA8"`, `"QUA9"` or `"TRI6"` between SEG2 sides,
+///   `"QUA8"`, `"QUA9"` or `"TRI6"` between SEG3 sides; `None` (the default) is
+///   `"QUA4"` between SEG2 sides and `"QUA8"` between SEG3 sides. Triangles
+///   alternate their diagonal from one cell to the next.
 ///
 /// # Returns
 ///
@@ -1024,8 +1031,9 @@ pub fn sweep(
 ///
 /// # Raises
 ///
-/// `RuntimeError` if the sides do not close, if opposite sides differ in cell
-/// count, or for an unsupported `element_type`.
+/// `RuntimeError` for an `element_type` the sides do not give or sides of
+/// different degrees (both before any node is created), if the sides do not
+/// close, or if opposite sides differ in cell count.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -1037,7 +1045,17 @@ pub fn transfinite(
     side4: PyRef<PyMesh>,
     element_type: Option<ElementType>,
 ) -> PyResult<PyMesh> {
-    let element_type = element_type.unwrap_or(ElementType::QUA4);
+    // `None`: the first type the sides give, as for `sweep`.
+    let element_type = match element_type {
+        Some(et) => et,
+        None => side1
+            .inner
+            .element_types()?
+            .first()
+            .and_then(|&source| crate::ops::mesh::sweep_kernel::swept_types(source).first())
+            .copied()
+            .unwrap_or(ElementType::QUA4),
+    };
     let mesh = crate::ops::mesh::transfinite(
         &side1.inner,
         &side2.inner,
