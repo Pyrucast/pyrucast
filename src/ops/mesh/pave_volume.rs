@@ -429,7 +429,7 @@ mod tests {
             crate::ops::mesh::FrontRelax::Free,
         )
         .unwrap();
-        let solid = crate::ops::mesh::extrude(&face, &[0.0, height, 0.0], ny).unwrap();
+        let solid = crate::ops::mesh::extrude(&face, &[0.0, height, 0.0], ny, None).unwrap();
         crate::ops::mesh::skin(&solid, crate::ops::mesh::skin::DEFAULT_ANGLE_DEG).unwrap()
     }
 
@@ -475,7 +475,7 @@ mod tests {
             crate::ops::mesh::FrontRelax::Free,
         )
         .unwrap();
-        let solid = crate::ops::mesh::extrude(&face, &[0.0, height, 0.0], layers).unwrap();
+        let solid = crate::ops::mesh::extrude(&face, &[0.0, height, 0.0], layers, None).unwrap();
         crate::ops::mesh::skin(&solid, crate::ops::mesh::skin::DEFAULT_ANGLE_DEG).unwrap()
     }
 

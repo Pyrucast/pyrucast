@@ -789,8 +789,9 @@ mod tests {
         let mut base = RawSubMesh::new(coords.clone(), ElementType::QUA4);
         base.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])
             .unwrap();
-        let hex20 = to_quadratic(&extrude(&Mesh::from_submesh(base), &[0.0, 0.0, 1.0], 1).unwrap())
-            .unwrap();
+        let hex20 =
+            to_quadratic(&extrude(&Mesh::from_submesh(base), &[0.0, 0.0, 1.0], 1, None).unwrap())
+                .unwrap();
         let sm = hex20.get(0).unwrap();
         assert_eq!(sm.read().element_type(), ElementType::HEX20);
         let nodal = vec![(0..20).map(|i| i as f64).collect::<Vec<f64>>()];

@@ -2504,25 +2504,36 @@ class Mesh:
         `RuntimeError` if the sides do not close, if opposite sides differ in cell
         count, or for an unsupported `element_type`.
         """
-    def extrude(self, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh:
+    def extrude(self, vector: typing.Sequence[builtins.float], n_layers: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
-        Extrude `mesh` along `direction` in `n_layers` layers.
+        Extrude `mesh` along `vector` in `n_layers` layers.
         
-        SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8, and their quadratic siblings
-        SEG3 → QUA8, TRI6 → PENTA15, QUA8 → HEX20.
+        Each zone gives its natural type: SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8, and
+        their quadratic siblings SEG3 → QUA8, TRI6 → PENTA15, QUA8 → HEX20.
         
         The cells that fill the space — a line extruded in 2-D, a surface in 3-D —
-        come out right-handed (positive jacobian) whatever the side `direction`
-        points to: a source cell whose sweep would be left-handed is swept from
-        its reversed copy. Their faces, from `skin`, thus point out of the
-        material. A line extruded in 3-D gives a surface, whose cells keep the
-        source's order.
+        come out right-handed (positive jacobian) whatever the side `vector` points
+        to: a source cell whose sweep would be left-handed is swept from its reversed
+        copy. Their faces, from `skin`, thus point out of the material. A line extruded
+        in 3-D gives a surface, whose cells keep the source's order.
         
         # Parameters
         
         - `mesh`: the mesh to extrude.
-        - `direction`: the total displacement vector, with the dimension of the mesh.
+        - `vector`: the total displacement, with the dimension of the mesh.
         - `n_layers`: the number of layers, `≥ 1`.
+        - `element_type`: the type of every cell produced; `None` (the default) keeps
+          each zone's natural type, so zones of different types stay different. Each
+          zone must be able to give it:
+        
+          | zone | element types |
+          |---|---|
+          | SEG2 | `"QUA4"`, `"TRI3"`, `"QUA8"`, `"QUA9"`, `"TRI6"` |
+          | SEG3 | `"QUA8"`, `"QUA9"`, `"TRI6"` |
+          | TRI3, QUA4, TRI6, QUA8 | `"PENTA6"`, `"HEX8"`, `"PENTA15"`, `"HEX20"` respectively |
+        
+          Triangles alternate their diagonal from one cell to the next; a centre or the
+          mid-node of a diagonal sits on the extruded cell.
         
         # Returns
         
@@ -2530,10 +2541,11 @@ class Mesh:
         
         # Raises
         
-        `RuntimeError` if `n_layers` is zero, or if the produced cells need 3-D
-        coordinates the mesh does not have (a surface extruded in 2-D).
+        `RuntimeError` for an `element_type` a zone does not give (before any node is
+        created), if `n_layers` is zero, or if the produced cells need 3-D coordinates
+        the mesh does not have (a surface extruded in 2-D).
         """
-    def revolve(self, angle: builtins.float, n_layers: builtins.int, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:
+    def revolve(self, angle: builtins.float, n_layers: builtins.int, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None, element_type: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
         Revolve `mesh` about an axis in `n_layers` layers, over a total `angle`.
         
@@ -2558,6 +2570,10 @@ class Mesh:
         - `center`: in 2-D, the centre of the revolution; in 3-D, a point of its axis.
         - `axis`: in 3-D, the direction of the axis (right-handed), required; ignored
           in 2-D.
+        - `element_type`: the type of every cell produced, with the rule and the table
+          of `pyrucast.mesh.extrude`; `None` (the default) keeps each zone's natural
+          type. The cells that close on the axis stay triangles: `"TRI3"` when
+          `element_type` is linear, `"TRI6"` when it is quadratic.
         
         # Returns
         
@@ -2565,7 +2581,8 @@ class Mesh:
         
         # Raises
         
-        `RuntimeError` if `|angle|` exceeds a full turn, if the produced cells need 3-D
+        `RuntimeError` for an `element_type` a zone does not give (before any node is
+        created), if `|angle|` exceeds a full turn, if the produced cells need 3-D
         coordinates the mesh does not have, or for a cell the axis would collapse.
         """
     def to_quadratic(self) -> Mesh:
@@ -7374,25 +7391,36 @@ def external_forces(model: Model, materials: ElementField) -> NodeField:
     that reads it, or lacks a component it reads.
     """
 
-def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh:
+def extrude(mesh: Mesh, vector: typing.Sequence[builtins.float], n_layers: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
-    Extrude `mesh` along `direction` in `n_layers` layers.
+    Extrude `mesh` along `vector` in `n_layers` layers.
     
-    SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8, and their quadratic siblings
-    SEG3 → QUA8, TRI6 → PENTA15, QUA8 → HEX20.
+    Each zone gives its natural type: SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8, and
+    their quadratic siblings SEG3 → QUA8, TRI6 → PENTA15, QUA8 → HEX20.
     
     The cells that fill the space — a line extruded in 2-D, a surface in 3-D —
-    come out right-handed (positive jacobian) whatever the side `direction`
-    points to: a source cell whose sweep would be left-handed is swept from
-    its reversed copy. Their faces, from `skin`, thus point out of the
-    material. A line extruded in 3-D gives a surface, whose cells keep the
-    source's order.
+    come out right-handed (positive jacobian) whatever the side `vector` points
+    to: a source cell whose sweep would be left-handed is swept from its reversed
+    copy. Their faces, from `skin`, thus point out of the material. A line extruded
+    in 3-D gives a surface, whose cells keep the source's order.
     
     # Parameters
     
     - `mesh`: the mesh to extrude.
-    - `direction`: the total displacement vector, with the dimension of the mesh.
+    - `vector`: the total displacement, with the dimension of the mesh.
     - `n_layers`: the number of layers, `≥ 1`.
+    - `element_type`: the type of every cell produced; `None` (the default) keeps
+      each zone's natural type, so zones of different types stay different. Each
+      zone must be able to give it:
+    
+      | zone | element types |
+      |---|---|
+      | SEG2 | `"QUA4"`, `"TRI3"`, `"QUA8"`, `"QUA9"`, `"TRI6"` |
+      | SEG3 | `"QUA8"`, `"QUA9"`, `"TRI6"` |
+      | TRI3, QUA4, TRI6, QUA8 | `"PENTA6"`, `"HEX8"`, `"PENTA15"`, `"HEX20"` respectively |
+    
+      Triangles alternate their diagonal from one cell to the next; a centre or the
+      mid-node of a diagonal sits on the extruded cell.
     
     # Returns
     
@@ -7400,8 +7428,9 @@ def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: bu
     
     # Raises
     
-    `RuntimeError` if `n_layers` is zero, or if the produced cells need 3-D
-    coordinates the mesh does not have (a surface extruded in 2-D).
+    `RuntimeError` for an `element_type` a zone does not give (before any node is
+    created), if `n_layers` is zero, or if the produced cells need 3-D coordinates
+    the mesh does not have (a surface extruded in 2-D).
     """
 
 def fick(fespace: FiniteElementSpace, species: builtins.str, symmetry: builtins.str = 'isotropic') -> Model:
@@ -9337,7 +9366,7 @@ def restrict_node(field: NodeField, mesh: Mesh) -> NodeField:
     and gives an empty field too.
     """
 
-def revolve(mesh: Mesh, angle: builtins.float, n_layers: builtins.int, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:
+def revolve(mesh: Mesh, angle: builtins.float, n_layers: builtins.int, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None, element_type: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
     Revolve `mesh` about an axis in `n_layers` layers, over a total `angle`.
     
@@ -9362,6 +9391,10 @@ def revolve(mesh: Mesh, angle: builtins.float, n_layers: builtins.int, center: t
     - `center`: in 2-D, the centre of the revolution; in 3-D, a point of its axis.
     - `axis`: in 3-D, the direction of the axis (right-handed), required; ignored
       in 2-D.
+    - `element_type`: the type of every cell produced, with the rule and the table
+      of `pyrucast.mesh.extrude`; `None` (the default) keeps each zone's natural
+      type. The cells that close on the axis stay triangles: `"TRI3"` when
+      `element_type` is linear, `"TRI6"` when it is quadratic.
     
     # Returns
     
@@ -9369,7 +9402,8 @@ def revolve(mesh: Mesh, angle: builtins.float, n_layers: builtins.int, center: t
     
     # Raises
     
-    `RuntimeError` if `|angle|` exceeds a full turn, if the produced cells need 3-D
+    `RuntimeError` for an `element_type` a zone does not give (before any node is
+    created), if `|angle|` exceeds a full turn, if the produced cells need 3-D
     coordinates the mesh does not have, or for a cell the axis would collapse.
     """
 

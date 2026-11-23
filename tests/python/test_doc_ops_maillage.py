@@ -179,8 +179,13 @@ bloc20 = pyrucast.mesh.extrude(plaque8, [0.0, 0.0, 0.5], 1)  # QUA8 → HEX20
 bord3 = pyrucast.mesh.border(plaque8)  # the border of a QUA8 surface: SEG3
 print(plaque8.element_types(), bloc20.element_types(), bord3.element_types())
 # ['QUA8'] ['HEX20'] ['SEG3']
+# element_type: the type of every cell, here triangles cut alternately.
+ligne = pyrucast.mesh.line(a, b, 2)
+tri = ligne.extrude([0.0, 1.0, 0.0], 2, element_type="TRI3")  # SEG2 → TRI3
+print(tri.element_types(), tri.cell_count)  # ['TRI3'] 8
 # ANCHOR_END: mesh-extrude
 assert (plaque8.cell_count, bloc20.cell_count, bord3.cell_count) == (4, 4, 8)
+assert tri.element_types() == ["TRI3"] and tri.cell_count == 8
 assert pyrucast.mesh.to_poi1(bloc20).cell_count == (5 * 5 - 4) * 2 + 3 * 3
 fes20 = pyrucast.FiniteElementSpace(bloc20)
 assert fes20[0].interpolation == "LAGRANGE2"
@@ -324,9 +329,16 @@ secteur = pyrucast.mesh.revolve(
     pyrucast.mesh.line(centre, bord, 2), math.pi / 2, 7, [0.0, 0.0]
 )
 print(secteur.element_types())  # ['QUA4', 'TRI3']
+# With element_type="TRI3", the ring is cut into triangles too.
+triangles = pyrucast.mesh.revolve(
+    pyrucast.mesh.line(centre, bord, 2), math.pi / 2, 7, [0.0, 0.0], element_type="TRI3"
+)
+print(triangles.element_types())  # ['TRI3', 'TRI3']
 # ANCHOR_END: revolve_axe
 assert secteur.element_types() == ["QUA4", "TRI3"]
 assert [z.cell_count for z in secteur] == [7, 7]
+assert triangles.element_types() == ["TRI3", "TRI3"]
+assert [z.cell_count for z in triangles] == [14, 7]
 
 # ── Order raising, type change ──────────────────────────────────────────────
 

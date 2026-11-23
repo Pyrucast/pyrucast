@@ -1018,7 +1018,7 @@ mod tests {
 
         let plate =
             super::super::triangulate_surface(&contour, ElementType::TRI3, Some(size)).unwrap();
-        let solid = super::super::extrude(&plate, &[0.0, 0.4, 0.0], 1).unwrap();
+        let solid = super::super::extrude(&plate, &[0.0, 0.4, 0.0], 1, None).unwrap();
         let skin = super::super::skin(&solid, crate::ops::mesh::skin::DEFAULT_ANGLE_DEG).unwrap();
         super::super::convert(&skin, ElementType::TRI3, false).unwrap()
     }

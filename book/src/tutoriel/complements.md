@@ -43,10 +43,10 @@ Les autres matrices s'assemblent avec [`pyrucast.matrix`](../reference/matrix.md
 À partir de la page [Maillage](maillage.md), les calculs de ce tutoriel se
 font en volume. Les mailleurs qui produisent un volume :
 
-- `pyrucast.mesh.extrude(mesh, direction, n_layers)` — balayage d'un
+- `pyrucast.mesh.extrude(mesh, vector, n_layers, element_type=None)` — balayage d'un
   maillage selon une direction : `SEG2` → `QUA4` (une surface), `TRI3` →
   `PENTA6`, `QUA4` → `HEX8` ;
-- `pyrucast.mesh.revolve(mesh, angle, n_layers, center, axis=None)` — le même
+- `pyrucast.mesh.revolve(mesh, angle, n_layers, center, axis=None, element_type=None)` — le même
   balayage, mais en rotation autour d'un axe ; un tour complet referme le
   volume engendré ;
 - `pyrucast.mesh.sweep(mesh_a, mesh_b, n_layers)` — entre deux maillages de

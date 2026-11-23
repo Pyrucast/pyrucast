@@ -27,8 +27,8 @@ fn clamped_bar(young: f64) -> (f64, f64) {
     let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
     let b = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
     let edge = mesh::line(&a, &b, 20, ElementType::SEG2).unwrap();
-    let face = mesh::extrude(&edge, &[0.0, 0.1, 0.0], 2).unwrap();
-    let bar = mesh::extrude(&face, &[0.0, 0.0, 0.1], 2).unwrap();
+    let face = mesh::extrude(&edge, &[0.0, 0.1, 0.0], 2, None).unwrap();
+    let bar = mesh::extrude(&face, &[0.0, 0.0, 0.1], 2, None).unwrap();
     let fes = FiniteElementSpace::lagrange(&bar).unwrap();
     let mut solid = model::elasticity(
         &fes,
@@ -102,8 +102,8 @@ fn released_bounds_push_nothing_and_both_methods_agree() {
     let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
     let b = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
     let edge = mesh::line(&a, &b, 20, ElementType::SEG2).unwrap();
-    let face = mesh::extrude(&edge, &[0.0, 0.1, 0.0], 2).unwrap();
-    let bar = mesh::extrude(&face, &[0.0, 0.0, 0.1], 2).unwrap();
+    let face = mesh::extrude(&edge, &[0.0, 0.1, 0.0], 2, None).unwrap();
+    let bar = mesh::extrude(&face, &[0.0, 0.0, 0.1], 2, None).unwrap();
     let fes = FiniteElementSpace::lagrange(&bar).unwrap();
     let mut solid = model::elasticity(
         &fes,

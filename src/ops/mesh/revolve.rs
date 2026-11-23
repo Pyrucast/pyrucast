@@ -1,8 +1,11 @@
+use crate::atoms::ElementType;
 use crate::containers::mesh::Mesh;
 use crate::error::Result;
+use crate::ops::mesh::sweep::{check_element_type, finish_surface};
 
-/// Revolve a mesh by `n_layers` layers over a total `angle` (radians) — the
-/// rotational companion of [`extrude`](fn@super::extrude).
+/// Revolve a mesh by `n_layers` layers over a total `angle` (radians), into
+/// cells of `element_type` — the rotational companion of
+/// [`extrude`](fn@super::extrude).
 ///
 /// Each node is swept along the circle it describes about the rotation centre
 /// (2-D) or axis (3-D), and consecutive angular positions are linked by one
@@ -29,6 +32,17 @@ use crate::error::Result;
 /// surface cell may not touch the axis (its prism would collapse), nor may a
 /// line lie along it.
 ///
+/// `element_type` follows the rule of [`extrude`](fn@super::extrude): when
+/// given, it is the type of every cell produced — a line gives `QUA4`,
+/// `TRI3`, `QUA8`, `QUA9` or `TRI6` (SEG2), `QUA8`, `QUA9` or `TRI6` (SEG3),
+/// triangles alternating their diagonal, a centre or the mid-node of a
+/// diagonal sitting on the revolved cell; a surface gives only its natural
+/// volume; a zone that cannot give it fails the call before any node is
+/// created. One exception: the cells that close on the axis stay triangles,
+/// `TRI3` when `element_type` is linear and `TRI6` when it is quadratic — with
+/// `TRI3` or `TRI6` the whole result is made of triangles. `None` keeps each
+/// zone's natural type.
+///
 /// Nodes shared between cells of the source stay shared in the result. Source
 /// nodes are re-used (refcount incremented); the other layers are created.
 ///
@@ -49,10 +63,10 @@ use crate::error::Result;
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // Un demi-tour d'un segment autour de l'axe z : quatre QUA4.
+/// // Half a turn of a segment about the z axis: four QUA4.
 /// let l = mesh::line(&p(&[1.0, 0.0, 0.0]), &p(&[1.0, 0.0, 1.0]), 1, ElementType::SEG2)?;
 /// let s = mesh::revolve(&l, std::f64::consts::PI, 4, &[0.0, 0.0, 0.0],
-///                       Some(&[0.0, 0.0, 1.0]))?;
+///                       Some(&[0.0, 0.0, 1.0]), None)?;
 /// assert_eq!(s.cell_count(), 4);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -62,8 +76,16 @@ pub fn revolve(
     n_layers: usize,
     center: &[f64],
     axis: Option<&[f64]>,
+    element_type: Option<ElementType>,
 ) -> Result<Mesh> {
-    crate::ops::mesh::sweep_kernel::revolve(mesh, angle, n_layers, center, axis)
+    if let Some(target) = element_type {
+        check_element_type(&mesh.element_types()?, target, "revolve")?;
+    }
+    let swept = crate::ops::mesh::sweep_kernel::revolve(mesh, angle, n_layers, center, axis)?;
+    match element_type {
+        Some(target) if target.topological_dim() == 2 => finish_surface(swept, target, "revolve"),
+        _ => Ok(swept),
+    }
 }
 
 #[cfg(test)]
@@ -105,7 +127,7 @@ mod tests {
     #[test]
     fn revolve_seg2_to_qua4_2d() {
         let seg = radial_seg2_2d(2);
-        let ring = revolve(&seg, PI / 2.0, 3, &[0.0, 0.0], None).unwrap();
+        let ring = revolve(&seg, PI / 2.0, 3, &[0.0, 0.0], None, None).unwrap();
         assert_eq!(ring.element_types().unwrap(), vec![ElementType::QUA4]);
         assert_eq!(ring.cell_count(), 6);
 
@@ -123,7 +145,7 @@ mod tests {
     #[test]
     fn revolve_shared_nodes_stay_shared() {
         let seg = radial_seg2_2d(2);
-        let ring = revolve(&seg, PI / 2.0, 1, &[0.0, 0.0], None).unwrap();
+        let ring = revolve(&seg, PI / 2.0, 1, &[0.0, 0.0], None, None).unwrap();
         // Node shared by the two source segments: shared on both layers.
         let base_cell0 = ring.node(0, 0, 1).unwrap();
         let base_cell1 = ring.node(0, 1, 0).unwrap();
@@ -136,7 +158,7 @@ mod tests {
     #[test]
     fn full_turn_closes_the_ring() {
         let seg = radial_seg2_2d(1);
-        let ring = revolve(&seg, TAU, 4, &[0.0, 0.0], None).unwrap();
+        let ring = revolve(&seg, TAU, 4, &[0.0, 0.0], None, None).unwrap();
         assert_eq!(ring.cell_count(), 4);
 
         // The last layer is the first one again: 4 angular positions × 2
@@ -154,7 +176,7 @@ mod tests {
         // circles at the half angle, not on the chords.
         use crate::ops::mesh::to_quadratic;
         let seg3 = to_quadratic(&radial_seg2_2d(1)).unwrap();
-        let ring = revolve(&seg3, PI / 2.0, 2, &[0.0, 0.0], None).unwrap();
+        let ring = revolve(&seg3, PI / 2.0, 2, &[0.0, 0.0], None, None).unwrap();
         assert_eq!(ring.element_types().unwrap(), vec![ElementType::QUA8]);
         let polar = |c: usize, k: usize| {
             let x = ring.node(0, c, k).unwrap().position().unwrap();
@@ -174,7 +196,7 @@ mod tests {
         // whole levels, 4 × 2 corners on the half levels — 20, no duplicate.
         use crate::ops::mesh::to_quadratic;
         let seg3 = to_quadratic(&radial_seg2_2d(1)).unwrap();
-        let ring = revolve(&seg3, TAU, 4, &[0.0, 0.0], None).unwrap();
+        let ring = revolve(&seg3, TAU, 4, &[0.0, 0.0], None, None).unwrap();
         assert_eq!(ring.cell_count(), 4);
         assert_eq!(distinct_nodes(&ring), 20);
         assert_eq!(
@@ -186,7 +208,15 @@ mod tests {
     #[test]
     fn revolve_tri3_to_penta6_3d() {
         let tri = tri3_off_axis();
-        let wedge = revolve(&tri, PI / 6.0, 2, &[0.0, 0.0, 0.0], Some(&[0.0, 0.0, 1.0])).unwrap();
+        let wedge = revolve(
+            &tri,
+            PI / 6.0,
+            2,
+            &[0.0, 0.0, 0.0],
+            Some(&[0.0, 0.0, 1.0]),
+            None,
+        )
+        .unwrap();
         assert_eq!(wedge.element_types().unwrap(), vec![ElementType::PENTA6]);
         assert_eq!(wedge.cell_count(), 2);
 
@@ -212,7 +242,7 @@ mod tests {
         let mut qua = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
         qua.add_cell(&[n0.id(), n1.id(), n2.id(), n3.id()]).unwrap();
 
-        let tube = revolve(&qua, TAU, 8, &[0.0, 0.0, 0.0], Some(&[0.0, 0.0, 1.0])).unwrap();
+        let tube = revolve(&qua, TAU, 8, &[0.0, 0.0, 0.0], Some(&[0.0, 0.0, 1.0]), None).unwrap();
         assert_eq!(tube.element_types().unwrap(), vec![ElementType::HEX8]);
         assert_eq!(tube.cell_count(), 8);
         // Closed ring: 8 angular positions × 4 section nodes.
@@ -228,7 +258,15 @@ mod tests {
         };
 
         let tri = tri3_off_axis();
-        let wedge = revolve(&tri, PI / 4.0, 2, &[0.0, 0.0, 0.0], Some(&[0.0, 0.0, 1.0])).unwrap();
+        let wedge = revolve(
+            &tri,
+            PI / 4.0,
+            2,
+            &[0.0, 0.0, 0.0],
+            Some(&[0.0, 0.0, 1.0]),
+            None,
+        )
+        .unwrap();
         for sub in &wedge {
             let space = SubFiniteElementSpace::new(
                 sub.clone(),
@@ -289,7 +327,7 @@ mod tests {
         let centre = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let rim = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let seg = line(&centre, &rim, 2, ElementType::SEG2).unwrap();
-        let sector = revolve(&seg, PI / 2.0, 7, &[0.0, 0.0], None).unwrap();
+        let sector = revolve(&seg, PI / 2.0, 7, &[0.0, 0.0], None, None).unwrap();
 
         assert_eq!(sector.len(), 2);
         let (ring, fan) = (sector.get(0).unwrap(), sector.get(1).unwrap());
@@ -320,7 +358,7 @@ mod tests {
         let rim = Node::create_in(coords, &[1.0, 0.0]).unwrap();
         // From the rim to the centre: the axis is the second node.
         let seg = line(&rim, &centre, 1, ElementType::SEG2).unwrap();
-        let disc = revolve(&seg, TAU, 4, &[0.0, 0.0], None).unwrap();
+        let disc = revolve(&seg, TAU, 4, &[0.0, 0.0], None, None).unwrap();
         assert_eq!(disc.len(), 1);
         assert_eq!(
             disc.get(0).unwrap().read().element_type(),
@@ -341,7 +379,7 @@ mod tests {
         let centre = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let rim = Node::create_in(coords.clone(), &[3.0, 0.0]).unwrap();
         let seg = line(&centre, &rim, 1, ElementType::SEG3).unwrap();
-        let fan = revolve(&seg, PI / 2.0, 3, &[0.0, 0.0], None).unwrap();
+        let fan = revolve(&seg, PI / 2.0, 3, &[0.0, 0.0], None, None).unwrap();
         assert_eq!(fan.len(), 1);
         let fan = fan.get(0).unwrap();
         assert_eq!(fan.read().element_type(), ElementType::TRI6);
@@ -370,7 +408,7 @@ mod tests {
         let n2 = Node::create_in(coords.clone(), &[1.0, 0.0, 1.0]).unwrap();
         let mut tri = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
         tri.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
-        let err = revolve(&tri, PI, 2, &[0.0, 0.0, 0.0], Some(&[0.0, 0.0, 1.0])).unwrap_err();
+        let err = revolve(&tri, PI, 2, &[0.0, 0.0, 0.0], Some(&[0.0, 0.0, 1.0]), None).unwrap_err();
         assert!(
             format!("{err}").contains("only a line"),
             "unexpected: {err}"
@@ -381,7 +419,15 @@ mod tests {
         let mut lines = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         lines.add_cell(&[n0.id(), n3.id()]).unwrap();
         lines.add_cell(&[n0.id(), n1.id()]).unwrap();
-        let err = revolve(&lines, PI, 2, &[0.0, 0.0, 0.0], Some(&[0.0, 0.0, 1.0])).unwrap_err();
+        let err = revolve(
+            &lines,
+            PI,
+            2,
+            &[0.0, 0.0, 0.0],
+            Some(&[0.0, 0.0, 1.0]),
+            None,
+        )
+        .unwrap_err();
         assert!(
             format!("{err}").contains("sweep nothing"),
             "unexpected: {err}"
@@ -395,8 +441,16 @@ mod tests {
         let centre = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
         let rim = Node::create_in(coords, &[0.0, 0.0, -1.0]).unwrap();
         let seg = line(&centre, &rim, 2, ElementType::SEG2).unwrap();
-        let sector = revolve(&seg, PI / 2.0, 7, &[0.0, 0.0, 0.0], Some(&[0.0, 1.0, 0.0])).unwrap();
-        let solid = crate::ops::mesh::extrude(&sector, &[0.0, 0.2, 0.0], 2).unwrap();
+        let sector = revolve(
+            &seg,
+            PI / 2.0,
+            7,
+            &[0.0, 0.0, 0.0],
+            Some(&[0.0, 1.0, 0.0]),
+            None,
+        )
+        .unwrap();
+        let solid = crate::ops::mesh::extrude(&sector, &[0.0, 0.2, 0.0], 2, None).unwrap();
         let types: Vec<ElementType> = solid.into_iter().map(|z| z.read().element_type()).collect();
         assert_eq!(types, [ElementType::HEX8, ElementType::PENTA6]);
         let mut all: Vec<_> = Vec::new();
@@ -412,16 +466,16 @@ mod tests {
     fn revolve_rejects_bad_arguments() {
         let seg = radial_seg2_2d(1);
         // Zero layers, zero angle, more than a full turn.
-        assert!(revolve(&seg, PI, 0, &[0.0, 0.0], None).is_err());
-        assert!(revolve(&seg, 0.0, 2, &[0.0, 0.0], None).is_err());
-        assert!(revolve(&seg, 1.01 * TAU, 2, &[0.0, 0.0], None).is_err());
+        assert!(revolve(&seg, PI, 0, &[0.0, 0.0], None, None).is_err());
+        assert!(revolve(&seg, 0.0, 2, &[0.0, 0.0], None, None).is_err());
+        assert!(revolve(&seg, 1.01 * TAU, 2, &[0.0, 0.0], None, None).is_err());
         // Centre of the wrong dimension.
-        assert!(revolve(&seg, PI, 2, &[0.0, 0.0, 0.0], None).is_err());
+        assert!(revolve(&seg, PI, 2, &[0.0, 0.0, 0.0], None, None).is_err());
 
         // 3-D without an axis.
         let tri = tri3_off_axis();
-        assert!(revolve(&tri, PI, 2, &[0.0, 0.0, 0.0], None).is_err());
-        assert!(revolve(&tri, PI, 2, &[0.0, 0.0, 0.0], Some(&[0.0, 0.0, 0.0])).is_err());
+        assert!(revolve(&tri, PI, 2, &[0.0, 0.0, 0.0], None, None).is_err());
+        assert!(revolve(&tri, PI, 2, &[0.0, 0.0, 0.0], Some(&[0.0, 0.0, 0.0]), None).is_err());
     }
 
     #[test]
@@ -433,7 +487,7 @@ mod tests {
         let n2 = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
         let mut tri = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
         tri.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
-        assert!(revolve(&tri, PI / 2.0, 2, &[0.0, 0.0], None).is_err());
+        assert!(revolve(&tri, PI / 2.0, 2, &[0.0, 0.0], None, None).is_err());
     }
 
     #[test]
@@ -442,6 +496,62 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let mut pts = Mesh::from_submesh(SubMesh::new(coords, ElementType::POI1));
         pts.add_cell(&[a.id()]).unwrap();
-        assert!(revolve(&pts, PI / 2.0, 1, &[0.0, 0.0], None).is_err());
+        assert!(revolve(&pts, PI / 2.0, 1, &[0.0, 0.0], None, None).is_err());
+    }
+
+    #[test]
+    fn revolve_element_type_keeps_triangles_on_the_axis() {
+        // A line from the axis to the rim: its first cell closes on the axis.
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+        let seg = line(&p(&[0.0, 0.0]), &p(&[2.0, 0.0]), 2, ElementType::SEG2).unwrap();
+        let all = |m: &Mesh| m.element_types().unwrap();
+        // Triangles asked: the whole sector is triangles.
+        let tri = revolve(
+            &seg,
+            PI / 2.0,
+            3,
+            &[0.0, 0.0],
+            None,
+            Some(ElementType::TRI3),
+        )
+        .unwrap();
+        assert!(
+            all(&tri).iter().all(|&t| t == ElementType::TRI3),
+            "{:?}",
+            all(&tri)
+        );
+        assert_eq!(tri.cell_count(), 3 * 2 + 3);
+        // Quadrangles asked: the fan stays triangles, of the same degree.
+        let qua8 = revolve(
+            &seg,
+            PI / 2.0,
+            3,
+            &[0.0, 0.0],
+            None,
+            Some(ElementType::QUA8),
+        )
+        .unwrap();
+        assert_eq!(all(&qua8), vec![ElementType::QUA8, ElementType::TRI6]);
+
+        // Off the axis, from a SEG3 line: the centre of a QUA9 is on the arc,
+        // at the half angle and the mid radius.
+        let seg3 = line(&p(&[1.0, 0.0]), &p(&[2.0, 0.0]), 1, ElementType::SEG3).unwrap();
+        let qua9 = revolve(
+            &seg3,
+            PI / 2.0,
+            2,
+            &[0.0, 0.0],
+            None,
+            Some(ElementType::QUA9),
+        )
+        .unwrap();
+        let x = qua9.node(0, 0, 8).unwrap().position().unwrap();
+        assert!(
+            (x[0].hypot(x[1]) - 1.5).abs() < 1e-5,
+            "radius {}",
+            x[0].hypot(x[1])
+        );
+        assert!((x[1].atan2(x[0]) - PI / 8.0).abs() < 1e-9);
     }
 }

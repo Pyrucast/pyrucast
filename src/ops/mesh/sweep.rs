@@ -19,17 +19,17 @@ use crate::ops::mesh::sweep_kernel::{surface_between, swept_types, unsweepable, 
 ///   SEG2 lines give `QUA4`, `TRI3`, `QUA8`, `QUA9` or `TRI6`; SEG3 lines
 ///   give `QUA8`, `QUA9` or `TRI6`, their own mid-nodes re-used, so that a
 ///   strip between two arcs follows them. A `QUA4` or `QUA8` strip is built
-///   first ([`surface_between`]), then delivered by [`finish_surface`]:
+///   first (`surface_between`), then delivered by `finish_surface`:
 ///   triangles alternate their diagonal from one cell to the next. **Two
 ///   closed loops** (each ending on its own first node) give a closed ring:
 ///   the seam is shared, not doubled.
 /// - **Two surfaces**: cell `i` of `mesh_a` faces cell `i` of `mesh_b`, node
-///   by node ([`volume_between`]). `TRI3`, `QUA4`, `TRI6` and `QUA8` faces
+///   by node (`volume_between`). `TRI3`, `QUA4`, `TRI6` and `QUA8` faces
 ///   give `PENTA6`, `HEX8`, `PENTA15` and `HEX20`, the one `element_type`
 ///   they allow.
 ///
 /// `element_type` is checked against the type of `mesh_a` before any node is
-/// created ([`check_element_type`]).
+/// created (`check_element_type`).
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -116,16 +116,21 @@ pub(super) fn check_element_type(
 /// diagonal is the middle of its chord and each triangle stays straight;
 /// from a `QUA8` base the centre comes first, on the curved cell, and the
 /// triangles take it as the mid-node of their diagonal. Zones of triangles —
-/// the few triangles a paver leaves among its quadrangles — pass
-/// through each step, promoted with the rest.
+/// the fan of `revolve` on its axis, the few triangles a paver leaves among
+/// its quadrangles — pass through each step, promoted with the rest. The base
+/// is quadratic when its zones are.
 ///
-/// The structured meshers ([`sweep`], [`transfinite`](super::transfinite))
-/// and the pavers ([`pave_surface`](super::pave_surface) and the grid meshers, which
+/// The structured meshers ([`sweep`], [`transfinite`](super::transfinite),
+/// [`extrude`](fn@super::extrude), [`revolve`](fn@super::revolve)) and the
+/// pavers ([`pave_surface`](super::pave_surface) and the grid meshers, which
 /// ask only for quadrangles) deliver this way. `op` only names the operator
 /// in the error message.
 pub(super) fn finish_surface(base: Mesh, element_type: ElementType, op: &str) -> Result<Mesh> {
     use ElementType::*;
-    let quadratic = base.element_types()?.contains(&QUA8);
+    let quadratic = base
+        .element_types()?
+        .iter()
+        .any(|t| t.as_kind().is_quadratic());
     match (quadratic, element_type) {
         (false, QUA4) | (true, QUA8) => Ok(base),
         (false, TRI3) => quadrangles_to(&base, TRI3),
@@ -644,7 +649,7 @@ mod tests {
                 let source = face.unit().unwrap().read().element_type();
                 let solid = swept_types(source)[0];
                 let swept = sweep(face, &translate(face, &d).unwrap(), 3, solid).unwrap();
-                let extruded = extrude(face, &d, 3).unwrap();
+                let extruded = extrude(face, &d, 3, None).unwrap();
                 assert_eq!(swept.element_types().unwrap(), vec![solid]);
                 assert_same_cells(&swept, &extruded);
             }

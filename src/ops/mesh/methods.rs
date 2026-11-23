@@ -64,8 +64,13 @@ impl Mesh {
     }
 
     /// See [`mesh::extrude`](fn@crate::ops::mesh::extrude).
-    pub fn extrude(&self, direction: &[f64], n_layers: usize) -> Result<Mesh> {
-        crate::ops::mesh::extrude(self, direction, n_layers)
+    pub fn extrude(
+        &self,
+        vector: &[f64],
+        n_layers: usize,
+        element_type: Option<ElementType>,
+    ) -> Result<Mesh> {
+        crate::ops::mesh::extrude(self, vector, n_layers, element_type)
     }
 
     /// See [`mesh::invert`](fn@crate::ops::mesh::invert).
@@ -216,8 +221,9 @@ impl Mesh {
         n_layers: usize,
         center: &[f64],
         axis: Option<&[f64]>,
+        element_type: Option<ElementType>,
     ) -> Result<Mesh> {
-        crate::ops::mesh::revolve(self, angle, n_layers, center, axis)
+        crate::ops::mesh::revolve(self, angle, n_layers, center, axis, element_type)
     }
 
     /// See [`mesh::rotate`](fn@crate::ops::mesh::rotate).

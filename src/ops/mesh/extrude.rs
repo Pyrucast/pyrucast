@@ -1,14 +1,28 @@
+use crate::atoms::ElementType;
 use crate::containers::mesh::Mesh;
 use crate::error::Result;
+use crate::ops::mesh::sweep::{check_element_type, finish_surface};
 
-/// Extrude a mesh by `n_layers` layers along `direction`.
+/// Extrude a mesh by `n_layers` layers along `vector`, into cells of
+/// `element_type`.
 ///
-/// `direction` is the **total** displacement vector; each intermediate
-/// layer is placed at an evenly spaced fraction. Supported element types:
-/// SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8, and their quadratic siblings
-/// SEG3 → QUA8, TRI6 → PENTA15, QUA8 → HEX20: the source's mid-nodes are
-/// copied on every layer, and each edge along the extrusion gets its
-/// mid-node halfway. Other types produce an error.
+/// `vector` is the **total** displacement; each intermediate layer is placed
+/// at an evenly spaced fraction. Each zone gives its natural type — SEG2 →
+/// QUA4, TRI3 → PENTA6, QUA4 → HEX8, and their quadratic siblings SEG3 →
+/// QUA8, TRI6 → PENTA15, QUA8 → HEX20: the source's mid-nodes are copied on
+/// every layer, and each edge along the extrusion gets its mid-node halfway.
+/// Other types produce an error.
+///
+/// `element_type`, when given, is the type of **every** cell produced, one
+/// zone of the result per zone of the source; each zone must be able to give
+/// it, or the
+/// call fails before any node is created. A SEG2 line gives `QUA4`, `TRI3`,
+/// `QUA8`, `QUA9` or `TRI6`, a SEG3 line `QUA8`, `QUA9` or `TRI6`, delivered
+/// as by [`sweep`](fn@super::sweep): triangles alternate their diagonal from
+/// one cell to the next, and a centre or the mid-node of a diagonal sits on
+/// the extruded cell. A surface gives only its natural volume. `None` keeps
+/// each zone's natural type, so that a source whose zones are of different
+/// types gives zones of different types.
 ///
 /// Nodes shared between cells in the source mesh remain shared in the
 /// extruded mesh. Source nodes are re-used (refcount incremented);
@@ -33,13 +47,25 @@ use crate::error::Result;
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
 /// // An extruded SEG2 becomes a QUA4: one layer, one cell.
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[1.0, 0.0, 0.0]), 1, ElementType::SEG2)?;
-/// let s = mesh::extrude(&l, &[0.0, 1.0, 0.0], 3)?;
+/// let s = mesh::extrude(&l, &[0.0, 1.0, 0.0], 3, None)?;
 /// assert_eq!(s.cell_count(), 3);
 /// assert_eq!(s.element_types()?, vec![ElementType::QUA4]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> {
-    crate::ops::mesh::sweep_kernel::extrude(mesh, direction, n_layers)
+pub fn extrude(
+    mesh: &Mesh,
+    vector: &[f64],
+    n_layers: usize,
+    element_type: Option<ElementType>,
+) -> Result<Mesh> {
+    if let Some(target) = element_type {
+        check_element_type(&mesh.element_types()?, target, "extrude")?;
+    }
+    let swept = crate::ops::mesh::sweep_kernel::extrude(mesh, vector, n_layers)?;
+    match element_type {
+        Some(target) if target.topological_dim() == 2 => finish_surface(swept, target, "extrude"),
+        _ => Ok(swept),
+    }
 }
 
 #[cfg(test)]
@@ -60,7 +86,7 @@ mod tests {
         let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let seg = line(&a, &b, 2, ElementType::SEG2).unwrap();
 
-        let qua = extrude(&seg, &[0.0, 3.0], 3).unwrap();
+        let qua = extrude(&seg, &[0.0, 3.0], 3, None).unwrap();
         assert_eq!(qua.element_types().unwrap(), vec![ElementType::QUA4]);
         assert_eq!(qua.cell_count(), 6);
 
@@ -78,7 +104,7 @@ mod tests {
         let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let seg = line(&a, &b, 2, ElementType::SEG2).unwrap();
 
-        let qua = extrude(&seg, &[0.0, 1.0], 1).unwrap();
+        let qua = extrude(&seg, &[0.0, 1.0], 1, None).unwrap();
         let mid_cell0 = qua.node(0, 0, 1).unwrap();
         let mid_cell1 = qua.node(0, 1, 0).unwrap();
         assert_eq!(mid_cell0.id(), mid_cell1.id());
@@ -96,7 +122,7 @@ mod tests {
             .add_cell(&[n0.id(), n1.id(), n2.id(), n3.id()])
             .unwrap();
 
-        let hex = extrude(&qua_mesh, &[0.0, 0.0, 2.0], 1).unwrap();
+        let hex = extrude(&qua_mesh, &[0.0, 0.0, 2.0], 1, None).unwrap();
         assert_eq!(hex.element_types().unwrap(), vec![ElementType::HEX8]);
         assert_eq!(hex.cell_count(), 1);
 
@@ -117,7 +143,7 @@ mod tests {
         let mut tri = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
         tri.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
 
-        let penta = extrude(&tri, &[0.0, 0.0, 2.0], 2).unwrap();
+        let penta = extrude(&tri, &[0.0, 0.0, 2.0], 2, None).unwrap();
         assert_eq!(penta.element_types().unwrap(), vec![ElementType::PENTA6]);
         assert_eq!(penta.cell_count(), 2);
 
@@ -183,8 +209,8 @@ mod tests {
             } else {
                 [0.0, 0.0, 1.5]
             };
-            let native = extrude(&to_quadratic(&linear).unwrap(), &direction, 3).unwrap();
-            let promoted = to_quadratic(&extrude(&linear, &direction, 3).unwrap()).unwrap();
+            let native = extrude(&to_quadratic(&linear).unwrap(), &direction, 3, None).unwrap();
+            let promoted = to_quadratic(&extrude(&linear, &direction, 3, None).unwrap()).unwrap();
             assert_eq!(native.element_types().unwrap(), vec![expected]);
             let (a, b) = (cell_positions(&native), cell_positions(&promoted));
             assert_eq!(a.len(), b.len());
@@ -273,7 +299,7 @@ mod tests {
             (&tri6, &[0.0, 0.0, -2.0]),
         ];
         for (source, direction) in cases {
-            let swept = extrude(source, direction, 2).unwrap();
+            let swept = extrude(source, direction, 2, None).unwrap();
             let et = swept.element_types().unwrap()[0];
             for cell in cell_positions(&swept) {
                 let j = corner_jacobian(&cell, et);
@@ -282,7 +308,7 @@ mod tests {
         }
         // The two quadrangles still share their edge's columns: 3 × 2 nodes
         // per level, 3 levels.
-        let swept = extrude(&quads, &[0.0, 0.0, -2.0], 2).unwrap();
+        let swept = extrude(&quads, &[0.0, 0.0, -2.0], 2, None).unwrap();
         let mut ids: Vec<_> = (0..swept.cell_count())
             .flat_map(|c| (0..8).map(move |k| (c, k)))
             .map(|(c, k)| swept.node(0, c, k).unwrap().id())
@@ -312,7 +338,7 @@ mod tests {
         let mut qua = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
         qua.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])
             .unwrap();
-        let hex = extrude(&to_quadratic(&qua).unwrap(), &[0.0, 0.0, -1.5], 1).unwrap();
+        let hex = extrude(&to_quadratic(&qua).unwrap(), &[0.0, 0.0, -1.5], 1, None).unwrap();
         let cell = &cell_positions(&hex)[0];
         assert!(corner_jacobian(cell, ElementType::HEX20) > 0.0);
         let edges = [
@@ -350,7 +376,7 @@ mod tests {
             to_quadratic(&line(&p(&[2.0, 0.0]), &p(&[3.0, 0.0]), 1, ElementType::SEG2).unwrap())
                 .unwrap();
         let mixed = seg2.union(&seg3).unwrap();
-        let err = extrude(&mixed, &[0.0, 1.0], 1).unwrap_err();
+        let err = extrude(&mixed, &[0.0, 1.0], 1, None).unwrap_err();
         assert!(err.to_string().contains("linear and quadratic"));
     }
 
@@ -360,7 +386,7 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let seg = line(&a, &b, 1, ElementType::SEG2).unwrap();
-        assert!(extrude(&seg, &[0.0, 1.0], 0).is_err());
+        assert!(extrude(&seg, &[0.0, 1.0], 0, None).is_err());
     }
 
     #[test]
@@ -369,7 +395,7 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let seg = line(&a, &b, 1, ElementType::SEG2).unwrap();
-        assert!(extrude(&seg, &[0.0, 1.0, 0.0], 1).is_err());
+        assert!(extrude(&seg, &[0.0, 1.0, 0.0], 1, None).is_err());
     }
 
     #[test]
@@ -379,6 +405,96 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mut pts = Mesh::from_submesh(SubMesh::new(coords, ElementType::POI1));
         pts.add_cell(&[a.id()]).unwrap();
-        assert!(extrude(&pts, &[0.0, 1.0], 1).is_err());
+        assert!(extrude(&pts, &[0.0, 1.0], 1, None).is_err());
+    }
+
+    #[test]
+    fn extrude_element_type_follows_the_table() {
+        use crate::ops::mesh::{convert, to_quadratic};
+        let coords = Handle::new(Coords::new(3).unwrap());
+        let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+        let seg = line(
+            &p(&[0.0, 0.0, 0.0]),
+            &p(&[3.0, 0.0, 0.0]),
+            3,
+            ElementType::SEG2,
+        )
+        .unwrap();
+        let d = [0.0, 2.0, 0.0];
+
+        // A line into triangles: the QUA4 extrusion cut alternately, as
+        // `convert` with `alternate` cuts it.
+        let tri = extrude(&seg, &d, 2, Some(ElementType::TRI3)).unwrap();
+        let cut = convert(
+            &extrude(&seg, &d, 2, None).unwrap(),
+            ElementType::TRI3,
+            true,
+        )
+        .unwrap();
+        assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
+        assert_eq!(cell_positions(&tri), cell_positions(&cut));
+
+        // A surface gives its one volume: asked for, it changes nothing.
+        let mut face = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+        let (a, b, c) = (
+            p(&[0.0, 0.0, 1.0]),
+            p(&[1.0, 0.0, 1.0]),
+            p(&[0.0, 1.0, 1.0]),
+        );
+        face.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        let up = [0.0, 0.0, 1.0];
+        let asked = extrude(&face, &up, 2, Some(ElementType::PENTA6)).unwrap();
+        assert_eq!(asked.element_types().unwrap(), vec![ElementType::PENTA6]);
+        assert_eq!(asked.cell_count(), 2);
+
+        // A type a zone cannot give is refused before any node is created:
+        // a SEG3 line gives no linear surface, and a source of lines and
+        // surfaces cannot be made all of one type.
+        let seg3 = to_quadratic(&seg).unwrap();
+        let mixed = seg.union(&face).unwrap();
+        let before = coords.read().node_count();
+        assert!(extrude(&seg3, &d, 2, Some(ElementType::TRI3)).is_err());
+        assert!(extrude(&mixed, &up, 2, Some(ElementType::TRI3)).is_err());
+        assert!(extrude(&face, &up, 2, Some(ElementType::HEX8)).is_err());
+        assert_eq!(coords.read().node_count(), before);
+    }
+
+    #[test]
+    fn extrude_seg3_matches_sweep_onto_its_translate() {
+        // An arc of radius 7 extruded along y, and `sweep` between the arc and
+        // its translated copy: the same cells, the centre of a QUA9 or the
+        // mid-node of a diagonal on the cylinder.
+        use crate::ops::mesh::arc::arc;
+        use crate::ops::mesh::{sweep, translate};
+        let coords = Handle::new(Coords::new(3).unwrap());
+        let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+        let o = p(&[0.0, 0.0, 0.0]);
+        let curve = arc(
+            &p(&[7.0, 0.0, 0.0]),
+            &o,
+            &p(&[0.0, 0.0, 7.0]),
+            6,
+            ElementType::SEG3,
+        )
+        .unwrap();
+        let d = [0.0, 5.0, 0.0];
+        for et in [ElementType::QUA8, ElementType::QUA9, ElementType::TRI6] {
+            let extruded = extrude(&curve, &d, 3, Some(et)).unwrap();
+            let swept = sweep(&curve, &translate(&curve, &d).unwrap(), 3, et).unwrap();
+            assert_eq!(extruded.element_types().unwrap(), vec![et]);
+            let (a, b) = (cell_positions(&extruded), cell_positions(&swept));
+            assert_eq!(a.len(), b.len(), "{et}");
+            for (ca, cb) in a.iter().zip(&b) {
+                for (x, y) in ca.iter().zip(cb) {
+                    for k in 0..3 {
+                        assert!((x[k] - y[k]).abs() < 1e-12, "{et}: {x:?} vs {y:?}");
+                    }
+                    assert!(
+                        (x[0].hypot(x[2]) - 7.0).abs() < 1e-12,
+                        "{et}: {x:?} is off the cylinder"
+                    );
+                }
+            }
+        }
     }
 }

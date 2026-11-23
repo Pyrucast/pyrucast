@@ -349,7 +349,7 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords, &[0.10, 0.0]).unwrap();
         let edge = mesh::line(&a, &b, 20, ElementType::SEG2).unwrap();
-        let plate = mesh::extrude(&edge, &[0.0, 0.10], 20).unwrap();
+        let plate = mesh::extrude(&edge, &[0.0, 0.10], 20, None).unwrap();
         let fes = FiniteElementSpace::lagrange1(&plate).unwrap();
         let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
         (plate, fes, conduction)

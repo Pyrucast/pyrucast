@@ -690,9 +690,9 @@ fn axis_patterns(et: ElementType) -> (ElementType, [&'static [(usize, usize)]; 2
     }
 }
 
-/// Extrude a mesh by `n_layers` layers along `direction`.
+/// Extrude a mesh by `n_layers` layers along `vector`.
 ///
-/// `direction` is the **total** displacement vector; each intermediate
+/// `vector` is the **total** displacement; each intermediate
 /// layer is placed at an evenly spaced fraction. Supported element types:
 /// SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8, and their quadratic siblings
 /// SEG3 → QUA8, TRI6 → PENTA15, QUA8 → HEX20 — the source's mid-nodes are
@@ -705,7 +705,7 @@ fn axis_patterns(et: ElementType) -> (ElementType, [&'static [(usize, usize)]; 2
 ///
 /// Every cell that fills the space — a line extruded in 2-D, a surface in
 /// 3-D — comes out **right-handed** (positive jacobian), whatever the side
-/// `direction` points to: a source cell whose sweep would be left-handed (a
+/// `vector` points to: a source cell whose sweep would be left-handed (a
 /// segment extruded to its right, a facet extruded against its normal) is
 /// swept from its reversed copy, [`ElementType::reversal_permutation`]. A
 /// line extruded in 3-D gives a surface, which has no handedness: its cells
@@ -718,27 +718,27 @@ fn axis_patterns(et: ElementType) -> (ElementType, [&'static [(usize, usize)]; 2
 /// - QUA8, PENTA15, HEX20: the corners as above, then the mid-nodes in the
 ///   edge order of the linear cell — those of the bottom face, of the top
 ///   face, then of the edges along the extrusion.
-pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> {
+pub fn extrude(mesh: &Mesh, vector: &[f64], n_layers: usize) -> Result<Mesh> {
     if n_layers == 0 {
         return Err(PyrucastError::Message(
             "extrude: n_layers must be ≥ 1".into(),
         ));
     }
     let dim = mesh.coords()?.read().dim() as usize;
-    if direction.len() != dim {
+    if vector.len() != dim {
         return Err(PyrucastError::Message(format!(
-            "extrude: direction has {} components but node dimension is {}",
-            direction.len(),
+            "extrude: vector has {} components but node dimension is {}",
+            vector.len(),
             dim
         )));
     }
 
-    // A cell whose sweep along `direction` would be left-handed is swept from
+    // A cell whose sweep along `vector` would be left-handed is swept from
     // its reversed copy, so that every extruded cell has a positive jacobian.
-    let flipped = right_handed_source(mesh, direction)?;
+    let flipped = right_handed_source(mesh, vector)?;
     let source = flipped.as_ref().unwrap_or(mesh);
     let cols = columns(source, "extrude")?;
-    let step: Vec<f64> = direction.iter().map(|&d| d / n_layers as f64).collect();
+    let step: Vec<f64> = vector.iter().map(|&d| d / n_layers as f64).collect();
     layered(
         source,
         &cols,
