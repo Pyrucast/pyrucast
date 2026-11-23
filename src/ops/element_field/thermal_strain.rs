@@ -152,7 +152,7 @@ pub fn thermal_strain(
 
 /// [`thermal_strain`] on one continuum law's FE space.
 fn dilation_zone(
-    fespace: &Handle<SubFiniteElementSpace>,
+    subfespace: &Handle<SubFiniteElementSpace>,
     kinematics: Kinematics,
     measure: StrainMeasure,
     temperature: &ElementField,
@@ -167,13 +167,13 @@ fn dilation_zone(
         StrainMeasure::Hencky => |a| (1.0 + a).ln(),
         _ => |a| a,
     };
-    let temp_sub = temperature.sub_for_fespace(fespace)?;
+    let temp_sub = temperature.sub_for_fespace(subfespace)?;
     // Resolve the material zone by `alpha`, so a shared FE space carrying
     // several component-disjoint material zones (e.g. thermal `k` + mechanical
     // `E`/`nu`/`alpha`) resolves the expansion zone without an explicit
     // consolidate.
-    let mat_sub = material.sub_for_fespace_with(fespace, &[ALPHA.to_string()])?;
-    let space_dim = fespace.read().space_dim();
+    let mat_sub = material.sub_for_fespace_with(subfespace, &[ALPHA.to_string()])?;
+    let space_dim = subfespace.read().space_dim();
 
     // Where the two values sit, resolved **once** for the zone — which is
     // also the check that they are there at all, with a message naming the
@@ -210,7 +210,7 @@ fn dilation_zone(
     }
 
     kernel::element_pointwise(
-        fespace,
+        subfespace,
         &temp_sub,
         // Thermal expansion reads no previous state: `α·ΔT` depends on the
         // temperature and the material, on nothing that happened before.

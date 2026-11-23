@@ -35,20 +35,20 @@ struct Operand {
 }
 
 impl Operand {
-    /// The tensor `prefix` read in the zone of `field` on `fespace`.
+    /// The tensor `prefix` read in the zone of `field` on `subfespace`.
     ///
     /// Settled once per subspace: which zone, which names, where each one
     /// sits in the row, which entry of the matrix it fills.
     fn new(
         field: &ElementField,
-        fespace: &Handle<SubFiniteElementSpace>,
+        subfespace: &Handle<SubFiniteElementSpace>,
         prefix: &str,
     ) -> Result<Operand> {
         let (space_dim, axisymmetric) = {
-            let s = fespace.read();
+            let s = subfespace.read();
             (s.space_dim(), s.is_axisymmetric())
         };
-        let zone = field.sub_for_fespace_reading(fespace, &[format!("{prefix}_xx")])?;
+        let zone = field.sub_for_fespace_reading(subfespace, &[format!("{prefix}_xx")])?;
         let components = zone.read().components().to_vec();
         let zz = format!("{prefix}_zz");
         let with_zz = space_dim == 2 && (axisymmetric || components.contains(&zz));
@@ -77,7 +77,7 @@ impl Operand {
             None => (
                 positions(&symmetric).ok_or_else(|| {
                     PyrucastError::Message(format!(
-                        "the zone on the FE space {fespace} carries no tensor `{prefix}`: \
+                        "the zone on the FE space {subfespace} carries no tensor `{prefix}`: \
                          expected {symmetric:?}, it carries {components:?}"
                     ))
                 })?,

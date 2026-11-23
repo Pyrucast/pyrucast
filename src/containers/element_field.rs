@@ -803,7 +803,7 @@ impl ElementField {
         Ok(Self { subs })
     }
 
-    /// Every [`SubElementField`] living on `fespace`, in aggregate order.
+    /// Every [`SubElementField`] living on `subfespace`, in aggregate order.
     ///
     /// The honest multi-zone accessor: a union (`a | b`) may leave several
     /// **component-disjoint** zones on one support (see
@@ -812,13 +812,13 @@ impl ElementField {
     /// legitimately carry more than one zone.
     pub(crate) fn subs_for_fespace(
         &self,
-        fespace: &Handle<SubFiniteElementSpace>,
+        subfespace: &Handle<SubFiniteElementSpace>,
     ) -> Vec<Handle<SubElementField>> {
         let mut out = Vec::new();
         for h in self {
             let matches = {
                 let f = h.read().support();
-                f.same_object(fespace)
+                f.same_object(subfespace)
             };
             if matches {
                 out.push(h.clone());
@@ -827,11 +827,11 @@ impl ElementField {
         out
     }
 
-    /// The **unique** [`SubElementField`] on `fespace`.
+    /// The **unique** [`SubElementField`] on `subfespace`.
     ///
     /// The per-zone field-matching primitive shared by the assembly and
     /// behaviour operators, for the common case of one zone per support. Errors
-    /// if no sub-field of the aggregate lives on `fespace` (a missing per-zone
+    /// if no sub-field of the aggregate lives on `subfespace` (a missing per-zone
     /// material / deformation is always a caller error, never a silent skip),
     /// **and also if more than one zone lives on the support** — it never
     /// silently returns the first of many, which would let `strain | state`
@@ -840,24 +840,24 @@ impl ElementField {
     /// [`crate::ops::element_field::consolidate`].
     pub(crate) fn sub_for_fespace(
         &self,
-        fespace: &Handle<SubFiniteElementSpace>,
+        subfespace: &Handle<SubFiniteElementSpace>,
     ) -> Result<Handle<SubElementField>> {
-        let mut zones = self.subs_for_fespace(fespace);
+        let mut zones = self.subs_for_fespace(subfespace);
         match zones.len() {
             1 => Ok(zones.pop().expect("length checked to be 1")),
             0 => Err(PyrucastError::Message(format!(
                 "no SubElementField in this ElementField matches the FE space \
-                 {fespace}"
+                 {subfespace}"
             ))),
             n => Err(PyrucastError::Message(format!(
-                "{n} SubElementFields live on the FE space {fespace}; \
+                "{n} SubElementFields live on the FE space {subfespace}; \
                  sub_for_fespace needs a unique zone. Use subs_for_fespace, or \
                  element_field::consolidate to fuse the zones."
             ))),
         }
     }
 
-    /// The **unique** [`SubElementField`] on `fespace` that carries **every**
+    /// The **unique** [`SubElementField`] on `subfespace` that carries **every**
     /// component in `required`.
     ///
     /// Like [`sub_for_fespace`](Self::sub_for_fespace) but discriminates zones by
@@ -873,11 +873,11 @@ impl ElementField {
     /// set matches every zone and is a caller error).
     pub(crate) fn sub_for_fespace_with(
         &self,
-        fespace: &Handle<SubFiniteElementSpace>,
+        subfespace: &Handle<SubFiniteElementSpace>,
         required: &[String],
     ) -> Result<Handle<SubElementField>> {
         let mut matching: Vec<Handle<SubElementField>> = Vec::new();
-        for h in self.subs_for_fespace(fespace) {
+        for h in self.subs_for_fespace(subfespace) {
             let carries_all = {
                 let comps = h.read().components().to_vec();
                 required.iter().all(|r| comps.contains(r))
@@ -889,18 +889,18 @@ impl ElementField {
         match matching.len() {
             1 => Ok(matching.pop().expect("length checked to be 1")),
             0 => Err(PyrucastError::Message(format!(
-                "no SubElementField on the FE space {fespace} carries \
+                "no SubElementField on the FE space {subfespace} carries \
                  all of {required:?} — supply it via material_field"
             ))),
             n => Err(PyrucastError::Message(format!(
-                "{n} SubElementFields on the FE space {fespace} each \
+                "{n} SubElementFields on the FE space {subfespace} each \
                  carry all of {required:?}; the zone is ambiguous — fuse them with \
                  element_field::consolidate or narrow the components"
             ))),
         }
     }
 
-    /// The zone on `fespace` handed to a consumer that reads `names`.
+    /// The zone on `subfespace` handed to a consumer that reads `names`.
     ///
     /// The only zone of the support, whatever it carries: the consumer's own
     /// layout then names a missing component. When **several** zones share the
@@ -911,12 +911,12 @@ impl ElementField {
     /// names single out none or several.
     pub(crate) fn sub_for_fespace_reading(
         &self,
-        fespace: &Handle<SubFiniteElementSpace>,
+        subfespace: &Handle<SubFiniteElementSpace>,
         names: &[String],
     ) -> Result<Handle<SubElementField>> {
-        let zones = self.subs_for_fespace(fespace);
+        let zones = self.subs_for_fespace(subfespace);
         if zones.len() <= 1 || names.is_empty() {
-            return self.sub_for_fespace(fespace);
+            return self.sub_for_fespace(subfespace);
         }
         let n_zones = zones.len();
         let mut carrying: Vec<Handle<SubElementField>> = zones
@@ -929,11 +929,11 @@ impl ElementField {
         match carrying.len() {
             1 => Ok(carrying.pop().expect("length checked to be 1")),
             0 => Err(PyrucastError::Message(format!(
-                "{n_zones} zones live on the FE space {fespace} and none carries all of \
+                "{n_zones} zones live on the FE space {subfespace} and none carries all of \
                  {names:?}"
             ))),
             n => Err(PyrucastError::Message(format!(
-                "{n} zones on the FE space {fespace} each carry all of {names:?}; the zone \
+                "{n} zones on the FE space {subfespace} each carry all of {names:?}; the zone \
                  is ambiguous — fuse them with element_field::consolidate"
             ))),
         }

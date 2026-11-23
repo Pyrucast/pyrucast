@@ -379,7 +379,7 @@ fn bar_cauchy(s: f64, a: &[f64], out: &mut [f64]) {
 /// along the current chord `a = F t₀` of each point.
 fn convert_bar_zone(
     zone: &Handle<SubElementField>,
-    fespace: &Handle<SubFiniteElementSpace>,
+    subfespace: &Handle<SubFiniteElementSpace>,
     space_dim: usize,
     gradient: &ElementField,
     target: StressMeasure,
@@ -398,7 +398,7 @@ fn convert_bar_zone(
         }
     };
     let f_names = full_matrix_reads("F", space_dim);
-    let f_zone = gradient.sub_for_fespace_reading(fespace, &f_names)?;
+    let f_zone = gradient.sub_for_fespace_reading(subfespace, &f_names)?;
     let f_idx = {
         let refs: Vec<&str> = f_names.iter().map(String::as_str).collect();
         f_zone.read().resolve_components(&refs, "gradient")?
@@ -407,7 +407,7 @@ fn convert_bar_zone(
     let d = space_dim;
 
     kernel::element_pointwise(
-        fespace,
+        subfespace,
         zone,
         &f_zone,
         &f_zone,

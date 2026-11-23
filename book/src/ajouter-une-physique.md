@@ -239,7 +239,7 @@ pub trait SubModelKind: Sync {
         fe: &mut [f64]) -> Result<()> { /* défaut : continuum */ }
     // Ce à quoi le terme applique son Bᵀ quand il n'a pas de loi (défaut : le
     // primal interpolé aux points) :
-    fn residual_input(&self, fespace: &Handle<SubFiniteElementSpace>,
+    fn residual_input(&self, subfespace: &Handle<SubFiniteElementSpace>,
         solution: &NodeField) -> Result<Handle<SubElementField>> { /* fourni */ }
     // Les recettes du résidu, de part et d'autre de Σ f_int = Σ f_ext :
     fn internal_force_contribution(&self) -> Vec<ResidualContribution> { /* Computed(layout) */ }

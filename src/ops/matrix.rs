@@ -105,11 +105,11 @@ pub enum AssemblyInputs<'a> {
 }
 
 impl AssemblyInputs<'_> {
-    /// The per-zone form, for the sub-model whose material lives on `fespace`.
+    /// The per-zone form, for the sub-model whose material lives on `subfespace`.
     fn for_sub(
         &self,
         sub: &SubModel,
-        fespace: &Handle<SubFiniteElementSpace>,
+        subfespace: &Handle<SubFiniteElementSpace>,
     ) -> Result<KernelInputs> {
         Ok(match self {
             Self::MaterialOnly => KernelInputs::MaterialOnly,
@@ -118,7 +118,7 @@ impl AssemblyInputs<'_> {
                     Some(domain) => domain.element_state_reads(MatrixKind::Geometric),
                     None => Vec::new(),
                 };
-                KernelInputs::State(sf.sub_for_fespace_reading(fespace, &reads)?)
+                KernelInputs::State(sf.sub_for_fespace_reading(subfespace, &reads)?)
             }
             Self::Behavior {
                 deformation,
@@ -144,8 +144,8 @@ impl AssemblyInputs<'_> {
                 })?;
                 // Two laws sharing the subspace: each takes the zone it reads.
                 let deformation =
-                    deformation.sub_for_fespace_reading(fespace, &law.deformation_reads())?;
-                let prev = prev.sub_for_fespace_reading(fespace, &previous_state_names(law))?;
+                    deformation.sub_for_fespace_reading(subfespace, &law.deformation_reads())?;
+                let prev = prev.sub_for_fespace_reading(subfespace, &previous_state_names(law))?;
                 KernelInputs::Behavior {
                     deformation,
                     prev,

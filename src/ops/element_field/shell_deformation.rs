@@ -101,7 +101,7 @@ pub fn shell_deformation(
     let view = field.view();
     let mut out = ElementField::empty();
     for sub in fespace {
-        out.add_sub(Handle::new(subspace_shell_deformation(
+        out.add_sub(Handle::new(shell_deformation_zone(
             sub,
             &view,
             &components,
@@ -112,13 +112,13 @@ pub fn shell_deformation(
 }
 
 /// Generalised strains on one surface subspace.
-pub(crate) fn subspace_shell_deformation(
-    fespace: &Handle<SubFiniteElementSpace>,
+pub(crate) fn shell_deformation_zone(
+    subfespace: &Handle<SubFiniteElementSpace>,
     view: &NodeFieldView,
     components: &[String],
     formulation: ShellFormulation,
 ) -> Result<SubElementField> {
-    kernel::require_field_basis(fespace, "shape values")?;
+    kernel::require_field_basis(subfespace, "shape values")?;
     // The field must carry every shell DOF up front (a clearer error than a
     // missing-component failure deep in the per-cell loop).
     for required in DOFS {
@@ -139,7 +139,7 @@ pub(crate) fn subspace_shell_deformation(
     // once per Newton iteration of an assembly, and the shared driver is what
     // keeps this operator off a parallel loop of its own.
     let full = kernel::nodal_pointwise(
-        fespace,
+        subfespace,
         view,
         &reads,
         names[..SHEAR_ROW].to_vec(),
@@ -163,7 +163,7 @@ pub(crate) fn subspace_shell_deformation(
 
     // ── The transverse shear, at the reduced point alone ──────────────────
     let reduced = Handle::new(SubFiniteElementSpace::new(
-        fespace.read().submesh(),
+        subfespace.read().submesh(),
         Interpolation::Lagrange1,
         QuadratureRule::Reduced,
     )?);
@@ -187,7 +187,7 @@ pub(crate) fn subspace_shell_deformation(
     )?;
 
     // ── One field: the shear broadcast onto the full Gauss points ─────────
-    let mut merged = SubElementField::new(fespace.clone(), names)?;
+    let mut merged = SubElementField::new(subfespace.clone(), names)?;
     let n_gauss = merged.gauss_count();
     for cell in 0..merged.cell_count() {
         let constant = shear.row(cell, 0);

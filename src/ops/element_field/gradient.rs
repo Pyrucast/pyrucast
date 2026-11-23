@@ -80,11 +80,11 @@ pub fn gradient(field: &NodeField, fespace: &FiniteElementSpace) -> Result<Eleme
 /// [`gradient`] of the named `components` on one zone — the per-zone body
 /// shared with [`strain`](fn@crate::ops::element_field::strain).
 pub(crate) fn gradient_zone(
-    sub: &Handle<SubFiniteElementSpace>,
+    subfespace: &Handle<SubFiniteElementSpace>,
     view: &NodeFieldView,
     components: &[String],
 ) -> Result<SubElementField> {
-    let space_dim = sub.read().space_dim();
+    let space_dim = subfespace.read().space_dim();
     let mut names = Vec::with_capacity(components.len() * space_dim);
     for comp in components {
         for a in 0..space_dim {
@@ -94,7 +94,7 @@ pub(crate) fn gradient_zone(
     // Point kernel: ∂(comp)/∂x_a = Σ_i f_i · ∂N_i/∂x_a, laid out
     // component-major then axis (grad_<comp>_x, grad_<comp>_y, …).
     let nc = components.len();
-    kernel::nodal_pointwise(sub, view, components, names, |geom, g, dofs, out| {
+    kernel::nodal_pointwise(subfespace, view, components, names, |geom, g, dofs, out| {
         let sd = geom.space_dim;
         let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
         let dn_dx = &mut dn_buf[..geom.n_nodes * sd];

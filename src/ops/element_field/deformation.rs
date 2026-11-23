@@ -310,15 +310,15 @@ pub fn deformation(
 /// [`strain`](fn@crate::ops::element_field::strain), which names a law's
 /// own displacement instead of every component of a solution.
 pub(crate) fn deformation_zone(
-    sub: &Handle<SubFiniteElementSpace>,
+    subfespace: &Handle<SubFiniteElementSpace>,
     view: &NodeFieldView,
     components: &[String],
     measure: StrainMeasure,
 ) -> Result<SubElementField> {
     // Everything is settled here, once per zone: the Gauss loop below
     // neither tests nor allocates.
-    kernel::require_field_basis(sub, "shape values")?;
-    let space_dim = sub.read().space_dim();
+    kernel::require_field_basis(subfespace, "shape values")?;
+    let space_dim = subfespace.read().space_dim();
     if components.len() != space_dim {
         return Err(PyrucastError::Message(format!(
             "deformation: the displacement field carries {} component(s) but the FE \
@@ -356,27 +356,39 @@ pub(crate) fn deformation_zone(
     // The measure is chosen here, by monomorphisation: each arm compiles
     // its own kernel, with no `match` at the Gauss point.
     match measure {
-        StrainMeasure::Linear => produce(sub, view, components, names, &slots, linear),
-        StrainMeasure::Gradient => produce(sub, view, components, names, &slots, gradient),
+        StrainMeasure::Linear => produce(subfespace, view, components, names, &slots, linear),
+        StrainMeasure::Gradient => produce(subfespace, view, components, names, &slots, gradient),
         StrainMeasure::GreenLagrange => {
-            produce(sub, view, components, names, &slots, green_lagrange)
+            produce(subfespace, view, components, names, &slots, green_lagrange)
         }
-        StrainMeasure::RightCauchyGreen => {
-            produce(sub, view, components, names, &slots, right_cauchy_green)
+        StrainMeasure::RightCauchyGreen => produce(
+            subfespace,
+            view,
+            components,
+            names,
+            &slots,
+            right_cauchy_green,
+        ),
+        StrainMeasure::LeftCauchyGreen => produce(
+            subfespace,
+            view,
+            components,
+            names,
+            &slots,
+            left_cauchy_green,
+        ),
+        StrainMeasure::Hencky => produce(subfespace, view, components, names, &slots, hencky),
+        StrainMeasure::EulerAlmansi => {
+            produce(subfespace, view, components, names, &slots, euler_almansi)
         }
-        StrainMeasure::LeftCauchyGreen => {
-            produce(sub, view, components, names, &slots, left_cauchy_green)
-        }
-        StrainMeasure::Hencky => produce(sub, view, components, names, &slots, hencky),
-        StrainMeasure::EulerAlmansi => produce(sub, view, components, names, &slots, euler_almansi),
-        StrainMeasure::Jacobian => produce(sub, view, components, names, &slots, jacobian),
+        StrainMeasure::Jacobian => produce(subfespace, view, components, names, &slots, jacobian),
     }
 }
 
 /// One zone, one measure: picks the axisymmetric or Cartesian kernel — a fact
 /// of the zone — and hands it to the shared driver.
 fn produce<M>(
-    sub: &Handle<SubFiniteElementSpace>,
+    subfespace: &Handle<SubFiniteElementSpace>,
     view: &NodeFieldView,
     components: &[String],
     names: Vec<String>,
@@ -386,12 +398,12 @@ fn produce<M>(
 where
     M: Fn(&Matrix3<f64>) -> Matrix3<f64> + Sync,
 {
-    if sub.read().is_axisymmetric() {
-        kernel::nodal_pointwise(sub, view, components, names, |geom, g, dofs, out| {
+    if subfespace.read().is_axisymmetric() {
+        kernel::nodal_pointwise(subfespace, view, components, names, |geom, g, dofs, out| {
             point::<true, M>(geom, g, dofs, out, slots, &measure)
         })
     } else {
-        kernel::nodal_pointwise(sub, view, components, names, |geom, g, dofs, out| {
+        kernel::nodal_pointwise(subfespace, view, components, names, |geom, g, dofs, out| {
             point::<false, M>(geom, g, dofs, out, slots, &measure)
         })
     }

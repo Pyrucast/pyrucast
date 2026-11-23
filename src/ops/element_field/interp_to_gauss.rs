@@ -76,17 +76,17 @@ pub fn interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> Resul
 /// [`interp_to_gauss`] of the named `components` on one zone — the per-zone
 /// body shared with [`strain`](fn@crate::ops::element_field::strain).
 pub(crate) fn interp_to_gauss_zone(
-    sub: &Handle<SubFiniteElementSpace>,
+    subfespace: &Handle<SubFiniteElementSpace>,
     view: &NodeFieldView,
     components: &[String],
 ) -> Result<SubElementField> {
     // This operator interpolates: it needs a field basis, and that is a fact of
     // the zone, settled here rather than at every Gauss point.
-    kernel::require_field_basis(sub, "shape values")?;
+    kernel::require_field_basis(subfespace, "shape values")?;
     // Point kernel: value at Gauss g = Σ_i N_i(g) · f_i, per component.
     let nc = components.len();
     kernel::nodal_pointwise(
-        sub,
+        subfespace,
         view,
         components,
         components.to_vec(),

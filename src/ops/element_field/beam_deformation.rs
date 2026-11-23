@@ -104,7 +104,7 @@ pub fn beam_deformation(
     let mut out = ElementField::empty();
     for sub in fespace {
         let mat = material.sub_for_fespace(sub)?;
-        out.add_sub(Handle::new(subspace_beam_deformation(
+        out.add_sub(Handle::new(beam_deformation_zone(
             sub,
             &view,
             &components,
@@ -116,14 +116,14 @@ pub fn beam_deformation(
 
 /// Section strains on one oriented `SEG2` subspace. Dispatches on the
 /// configuration's spatial dimension (2-D vs 3-D frame).
-pub(crate) fn subspace_beam_deformation(
-    fespace: &Handle<SubFiniteElementSpace>,
+pub(crate) fn beam_deformation_zone(
+    subfespace: &Handle<SubFiniteElementSpace>,
     view: &NodeFieldView,
     components: &[String],
     material: &Handle<SubElementField>,
 ) -> Result<SubElementField> {
     // One read guard on the subspace, held for every property we read off it.
-    let s = fespace.read();
+    let s = subfespace.read();
     let space_dim = s.space_dim();
     // The configuration reads off the dimension, and with it the DOFs read and
     // the strains produced — the operator has no table of its own.
@@ -159,7 +159,7 @@ pub(crate) fn subspace_beam_deformation(
 
     let n_comp = out_comps.len();
     let mut field = SubElementField::new(
-        fespace.clone(),
+        subfespace.clone(),
         out_comps.iter().map(|s| s.to_string()).collect(),
     )?;
     // The section constants, located **once for the zone**: one bending plane in

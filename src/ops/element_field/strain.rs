@@ -26,11 +26,11 @@ use crate::containers::node_field::NodeField;
 use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::StrainOperator;
-use crate::ops::element_field::beam_deformation::subspace_beam_deformation;
+use crate::ops::element_field::beam_deformation::beam_deformation_zone;
 use crate::ops::element_field::deformation::deformation_zone;
 use crate::ops::element_field::gradient::gradient_zone;
 use crate::ops::element_field::interp_to_gauss::interp_to_gauss_zone;
-use crate::ops::element_field::shell_deformation::subspace_shell_deformation;
+use crate::ops::element_field::shell_deformation::shell_deformation_zone;
 
 /// The input of every law of `model`, produced from the nodal `solution` —
 /// one zone per sub-model with a law, on its behaviour space, carrying what
@@ -119,10 +119,10 @@ pub fn strain(
             StrainOperator::Beam => {
                 let material = materials
                     .sub_for_fespace_with(&law.material_fespace(), &law.material_components())?;
-                subspace_beam_deformation(&fespace, &view, &unknowns, &material)?
+                beam_deformation_zone(&fespace, &view, &unknowns, &material)?
             }
             StrainOperator::Shell(formulation) => {
-                subspace_shell_deformation(&fespace, &view, &unknowns, formulation)?
+                shell_deformation_zone(&fespace, &view, &unknowns, formulation)?
             }
         };
         out.add_sub(Handle::new(zone))?;

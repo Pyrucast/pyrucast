@@ -212,11 +212,11 @@ impl InterfaceTransfer {
     /// The layout of a diagonal block, on one side of the interface.
     fn diagonal_layout(
         &self,
-        fespace: &Handle<SubFiniteElementSpace>,
+        subfespace: &Handle<SubFiniteElementSpace>,
         support: &Handle<SubMesh>,
     ) -> MatrixLayout {
         MatrixLayout {
-            fespaces: vec![fespace.clone()],
+            fespaces: vec![subfespace.clone()],
             support: support.clone(),
             dual_vars: self.dual_vars(),
             primal_vars: self.primal_vars(),
@@ -228,25 +228,25 @@ impl InterfaceTransfer {
     /// The layout of an off-diagonal block, rows on one side, columns on the other.
     /// One interpolation of the primal at one side's points.
     fn interp_side(
-        fes: &Handle<SubFiniteElementSpace>,
+        subfespace: &Handle<SubFiniteElementSpace>,
         solution: &crate::containers::node_field::NodeField,
     ) -> Result<Handle<SubElementField>> {
         let mut one = crate::containers::finite_element_space::FiniteElementSpace::empty();
-        one.add_sub(fes.clone())?;
+        one.add_sub(subfespace.clone())?;
         crate::ops::element_field::interp_to_gauss(solution, &one)?.get(0)
     }
 
     fn coupling_layout(
         &self,
-        row_fespace: &Handle<SubFiniteElementSpace>,
+        row_subfespace: &Handle<SubFiniteElementSpace>,
         row_support: &Handle<SubMesh>,
-        col_fespace: &Handle<SubFiniteElementSpace>,
+        col_subfespace: &Handle<SubFiniteElementSpace>,
         col_support: &Handle<SubMesh>,
         symmetry: Symmetry,
     ) -> CouplingLayout {
         CouplingLayout {
-            fespaces: vec![row_fespace.clone()],
-            col_fespaces: vec![col_fespace.clone()],
+            fespaces: vec![row_subfespace.clone()],
+            col_fespaces: vec![col_subfespace.clone()],
             row_support: row_support.clone(),
             col_support: col_support.clone(),
             dual_vars: self.dual_vars(),
@@ -359,23 +359,23 @@ impl SubModelKind for InterfaceTransfer {
         .collect()
     }
 
-    /// The jump `a₁ − a₂` at the points, seen from the `fespace` side: positive on
+    /// The jump `a₁ − a₂` at the points, seen from the `subfespace` side: positive on
     /// A, negative on B. Both sides being **conforming** — same element type, same
     /// cell count, cell `i` of one facing cell `i` of the other — the two
     /// interpolations align index for index and the jump is a subtraction, not a
     /// projection.
     fn residual_input(
         &self,
-        fespace: &Handle<SubFiniteElementSpace>,
+        subfespace: &Handle<SubFiniteElementSpace>,
         solution: &crate::containers::node_field::NodeField,
     ) -> Result<Handle<SubElementField>> {
-        let sur_a = Handle::same_object(fespace, &self.side_a);
+        let sur_a = Handle::same_object(subfespace, &self.side_a);
         let a = Self::interp_side(&self.side_a, solution)?;
         let b = Self::interp_side(&self.side_b, solution)?;
         let (plus, moins) = if sur_a { (&a, &b) } else { (&b, &a) };
         let noms: Vec<String> = self.components.iter().map(|(p, _)| jump_name(p)).collect();
         let nj = noms.len();
-        let mut out = SubElementField::new(fespace.clone(), noms)?;
+        let mut out = SubElementField::new(subfespace.clone(), noms)?;
         {
             let (p, m) = (plus.read(), moins.read());
             // Both interpolated fields carry **every** component of the solution, in its

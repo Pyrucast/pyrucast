@@ -102,10 +102,7 @@ pub fn divergence(field: &ElementField, prefix: &str) -> Result<NodeField> {
     for sub in field {
         // Two subspaces on one cell list share its nodes' support: their
         // terms add up there, and keep it.
-        out = add_partials(
-            &out,
-            &NodeField::from_sub(subspace_divergence(sub, prefix)?),
-        )?;
+        out = add_partials(&out, &NodeField::from_sub(divergence_zone(sub, prefix)?))?;
     }
     // A node on the seam between two subspaces receives from both: added, not
     // stacked side by side.
@@ -118,7 +115,7 @@ pub fn divergence(field: &ElementField, prefix: &str) -> Result<NodeField> {
 /// A_yy` a symmetric tensor, and with `A_yx` as well a full one, read whole.
 /// Nothing is counted and nothing is positional, so the two never collide — not
 /// even in 1-D, where both carry one component.
-fn subspace_divergence(field: &Handle<SubElementField>, prefix: &str) -> Result<SubNodeField> {
+fn divergence_zone(field: &Handle<SubElementField>, prefix: &str) -> Result<SubNodeField> {
     let f = field.read();
     let fespace = f.support();
     let (submesh, space_dim, axisymmetric) = {

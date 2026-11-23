@@ -100,8 +100,8 @@ use std::collections::HashMap;
 /// assert!(format!("{err}").contains("MODEL_EMBEDDED"));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn require_field_basis(fespace: &Handle<SubFiniteElementSpace>, what: &str) -> Result<()> {
-    if fespace.read().interpolation().is_model_embedded() {
+pub fn require_field_basis(subfespace: &Handle<SubFiniteElementSpace>, what: &str) -> Result<()> {
+    if subfespace.read().interpolation().is_model_embedded() {
         return Err(PyrucastError::Message(format!(
             "this FE subspace is MODEL_EMBEDDED — it declares no field basis, so it has no \
              {what}. Its formulation owns the interpolation, so evaluating a field inside one \
@@ -1189,7 +1189,7 @@ impl<'a> CellGeom<'a> {
     }
 }
 
-/// Integrate a point-local constitutive law over `fespace`, in parallel.
+/// Integrate a point-local constitutive law over `subfespace`, in parallel.
 ///
 /// `point(geom, g, input, prev, material, out)` is a pure sequential kernel: for
 /// the cell `geom.cell` at Gauss point `g` it receives **the row of that point**
@@ -1203,7 +1203,7 @@ impl<'a> CellGeom<'a> {
 /// ([`crate::models::ZoneLayout`]).
 ///
 /// The three input fields are checked **here**, once, to span the same cells and
-/// Gauss points as `fespace` — a field built by hand can disagree, and the
+/// Gauss points as `subfespace` — a field built by hand can disagree, and the
 /// parallel loop below indexes without asking.
 ///
 /// A producer with no previous state — a *geometric* one, such as
@@ -1217,7 +1217,7 @@ impl<'a> CellGeom<'a> {
 /// [`crate::ops::element_field::behavior::integrate`] and the thermal strain
 /// [`crate::ops::element_field::thermal_strain`](fn@crate::ops::element_field::thermal_strain).
 ///
-/// Returns the material-state field (flux/stress + `VAR1`) on `fespace`.
+/// Returns the material-state field (flux/stress + `VAR1`) on `subfespace`.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -1259,7 +1259,7 @@ impl<'a> CellGeom<'a> {
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn element_pointwise(
-    fespace: &Handle<SubFiniteElementSpace>,
+    subfespace: &Handle<SubFiniteElementSpace>,
     input: &Handle<SubElementField>,
     prev: &Handle<SubElementField>,
     material: &Handle<SubElementField>,
@@ -1267,11 +1267,11 @@ pub fn element_pointwise(
     point: impl Fn(&CellGeom, usize, &[f64], &[f64], &[f64], &mut [f64]) -> Result<()> + Sync,
 ) -> Result<SubElementField> {
     let out_stride = out_components.len();
-    let mut out = SubElementField::new(fespace.clone(), out_components)?;
+    let mut out = SubElementField::new(subfespace.clone(), out_components)?;
 
     // Guards held for the whole parallel region — slices borrowed, not copied.
     // Reference data gathered once: nothing inside the loop validates or fails.
-    let fe = fespace.read();
+    let fe = subfespace.read();
     let submesh = fe.submesh();
     let sm = submesh.read();
     let coords_h = sm.coords();
@@ -1349,7 +1349,7 @@ pub fn element_pointwise(
 /// — the cell-wise counterpart of [`element_pointwise`], which keeps every
 /// Gauss point.
 ///
-/// `cell(geom, values, out)` receives the geometry of one cell of `fespace`
+/// `cell(geom, values, out)` receives the geometry of one cell of `subfespace`
 /// (its quadrature, the one `input` lives on), that cell's block of `input` —
 /// `n_gauss` rows of `input`'s components, contiguous — and writes the cell's
 /// `out_components.len()` values. The result lives on `target`: a subspace of
@@ -1392,13 +1392,13 @@ pub fn element_pointwise(
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn cellwise(
-    fespace: &Handle<SubFiniteElementSpace>,
+    subfespace: &Handle<SubFiniteElementSpace>,
     input: &Handle<SubElementField>,
     target: &Handle<SubFiniteElementSpace>,
     out_components: Vec<String>,
     cell: impl Fn(&CellGeom, &[f64], &mut [f64]) -> Result<()> + Sync,
 ) -> Result<SubElementField> {
-    let fe = fespace.read();
+    let fe = subfespace.read();
     let submesh = fe.submesh();
     {
         let t = target.read();
@@ -1470,17 +1470,17 @@ pub fn cellwise(
 /// [`crate::ops::element_field::deformation`](fn@crate::ops::element_field::deformation) and
 /// [`crate::ops::element_field::interp_to_gauss`](fn@crate::ops::element_field::interp_to_gauss).
 pub(crate) fn nodal_pointwise(
-    fespace: &Handle<SubFiniteElementSpace>,
+    subfespace: &Handle<SubFiniteElementSpace>,
     field: &NodeFieldView,
     reads: &[String],
     out_components: Vec<String>,
     point: impl Fn(&CellGeom, usize, &[f64], &mut [f64]) -> Result<()> + Sync,
 ) -> Result<SubElementField> {
     let out_stride = out_components.len();
-    let mut out = SubElementField::new(fespace.clone(), out_components)?;
+    let mut out = SubElementField::new(subfespace.clone(), out_components)?;
 
     // Guards held for the whole parallel region — slices borrowed, not copied.
-    let fe = fespace.read();
+    let fe = subfespace.read();
     let submesh = fe.submesh();
     let sm = submesh.read();
     let coords_h = sm.coords();
@@ -2182,14 +2182,14 @@ impl BlockPattern {
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn element_block_pattern(
-    fespace: &Handle<SubFiniteElementSpace>,
+    subfespace: &Handle<SubFiniteElementSpace>,
     row_support: &Handle<SubMesh>,
     col_support: &Handle<SubMesh>,
     n_dual: usize,
     n_primal: usize,
     ordering: DofOrdering,
 ) -> Result<BlockPattern> {
-    let fe = fespace.read();
+    let fe = subfespace.read();
     let submesh = fe.submesh();
     let sm = submesh.read();
     let conn: &[NodeId] = sm.connectivity();
@@ -2776,15 +2776,15 @@ pub fn coupling_block_values_per_cell(
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn coupling_block_pattern(
-    row_fespace: &Handle<SubFiniteElementSpace>,
-    col_fespace: &Handle<SubFiniteElementSpace>,
+    row_subfespace: &Handle<SubFiniteElementSpace>,
+    col_subfespace: &Handle<SubFiniteElementSpace>,
     row_support: &Handle<SubMesh>,
     col_support: &Handle<SubMesh>,
     n_dual: usize,
     n_primal: usize,
     ordering: DofOrdering,
 ) -> Result<BlockPattern> {
-    let (row_fe, col_fe) = (row_fespace.read(), col_fespace.read());
+    let (row_fe, col_fe) = (row_subfespace.read(), col_subfespace.read());
     let (row_sm_h, col_sm_h) = (row_fe.submesh(), col_fe.submesh());
     let (row_sm, col_sm) = (row_sm_h.read(), col_sm_h.read());
     let row_conn: &[NodeId] = row_sm.connectivity();
@@ -3029,7 +3029,7 @@ pub fn scatter_to_nodes(
     Ok(out_field)
 }
 
-/// Parallel **scalar reduction over the cells** of `fespace` — the reduction
+/// Parallel **scalar reduction over the cells** of `subfespace` — the reduction
 /// counterpart of [`scatter_to_nodes`]. `cell(geom)` returns one cell's scalar
 /// contribution (e.g. `∫_cell f dΩ` by quadrature); the driver sums them over
 /// every cell and returns `Σ_cell cell(geom)`.
@@ -3074,10 +3074,10 @@ pub fn scatter_to_nodes(
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn reduce_cells(
-    fespace: &Handle<SubFiniteElementSpace>,
+    subfespace: &Handle<SubFiniteElementSpace>,
     cell: impl Fn(&CellGeom) -> Result<f64> + Sync,
 ) -> Result<f64> {
-    let fe = fespace.read();
+    let fe = subfespace.read();
     let submesh = fe.submesh();
     let sm = submesh.read();
     let coords_h = sm.coords();

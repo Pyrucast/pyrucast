@@ -986,7 +986,7 @@ pub trait SubModelKind: Sync {
         }
     }
 
-    /// What this term applies its `Bᵀ` to, at the points of `fespace` — read
+    /// What this term applies its `Bᵀ` to, at the points of `subfespace` — read
     /// when the sub-model has no constitutive law to produce a state.
     ///
     /// **Default**: the primal itself, interpolated there. That is what a
@@ -1032,11 +1032,11 @@ pub trait SubModelKind: Sync {
     /// ```
     fn residual_input(
         &self,
-        fespace: &Handle<SubFiniteElementSpace>,
+        subfespace: &Handle<SubFiniteElementSpace>,
         solution: &NodeField,
     ) -> Result<Handle<SubElementField>> {
         let mut one = crate::containers::finite_element_space::FiniteElementSpace::empty();
-        one.add_sub(fespace.clone())?;
+        one.add_sub(subfespace.clone())?;
         crate::ops::element_field::interp_to_gauss(solution, &one)?.get(0)
     }
 
