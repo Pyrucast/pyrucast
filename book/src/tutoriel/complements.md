@@ -49,16 +49,16 @@ font en volume. Les mailleurs qui produisent un volume :
 - `pyrucast.mesh.revolve(mesh, angle, n_layers, center, axis=None)` — le même
   balayage, mais en rotation autour d'un axe ; un tour complet referme le
   volume engendré ;
-- `pyrucast.mesh.sweep_solid(mesh_a, mesh_b, n_layers)` — remplissage entre
-  deux maillages de surface `TRI3`/`QUA4` qui se correspondent maille à
-  maille (la maille *i* de l'un fait face à la maille *i* de l'autre) ;
+- `pyrucast.mesh.sweep(mesh_a, mesh_b, n_layers)` — entre deux maillages de
+  surface qui se correspondent maille à maille (la maille *i* de l'un fait
+  face à la maille *i* de l'autre), le volume qui les relie ;
 - `pyrucast.mesh.triangulate_volume(envelope, size=None)` — remplissage
   `TET4` d'une enveloppe `TRI3` fermée par triangulation de Delaunay 3D ;
   sans `size`, la taille visée est la longueur moyenne des arêtes de
   l'enveloppe.
 
 La page [Maillage](maillage.md) emploie `extrude` et `triangulate_volume`, la
-page [Contact](contact.md) `revolve` ; `sweep_solid` n'y sert pas.
+page [Contact](contact.md) `revolve` ; `sweep` entre deux surfaces n'y sert pas.
 
 ## Éléments finis supportés
 

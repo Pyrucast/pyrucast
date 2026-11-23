@@ -15,7 +15,7 @@ maillage structuré, par extrusion ou par couches.
 | bord | 6 `QUA4` |
 | quadrature | `"GAUSS"` : 2×2×2 points, degré 3 par direction ; `"REDUCED"` : 1 point |
 | versions quadratiques | [HEX20](hex20.md) (sérendipité), [HEX27](hex27.md) (complet) |
-| obtenu par | `extrude`, `revolve` d'un `QUA4` ; `sweep_solid` ; `pave_volume` |
+| obtenu par | `extrude`, `revolve` d'un `QUA4` ; `sweep` entre deux surfaces `QUA4` ; `pave_volume` |
 
 ## Élément de référence
 

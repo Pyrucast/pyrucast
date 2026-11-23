@@ -14,7 +14,7 @@ Maillage - création;MANU;Maillage manuel (élément défini nœud par nœud);Me
 Maillage - création;LIRE;Lit un maillage (et ses champs) depuis un fichier externe (gmsh .msh, ASCII/binaire ; MED via medcoupling), une session gmsh vivante ou des tableaux;read_gmsh / read_gmsh_str / from_gmsh / from_medcoupling / from_arrays
 Maillage - génération;TRAN;Translation/extrusion d'un maillage (engendre la dimension supérieure);extrude / translate (extrude garde le degré : SEG3 → QUA8, QUA8 → HEX20, TRI6 → PENTA15)
 Maillage - génération;ROTA;Rotation / révolution d'un maillage;rotate / revolve (une ligne qui touche l'axe s'y referme en TRI3 / TRI6, comme ROTA suivi d'ELIM et REGE)
-Maillage - génération;VOLU;Volume engendré par déplacement d'une surface;sweep / sweep_solid / revolve / triangulate_volume / pave_volume
+Maillage - génération;VOLU;Volume engendré par déplacement d'une surface;sweep (entre deux surfaces) / revolve / triangulate_volume / pave_volume
 Maillage - génération;GENE;Génère un maillage par balayage entre deux lignes;sweep
 Maillage - génération;SYME;Symétrie d'un maillage;symmetry_point / symmetry_line / symmetry_plane
 Maillage - génération;PROJ;Projette un maillage sur une surface;project_on_sphere (projection radiale sur une sphère, 'CONI' depuis le centre seulement ; ni 'CYLI', ni plan, cylindre, cône, tore ou surface maillée)

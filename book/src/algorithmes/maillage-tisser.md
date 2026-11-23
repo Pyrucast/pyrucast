@@ -81,27 +81,26 @@ sur le bord, quelle que soit leur forme (pas seulement des droites). Comme
 > de **même** nombre d'éléments — largement suffisant en pratique et
 > implémentable simplement.
 
-## Tissage d'un solide entre deux surfaces : `sweep_solid`
+## Un volume entre deux surfaces : `sweep`
 
-{{#pyalgo mesh.sweep_solid}}
-
-`sweep_solid(mesh_a, mesh_b, n_layers)` est le **compagnon 3D** de `sweep` :
-là où ce dernier relie deux lignes `SEG2` par une bande de `QUA4`, `sweep_solid`
-relie deux **surfaces** par un solide. Les faces `TRI3` deviennent des prismes
-`PENTA6`, les faces `QUA4` des hexaèdres `HEX8`.
+Entre deux **surfaces**, `sweep(mesh_a, mesh_b, n_layers)` construit un
+volume, comme il construit une surface entre deux lignes. Les faces `TRI3`
+deviennent des prismes `PENTA6`, les faces `QUA4` des hexaèdres `HEX8`, et en
+quadratique les faces `TRI6` des `PENTA15`, les faces `QUA8` des `HEX20`.
 
 La cellule `i` de `mesh_a` est appariée à la cellule `i` de `mesh_b`, nœud local
 par nœud local. Les deux maillages doivent être **mono-sous-maillage**, du
-**même** type de surface (`TRI3` ou `QUA4`), avec le même nombre de cellules et
-une correspondance de nœuds cohérente, sur le **même** `Coords`. Les `n_layers`
+**même** type de surface, avec le même nombre de cellules et une
+correspondance de nœuds cohérente, sur le **même** `Coords`. Les `n_layers`
 couches de nœuds intermédiaires sont interpolées linéairement ; les nœuds des
-deux faces d'extrémité sont réutilisés.
+deux faces d'extrémité sont réutilisés. Une face quadratique donne aussi les
+nœuds milieux des arêtes qui vont d'une face à l'autre, à mi-couche.
 
 Associé à `translate` / `rotate`, il construit une tranche de solide entre une
 surface et sa copie déplacée :
 
 ```python
-{{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-sweep_solid}}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:sweep_volume}}
 ```
 
 ## Révolution : `revolve`
@@ -158,7 +157,7 @@ cohérentes entre elles, toutes retournées de la même façon.
 {{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-revolve}}
 ```
 
-`revolve` fait d'un coup ce que `rotate` + `sweep_solid` font tranche par
-tranche : une couche de `revolve` équivaut exactement à `sweep_solid(face,
-rotate(face, angle, …), 1)`. Le passage par `sweep_solid` reste utile quand
+`revolve` fait d'un coup ce que `rotate` + `sweep` font tranche par
+tranche : une couche de `revolve` équivaut exactement à `sweep(face,
+rotate(face, angle, …), 1)`. Le passage par `sweep` reste utile quand
 les deux faces ne se déduisent pas l'une de l'autre par une rotation.

@@ -1,18 +1,18 @@
-"""Rigid copies and 3-D sweep demo (`translate`, `rotate`, `sweep_solid`,
+"""Rigid copies and 3-D sweep demo (`translate`, `rotate`, `sweep`,
 `revolve`).
 
 Meshes a small surface, then shows the mesh-transform and sweep operators:
 
 - `translate` / `rotate` return a fresh copy of a mesh with its own new
   nodes (the source is left untouched);
-- `sweep_solid` is the 3-D companion of `sweep`: it links two matching
-  surfaces into a solid — TRI3 faces become PENTA6 prisms, QUA4 faces HEX8;
+- `sweep` between two matching surfaces links them into a solid — TRI3
+  faces become PENTA6 prisms, QUA4 faces HEX8;
 - `revolve` is the rotational companion of `extrude`: it sweeps the whole
   solid of revolution in one call, layer after layer.
 
-Combining `rotate` with `sweep_solid` builds one angular slice of a solid
+Combining `rotate` with `sweep` builds one angular slice of a solid
 of revolution — which is exactly one layer of `revolve`; combining
-`translate` with `sweep_solid` extrudes a surface onto a shifted copy
+`translate` with `sweep` extrudes a surface onto a shifted copy
 (equivalent to a straight `extrude`).
 
 Run:
@@ -39,7 +39,7 @@ def main() -> None:
 
     # One 15° slice of a solid of revolution about the z axis.
     rotated = pc.mesh.rotate(face, math.radians(15.0), [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
-    wedge = pc.mesh.sweep_solid(face, rotated, 2)
+    wedge = pc.mesh.sweep(face, rotated, 2)
     print("wedge :", wedge.element_types(), wedge.cell_count, "cells")
 
     # The whole solid of revolution, in one call: a full turn in 24 slices.
@@ -49,7 +49,7 @@ def main() -> None:
 
     # A straight prism block: sweep the face onto a translated copy.
     shifted = pc.mesh.translate(face, [0.0, 3.0, 0.0])
-    block = pc.mesh.sweep_solid(face, shifted, 3)
+    block = pc.mesh.sweep(face, shifted, 3)
     print("block :", block.element_types(), block.cell_count, "cells")
 
     # The source face is untouched by either copy.

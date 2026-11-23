@@ -268,14 +268,14 @@ assert jumelle.node(0, 0, 0).position() == face.node(0, 0, 0).position()
 assert calque.node(0, 0, 0).id == face.node(0, 0, 0).id
 assert calque.cell_count == face.cell_count
 
-# ── sweep solid ────────────────────────────────────────────
+# ── sweep between two surfaces ─────────────────────────────
 
 face, _, tournee, _ = _face_et_copies()
-# ANCHOR: mesh-sweep_solid
+# ANCHOR: sweep_volume
 # `face` and `tournee`: the TRI3 face above and its copy rotated by 30°.
-solide = pyrucast.mesh.sweep_solid(face, tournee, 1)
+solide = pyrucast.mesh.sweep(face, tournee, 1)
 print(solide.element_types())  # ['PENTA6']
-# ANCHOR_END: mesh-sweep_solid
+# ANCHOR_END: sweep_volume
 assert solide.element_types() == ["PENTA6"]
 
 # ── Revolution ──────────────────────────────────────────────────────────────

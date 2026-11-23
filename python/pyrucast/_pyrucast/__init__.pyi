@@ -153,7 +153,6 @@ __all__ = [
     "stress_measure",
     "sub_material_field",
     "sweep",
-    "sweep_solid",
     "symmetry_line",
     "symmetry_plane",
     "symmetry_point",
@@ -2444,21 +2443,31 @@ class Mesh:
         """
     def sweep(self, mesh_b: Mesh, n_layers: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
-        Fill the space between two line meshes with `n_layers` layers of cells.
+        Fill the space between two meshes with `n_layers` layers of cells.
         
-        Two **closed loops** (each ending on its own first node) give a closed ring,
-        the seam shared between its first and last cells.
+        Between two lines it builds a surface, between two surfaces a volume. Two
+        **closed loops** (each ending on its own first node) give a closed ring, the
+        seam shared between its first and last cells.
         
         # Parameters
         
-        - `mesh_a`, `mesh_b`: the two lines, with the same number of cells.
+        - `mesh_a`, `mesh_b`: two lines, or two surfaces, of the same type and with
+          the same number of cells; between surfaces, cell `i` of one faces cell `i`
+          of the other, node by node.
         - `n_layers`: the number of layers, `≥ 1`.
-        - `element_type`: between SEG2 lines, `"QUA4"` (the default), `"TRI3"`,
-          `"QUA8"`, `"QUA9"` or `"TRI6"` — a QUA4 mesh is built first, then converted
-          (diagonal split for the triangles, promoted to quadratic for the others).
-          Between SEG3 lines, `"QUA8"` (the default) or `"QUA9"`, built directly: the
-          lines' own mid-nodes are reused, so a strip between two arcs follows them
-          exactly.
+        - `element_type`: the type of every cell built; `None` (the default) takes the
+          first one the source gives:
+        
+          | source | element types |
+          |---|---|
+          | SEG2 lines | `"QUA4"`, `"TRI3"`, `"QUA8"`, `"QUA9"`, `"TRI6"` |
+          | SEG3 lines | `"QUA8"`, `"QUA9"`, `"TRI6"` |
+          | TRI3, QUA4, TRI6, QUA8 surfaces | `"PENTA6"`, `"HEX8"`, `"PENTA15"`, `"HEX20"` respectively |
+        
+          Triangles alternate their diagonal from one cell to the next. Between SEG3
+          lines the lines' own mid-nodes are reused, so a strip between two arcs
+          follows them exactly; a centre or a mid-node of a diagonal is placed on the
+          curved cell.
         
         # Returns
         
@@ -2466,8 +2475,9 @@ class Mesh:
         
         # Raises
         
-        `RuntimeError` if the two lines differ in cell count, for an unsupported
-        `element_type`, or for a closed loop swept onto an open line.
+        `RuntimeError` for an `element_type` the source does not give (before any node
+        is created), if the two meshes differ in type or cell count, or for a closed
+        loop swept onto an open line.
         """
     def transfinite(self, side2: Mesh, side3: Mesh, side4: Mesh, element_type: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
@@ -2557,28 +2567,6 @@ class Mesh:
         
         `RuntimeError` if `|angle|` exceeds a full turn, if the produced cells need 3-D
         coordinates the mesh does not have, or for a cell the axis would collapse.
-        """
-    def sweep_solid(self, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
-        r"""
-        Fill the space between two matching surface meshes with `n_layers` layers.
-        
-        The 3-D companion of `pyrucast.mesh.sweep`: TRI3 faces → PENTA6 prisms,
-        QUA4 faces → HEX8 hexahedra.
-        
-        # Parameters
-        
-        - `mesh_a`, `mesh_b`: the two surface meshes, TRI3 or QUA4, cell `i` of one
-          facing cell `i` of the other.
-        - `n_layers`: the number of layers, `≥ 1`.
-        
-        # Returns
-        
-        A new `Mesh` sharing the nodes of `mesh_a` and `mesh_b`.
-        
-        # Raises
-        
-        `RuntimeError` for a surface type other than TRI3 or QUA4, or if the two
-        meshes do not match.
         """
     def to_quadratic(self) -> Mesh:
         r"""
@@ -9873,21 +9861,31 @@ def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequen
 
 def sweep(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
-    Fill the space between two line meshes with `n_layers` layers of cells.
+    Fill the space between two meshes with `n_layers` layers of cells.
     
-    Two **closed loops** (each ending on its own first node) give a closed ring,
-    the seam shared between its first and last cells.
+    Between two lines it builds a surface, between two surfaces a volume. Two
+    **closed loops** (each ending on its own first node) give a closed ring, the
+    seam shared between its first and last cells.
     
     # Parameters
     
-    - `mesh_a`, `mesh_b`: the two lines, with the same number of cells.
+    - `mesh_a`, `mesh_b`: two lines, or two surfaces, of the same type and with
+      the same number of cells; between surfaces, cell `i` of one faces cell `i`
+      of the other, node by node.
     - `n_layers`: the number of layers, `≥ 1`.
-    - `element_type`: between SEG2 lines, `"QUA4"` (the default), `"TRI3"`,
-      `"QUA8"`, `"QUA9"` or `"TRI6"` — a QUA4 mesh is built first, then converted
-      (diagonal split for the triangles, promoted to quadratic for the others).
-      Between SEG3 lines, `"QUA8"` (the default) or `"QUA9"`, built directly: the
-      lines' own mid-nodes are reused, so a strip between two arcs follows them
-      exactly.
+    - `element_type`: the type of every cell built; `None` (the default) takes the
+      first one the source gives:
+    
+      | source | element types |
+      |---|---|
+      | SEG2 lines | `"QUA4"`, `"TRI3"`, `"QUA8"`, `"QUA9"`, `"TRI6"` |
+      | SEG3 lines | `"QUA8"`, `"QUA9"`, `"TRI6"` |
+      | TRI3, QUA4, TRI6, QUA8 surfaces | `"PENTA6"`, `"HEX8"`, `"PENTA15"`, `"HEX20"` respectively |
+    
+      Triangles alternate their diagonal from one cell to the next. Between SEG3
+      lines the lines' own mid-nodes are reused, so a strip between two arcs
+      follows them exactly; a centre or a mid-node of a diagonal is placed on the
+      curved cell.
     
     # Returns
     
@@ -9895,31 +9893,9 @@ def sweep(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int, element_type: typi
     
     # Raises
     
-    `RuntimeError` if the two lines differ in cell count, for an unsupported
-    `element_type`, or for a closed loop swept onto an open line.
-    """
-
-def sweep_solid(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
-    r"""
-    Fill the space between two matching surface meshes with `n_layers` layers.
-    
-    The 3-D companion of `pyrucast.mesh.sweep`: TRI3 faces → PENTA6 prisms,
-    QUA4 faces → HEX8 hexahedra.
-    
-    # Parameters
-    
-    - `mesh_a`, `mesh_b`: the two surface meshes, TRI3 or QUA4, cell `i` of one
-      facing cell `i` of the other.
-    - `n_layers`: the number of layers, `≥ 1`.
-    
-    # Returns
-    
-    A new `Mesh` sharing the nodes of `mesh_a` and `mesh_b`.
-    
-    # Raises
-    
-    `RuntimeError` for a surface type other than TRI3 or QUA4, or if the two
-    meshes do not match.
+    `RuntimeError` for an `element_type` the source does not give (before any node
+    is created), if the two meshes differ in type or cell count, or for a closed
+    loop swept onto an open line.
     """
 
 def symmetry_line(mesh: Mesh, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float]) -> Mesh:

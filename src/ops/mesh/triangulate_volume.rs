@@ -208,12 +208,12 @@ const DEGENERATE_SHAPE: f64 = 1e-4;
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut carre = SubMesh::new(coords.clone(), ElementType::QUA4);
 /// # carre.add_cell(&base.iter().map(|n| n.id()).collect::<Vec<_>>()).unwrap();
-/// # let cube = mesh::sweep_solid(&Mesh::from_submesh(carre),
+/// # let cube = mesh::sweep(&Mesh::from_submesh(carre),
 /// #     &mesh::translate(&Mesh::from_submesh({
 /// #         let mut c = SubMesh::new(coords.clone(), ElementType::QUA4);
 /// #         c.add_cell(&base.iter().map(|n| n.id()).collect::<Vec<_>>()).unwrap();
 /// #         c
-/// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1).unwrap();
+/// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1, ElementType::HEX8).unwrap();
 /// # let enveloppe = mesh::convert(&mesh::skin(&cube, mesh::skin::DEFAULT_ANGLE_DEG).unwrap(),
 /// #                               ElementType::TRI3, false).unwrap();
 /// // Delaunay under a hull constraint: the skin is **frozen**, and the
@@ -245,12 +245,12 @@ pub fn triangulate_volume(
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut carre = SubMesh::new(coords.clone(), ElementType::QUA4);
 /// # carre.add_cell(&base.iter().map(|n| n.id()).collect::<Vec<_>>()).unwrap();
-/// # let cube = mesh::sweep_solid(&Mesh::from_submesh(carre),
+/// # let cube = mesh::sweep(&Mesh::from_submesh(carre),
 /// #     &mesh::translate(&Mesh::from_submesh({
 /// #         let mut c = SubMesh::new(coords.clone(), ElementType::QUA4);
 /// #         c.add_cell(&base.iter().map(|n| n.id()).collect::<Vec<_>>()).unwrap();
 /// #         c
-/// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1).unwrap();
+/// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1, ElementType::HEX8).unwrap();
 /// # let enveloppe = mesh::convert(&mesh::skin(&cube, mesh::skin::DEFAULT_ANGLE_DEG).unwrap(),
 /// #                               ElementType::TRI3, false).unwrap();
 /// # use std::sync::atomic::{AtomicBool, Ordering};

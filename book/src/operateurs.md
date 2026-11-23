@@ -32,7 +32,7 @@ fonction ; la règle qui décide lesquelles tient dans les trois conditions de
 ### Surfaces et volumes réglés
 
 {{#pysummary
-mesh.transfinite mesh.sweep mesh.sweep_solid mesh.extrude mesh.revolve}}
+mesh.transfinite mesh.sweep mesh.extrude mesh.revolve}}
 
 ### Mailleurs automatiques
 

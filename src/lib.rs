@@ -214,7 +214,6 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesh::arc, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::sweep, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::transfinite, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::mesh::sweep_solid, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::extrude, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::revolve, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::project_on_sphere, m)?)?;

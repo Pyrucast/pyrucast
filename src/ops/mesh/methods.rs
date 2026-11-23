@@ -240,11 +240,6 @@ impl Mesh {
         crate::ops::mesh::sweep(self, mesh_b, n_layers, element_type)
     }
 
-    /// See [`mesh::sweep_solid`](fn@crate::ops::mesh::sweep_solid).
-    pub fn sweep_solid(&self, mesh_b: &Mesh, n_layers: usize) -> Result<Mesh> {
-        crate::ops::mesh::sweep_solid(self, mesh_b, n_layers)
-    }
-
     /// See [`mesh::symmetry_line`](fn@crate::ops::mesh::symmetry_line).
     pub fn symmetry_line(&self, a: &[f64], b: &[f64]) -> Result<Mesh> {
         crate::ops::mesh::symmetry_line(self, a, b)

@@ -1,5 +1,5 @@
 """Python tests for the mesh-transform / 3-D sweep operators: translate,
-rotate, the symmetries, sweep_solid, TRI3 → PENTA6 extrusion, and the
+rotate, the symmetries, sweep between two surfaces, TRI3 → PENTA6 extrusion, and the
 rotational sweep revolve."""
 
 import math
@@ -58,12 +58,12 @@ def test_extrude_tri3_to_penta6():
     assert penta.cell_counts() == [2]
 
 
-def test_sweep_solid_tri3_to_penta6():
+def test_sweep_of_two_tri3_surfaces_gives_penta6():
     c = pyrucast.Coords(3)
     a, _ = _tri3(c, [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
     b, bids = _tri3(c, [[0.0, 0.0, 2.0], [1.0, 0.0, 2.0], [0.0, 1.0, 2.0]])
 
-    solid = pyrucast.mesh.sweep_solid(a, b, 2)
+    solid = pyrucast.mesh.sweep(a, b, 2)
     assert solid.element_types() == ["PENTA6"]
     assert solid.cell_counts() == [2]
     # The top face of the last layer reuses mesh_b's nodes.
@@ -71,13 +71,13 @@ def test_sweep_solid_tri3_to_penta6():
 
 
 def test_rotate_via_sweep_builds_a_solid_of_revolution_slice():
-    """rotate + sweep_solid together: sweep a face onto its rotated copy."""
+    """rotate + sweep together: sweep a face onto its rotated copy."""
     c = pyrucast.Coords(3)
     face, _ = _tri3(c, [[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [1.0, 0.0, 1.0]])
     rotated = pyrucast.mesh.rotate(
         face, math.pi / 6.0, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]
     )
-    solid = pyrucast.mesh.sweep_solid(face, rotated, 1)
+    solid = pyrucast.mesh.sweep(face, rotated, 1)
     assert solid.element_types() == ["PENTA6"]
     assert solid.cell_counts() == [1]
 
@@ -236,8 +236,8 @@ def test_revolve_tri3_to_penta6_3d():
     assert abs(z) < 1e-12
 
 
-def test_revolve_matches_rotate_plus_sweep_solid():
-    """One layer of revolve = sweep_solid onto the rotated copy."""
+def test_revolve_matches_rotate_plus_sweep():
+    """One layer of revolve = sweep onto the rotated copy."""
     c = pyrucast.Coords(3)
     face, _ = _tri3(c, [[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [1.0, 0.0, 1.0]])
 
@@ -245,7 +245,7 @@ def test_revolve_matches_rotate_plus_sweep_solid():
         face, math.pi / 6.0, 1, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]
     )
     turned = pyrucast.mesh.rotate(face, math.pi / 6.0, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
-    by_sweep = pyrucast.mesh.sweep_solid(face, turned, 1)
+    by_sweep = pyrucast.mesh.sweep(face, turned, 1)
     for i in range(6):
         a = by_revolve.node(0, 0, i).position()
         b = by_sweep.node(0, 0, i).position()

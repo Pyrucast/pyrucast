@@ -308,5 +308,5 @@ une figure.
 
 À venir. En attendant, les mailleurs volumiques — `triangulate_volume`
 (tétraèdres), `pave_volume` (couche limite d'hexaèdres autour d'un cœur
-tétraédrique), `extrude` et `sweep_solid` — sont décrits dans
+tétraédrique), `extrude` et `sweep` entre deux surfaces — sont décrits dans
 [Opérateurs → Maillage](algorithmes/maillage.md).

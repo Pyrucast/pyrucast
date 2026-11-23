@@ -171,8 +171,8 @@ inequality. Output on block supports (reused POI1 handles, subtractable fields).
 ## Meshing
 
 Primitives: `line`, `circle`, `arc`, `transfinite`, `points`.
-Sweeps: `sweep`, `extrude` (TRI3 → PENTA6, QUA4 → HEX8), `revolve`,
-`sweep_solid`.
+Sweeps: `sweep` (a surface between two lines, a volume between two
+surfaces), `extrude` (TRI3 → PENTA6, QUA4 → HEX8), `revolve`.
 Free meshers: `triangulate_surface` (constrained Delaunay + Ruppert, holes
 included, TRI3/QUA4, 2-D and planar 3-D contours) and `triangulate_volume`
 (exact predicates, frozen hull, recovery, refinement and anti-*sliver*

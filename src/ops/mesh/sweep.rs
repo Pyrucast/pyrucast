@@ -1,32 +1,35 @@
 use crate::aggregate::Aggregate;
 use crate::atoms::ElementType;
-use crate::atoms::NodeId;
-use crate::containers::mesh::{Mesh, SubMesh};
+use crate::containers::mesh::Mesh;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::ops::mesh::convert::convert_zone;
+use crate::ops::mesh::sweep_kernel::{surface_between, swept_types, unsweepable, volume_between};
 
-/// Sweep two line meshes into a mesh of `element_type`, building `n_layers`
-/// layers between them.
+/// Sweep between two meshes into `n_layers` layers of cells of
+/// `element_type`: a surface between two lines, a volume between two
+/// surfaces.
 ///
-/// Both meshes must be single-submesh lines of the same degree with the same
-/// number of elements, attached to the same `Coords`. `n_layers` must be ≥ 1.
+/// Both meshes must be single-submesh meshes of the same type, with the same
+/// number of cells, attached to the same `Coords`; `n_layers` must be ≥ 1.
+/// The nodes of both meshes are re-used (refcount incremented); the layers
+/// in between are interpolated linearly and created.
 ///
-/// - **SEG2 lines**: `element_type` is one of `QUA4`, `TRI3`, `QUA8`,
-///   `QUA9`, `TRI6`. A `QUA4` mesh is always built first; the others are
-///   derived from it (diagonal split for triangles, [`super::to_quadratic`]
-///   for the quadratic siblings, a fresh centre node per cell for `QUA9`).
-/// - **SEG3 lines**: `element_type` is `QUA8` or `QUA9`, built directly
-///   by the sweep kernel itself: the lines' own mid-nodes are
-///   re-used, so a strip between two arcs follows them exactly.
+/// - **Two lines**: node `j` of `mesh_a` is linked to node `j` of `mesh_b`.
+///   SEG2 lines give `QUA4`, `TRI3`, `QUA8`, `QUA9` or `TRI6`; SEG3 lines
+///   give `QUA8`, `QUA9` or `TRI6`, their own mid-nodes re-used, so that a
+///   strip between two arcs follows them. A `QUA4` or `QUA8` strip is built
+///   first ([`surface_between`]), then delivered by [`finish_surface`]:
+///   triangles alternate their diagonal from one cell to the next. **Two
+///   closed loops** (each ending on its own first node) give a closed ring:
+///   the seam is shared, not doubled.
+/// - **Two surfaces**: cell `i` of `mesh_a` faces cell `i` of `mesh_b`, node
+///   by node ([`volume_between`]). `TRI3`, `QUA4`, `TRI6` and `QUA8` faces
+///   give `PENTA6`, `HEX8`, `PENTA15` and `HEX20`, the one `element_type`
+///   they allow.
 ///
-/// Column `j` of `mesh_a` is linearly interpolated with column `j` of
-/// `mesh_b` to produce the intermediate layers. Endpoint nodes from both
-/// meshes are re-used (refcount incremented); intermediate nodes are
-/// created at evenly spaced positions. **Two closed loops** (each ending on
-/// its own first node) give a closed ring: the seam is shared, not doubled.
-///
-/// QUA4 node order per element (counterclockwise, `mesh_a` side first):
-/// `[k][j]`, `[k][j+1]`, `[k+1][j+1]`, `[k+1][j]`.
+/// `element_type` is checked against the type of `mesh_a` before any node is
+/// created ([`check_element_type`]).
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -43,6 +46,16 @@ use crate::handle::Handle;
 /// let b = mesh::line(&p(&[0.0, 1.0, 0.0]), &p(&[2.0, 1.0, 0.0]), 2, ElementType::SEG2)?;
 /// let s = mesh::sweep(&a, &b, 1, ElementType::QUA4)?;
 /// assert_eq!(s.cell_count(), 2);
+///
+/// // Two surfaces stitched by hexahedra: the volume counterpart.
+/// # let q = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]];
+/// # let n: Vec<Node> = q.iter().map(|x| p(x)).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])?;
+/// # let bottom = Mesh::from_submesh(sm);
+/// let top = mesh::translate(&bottom, &[0.0, 0.0, 1.0])?;
+/// let v = mesh::sweep(&bottom, &top, 2, ElementType::HEX8)?;
+/// assert_eq!(v.cell_count(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn sweep(
@@ -51,130 +64,102 @@ pub fn sweep(
     n_layers: usize,
     element_type: ElementType,
 ) -> Result<Mesh> {
-    use crate::ops::mesh::sweep_kernel::grid_between;
-    if line_degree(mesh_a) == ElementType::SEG3 {
-        return match element_type {
-            ElementType::QUA8 | ElementType::QUA9 => {
-                grid_between(mesh_a, mesh_b, n_layers, element_type)
-            }
-            other => Err(PyrucastError::Message(format!(
-                "sweep: SEG3 lines give QUA8 or QUA9, not {other} (a SEG3 line has mid-nodes \
-                 that {other} cannot carry)"
-            ))),
-        };
-    }
-    let qua4 = grid_between(mesh_a, mesh_b, n_layers, ElementType::QUA4)?;
-    finish_surface(qua4, element_type, "sweep")
-}
-
-/// The element type of a one-zone line, `SEG2` when the mesh has another
-/// shape — the sweep kernel then reports what is wrong.
-fn line_degree(mesh: &Mesh) -> ElementType {
-    match mesh.get(0) {
-        Ok(zone) if mesh.len() == 1 => zone.read().element_type(),
-        _ => ElementType::SEG2,
+    let source = mesh_a.unit()?.read().element_type();
+    check_element_type(&[source], element_type, "sweep")?;
+    if source.topological_dim() == 2 {
+        volume_between(mesh_a, mesh_b, n_layers)
+    } else {
+        finish_surface(
+            surface_between(mesh_a, mesh_b, n_layers)?,
+            element_type,
+            "sweep",
+        )
     }
 }
 
-/// Deliver a `QUA4` grid as the surface type the caller asked for.
+/// Check, before any node is created, that every type in `sources` can give
+/// `element_type` when swept ([`swept_types`]): the error names the source
+/// type, the type asked and the types it gives. `op` names the operator.
+pub(super) fn check_element_type(
+    sources: &[ElementType],
+    element_type: ElementType,
+    op: &str,
+) -> Result<()> {
+    for &source in sources {
+        let types = swept_types(source);
+        if types.is_empty() {
+            return Err(unsweepable(source, op));
+        }
+        if !types.contains(&element_type) {
+            let names: Vec<String> = types.iter().map(ElementType::to_string).collect();
+            let gives = match names.split_last() {
+                Some((last, rest)) if !rest.is_empty() => format!("{} or {last}", rest.join(", ")),
+                _ => names.concat(),
+            };
+            return Err(PyrucastError::Message(format!(
+                "{op}: a {source} zone cannot give {element_type} (a {source} zone gives {gives})"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Deliver a `QUA4` or `QUA8` base surface as the surface type the caller
+/// asked for, by the three steps the type calls for: cut the quadrangles
+/// into triangles ([`convert_zone`], the diagonal alternating from one cell
+/// to the next), promote to degree 2 ([`super::to_quadratic`], which shares
+/// the mid-nodes between zones), give the quadrangles their centre
+/// ([`convert_zone`]).
 ///
-/// The structured surface meshers — [`sweep`],
-/// [`transfinite`](super::transfinite) — build a pure quadrangle grid; the
-/// pavers ([`pave_surface`](super::pave_surface) and the grid meshers) build
-/// one that may also hold a few `TRI3`, and only ask for the quadrangle
-/// types. All owe the same conversions. `op` only names the operator in the
-/// error message.
-pub(super) fn finish_surface(qua4: Mesh, element_type: ElementType, op: &str) -> Result<Mesh> {
-    match element_type {
-        ElementType::QUA4 => Ok(qua4),
-        ElementType::QUA8 => super::to_quadratic(&qua4),
-        ElementType::QUA9 => qua8_to_qua9(&super::to_quadratic(&qua4)?),
-        ElementType::TRI3 => qua4_to_tri3(&qua4),
-        ElementType::TRI6 => super::to_quadratic(&qua4_to_tri3(&qua4)?),
-        other => Err(PyrucastError::Message(format!(
-            "{op}: unsupported element type {other} (expected QUA4, TRI3, QUA8, QUA9, TRI6)"
+/// Every node a step adds sits on the geometry already built. From a `QUA4`
+/// base the triangles are cut before being promoted, so the mid-node of a
+/// diagonal is the middle of its chord and each triangle stays straight;
+/// from a `QUA8` base the centre comes first, on the curved cell, and the
+/// triangles take it as the mid-node of their diagonal. Zones of triangles —
+/// the few triangles a paver leaves among its quadrangles — pass
+/// through each step, promoted with the rest.
+///
+/// The structured meshers ([`sweep`], [`transfinite`](super::transfinite))
+/// and the pavers ([`pave_surface`](super::pave_surface) and the grid meshers, which
+/// ask only for quadrangles) deliver this way. `op` only names the operator
+/// in the error message.
+pub(super) fn finish_surface(base: Mesh, element_type: ElementType, op: &str) -> Result<Mesh> {
+    use ElementType::*;
+    let quadratic = base.element_types()?.contains(&QUA8);
+    match (quadratic, element_type) {
+        (false, QUA4) | (true, QUA8) => Ok(base),
+        (false, TRI3) => quadrangles_to(&base, TRI3),
+        (false, QUA8) => super::to_quadratic(&base),
+        (false, QUA9) => quadrangles_to(&super::to_quadratic(&base)?, QUA9),
+        (false, TRI6) => super::to_quadratic(&quadrangles_to(&base, TRI3)?),
+        (true, QUA9) | (true, TRI6) => quadrangles_to(&base, element_type),
+        (_, other) => Err(PyrucastError::Message(format!(
+            "{op}: a {} surface cannot give {other} (expected {})",
+            if quadratic { QUA8 } else { QUA4 },
+            if quadratic {
+                "QUA8, QUA9 or TRI6"
+            } else {
+                "QUA4, TRI3, QUA8, QUA9 or TRI6"
+            }
         ))),
     }
 }
 
-/// Split each QUA4 cell into two TRI3 cells along the `(0, 2)` diagonal:
-/// `(0, 1, 2)` and `(0, 2, 3)`. Nodes are re-used, no new node is created.
-///
-/// Shared with [`super::transfinite`], which derives `TRI3`/`TRI6` from a
-/// QUA4 grid the same way [`sweep`] does.
-pub(super) fn qua4_to_tri3(mesh: &Mesh) -> Result<Mesh> {
-    let coords = mesh.coords()?;
+/// `mesh` with its quadrangle zones converted to `target` by [`convert_zone`],
+/// the diagonal of the triangles alternating from one cell to the next; the
+/// other zones pass through as they are.
+fn quadrangles_to(mesh: &Mesh, target: ElementType) -> Result<Mesh> {
     let mut result = Mesh::empty();
-    for sm_h in mesh {
-        // Guard held for this zone's pass: what follows only reads.
-        let s = sm_h.read();
-        let (color, conn) = (s.face_color(), s.connectivity());
-        // Two triangles per quad, laid out whole then posted in one locked
-        // pass over the `Coords`.
-        let split: Vec<NodeId> = conn
-            .chunks(4)
-            .flat_map(|cell| [cell[0], cell[1], cell[2], cell[0], cell[2], cell[3]])
-            .collect();
-        let mut new_sm = SubMesh::from_connectivity(coords.clone(), ElementType::TRI3, split)?;
-        new_sm.set_face_color(color);
-        result.add_sub(Handle::new(new_sm))?;
-    }
-    Ok(result)
-}
-
-/// Promote each QUA8 cell to QUA9 by adding a fresh center node (node 8, the
-/// mean of the 4 corners) — [`super::to_quadratic`] only produces the
-/// serendipity QUA8, which has no center node to re-use.
-///
-/// Any other zone passes through unchanged: the `TRI6` a paver leaves among
-/// its quadrangles is already the quadratic triangle, and shares its
-/// three-node edges with the `QUA9` around it.
-///
-/// Shared with [`super::transfinite`] (see [`qua4_to_tri3`]).
-pub(super) fn qua8_to_qua9(mesh: &Mesh) -> Result<Mesh> {
-    let coords = mesh.coords()?;
-    let mut result = Mesh::empty();
-    for sm_h in mesh {
-        if sm_h.read().element_type() != ElementType::QUA8 {
-            result.add_sub(sm_h.clone())?;
-            continue;
+    for zone in mesh {
+        let s = zone.read();
+        if matches!(
+            s.element_type(),
+            ElementType::QUA4 | ElementType::QUA8 | ElementType::QUA9
+        ) {
+            result.add_sub(Handle::new(convert_zone(&s, target, true)?))?;
+        } else {
+            result.add_sub(zone.clone())?;
         }
-        // Guard held for this zone's pass: what follows only reads.
-        let s = sm_h.read();
-        let (color, conn) = (s.face_color(), s.connectivity());
-        // Every centre first — one flat buffer, one `Coords` write — then the
-        // connectivity that references them, in order.
-        let centers: Vec<f64> = {
-            let c = coords.read();
-            let dim = c.dim() as usize;
-            let mut buf = Vec::with_capacity(conn.len() / 8 * dim);
-            for cell in conn.chunks(8) {
-                let corners: Vec<&[f64]> = cell[..4]
-                    .iter()
-                    .map(|&id| c.position(id))
-                    .collect::<Result<_>>()?;
-                buf.extend((0..dim).map(|d| corners.iter().map(|p| p[d]).sum::<f64>() / 4.0));
-            }
-            buf
-        };
-        let first = coords.write().add_nodes(&centers)?.start;
-        let n_cells = conn.len() / 8;
-        let with_center: Vec<NodeId> = conn
-            .chunks(8)
-            .enumerate()
-            .flat_map(|(ci, cell)| {
-                cell.iter()
-                    .copied()
-                    .chain(std::iter::once(NodeId(first + ci as u32)))
-            })
-            .collect();
-        let mut new_sm =
-            SubMesh::from_connectivity(coords.clone(), ElementType::QUA9, with_center)?;
-        new_sm.set_face_color(color);
-        // The zone owns the centres now; hand back the unit `add_nodes` gave.
-        let owned: Vec<NodeId> = (first..first + n_cells as u32).map(NodeId).collect();
-        coords.write().decref_all(&owned)?;
-        result.add_sub(Handle::new(new_sm))?;
     }
     Ok(result)
 }
@@ -183,11 +168,20 @@ pub(super) fn qua8_to_qua9(mesh: &Mesh) -> Result<Mesh> {
 mod tests {
     use super::*;
     use crate::atoms::ElementType;
-    use crate::atoms::Node;
+    use crate::atoms::{Node, NodeId};
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
     use crate::handle::Handle;
     use crate::ops::mesh::line::line;
+
+    /// A single-TRI3 mesh on `coords` from three coordinates, with its three
+    /// corner nodes.
+    fn tri(coords: &Handle<Coords>, pts: [[f64; 3]; 3]) -> (Mesh, [Node; 3]) {
+        let n = pts.map(|p| Node::create_in(coords.clone(), &p).unwrap());
+        let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+        m.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+        (m, n)
+    }
 
     #[test]
     fn sweep_basic() {
@@ -241,6 +235,10 @@ mod tests {
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let m = line(&a, &b, 1, ElementType::SEG2).unwrap();
         assert!(sweep(&m, &m, 0, ElementType::QUA4).is_err());
+        // Between two surfaces as well.
+        let coords = Handle::new(Coords::new(3).unwrap());
+        let (t, _) = tri(&coords, [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]);
+        assert!(sweep(&t, &t, 0, ElementType::PENTA6).is_err());
     }
 
     #[test]
@@ -497,10 +495,17 @@ mod tests {
         let coords = Handle::new(Coords::new(2).unwrap());
         let (a2, _) = two_lines(&coords, 2, ElementType::SEG2);
         let (a3, b3) = two_lines(&coords, 2, ElementType::SEG3);
+        // No demotion, and the refusal comes before any node is created.
+        let before = coords.read().node_count();
         assert!(sweep(&a3, &b3, 1, ElementType::QUA4).is_err());
-        assert!(sweep(&a3, &b3, 1, ElementType::TRI6).is_err());
+        assert!(sweep(&a3, &b3, 1, ElementType::TRI3).is_err());
+        assert_eq!(coords.read().node_count(), before);
         assert!(sweep(&a3, &a2, 1, ElementType::QUA8).is_err());
         assert!(sweep(&a2, &a3, 1, ElementType::QUA8).is_err());
+        // Triangles, quadratic: the QUA9 cut through its centre.
+        let tri6 = sweep(&a3, &b3, 1, ElementType::TRI6).unwrap();
+        assert_eq!(tri6.element_types().unwrap(), vec![ElementType::TRI6]);
+        assert_eq!(tri6.cell_count(), 4);
     }
 
     #[test]
@@ -532,5 +537,117 @@ mod tests {
         let tri6 = sweep(&mesh_a, &mesh_b, 1, ElementType::TRI6).unwrap();
         assert_eq!(tri6.element_types().unwrap(), vec![ElementType::TRI6]);
         assert_eq!(tri6.cell_count(), 2);
+    }
+
+    #[test]
+    fn sweep_of_two_triangles_gives_prisms() {
+        let coords = Handle::new(Coords::new(3).unwrap());
+        let (a, na) = tri(&coords, [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]);
+        let (b, nb) = tri(&coords, [[0.0, 0.0, 2.0], [1.0, 0.0, 2.0], [0.0, 1.0, 2.0]]);
+
+        let solid = sweep(&a, &b, 2, ElementType::PENTA6).unwrap();
+        assert_eq!(solid.element_types().unwrap(), vec![ElementType::PENTA6]);
+        assert_eq!(solid.cell_count(), 2);
+
+        // Bottom of the first prism reuses mesh_a nodes.
+        assert_eq!(solid.node(0, 0, 0).unwrap().id(), na[0].id());
+        assert_eq!(solid.node(0, 0, 1).unwrap().id(), na[1].id());
+        assert_eq!(solid.node(0, 0, 2).unwrap().id(), na[2].id());
+        // Top of the last prism reuses mesh_b nodes.
+        assert_eq!(solid.node(0, 1, 3).unwrap().id(), nb[0].id());
+        assert_eq!(solid.node(0, 1, 4).unwrap().id(), nb[1].id());
+        assert_eq!(solid.node(0, 1, 5).unwrap().id(), nb[2].id());
+        // Interpolated interior layer sits at z = 1.
+        let mid = solid.node(0, 0, 3).unwrap();
+        assert!((mid.position().unwrap()[2] - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn sweep_of_surfaces_keeps_shared_nodes_shared() {
+        // Two triangles sharing an edge → two prisms sharing a quad face.
+        let coords = Handle::new(Coords::new(3).unwrap());
+        let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap().id();
+        let (a0, a1, a2, a3) = (
+            p(&[0.0, 0.0, 0.0]),
+            p(&[1.0, 0.0, 0.0]),
+            p(&[0.0, 1.0, 0.0]),
+            p(&[1.0, 1.0, 0.0]),
+        );
+        let mut a = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+        a.add_cell(&[a0, a1, a2]).unwrap();
+        a.add_cell(&[a1, a3, a2]).unwrap();
+        let (b0, b1, b2, b3) = (
+            p(&[0.0, 0.0, 1.0]),
+            p(&[1.0, 0.0, 1.0]),
+            p(&[0.0, 1.0, 1.0]),
+            p(&[1.0, 1.0, 1.0]),
+        );
+        let mut b = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+        b.add_cell(&[b0, b1, b2]).unwrap();
+        b.add_cell(&[b1, b3, b2]).unwrap();
+
+        let solid = sweep(&a, &b, 3, ElementType::PENTA6).unwrap();
+        assert_eq!(solid.cell_count(), 6);
+        // Node a1 is shared by both source triangles; both prisms of the
+        // first layer must reference the same node for it.
+        assert_eq!(
+            solid.node(0, 0, 1).unwrap().id(), // cell 0, local 1 = a1
+            solid.node(0, 1, 0).unwrap().id(), // cell 1, local 0 = a1
+        );
+    }
+
+    #[test]
+    fn sweep_rejects_surfaces_of_different_types() {
+        let coords = Handle::new(Coords::new(3).unwrap());
+        let (a, _) = tri(&coords, [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]);
+        let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap().id();
+        let q = [
+            p(&[0.0, 0.0, 1.0]),
+            p(&[1.0, 0.0, 1.0]),
+            p(&[1.0, 1.0, 1.0]),
+            p(&[0.0, 1.0, 1.0]),
+        ];
+        let mut quad = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
+        quad.add_cell(&q).unwrap();
+        assert!(sweep(&a, &quad, 1, ElementType::PENTA6).is_err());
+        // A surface gives its one volume, nothing else.
+        assert!(sweep(&a, &a, 1, ElementType::HEX8).is_err());
+    }
+
+    #[test]
+    fn sweep_of_two_surfaces_matches_extrude() {
+        // A face and its translated copy, swept, give the cells the face
+        // extruded gives: the same patterns, the same half levels.
+        use crate::ops::mesh::{extrude, to_quadratic, translate};
+        let coords = Handle::new(Coords::new(3).unwrap());
+        let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap().id();
+        let n = [
+            p(&[0.0, 0.0, 0.0]),
+            p(&[1.0, 0.0, 0.0]),
+            p(&[2.0, 0.2, 0.0]),
+            p(&[0.1, 1.0, 0.0]),
+            p(&[1.1, 1.1, 0.0]),
+            p(&[2.1, 1.3, 0.0]),
+        ];
+        // Counter-clockwise seen from +z: the extrusion along +z keeps the
+        // cells as they are.
+        let mut quads = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
+        quads.add_cell(&[n[0], n[1], n[4], n[3]]).unwrap();
+        quads.add_cell(&[n[1], n[2], n[5], n[4]]).unwrap();
+        let mut tris = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+        tris.add_cell(&[n[0], n[1], n[4]]).unwrap();
+        tris.add_cell(&[n[0], n[4], n[3]]).unwrap();
+        let d = [0.0, 0.0, 1.5];
+        for linear in [tris, quads] {
+            let quadratic = to_quadratic(&linear).unwrap();
+            for face in [&linear, &quadratic] {
+                let source = face.unit().unwrap().read().element_type();
+                let solid = swept_types(source)[0];
+                let swept = sweep(face, &translate(face, &d).unwrap(), 3, solid).unwrap();
+                let extruded = extrude(face, &d, 3).unwrap();
+                assert_eq!(swept.element_types().unwrap(), vec![solid]);
+                assert_same_cells(&swept, &extruded);
+            }
+        }
     }
 }

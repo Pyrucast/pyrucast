@@ -1,15 +1,17 @@
 //! Sweep / extrusion mesh-construction operators.
 //!
-//! - [`grid_between`] — sweep between two contours (SEG2 → QUA4, SEG3 →
-//!   QUA8/QUA9), one cell per source segment per layer; two closed loops
-//!   close the strip.
+//! - [`surface_between`] — sweep between two contours (SEG2 → QUA4, SEG3 →
+//!   QUA8), one cell per source segment per layer; two closed loops close the
+//!   strip.
 //! - [`extrude`] — translate every cell of a mesh along a vector by
 //!   `n_layers` layers, bumping element dimension (SEG2 → QUA4,
 //!   TRI3 → PENTA6, QUA4 → HEX8).
 //! - [`revolve`] — the same layered sweep, but rotating about a centre
 //!   (2-D) or an axis (3-D); a full turn closes the ring.
-//! - [`solid_between`] — the 3-D companion of [`grid_between`]: sweep
-//!   between two matching surface meshes (TRI3 → PENTA6, QUA4 → HEX8).
+//! - [`volume_between`] — the 3-D companion of [`surface_between`]: sweep
+//!   between two matching surface meshes (TRI3 → PENTA6, QUA4 → HEX8, and in
+//!   quadratic TRI6 → PENTA15, QUA8 → HEX20).
+//! - [`swept_types`] — the cell types a sweep of a given type can give.
 
 use crate::aggregate::Aggregate;
 use crate::atoms::ElementType;
@@ -42,17 +44,17 @@ fn line_row(conn: &[NodeId], et: ElementType, n_elems: usize) -> Vec<NodeId> {
     row
 }
 
-/// Sweep between two line meshes — both SEG2, or both SEG3 — into a
-/// structured strip of `element_type`: `QUA4` from SEG2 lines, `QUA8` or
-/// `QUA9` from SEG3 lines.
+/// Sweep between two line meshes — both SEG2, or both SEG3 — into the base
+/// surface of a structured strip: `QUA4` between SEG2 lines, `QUA8` between
+/// SEG3 lines. [`super::sweep::finish_surface`] then delivers the type asked.
 ///
 /// The two lines are read as node rows ([`line_row`]) and interpolated
 /// linearly, row node by row node, at evenly spaced levels between them:
-/// `n_layers + 1` levels for QUA4, `2·n_layers + 1` for the quadratic types,
-/// whose odd levels carry the mid-nodes of the edges running from one line
-/// to the other. Level 0 is `mesh_a`'s own nodes and the last level
-/// `mesh_b`'s, re-used (refcount incremented); the mid-nodes of SEG3 lines
-/// are re-used too, so the strip follows a curved line exactly.
+/// `n_layers + 1` levels for QUA4, `2·n_layers + 1` for QUA8, whose odd
+/// levels carry the mid-nodes of the edges running from one line to the
+/// other. Level 0 is `mesh_a`'s own nodes and the last level `mesh_b`'s,
+/// re-used (refcount incremented); the mid-nodes of SEG3 lines are re-used
+/// too, so the strip follows a curved line exactly.
 ///
 /// **Two closed loops close the strip**: when each line ends on its own first
 /// node, the last column of every level *is* the first — the seam between
@@ -62,13 +64,8 @@ fn line_row(conn: &[NodeId], et: ElementType, n_elems: usize) -> Vec<NodeId> {
 /// Node order per cell (`mesh_a` side first), with `(level, column)`:
 /// QUA4 `(k, j) (k, j+1) (k+1, j+1) (k+1, j)`; QUA8 the same corners on the
 /// even levels and columns, then the mid-nodes of the edges in the order of
-/// the QUA4 edges (`0-1`, `1-2`, `2-3`, `3-0`); QUA9 adds the centre.
-pub fn grid_between(
-    mesh_a: &Mesh,
-    mesh_b: &Mesh,
-    n_layers: usize,
-    element_type: ElementType,
-) -> Result<Mesh> {
+/// the QUA4 edges (`0-1`, `1-2`, `2-3`, `3-0`).
+pub fn surface_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mesh> {
     if n_layers == 0 {
         return Err(PyrucastError::Message("sweep: n_layers must be ≥ 1".into()));
     }
@@ -97,15 +94,6 @@ pub fn grid_between(
     let (et_a, n_elems, conn_a) = (a.element_type(), a.cell_count(), a.connectivity());
     let (et_b, n_elems_b, conn_b) = (b.element_type(), b.cell_count(), b.connectivity());
 
-    let line_type = match element_type {
-        ElementType::QUA4 => ElementType::SEG2,
-        ElementType::QUA8 | ElementType::QUA9 => ElementType::SEG3,
-        other => {
-            return Err(PyrucastError::Message(format!(
-                "sweep: cannot build {other} between two lines (expected QUA4, QUA8 or QUA9)"
-            )))
-        }
-    };
     for (name, et) in [("mesh_a", et_a), ("mesh_b", et_b)] {
         if !matches!(et, ElementType::SEG2 | ElementType::SEG3) {
             return Err(PyrucastError::Message(format!(
@@ -118,11 +106,12 @@ pub fn grid_between(
             "sweep: mesh_a is {et_a} but mesh_b is {et_b} — both lines must be of the same degree"
         )));
     }
-    if et_a != line_type {
-        return Err(PyrucastError::Message(format!(
-            "sweep: {element_type} is built between {line_type} lines, got {et_a}"
-        )));
-    }
+    let line_type = et_a;
+    let element_type = if line_type == ElementType::SEG3 {
+        ElementType::QUA8
+    } else {
+        ElementType::QUA4
+    };
     if n_elems != n_elems_b {
         return Err(PyrucastError::Message(format!(
             "sweep: mesh_a has {} elements but mesh_b has {}",
@@ -153,7 +142,6 @@ pub fn grid_between(
 
     let quadratic = line_type == ElementType::SEG3;
     let n_levels = if quadratic { 2 * n_layers } else { n_layers };
-    let with_centre = element_type == ElementType::QUA9;
 
     // The two rows' positions, flat, `dim` numbers per column.
     let dim = coords.read().dim() as usize;
@@ -173,8 +161,7 @@ pub fn grid_between(
     // created here, laid out flat and added in one locked pass —
     // interpolating a million nodes must not mean a million write locks.
     // A QUA8 has no node where an odd level crosses an odd column (the middle
-    // of a cell), a QUA9 has: odd levels of a QUA8 strip take every other
-    // column.
+    // of a cell): odd levels of a QUA8 strip take every other column.
     let width = last + 1;
     let mut grid: Vec<NodeId> = vec![NodeId(u32::MAX); (n_levels + 1) * width];
     grid[..n_cols].copy_from_slice(&row_a[..n_cols]);
@@ -183,11 +170,7 @@ pub fn grid_between(
     let mut created: u32 = 0;
     for level in 1..n_levels {
         let t = level as f64 / n_levels as f64;
-        let stride = if quadratic && level % 2 == 1 && !with_centre {
-            2
-        } else {
-            1
-        };
+        let stride = if quadratic && level % 2 == 1 { 2 } else { 1 };
         for col in (0..n_cols).step_by(stride) {
             let (a, b) = (
                 &pos_a[col * dim..(col + 1) * dim],
@@ -201,11 +184,7 @@ pub fn grid_between(
     }
     let first = coords.write().add_nodes(&flat)?.start;
     for level in 1..n_levels {
-        let stride = if quadratic && level % 2 == 1 && !with_centre {
-            2
-        } else {
-            1
-        };
+        let stride = if quadratic && level % 2 == 1 { 2 } else { 1 };
         for col in (0..n_cols).step_by(stride) {
             grid[level * width + col].0 += first;
         }
@@ -225,9 +204,7 @@ pub fn grid_between(
             let (l0, lm, l1) = (2 * k, 2 * k + 1, 2 * k + 2);
             for j in 0..n_elems {
                 let (c0, cm, c1) = (2 * j, 2 * j + 1, 2 * j + 2);
-                // The QUA9 order; a QUA8 keeps its first eight (its grid has
-                // no centre: that slot holds a placeholder, dropped here).
-                let cell = [
+                conn.extend_from_slice(&[
                     at(l0, c0),
                     at(l0, c1),
                     at(l1, c1),
@@ -236,9 +213,7 @@ pub fn grid_between(
                     at(lm, c1),
                     at(l1, cm),
                     at(lm, c0),
-                    at(lm, cm),
-                ];
-                conn.extend_from_slice(&cell[..npc]);
+                ]);
             }
         }
     } else {
@@ -309,22 +284,32 @@ fn columns(mesh: &Mesh, op: &str) -> Result<Columns> {
     })
 }
 
-/// The cell type a layered sweep turns `et` into, or why it cannot.
-fn swept_type(et: ElementType, op: &str) -> Result<ElementType> {
-    Ok(match et {
-        ElementType::SEG2 => ElementType::QUA4,
-        ElementType::TRI3 => ElementType::PENTA6,
-        ElementType::QUA4 => ElementType::HEX8,
-        ElementType::SEG3 => ElementType::QUA8,
-        ElementType::TRI6 => ElementType::PENTA15,
-        ElementType::QUA8 => ElementType::HEX20,
-        _ => {
-            return Err(PyrucastError::Message(format!(
-                "{op}: cannot sweep {et} elements \
-                 (supported: SEG2, TRI3, QUA4 and their quadratic SEG3, TRI6, QUA8)"
-            )))
-        }
-    })
+/// The cell types a sweep of `source` can give, its natural type first.
+///
+/// A line gives a surface — quadrangles, which can be cut into triangles and
+/// promoted to degree 2, never demoted: a SEG2 line gives `QUA4`, `TRI3`,
+/// `QUA8`, `QUA9`, `TRI6`; a SEG3 line `QUA8`, `QUA9`, `TRI6`. A surface gives
+/// its one volume: `TRI3` → `PENTA6`, `QUA4` → `HEX8`, `TRI6` → `PENTA15`,
+/// `QUA8` → `HEX20`. Empty for a type that cannot be swept.
+pub(crate) fn swept_types(source: ElementType) -> &'static [ElementType] {
+    use ElementType::*;
+    match source {
+        SEG2 => &[QUA4, TRI3, QUA8, QUA9, TRI6],
+        SEG3 => &[QUA8, QUA9, TRI6],
+        TRI3 => &[PENTA6],
+        QUA4 => &[HEX8],
+        TRI6 => &[PENTA15],
+        QUA8 => &[HEX20],
+        _ => &[],
+    }
+}
+
+/// Why `op` cannot sweep `et` elements — a type absent from [`swept_types`].
+pub(super) fn unsweepable(et: ElementType, op: &str) -> PyrucastError {
+    PyrucastError::Message(format!(
+        "{op}: cannot sweep {et} elements \
+         (supported: SEG2, TRI3, QUA4 and their quadratic SEG3, TRI6, QUA8)"
+    ))
 }
 
 /// Sweep `mesh` into `n_layers` layers of cells, the node of a column at
@@ -386,7 +371,7 @@ fn layered(
     for sm_handle in mesh {
         let s = sm_handle.read();
         let et = s.element_type();
-        let swept_et = swept_type(et, op)?;
+        let swept_et = *swept_types(et).first().ok_or_else(|| unsweepable(et, op))?;
         if swept_et.topological_dim() > dim {
             return Err(PyrucastError::Message(format!(
                 "{op}: sweeping {et} elements produces {swept_et}, which needs 3-D coordinates \
@@ -649,7 +634,7 @@ fn sweep_pattern(et: ElementType) -> &'static [(usize, usize)] {
             (H, 1),
             (H, 2),
         ],
-        // QUA8, the last type `swept_type` admits.
+        // QUA8, the last type `swept_types` admits.
         _ => &[
             (B, 0),
             (B, 1),
@@ -1044,33 +1029,39 @@ pub fn revolve(
 }
 
 /// Sweep between two matching surface meshes to produce a solid mesh —
-/// the 3-D companion of [`grid_between`].
+/// the 3-D companion of [`surface_between`].
 ///
 /// Cell `i` of `mesh_a` is paired with cell `i` of `mesh_b`, node by node
 /// (local node `j` of one matches local node `j` of the other), just as
-/// [`grid_between`] pairs two SEG2 contours. `n_layers` ≥ 1 layers of solid
+/// [`surface_between`] pairs two contours. `n_layers` ≥ 1 layers of solid
 /// cells are built between the two faces; intermediate node layers are
 /// linearly interpolated. Endpoint nodes from both meshes are re-used
 /// (refcount incremented); intermediate nodes are created.
 ///
 /// Both meshes must be single-submesh meshes of the **same** surface
-/// element type (TRI3 or QUA4), with the same number of cells, attached to
-/// the same `Coords`. The node correspondence read off the connectivity
-/// must be consistent — a node shared by two cells of `mesh_a` must map to
-/// the same node of `mesh_b` in both.
+/// element type, with the same number of cells, attached to the same
+/// `Coords`. The node correspondence read off the connectivity must be
+/// consistent — a node shared by two cells of `mesh_a` must map to the same
+/// node of `mesh_b` in both.
 ///
-/// Element mapping and node ordering (bottom face = `mesh_a` side):
+/// A **quadratic** surface gives quadratic cells, as in [`layered`]: every
+/// node of the faces — corners and mid-nodes — is interpolated at the whole
+/// levels, and the corners alone also at the half levels `k + ½`, where the
+/// mid-nodes of the edges running from one face to the other sit.
+///
+/// Element mapping and node ordering, those of [`layered`] (bottom face =
+/// `mesh_a` side, `v` the half level):
 /// - TRI3 → PENTA6: `bot[0..3], top[0..3]`
 /// - QUA4 → HEX8: `bot[0..4], top[0..4]`
-pub fn solid_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mesh> {
+/// - TRI6 → PENTA15: `bot[0..3], top[0..3], bot[3..6], top[3..6], v[0..3]`
+/// - QUA8 → HEX20: `bot[0..4], top[0..4], bot[4..8], top[4..8], v[0..4]`
+pub fn volume_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mesh> {
     if n_layers == 0 {
-        return Err(PyrucastError::Message(
-            "sweep_solid: n_layers must be ≥ 1".into(),
-        ));
+        return Err(PyrucastError::Message("sweep: n_layers must be ≥ 1".into()));
     }
     if mesh_a.len() != 1 || mesh_b.len() != 1 {
         return Err(PyrucastError::Message(
-            "sweep_solid: both meshes must have exactly one submesh".into(),
+            "sweep: both meshes must have exactly one submesh".into(),
         ));
     }
     let sm_a = mesh_a.get(0)?;
@@ -1079,7 +1070,7 @@ pub fn solid_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Me
     let coords_b = sm_b.read().coords();
     if !coords.same_object(&coords_b) {
         return Err(PyrucastError::Message(
-            "sweep_solid: meshes are attached to different Coords".into(),
+            "sweep: meshes are attached to different Coords".into(),
         ));
     }
 
@@ -1089,23 +1080,18 @@ pub fn solid_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Me
     let (et_b, conn_b) = (b.element_type(), b.connectivity());
     if et_a != et_b {
         return Err(PyrucastError::Message(format!(
-            "sweep_solid: element types differ ({et_a} vs {et_b})"
+            "sweep: element types differ ({et_a} vs {et_b})"
         )));
     }
-    let solid_et = match et_a {
-        ElementType::TRI3 => ElementType::PENTA6,
-        ElementType::QUA4 => ElementType::HEX8,
-        other => {
-            return Err(PyrucastError::Message(format!(
-                "sweep_solid: unsupported surface type {other} (supported: TRI3, QUA4)"
-            )))
-        }
+    let solid_et = match swept_types(et_a).first() {
+        Some(&solid) if et_a.topological_dim() == 2 => solid,
+        _ => return Err(unsweepable(et_a, "sweep")),
     };
     let npc = et_a.nodes_per_cell();
     let n_cells = conn_a.len() / npc;
     if conn_b.len() / npc != n_cells {
         return Err(PyrucastError::Message(format!(
-            "sweep_solid: mesh_a has {} cells but mesh_b has {}",
+            "sweep: mesh_a has {} cells but mesh_b has {}",
             n_cells,
             conn_b.len() / npc
         )));
@@ -1121,7 +1107,7 @@ pub fn solid_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Me
         match pair.get(&a_id) {
             Some(&existing) if existing != b_id => {
                 return Err(PyrucastError::Message(
-                    "sweep_solid: inconsistent node correspondence between the two meshes".into(),
+                    "sweep: inconsistent node correspondence between the two meshes".into(),
                 ));
             }
             Some(_) => {}
@@ -1133,8 +1119,26 @@ pub fn solid_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Me
             }
         }
     }
-
     let n_cols = cols_a.len();
+    let col = |id: NodeId| col_map[&id];
+
+    // The corner columns, numbered: only those get a node at the half levels.
+    let corners = et_a.as_kind().corner_count();
+    let quadratic = et_a.as_kind().is_quadratic();
+    let mut corner_rank: Vec<u32> = vec![u32::MAX; n_cols];
+    let mut corner_cols: Vec<usize> = Vec::new();
+    if quadratic {
+        for cell in conn_a.chunks(npc) {
+            for &id in &cell[..corners] {
+                let c = col(id);
+                if corner_rank[c] == u32::MAX {
+                    corner_rank[c] = corner_cols.len() as u32;
+                    corner_cols.push(c);
+                }
+            }
+        }
+    }
+
     let base_a: Vec<Vec<f64>> = cols_a
         .iter()
         .map(|&id| -> Result<Vec<f64>> { Ok(coords.read().position(id)?.to_vec()) })
@@ -1145,24 +1149,41 @@ pub fn solid_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Me
         .collect::<Result<_>>()?;
 
     // Layer 0 is `mesh_a`'s own nodes and layer `n_layers` is `mesh_b`'s; the
-    // interpolated layers in between are laid out flat and created in one
-    // locked pass.
-    let inner = n_layers.saturating_sub(1);
-    let mut flat: Vec<f64> = Vec::new();
+    // interpolated whole levels in between, then the half levels of the
+    // corner columns, are laid out flat and created in one locked pass.
+    let inner = n_layers - 1;
+    let n_created = inner * n_cols
+        + if quadratic {
+            n_layers * corner_cols.len()
+        } else {
+            0
+        };
+    let dim = base_a.first().map_or(0, Vec::len);
+    let mut flat: Vec<f64> = Vec::with_capacity(n_created * dim);
+    let mut interpolate = |c: usize, t: f64| {
+        flat.extend(
+            base_a[c]
+                .iter()
+                .zip(base_b[c].iter())
+                .map(|(&ca, &cb)| ca + t * (cb - ca)),
+        );
+    };
     for k in 1..n_layers {
-        let t = k as f64 / n_layers as f64;
         for c in 0..n_cols {
-            flat.extend(
-                base_a[c]
-                    .iter()
-                    .zip(base_b[c].iter())
-                    .map(|(&ca, &cb)| ca + t * (cb - ca)),
-            );
+            interpolate(c, k as f64 / n_layers as f64);
+        }
+    }
+    if quadratic {
+        for k in 0..n_layers {
+            for &c in &corner_cols {
+                interpolate(c, (k as f64 + 0.5) / n_layers as f64);
+            }
         }
     }
     let first = coords.write().add_nodes(&flat)?.start;
-    // Node at layer k, column col.
-    let at = |k: usize, c: usize| -> NodeId {
+    let first_half = first + (inner * n_cols) as u32;
+    // Node at whole level k, column c; and at the half level k + ½.
+    let whole = |k: usize, c: usize| -> NodeId {
         if k == 0 {
             cols_a[c]
         } else if k == n_layers {
@@ -1171,40 +1192,28 @@ pub fn solid_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Me
             NodeId(first + ((k - 1) * n_cols + c) as u32)
         }
     };
+    let half = |k: usize, c: usize| -> NodeId {
+        NodeId(first_half + (k * corner_cols.len()) as u32 + corner_rank[c])
+    };
 
-    let col = |id: NodeId| *col_map.get(&id).unwrap();
-    let mut out: Vec<NodeId> = Vec::with_capacity(n_layers * n_cells * solid_et.nodes_per_cell());
+    let pattern = sweep_pattern(et_a);
+    let mut out: Vec<NodeId> = Vec::with_capacity(n_layers * n_cells * pattern.len());
     for k in 0..n_layers {
-        for ci in 0..n_cells {
-            let cell = &conn_a[ci * npc..(ci + 1) * npc];
-            let bot = |i: usize| at(k, col(cell[i]));
-            let top = |i: usize| at(k + 1, col(cell[i]));
-            match et_a {
-                ElementType::TRI3 => {
-                    out.extend_from_slice(&[bot(0), bot(1), bot(2), top(0), top(1), top(2)]);
+        for cell in conn_a.chunks(npc) {
+            out.extend(pattern.iter().map(|&(level, i)| {
+                let c = col(cell[i]);
+                match level {
+                    0 => whole(k, c),
+                    1 => whole(k + 1, c),
+                    _ => half(k, c),
                 }
-                ElementType::QUA4 => {
-                    out.extend_from_slice(&[
-                        bot(0),
-                        bot(1),
-                        bot(2),
-                        bot(3),
-                        top(0),
-                        top(1),
-                        top(2),
-                        top(3),
-                    ]);
-                }
-                _ => unreachable!(),
-            }
+            }));
         }
     }
     let sm_out = SubMesh::from_connectivity(coords.clone(), solid_et, out)?;
     // The solid owns the fresh nodes now; hand back the unit `add_nodes`
     // handed us.
-    let owned: Vec<NodeId> = (first..first + (inner * n_cols) as u32)
-        .map(NodeId)
-        .collect();
+    let owned: Vec<NodeId> = (first..first + n_created as u32).map(NodeId).collect();
     coords.write().decref_all(&owned)?;
     Ok(Mesh::from_submesh(sm_out))
 }

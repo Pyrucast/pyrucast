@@ -10,7 +10,8 @@
 //!   kernel) behind the tetrahedral mesher.
 //! - `sweep_kernel` — the structured kernels behind [`sweep()`](fn@sweep),
 //!   [`extrude()`] and [`revolve()`]: strips between two lines (SEG2 → QUA4,
-//!   SEG3 → QUA8/QUA9) and layered sweeps, linear or quadratic.
+//!   SEG3 → QUA8), volumes between two surfaces, and layered sweeps, linear
+//!   or quadratic.
 
 pub mod arc;
 pub mod arrays;
@@ -49,7 +50,6 @@ pub mod select;
 pub mod skin;
 pub mod sweep;
 pub(crate) mod sweep_kernel;
-pub mod sweep_solid;
 pub(crate) mod tetrahedralization;
 pub mod to_poi1;
 pub mod transfinite;
@@ -96,7 +96,6 @@ pub use revolve::revolve;
 pub use select::{select_cells, select_nodes, select_sub_cells, select_sub_nodes};
 pub use skin::skin;
 pub use sweep::sweep;
-pub use sweep_solid::sweep_solid;
 pub use to_poi1::to_poi1;
 pub use transfinite::transfinite;
 pub use transform::{rotate, symmetry_line, symmetry_plane, symmetry_point, translate};

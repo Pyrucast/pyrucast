@@ -943,21 +943,31 @@ pub fn arc(
     Ok(PyMesh { inner: mesh })
 }
 
-/// Fill the space between two line meshes with `n_layers` layers of cells.
+/// Fill the space between two meshes with `n_layers` layers of cells.
 ///
-/// Two **closed loops** (each ending on its own first node) give a closed ring,
-/// the seam shared between its first and last cells.
+/// Between two lines it builds a surface, between two surfaces a volume. Two
+/// **closed loops** (each ending on its own first node) give a closed ring, the
+/// seam shared between its first and last cells.
 ///
 /// # Parameters
 ///
-/// - `mesh_a`, `mesh_b`: the two lines, with the same number of cells.
+/// - `mesh_a`, `mesh_b`: two lines, or two surfaces, of the same type and with
+///   the same number of cells; between surfaces, cell `i` of one faces cell `i`
+///   of the other, node by node.
 /// - `n_layers`: the number of layers, `≥ 1`.
-/// - `element_type`: between SEG2 lines, `"QUA4"` (the default), `"TRI3"`,
-///   `"QUA8"`, `"QUA9"` or `"TRI6"` — a QUA4 mesh is built first, then converted
-///   (diagonal split for the triangles, promoted to quadratic for the others).
-///   Between SEG3 lines, `"QUA8"` (the default) or `"QUA9"`, built directly: the
-///   lines' own mid-nodes are reused, so a strip between two arcs follows them
-///   exactly.
+/// - `element_type`: the type of every cell built; `None` (the default) takes the
+///   first one the source gives:
+///
+///   | source | element types |
+///   |---|---|
+///   | SEG2 lines | `"QUA4"`, `"TRI3"`, `"QUA8"`, `"QUA9"`, `"TRI6"` |
+///   | SEG3 lines | `"QUA8"`, `"QUA9"`, `"TRI6"` |
+///   | TRI3, QUA4, TRI6, QUA8 surfaces | `"PENTA6"`, `"HEX8"`, `"PENTA15"`, `"HEX20"` respectively |
+///
+///   Triangles alternate their diagonal from one cell to the next. Between SEG3
+///   lines the lines' own mid-nodes are reused, so a strip between two arcs
+///   follows them exactly; a centre or a mid-node of a diagonal is placed on the
+///   curved cell.
 ///
 /// # Returns
 ///
@@ -965,8 +975,9 @@ pub fn arc(
 ///
 /// # Raises
 ///
-/// `RuntimeError` if the two lines differ in cell count, for an unsupported
-/// `element_type`, or for a closed loop swept onto an open line.
+/// `RuntimeError` for an `element_type` the source does not give (before any node
+/// is created), if the two meshes differ in type or cell count, or for a closed
+/// loop swept onto an open line.
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -977,11 +988,17 @@ pub fn sweep(
     n_layers: usize,
     element_type: Option<ElementType>,
 ) -> PyResult<PyMesh> {
-    // `None`: the surface the lines' degree calls for.
+    // `None`: the first type the source gives; a source the Rust side rejects
+    // keeps any placeholder, the error being reported there.
     let element_type = match element_type {
         Some(et) => et,
-        None if mesh_a.inner.element_types()? == [ElementType::SEG3] => ElementType::QUA8,
-        None => ElementType::QUA4,
+        None => mesh_a
+            .inner
+            .element_types()?
+            .first()
+            .and_then(|&source| crate::ops::mesh::sweep_kernel::swept_types(source).first())
+            .copied()
+            .unwrap_or(ElementType::QUA4),
     };
     let mesh = crate::ops::mesh::sweep(&mesh_a.inner, &mesh_b.inner, n_layers, element_type)?;
     Ok(PyMesh { inner: mesh })
@@ -1110,37 +1127,6 @@ pub fn revolve(
 ) -> PyResult<PyMesh> {
     let result = crate::ops::mesh::revolve(&mesh.inner, angle, n_layers, &center, axis.as_deref())?;
     Ok(PyMesh { inner: result })
-}
-
-/// Fill the space between two matching surface meshes with `n_layers` layers.
-///
-/// The 3-D companion of `pyrucast.mesh.sweep`: TRI3 faces → PENTA6 prisms,
-/// QUA4 faces → HEX8 hexahedra.
-///
-/// # Parameters
-///
-/// - `mesh_a`, `mesh_b`: the two surface meshes, TRI3 or QUA4, cell `i` of one
-///   facing cell `i` of the other.
-/// - `n_layers`: the number of layers, `≥ 1`.
-///
-/// # Returns
-///
-/// A new `Mesh` sharing the nodes of `mesh_a` and `mesh_b`.
-///
-/// # Raises
-///
-/// `RuntimeError` for a surface type other than TRI3 or QUA4, or if the two
-/// meshes do not match.
-#[py_op(method_on = PyMesh)]
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-pub fn sweep_solid(
-    mesh_a: PyRef<PyMesh>,
-    mesh_b: PyRef<PyMesh>,
-    n_layers: usize,
-) -> PyResult<PyMesh> {
-    let mesh = crate::ops::mesh::sweep_solid(&mesh_a.inner, &mesh_b.inner, n_layers)?;
-    Ok(PyMesh { inner: mesh })
 }
 
 /// The quadratic (Lagrange-2) copy of the linear mesh `mesh`.

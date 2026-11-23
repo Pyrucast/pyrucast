@@ -15,7 +15,7 @@ maillage par couches.
 | bord | 2 `TRI3`, 3 `QUA4` |
 | quadrature | `"GAUSS"` : 3 × 2 = 6 points ; `"REDUCED"` : 1 point |
 | version quadratique | [PENTA15](penta15.md) |
-| obtenu par | `extrude`, `revolve` d'un `TRI3` ; `sweep_solid` ; `pave_volume` |
+| obtenu par | `extrude`, `revolve` d'un `TRI3` ; `sweep` entre deux surfaces `TRI3` ; `pave_volume` |
 
 ## Élément de référence
 
