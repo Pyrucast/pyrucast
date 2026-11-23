@@ -171,15 +171,14 @@ fn with_centres(
     let positions: Vec<f64> = {
         let c = coords.read();
         let dim = c.dim() as usize;
+        // Every node checked once for the zone, then read without a test.
+        c.ensure_all_alive(conn)?;
         let mut flat = Vec::with_capacity(conn.len() / 8 * dim);
         for cell in conn.chunks(8) {
-            let mut p: [&[f64]; 8] = [&[]; 8];
-            for (k, &id) in cell.iter().enumerate() {
-                p[k] = c.position(id)?;
-            }
+            let p = |k: usize| c.position_alive(cell[k]);
             flat.extend((0..dim).map(|d| {
-                -0.25 * (p[0][d] + p[1][d] + p[2][d] + p[3][d])
-                    + 0.5 * (p[4][d] + p[5][d] + p[6][d] + p[7][d])
+                -0.25 * (p(0)[d] + p(1)[d] + p(2)[d] + p(3)[d])
+                    + 0.5 * (p(4)[d] + p(5)[d] + p(6)[d] + p(7)[d])
             }));
         }
         flat
