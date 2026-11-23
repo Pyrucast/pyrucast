@@ -101,7 +101,7 @@ const SMOOTH_SWEEPS: usize = 12;
 /// #         c
 /// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1).unwrap();
 /// # let enveloppe = mesh::convert(&mesh::skin(&cube, mesh::skin::DEFAULT_ANGLE_DEG).unwrap(),
-/// #                               ElementType::TRI3).unwrap();
+/// #                               ElementType::TRI3, false).unwrap();
 /// // Couche limite hexaédrique, raccord pyramidal, cœur tétraédrique :
 /// // three element types in the same mesh.
 /// let v = mesh::pave_volume(&enveloppe, 1, Some(0.2), Some(0.5))?;
@@ -139,7 +139,7 @@ pub fn pave_volume(
 /// #         c
 /// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1).unwrap();
 /// # let enveloppe = mesh::convert(&mesh::skin(&cube, mesh::skin::DEFAULT_ANGLE_DEG).unwrap(),
-/// #                               ElementType::TRI3).unwrap();
+/// #                               ElementType::TRI3, false).unwrap();
 /// # use std::sync::atomic::{AtomicBool, Ordering};
 /// // The token is polled at the mesher's checkpoints: armed in advance, the
 /// // call stops at the first of them.

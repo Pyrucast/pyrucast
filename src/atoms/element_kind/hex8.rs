@@ -165,15 +165,17 @@ impl ElementKind for Hex8 {
         Some(ElementType::HEX20)
     }
 
-    /// Six tetrahedra round the main diagonal 0-6.
-    fn split_into(&self, target: ElementType) -> Option<&'static [&'static [usize]]> {
-        (target == ElementType::TET4).then_some(&[
+    /// Six tetrahedra round the main diagonal 0-6, the same in every cell:
+    /// two neighbours then cut their common face alike.
+    fn split_into(&self, target: ElementType) -> Option<[&'static [&'static [usize]]; 2]> {
+        const KUHN: &[&[usize]] = &[
             &[0, 1, 2, 6],
             &[0, 2, 3, 6],
             &[0, 3, 7, 6],
             &[0, 7, 4, 6],
             &[0, 4, 5, 6],
             &[0, 5, 1, 6],
-        ])
+        ];
+        (target == ElementType::TET4).then_some([KUHN, KUHN])
     }
 }

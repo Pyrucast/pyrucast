@@ -215,7 +215,7 @@ const DEGENERATE_SHAPE: f64 = 1e-4;
 /// #         c
 /// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1).unwrap();
 /// # let enveloppe = mesh::convert(&mesh::skin(&cube, mesh::skin::DEFAULT_ANGLE_DEG).unwrap(),
-/// #                               ElementType::TRI3).unwrap();
+/// #                               ElementType::TRI3, false).unwrap();
 /// // Delaunay under a hull constraint: the skin is **frozen**, and the
 /// // volume rempli de tétraèdres.
 /// let v = mesh::triangulate_volume(&enveloppe, Some(0.5), false)?;
@@ -252,7 +252,7 @@ pub fn triangulate_volume(
 /// #         c
 /// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1).unwrap();
 /// # let enveloppe = mesh::convert(&mesh::skin(&cube, mesh::skin::DEFAULT_ANGLE_DEG).unwrap(),
-/// #                               ElementType::TRI3).unwrap();
+/// #                               ElementType::TRI3, false).unwrap();
 /// # use std::sync::atomic::{AtomicBool, Ordering};
 /// // The token is polled at the mesher's checkpoints: armed in advance, the
 /// // call stops at the first of them.
@@ -1020,7 +1020,7 @@ mod tests {
             super::super::triangulate_surface(&contour, ElementType::TRI3, Some(size)).unwrap();
         let solid = super::super::extrude(&plate, &[0.0, 0.4, 0.0], 1).unwrap();
         let skin = super::super::skin(&solid, crate::ops::mesh::skin::DEFAULT_ANGLE_DEG).unwrap();
-        super::super::convert(&skin, ElementType::TRI3).unwrap()
+        super::super::convert(&skin, ElementType::TRI3, false).unwrap()
     }
 
     #[test]

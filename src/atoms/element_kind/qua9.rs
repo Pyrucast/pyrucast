@@ -101,6 +101,16 @@ impl ElementKind for Qua9 {
     fn linear_parent(&self) -> Option<ElementType> {
         Some(ElementType::QUA4)
     }
+
+    /// Two `TRI6` whose diagonal mid-node is the centre (node 8): along the
+    /// diagonal 0-2 for a cell of even rank, 1-3 for a cell of odd rank, as
+    /// `QUA4` into `TRI3`. Each triangle lists its corners, then the mid-nodes
+    /// of its edges 0-1, 1-2, 2-0.
+    fn split_into(&self, target: ElementType) -> Option<[&'static [&'static [usize]]; 2]> {
+        const EVEN: &[&[usize]] = &[&[0, 1, 2, 4, 5, 8], &[0, 2, 3, 8, 6, 7]];
+        const ODD: &[&[usize]] = &[&[0, 1, 3, 4, 8, 7], &[1, 2, 3, 5, 6, 8]];
+        (target == ElementType::TRI6).then_some([EVEN, ODD])
+    }
 }
 
 /// 1-D quadratic Lagrange basis on `[-1, 1]` at `t`, nodes `-1, 0, +1`.

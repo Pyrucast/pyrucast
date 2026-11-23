@@ -277,9 +277,12 @@ pub trait ElementKind: Sync {
     }
 
     /// How one cell of this type splits into cells of `target`, as local
-    /// corner-index tuples — `HEX8` into six `TET4`, say. `None` when no such
-    /// split is defined.
-    fn split_into(&self, _target: ElementType) -> Option<&'static [&'static [usize]]> {
+    /// node-index tuples — `HEX8` into six `TET4`, say: the split of a cell of
+    /// even rank in its zone, then the split of a cell of odd rank. Two
+    /// different splits alternate the diagonal from one cell to the next; a
+    /// type whose split must be the same everywhere gives it twice. `None`
+    /// when no such split is defined.
+    fn split_into(&self, _target: ElementType) -> Option<[&'static [&'static [usize]]; 2]> {
         None
     }
 
@@ -611,21 +614,23 @@ mod tests {
         }
     }
 
-    /// A split names cells of the target type, built from the source's corners.
+    /// A split names cells of the target type, built from the source's nodes,
+    /// and both splits of a pair cut a cell into as many cells.
     #[test]
     fn splits_are_well_formed() {
         for &src in ElementType::ALL {
             for &target in ElementType::ALL {
-                let Some(cells) = src.as_kind().split_into(target) else {
+                let Some([even, odd]) = src.as_kind().split_into(target) else {
                     continue;
                 };
-                let want = target.as_kind().corner_count();
-                for cell in cells {
+                assert_eq!(even.len(), odd.len(), "{src} → {target}: cell count");
+                let want = target.as_kind().nodes_per_cell();
+                for cell in even.iter().chain(odd) {
                     assert_eq!(cell.len(), want, "{src} → {target}: cell arity");
                     for &n in *cell {
                         assert!(
-                            n < src.as_kind().corner_count(),
-                            "{src} → {target}: node {n} is not a corner"
+                            n < src.as_kind().nodes_per_cell(),
+                            "{src} → {target}: node {n} is not a node of the cell"
                         );
                     }
                 }

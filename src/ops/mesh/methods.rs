@@ -39,8 +39,8 @@ impl Mesh {
     }
 
     /// See [`mesh::convert`](fn@crate::ops::mesh::convert).
-    pub fn convert(&self, target: ElementType) -> Result<Mesh> {
-        crate::ops::mesh::convert(self, target)
+    pub fn convert(&self, target: ElementType, alternate: bool) -> Result<Mesh> {
+        crate::ops::mesh::convert(self, target, alternate)
     }
 
     /// See [`mesh::copy`](fn@crate::ops::mesh::copy).

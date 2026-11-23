@@ -1164,22 +1164,38 @@ pub fn to_quadratic(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Split every cell of `mesh` into cells of `element_type`, adding no node.
+/// Convert every cell of `mesh` to `element_type`, keeping the geometry of each cell.
 ///
-/// Supported: the identity (already the target type, copied as it is),
-/// `"QUA4"` → `"TRI3"` (two triangles per quadrangle, diagonal `(0, 2)`), and
-/// `"HEX8"` → `"TET4"` (six tetrahedra per hexahedron, a conforming split).
-/// Corner nodes are reused; face colours are kept. To promote to a quadratic type,
-/// which creates mid-edge nodes, use `pyrucast.mesh.to_quadratic`.
+/// Supported, zone by zone:
+///
+/// | from | to | how |
+/// |---|---|---|
+/// | any type | itself | copied as it is |
+/// | `"QUA4"` | `"TRI3"` | two triangles, along the diagonal `(0, 2)`, or alternated (see `alternate`) |
+/// | `"QUA8"` | `"QUA9"` | each cell gains its centre, the point of the `QUA8` at the middle of the cell (the mean of the corners when the edges are straight) |
+/// | `"QUA9"` | `"TRI6"` | two triangles as for `"QUA4"`, the centre becoming the mid-node of the diagonal |
+/// | `"QUA8"` | `"TRI6"` | the centre, then the split of `"QUA9"` |
+/// | `"HEX8"` | `"TET4"` | six tetrahedra, the same split in every cell, so neighbours cut their common face alike |
+///
+/// Corners and mid-nodes are reused, and face colours kept; the only nodes created
+/// are the centres of a `"QUA8"`. To promote to a quadratic type, which creates
+/// mid-edge nodes, use `pyrucast.mesh.to_quadratic`.
 ///
 /// # Parameters
 ///
 /// - `mesh`: the mesh to convert, left untouched.
 /// - `element_type`: the target element type.
+/// - `alternate`: for the splits of quadrangles into triangles. `False` cuts every
+///   quadrangle along its diagonal `(0, 2)`, which suits any mesh — the skin of a
+///   solid meshed next by `pyrucast.mesh.triangulate_volume`, say. `True` cuts a
+///   cell of odd rank in its zone along `(1, 3)` instead: on a grid laid out layer
+///   by layer, as `pyrucast.mesh.sweep`, `pyrucast.mesh.extrude` and
+///   `pyrucast.mesh.transfinite` lay theirs out, the diagonal alternates from one
+///   cell to the next.
 ///
 /// # Returns
 ///
-/// A new `Mesh` on the nodes of `mesh`.
+/// A new `Mesh` on the nodes of `mesh`, plus the centres it creates.
 ///
 /// # Raises
 ///
@@ -1188,8 +1204,13 @@ pub fn to_quadratic(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 #[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn convert(mesh: PyRef<PyMesh>, element_type: ElementType) -> PyResult<PyMesh> {
-    let result = crate::ops::mesh::convert(&mesh.inner, element_type)?;
+#[pyo3(signature = (mesh, element_type, alternate=false))]
+pub fn convert(
+    mesh: PyRef<PyMesh>,
+    element_type: ElementType,
+    alternate: bool,
+) -> PyResult<PyMesh> {
+    let result = crate::ops::mesh::convert(&mesh.inner, element_type, alternate)?;
     Ok(PyMesh { inner: result })
 }
 

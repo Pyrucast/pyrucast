@@ -131,8 +131,11 @@ impl ElementKind for Qua4 {
         Some(ElementType::QUA8)
     }
 
-    /// Cut along the diagonal 0-2.
-    fn split_into(&self, target: ElementType) -> Option<&'static [&'static [usize]]> {
-        (target == ElementType::TRI3).then_some(&[&[0, 1, 2], &[0, 2, 3]])
+    /// Cut along the diagonal 0-2 for a cell of even rank, 1-3 for a cell of
+    /// odd rank.
+    fn split_into(&self, target: ElementType) -> Option<[&'static [&'static [usize]]; 2]> {
+        const EVEN: &[&[usize]] = &[&[0, 1, 2], &[0, 2, 3]];
+        const ODD: &[&[usize]] = &[&[0, 1, 3], &[1, 2, 3]];
+        (target == ElementType::TRI3).then_some([EVEN, ODD])
     }
 }
