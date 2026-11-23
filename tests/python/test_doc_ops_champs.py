@@ -308,6 +308,35 @@ assert abs(volumes.value(n[0], "un") - 1.0) < 1e-12
 assert abs(lu.value(n[1], "s") - 3.0) < 1e-12  # shared: (1 + 5) / 2
 assert abs(lu.value(n[2], "s") - 5.0) < 1e-12
 
+# ── contracted products of two tensors ─────────────────────
+
+_, mesh, fes, n = _plaque()
+a = pyrucast.ElementField(fes, ["A_xx", "A_xy", "A_yy"])
+for name, value in (("A_xx", 1.0), ("A_xy", 2.0), ("A_yy", 3.0)):
+    a[0].set_uniform(name, value)
+b = pyrucast.ElementField(fes, ["B_xx", "B_xy", "B_yx", "B_yy"])
+for name, value in (("B_xx", 4.0), ("B_xy", 5.0), ("B_yx", 6.0), ("B_yy", 7.0)):
+    b[0].set_uniform(name, value)
+identity = pyrucast.ElementField(fes, ["I_xx", "I_xy", "I_yy", "I_zz"])
+for name in ("I_xx", "I_yy", "I_zz"):
+    identity[0].set_uniform(name, 1.0)
+# ANCHOR: element_field-tensor_dot
+# A = [[1, 2], [2, 3]] is stored symmetric (A_xx, A_xy, A_yy); B = [[4, 5],
+# [6, 7]] whole, since it carries B_yx. Their product A·B at each point:
+p = pyrucast.element_field.tensor_dot(a, b, "A", "B", "p")
+# ANCHOR_END: element_field-tensor_dot
+assert p[0].components() == ["p_xx", "p_xy", "p_yx", "p_yy"]
+assert p[0].value(0, 0, "p_xy") == 19.0
+assert p[0].value(0, 0, "p_yx") == 26.0
+# ANCHOR: element_field-tensor_ddot
+# A:B at each point, in a single component named after the operator.
+ab = pyrucast.element_field.tensor_ddot(a, b, "A", "B")
+# The trace of B is B:I, with I the identity.
+trace = pyrucast.element_field.tensor_ddot(b, identity, "B", "I")
+# ANCHOR_END: element_field-tensor_ddot
+assert ab[0].value(0, 0, "tensor_ddot") == 47.0  # 1·4 + 2·5 + 2·6 + 3·7
+assert trace[0].value(0, 0, "tensor_ddot") == 11.0  # 4 + 7
+
 # ── B du modèle : l'entrée de chaque loi ───────────────────
 
 _, mesh, fes, n = _plaque()

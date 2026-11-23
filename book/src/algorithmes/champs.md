@@ -687,6 +687,73 @@ combinent à l'arithmétique scalaire des champs (`f + s`, `f * s`, cf.
 {{#include ../../../tests/python/test_doc_ops_champs.py:maths}}
 ```
 
+## Produits contractés de deux tenseurs
+
+{{#pyalgo element_field.tensor_dot element_field.tensor_ddot}}
+
+Deux opérateurs multiplient, point de Gauss par point de Gauss, deux tenseurs
+d'ordre 2 portés par des champs aux points de Gauss. Ils ne demandent pas de
+modèle : comme `divergence`, ils lisent chaque tenseur d'après les noms de ses
+composantes, sous le nom qu'on leur donne (`A` ci-dessous).
+
+| Espace | Lu symétrique | Lu complet (si `A_yx`, `A_zx`, `A_zy` existent) | Terme `A_zz` |
+|---|---|---|---|
+| 1D | `A_xx` | — | — |
+| 2D plan | `A_xx, A_xy, A_yy` | `A_xx, A_xy, A_yx, A_yy` | lu si le champ le porte ; absent, il vaut 0 |
+| 2D axisymétrique | `A_xx, A_xy, A_yy` | `A_xx, A_xy, A_yx, A_yy` | exigé : c'est le terme circonférentiel |
+| 3D | `A_xx, A_xy, A_xz, A_yy, A_yz, A_zz` | les 9, rangés par lignes | dans la liste |
+
+En 2D plan, le terme `A_zz` compte quand il existe : en déformations planes
+avec dilatation, `σ_zz` et la déformation élastique `ε_zz` ne sont pas nuls, et
+leur produit fait partie de l'énergie `σ:ε`. Un gradient de déplacement plan
+n'en porte pas, et son produit n'en a pas.
+
+Les deux champs sont appariés par sous-espace, comme dans
+[`psca`](../reference/field.md#field-psca) : le résultat a une zone par
+sous-espace que les deux portent, dans l'ordre du premier ; un sous-espace
+qu'un seul des deux porte ne donne pas de zone. Les deux tenseurs peuvent
+venir du même champ. Ces deux produits correspondent au `*` de Cast3M entre
+deux gradients, et à ses opérateurs `ENER` et `WORK`.
+
+### `tensor_dot(a, b, a_prefix, b_prefix, prefix)` → `ElementField`
+
+Le produit simplement contracté :
+
+\\[
+(A \cdot B)\_{ij} = \sum_k A_{ik}\\, B_{kj}.
+\\]
+
+Le résultat est le tenseur complet `prefix`, rangé par lignes (`p_xx, p_xy,
+p_yx, p_yy` en 2D, neuf composantes en 3D), suivi de `p_zz` quand les deux
+tenseurs portent leur terme `zz`. L'ordre compte : `A·B` n'est pas `B·A`, et le
+produit n'est pas symétrique, même quand un des deux tenseurs l'est.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_champs.py:element_field-tensor_dot}}
+```
+
+Avec A = [[1, 2], [2, 3]] et B = [[4, 5], [6, 7]], `p` vaut [[16, 19], [26, 31]].
+
+### `tensor_ddot(a, b, a_prefix, b_prefix)` → `ElementField`
+
+Le produit doublement contracté :
+
+\\[
+A : B = \sum_{i,j} A_{ij}\\, B_{ij}.
+\\]
+
+Un terme hors diagonale rangé une seule fois dans un tenseur symétrique tient
+la place de deux termes : il compte deux fois. Le résultat porte une seule
+composante, `tensor_ddot`, et `A:B = B:A`. La trace d'un tenseur est `A:I`,
+avec `I` un champ uniforme qui porte `I_xx = I_yy = I_zz = 1` et `I_xy = 0` :
+il n'y a pas d'opérateur de trace à part.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_champs.py:element_field-tensor_ddot}}
+```
+
+Ici `A:B` = 1·4 + 2·5 + 2·6 + 3·7 = 47, et la trace de B vaut 4 + 7 = 11.
+
 ## Réduction
 
 {{#pyalgo measure.xty measure.integral measure.xtx}}

@@ -185,6 +185,7 @@ champs](algorithmes/champs.md), [Construction](algorithmes/champs-materiau.md) e
 | d'un champ aux nœuds | `interp_to_gauss`, `gradient`, `deformation`, `beam_deformation`, `shell_deformation`, `strain` |
 | comportement | `integrate_behavior`, `elastic_stress`, `elastic_strain`, `thermal_strain`, `stress_measure`, `rotate_frame` |
 | d'un champ aux points de Gauss | `cell_integral`, `mask`, `consolidate`, `restrict`, `restrict_like` |
+| produits de tenseurs | `tensor_dot`, `tensor_ddot` |
 
 `material_field` crée une zone par sous-modèle qui consomme du matériau, sur
 l'espace de ce sous-modèle, et ignore les autres (Dirichlet…). Il refuse une

@@ -152,6 +152,11 @@ node_field.merge node_field.consolidate element_field.consolidate
 node_field.mask element_field.mask
 node_field.to_nodes}}
 
+### Multiplier des tenseurs
+
+{{#pysummary
+element_field.tensor_dot element_field.tensor_ddot}}
+
 ### Mesurer
 
 {{#pysummary

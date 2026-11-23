@@ -107,6 +107,9 @@ Champs - réduction;MINI;Minimum d'un champ;NodeField.min / ElementField.min
 Champs - réduction;MOYE;Moyenne d'un champ;—
 Champs - réduction;PSCA;Produit scalaire nœud par nœud de deux champs (renvoie un champ);psca
 Champs - réduction;XTY;Produit scalaire global de deux champs entiers (renvoie un flottant);xty
+Champs - produits;* (deux gradients, avec modèle);Produit simplement contracté de deux tenseurs, point par point;element_field.tensor_dot (sans modèle)
+Champs - produits;ENER;Produit doublement contracté contraintes : déformations, densité d'énergie;element_field.tensor_ddot (sans modèle)
+Champs - produits;WORK;Trace de σ·G, contraintes par un gradient;element_field.tensor_ddot (σ symétrique, sans modèle)
 Champs - réduction;INTG;Intègre un champ sur son support (∫ f dΩ, quadrature EF);integral / integral_element
 Champs - réduction;RESU;Résultante (somme) d'un champ de forces nodal;NodeField.sum / ElementField.sum
 Maths - arithmétique;+;Addition;__add__ (champs/scalaires)
