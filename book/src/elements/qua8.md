@@ -15,7 +15,7 @@ polynôme incomplet : il lui manque le terme \\( \xi^2\eta^2 \\).
 | bord | 4 `SEG3` |
 | quadrature | `"GAUSS"` : 3×3 points, degré 5 par direction ; `"REDUCED"` : 1 point |
 | parent linéaire | [QUA4](qua4.md) |
-| obtenu par | `sweep`, `transfinite`, `pave_surface`, `grid_surface` ; `to_quadratic` d'un `QUA4` ; `skin` d'un `HEX20` ou `PENTA15` |
+| obtenu par | `sweep`, `transfinite`, `pave_surface`, `grid_surface` ; `extrude`, `revolve` d'un `SEG3` ; `to_quadratic` d'un `QUA4` ; `skin` d'un `HEX20` ou `PENTA15` |
 
 ## Élément de référence
 

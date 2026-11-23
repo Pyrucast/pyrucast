@@ -138,25 +138,43 @@ l'espace éléments finis prend de lui-même (cf.
 
 {{#pyalgo mesh.convert}}
 
-`convert(mesh, element_type)` **change le type d'élément** de chaque
-sous-maillage vers `element_type`, en découpant chaque cellule en cellules du
-type cible — **sans jamais déplacer ni ajouter de nœud** sur les sommets
-existants. Trois cas sont couverts :
+`convert(mesh, element_type, alternate=False)` **change le type d'élément**
+de chaque sous-maillage vers `element_type`, zone par zone, **en gardant la
+géométrie de chaque maille** : aucun nœud n'est déplacé. Les cas couverts :
 
 - **identité** — `element_type` est déjà le type du sous-maillage : celui-ci
   est recopié tel quel ;
 - **`QUA4`→`TRI3`** — chaque quadrangle est coupé en deux triangles selon la
   diagonale `(0, 2)` : `(0, 1, 2)` et `(0, 2, 3)` ;
+- **`QUA8`→`QUA9`** — chaque maille reçoit son centre, le point du `QUA8`
+  lui-même au milieu de la maille, `−¼ Σ coins + ½ Σ milieux` : la moyenne des
+  coins quand les bords sont droits, un point de la maille courbe sinon. Le
+  `QUA9` garde ainsi exactement la géométrie du `QUA8` ;
+- **`QUA9`→`TRI6`** — la découpe de `QUA4`→`TRI3`, le centre devenant le nœud
+  milieu de la diagonale ;
+- **`QUA8`→`TRI6`** — le centre de `QUA8`→`QUA9`, puis cette découpe ;
 - **`HEX8`→`TET4`** — chaque hexaèdre est coupé en six tétraèdres partageant la
-  grande diagonale `(0, 6)` (subdivision de Freudenthal/Kuhn), un découpage
-  qui pave l'espace et reste **conforme** entre hexaèdres voisins (faces
-  coupées selon la même diagonale).
+  grande diagonale `(0, 6)` (subdivision de Freudenthal/Kuhn), la même dans
+  chaque maille : couper un hexaèdre coupe ses faces, et deux voisins coupent
+  leur face commune de la même façon, si bien que le résultat reste
+  **conforme**.
 
-Les **nœuds sommets sont réutilisés** (aucune création, aucun déplacement) et
-les **couleurs de face sont conservées**. Le maillage d'origine n'est pas
-modifié. Tout autre couple `(source, cible)` lève une erreur : passer à un type
-**quadratique** (`TRI3`→`TRI6`, …), qui crée des nœuds de milieu d'arête,
-relève de [`to_quadratic`](#passage-à-lordre-quadratique--to_quadratic).
+**`alternate`** concerne les découpes de quadrangles en triangles. Par défaut,
+toutes coupent selon `(0, 2)` : un maillage quelconque, comme la peau d'un
+solide, n'a pas d'ordre de grille, et le mailleur volumique `triangulate_volume`
+retrouve mieux une peau coupée partout pareil. Avec `alternate=True`, la maille
+de rang impair dans sa zone est coupée selon `(1, 3)` — `(0, 1, 3)` et
+`(1, 2, 3)` — : sur une grille rangée couche par couche, comme celles de
+`sweep`, `transfinite` ou `extrude`, la diagonale alterne d'une maille à la
+suivante, comme dans les générateurs structurés (voir
+[Tisser et révolutionner](maillage-tisser.md#diagonales-alternées)).
+
+Les **sommets et les nœuds milieux sont réutilisés**, seuls les centres d'un
+`QUA8` sont créés, et les **couleurs de face sont conservées**. Le maillage
+d'origine n'est pas modifié. Tout autre couple `(source, cible)` lève une
+erreur : passer à un type **quadratique** (`TRI3`→`TRI6`, …), qui crée des
+nœuds de milieu d'arête partagés entre zones, relève de
+[`to_quadratic`](#passage-à-lordre-quadratique--to_quadratic).
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_maillage.py:mesh-convert}}

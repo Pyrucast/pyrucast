@@ -2611,7 +2611,7 @@ class Mesh:
         """
     def convert(self, element_type: builtins.str, alternate: builtins.bool = False) -> Mesh:
         r"""
-        Convert every cell of `mesh` to `element_type`, keeping the geometry of each cell.
+        Convert every cell of `mesh` to `element_type`, keeping each cell's geometry.
         
         Supported, zone by zone:
         
@@ -6618,7 +6618,7 @@ def contact(slave: Mesh, master: Mesh, target: Model, variables: typing.Sequence
 
 def convert(mesh: Mesh, element_type: builtins.str, alternate: builtins.bool = False) -> Mesh:
     r"""
-    Convert every cell of `mesh` to `element_type`, keeping the geometry of each cell.
+    Convert every cell of `mesh` to `element_type`, keeping each cell's geometry.
     
     Supported, zone by zone:
     

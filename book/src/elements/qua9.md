@@ -15,7 +15,7 @@ dans chaque direction, terme \\( \xi^2\eta^2 \\) compris.
 | bord | 4 `SEG3` |
 | quadrature | `"GAUSS"` : 3×3 points, degré 5 par direction ; `"REDUCED"` : 1 point |
 | parent linéaire | [QUA4](qua4.md) |
-| obtenu par | `sweep`, `transfinite`, `pave_surface`, `grid_surface` ; `skin` d'un `HEX27` |
+| obtenu par | `sweep`, `transfinite`, `pave_surface`, `grid_surface` ; `extrude`, `revolve` d'une ligne (`element_type="QUA9"`) ; `convert` d'un `QUA8` ; `skin` d'un `HEX27` |
 
 ## Élément de référence
 

@@ -16,7 +16,7 @@ flexion.
 | bord | 3 `SEG3` |
 | quadrature | `"GAUSS"` : 6 points, degré 4 ; `"REDUCED"` : 1 point |
 | parent linéaire | [TRI3](tri3.md) |
-| obtenu par | `sweep`, `transfinite` ; `to_quadratic` d'un `TRI3` ; `skin` d'un `TET10` ou `PENTA15` |
+| obtenu par | `sweep`, `transfinite` ; `extrude`, `revolve` d'un `SEG2` ou d'un `SEG3` (`element_type="TRI6"`) ; `to_quadratic` d'un `TRI3` ; `convert` d'un `QUA8` ou d'un `QUA9` ; `skin` d'un `TET10` ou `PENTA15` |
 
 ## Élément de référence
 

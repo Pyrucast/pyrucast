@@ -15,7 +15,7 @@ surface : une coque, la peau d'un volume.
 | bord | 3 `SEG2` |
 | quadrature | `"GAUSS"` : 3 points, degré 2 ; `"REDUCED"` : 1 point |
 | version quadratique | [TRI6](tri6.md) |
-| obtenu par | `triangulate_surface`, `sweep`, `transfinite` ; `convert` d'un `QUA4` ; `skin` d'un `TET4`, `PYRA5` ou `PENTA6` |
+| obtenu par | `triangulate_surface`, `sweep`, `transfinite` ; `extrude`, `revolve` d'un `SEG2` (`element_type="TRI3"`) ; `convert` d'un `QUA4` ; `skin` d'un `TET4`, `PYRA5` ou `PENTA6` |
 
 ## Élément de référence
 

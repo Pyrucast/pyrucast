@@ -1199,7 +1199,7 @@ pub fn to_quadratic(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
-/// Convert every cell of `mesh` to `element_type`, keeping the geometry of each cell.
+/// Convert every cell of `mesh` to `element_type`, keeping each cell's geometry.
 ///
 /// Supported, zone by zone:
 ///

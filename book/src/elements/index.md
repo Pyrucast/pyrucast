@@ -72,6 +72,21 @@ et de volume pour HEX27. Le degré exact de chaque règle a été mesuré en
 intégrant les monômes \\( \xi^a\eta^b\zeta^c \\) avec les tables que rend
 Python.
 
+### Par forme et par degré
+
+Les éléments de surface et de volume se rangent selon trois axes : leur forme,
+leur degré, et, pour les quadrangles et les hexaèdres, un centre ou non. Les
+générateurs structurés lisent leur option `element_type` sur ces axes (voir
+[Tisser et révolutionner](../algorithmes/maillage-tisser.md)).
+
+| Forme | Linéaire | Quadratique sans centre | Quadratique avec centre |
+|---|---|---|---|
+| triangle | [TRI3](tri3.md) | [TRI6](tri6.md) | |
+| tétraèdre | [TET4](tet4.md) | [TET10](tet10.md) | |
+| prisme | [PENTA6](penta6.md) | [PENTA15](penta15.md) | |
+| quadrangle | [QUA4](qua4.md) | [QUA8](qua8.md) | [QUA9](qua9.md) |
+| hexaèdre | [HEX8](hex8.md) | [HEX20](hex20.md) | [HEX27](hex27.md) |
+
 Tous les types se lisent par `read_gmsh` et `from_arrays`. Chaque fiche dit
 quels mailleurs de pyrucast le produisent.
 

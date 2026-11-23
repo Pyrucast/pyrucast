@@ -15,7 +15,7 @@ pour un polynôme incomplet, sans les termes comme \\( \xi^2\eta^2\zeta^2 \\).
 | bord | 6 `QUA8` |
 | quadrature | `"GAUSS"` : 3×3×3 points, degré 5 par direction ; `"REDUCED"` : 1 point |
 | parent linéaire | [HEX8](hex8.md) |
-| obtenu par | `to_quadratic` d'un `HEX8` |
+| obtenu par | `extrude`, `revolve` d'un `QUA8` ; `sweep` entre deux surfaces `QUA8` ; `to_quadratic` d'un `HEX8` |
 
 ## Élément de référence
 

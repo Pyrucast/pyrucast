@@ -15,7 +15,7 @@ triangle et en hauteur. C'est l'extrusion quadratique du [TRI6](tri6.md).
 | bord | 2 `TRI6`, 3 `QUA8` |
 | quadrature | `"GAUSS"` : 6 × 3 = 18 points ; `"REDUCED"` : 1 point |
 | parent linéaire | [PENTA6](penta6.md) |
-| obtenu par | `to_quadratic` d'un `PENTA6` |
+| obtenu par | `extrude`, `revolve` d'un `TRI6` ; `sweep` entre deux surfaces `TRI6` ; `to_quadratic` d'un `PENTA6` |
 
 ## Élément de référence
 

@@ -7,13 +7,13 @@ Maillage - création;COUR;Maille une courbe quelconque;—
 Maillage - création;CONT;Extrait le contour (frontière) d'une surface;border
 Maillage - création;ENVE;Extrait l'enveloppe (peau) d'un volume, découpée par face plane;skin
 Maillage - création;SURF;Maille une surface délimitée par un contour fermé;triangulate_surface / pave_surface / grid_surface / grid_surface2
-Maillage - création;DALL;Surface structurée entre 4 côtés (interpolation transfinie);transfinite
-Maillage - création;REGL;Surface réglée entre deux lignes;sweep (SEG2 → QUA4, SEG3 → QUA8/QUA9 ; deux boucles fermées donnent un anneau fermé)
+Maillage - création;DALL;Surface structurée entre 4 côtés (interpolation transfinie);transfinite (côtés SEG2 ou SEG3 ; les nœuds milieux du bord sont ceux des côtés, ceux de l'intérieur au milieu de la corde, comme DALL)
+Maillage - création;REGL;Surface réglée entre deux lignes;sweep (SEG2 → QUA4/TRI3/QUA8/QUA9/TRI6, SEG3 → QUA8/QUA9/TRI6 ; TRI3 et TRI6 à diagonales alternées comme REGL ; deux boucles fermées donnent un anneau fermé)
 Maillage - création;PAVE;Maille un pavé / bloc volumique structuré;—
 Maillage - création;MANU;Maillage manuel (élément défini nœud par nœud);Mesh(coords, type)
 Maillage - création;LIRE;Lit un maillage (et ses champs) depuis un fichier externe (gmsh .msh, ASCII/binaire ; MED via medcoupling), une session gmsh vivante ou des tableaux;read_gmsh / read_gmsh_str / from_gmsh / from_medcoupling / from_arrays
-Maillage - génération;TRAN;Translation/extrusion d'un maillage (engendre la dimension supérieure);extrude / translate (extrude garde le degré : SEG3 → QUA8, QUA8 → HEX20, TRI6 → PENTA15)
-Maillage - génération;ROTA;Rotation / révolution d'un maillage;rotate / revolve (une ligne qui touche l'axe s'y referme en TRI3 / TRI6, comme ROTA suivi d'ELIM et REGE)
+Maillage - génération;TRAN;Translation/extrusion d'un maillage (engendre la dimension supérieure);extrude / translate (extrude garde le degré : SEG3 → QUA8, QUA8 → HEX20, TRI6 → PENTA15 ; element_type comme OPTI ELEM, TRI3 et TRI6 à diagonales alternées comme TRAN)
+Maillage - génération;ROTA;Rotation / révolution d'un maillage;rotate / revolve (une ligne qui touche l'axe s'y referme en TRI3 / TRI6, comme ROTA suivi d'ELIM et REGE ; element_type comme pour extrude)
 Maillage - génération;VOLU;Volume engendré par déplacement d'une surface;sweep (entre deux surfaces) / revolve / triangulate_volume / pave_volume
 Maillage - génération;GENE;Génère un maillage par balayage entre deux lignes;sweep
 Maillage - génération;SYME;Symétrie d'un maillage;symmetry_point / symmetry_line / symmetry_plane
@@ -25,7 +25,7 @@ Maillage - assemblage;ELIM;Élimine les nœuds doubles (fusion par tolérance);m
 Maillage - assemblage;ENLE;Enlève des éléments d'un maillage;—
 Maillage - assemblage;DIFF;Différence de maillages;difference (A \ B ; la différence symétrique de DIFF = difference(a, b) | difference(b, a))
 Maillage - assemblage;INTE;Intersection de maillages;intersection (même maille = mêmes nœuds dans le même ordre)
-Maillage - transformation;CHAN;Change le type d'élément (POI1, passage quadratique…);to_poi1 (cas POI1) / to_quadratic (linéaire→quadratique) / convert (QUA4→TRI3, HEX8→TET4)
+Maillage - transformation;CHAN;Change le type d'élément (POI1, passage quadratique…);to_poi1 (cas POI1) / to_quadratic (linéaire→quadratique) / convert (QUA4→TRI3, QUA8→QUA9, QUA9→TRI6, QUA8→TRI6, HEX8→TET4 ; alternate=True alterne les diagonales comme CHAN)
 Maillage - transformation;PLUS;Translate les coordonnées des nœuds;coords.displace / coords.set
 Maillage - transformation;FORM;Configuration déformée (coordonnées courantes = initiales + déplacement);coords.displace_from (pose en absolu la configuration cible X + u, sans changer la configuration active) · Coords.add_config / select · coords.in_config (calculer le temps d'un bloc sur une configuration)
 Maillage - transformation;TOUR;Tourne (rotation) les coordonnées des nœuds;rotate
