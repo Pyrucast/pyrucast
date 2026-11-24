@@ -58,6 +58,7 @@ __all__ = [
     "displace_from",
     "divergence",
     "drucker_prager",
+    "eigen",
     "elastic_strain",
     "elastic_stress",
     "elasticity",
@@ -7141,6 +7142,56 @@ def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str, strain
     - `RuntimeError` if `kinematics` does not match the dimension of the space,
       if `"axisymmetric"` meets a geometry that is not, or for a measure that is
       not a strain a law reads (`"gradient"`, `"jacobian"`, …).
+    """
+
+def eigen(a: Matrix, b: Matrix, count: builtins.int, shift: builtins.float = 0.0, normalization: builtins.str = 'mass') -> builtins.list[dict]:
+    r"""
+    The `count` eigenvalues of `a x = λ b x` nearest `shift`, and their modes.
+    
+    Vibrations take the stiffness and the mass (`λ = ω²`), buckling the
+    stiffness and the geometric stiffness. The relations `a` carries (the
+    multipliers of `dirichlet`, `mpc`…) hold in every mode.
+    
+    The modes are those of the shift-inverted operator `(a − shift·b)⁻¹ b`:
+    `a − shift·b` is factorized once, as `solve` does, and a Krylov-Schur
+    iteration runs over the unknowns `b` carries. Each mode is then completed
+    (unknowns without mass, multipliers) and checked by its residual; modes of a
+    common eigenvalue come out `b`-orthogonal.
+    
+    # Parameters
+    
+    - `a`, `b`: assembled symmetric matrices; `a` or `b` is positive definite on
+      the unknowns the relations leave free (the stiffness, or the mass).
+    - `count`: how many modes; at most the number of unknowns `b` carries.
+    - `shift`: the value near which to look, in the units of `λ` (`ω²` for
+      vibrations). A free structure has `λ = 0`: give it a negative shift.
+    - `normalization`: `"mass"` scales each shape to `φᵀbφ = ±1`, so that, projected
+      on the modes, `b` becomes the identity and `a` the diagonal of the
+      eigenvalues; `"max"` scales its value of largest magnitude to `1`. Either way,
+      that value is positive.
+    
+    # Returns
+    
+    The modes, in increasing order of `λ`. A mode is a `dict`:
+    
+    - `"node"`: its own `Node`, at the origin of the matrices' `Coords`: it carries
+      the mode's coordinate `alpha` and its force `f_alpha` in what is projected
+      on the modes.
+    - `"support"`: the POI1 `Mesh` shared by the modes of the list, whose nodes are
+      exactly theirs. A slice or a union of lists needs its own:
+      `s = pyrucast.mesh.poi1_from_nodes([m["node"] for m in part])`, then
+      `[{**m, "support": s} for m in part]`.
+    - `"eigenvalue"`: `λ`.
+    - `"shape"`: the shape, a `NodeField` on the column supports of `a` (those
+      `solve` returns), without the multipliers.
+    - `"pairs"`: the `(primal, dual)` names of the shape, as `xty` takes them.
+    - `"generalized_mass"`: `φᵀbφ` of the scaled shape.
+    
+    # Raises
+    
+    `RuntimeError` if `a` or `b` has no assembled values or is not symmetric, if
+    `a` carries a unilateral relation, if `a − shift·b` is singular, or if a mode
+    does not converge. `ValueError` for an unknown `normalization`.
     """
 
 def elastic_strain(model: Model, stress: ElementField, materials: ElementField) -> ElementField:

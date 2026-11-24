@@ -226,6 +226,7 @@ named_enum!(
     crate::ops::solver::Verbosity,
     crate::ops::solver::RelationMethod,
     crate::ops::solver::ActiveSetMethod,
+    crate::ops::solver::Normalization,
     crate::ops::mesh::FrontRelax,
     crate::ops::element_field::StrainMeasure,
     crate::ops::element_field::StressMeasure,

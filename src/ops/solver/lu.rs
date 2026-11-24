@@ -568,15 +568,20 @@ impl Factorization {
     /// Solve `A·x = b` for one right-hand side (descent/back-substitution only;
     /// a scaled saddle-point scales `b` on the way in and `x` on the way out).
     fn solve_vec(&self, b: &[f64]) -> Vec<f64> {
+        let mut x = b.to_vec();
+        self.solve_in_place(&mut x);
+        x
+    }
+
+    /// [`solve_vec`](Self::solve_vec) in the caller's buffer: `b` becomes `x`.
+    pub(super) fn solve_in_place(&self, b: &mut [f64]) {
         match &self.scaling {
             Some(scale) => {
-                let mut x = b.to_vec();
-                scale.scale_rhs(&mut x);
-                self.factored.solve_in_place(&mut x);
-                scale.unscale_solution(&mut x);
-                x
+                scale.scale_rhs(b);
+                self.factored.solve_in_place(b);
+                scale.unscale_solution(b);
             }
-            None => self.factored.solve_vec(b),
+            None => self.factored.solve_in_place(b),
         }
     }
 

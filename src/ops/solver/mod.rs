@@ -65,6 +65,7 @@ use crate::containers::node_field::NodeField;
 use crate::error::Result;
 use crate::interrupt::{Cancel, NoCancel};
 
+mod eigen;
 mod eliminate;
 mod lu;
 pub mod methods;
@@ -72,6 +73,7 @@ mod relations;
 mod scaling;
 mod unilateral;
 
+pub use eigen::{eigen, Mode, Normalization, MODAL_COORDINATE, MODAL_FORCE};
 pub use lu::{SolveMethod, Verbosity};
 pub use unilateral::ActiveSetMethod;
 

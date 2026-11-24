@@ -1,14 +1,20 @@
 //! Python wrapper for the solver operation in [`crate::ops::solver`].
 //!
-//! Free function solving a linear system into a [`PyNodeField`]. Kept here —
-//! mirroring `src/ops/solver/` — per the `py/ops/` convention (its identity
-//! is the *operation*, not its `NodeField` result).
+//! Free functions solving a linear system into a [`PyNodeField`] and finding
+//! eigenmodes, each mode a `dict`. Kept here — mirroring `src/ops/solver/` —
+//! per the `py/ops/` convention (their identity is the *operation*, not their
+//! result).
 
-use crate::ops::solver::{ActiveSetMethod, RelationMethod, SolveMethod, SolveOptions, Verbosity};
+use crate::ops::solver::{
+    ActiveSetMethod, Mode, Normalization, RelationMethod, SolveMethod, SolveOptions, Verbosity,
+};
 use crate::py::matrix::PyMatrix;
+use crate::py::mesh::PyMesh;
+use crate::py::node::PyNode;
 use crate::py::node_field::PyNodeField;
 use crate::py::signals::PySignals;
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 use pyrucast_macros::py_op;
 
 /// Solve the linear system `A·x = b` for `x` (sparse direct, faer).
@@ -124,4 +130,95 @@ pub fn solve(
         &PySignals(py),
     )?;
     Ok(PyNodeField { inner: solution })
+}
+
+/// The `count` eigenvalues of `a x = λ b x` nearest `shift`, and their modes.
+///
+/// Vibrations take the stiffness and the mass (`λ = ω²`), buckling the
+/// stiffness and the geometric stiffness. The relations `a` carries (the
+/// multipliers of `dirichlet`, `mpc`…) hold in every mode.
+///
+/// The modes are those of the shift-inverted operator `(a − shift·b)⁻¹ b`:
+/// `a − shift·b` is factorized once, as `solve` does, and a Krylov-Schur
+/// iteration runs over the unknowns `b` carries. Each mode is then completed
+/// (unknowns without mass, multipliers) and checked by its residual; modes of a
+/// common eigenvalue come out `b`-orthogonal.
+///
+/// # Parameters
+///
+/// - `a`, `b`: assembled symmetric matrices; `a` or `b` is positive definite on
+///   the unknowns the relations leave free (the stiffness, or the mass).
+/// - `count`: how many modes; at most the number of unknowns `b` carries.
+/// - `shift`: the value near which to look, in the units of `λ` (`ω²` for
+///   vibrations). A free structure has `λ = 0`: give it a negative shift.
+/// - `normalization`: `"mass"` scales each shape to `φᵀbφ = ±1`, so that, projected
+///   on the modes, `b` becomes the identity and `a` the diagonal of the
+///   eigenvalues; `"max"` scales its value of largest magnitude to `1`. Either way,
+///   that value is positive.
+///
+/// # Returns
+///
+/// The modes, in increasing order of `λ`. A mode is a `dict`:
+///
+/// - `"node"`: its own `Node`, at the origin of the matrices' `Coords`: it carries
+///   the mode's coordinate `alpha` and its force `f_alpha` in what is projected
+///   on the modes.
+/// - `"support"`: the POI1 `Mesh` shared by the modes of the list, whose nodes are
+///   exactly theirs. A slice or a union of lists needs its own:
+///   `s = pyrucast.mesh.poi1_from_nodes([m["node"] for m in part])`, then
+///   `[{**m, "support": s} for m in part]`.
+/// - `"eigenvalue"`: `λ`.
+/// - `"shape"`: the shape, a `NodeField` on the column supports of `a` (those
+///   `solve` returns), without the multipliers.
+/// - `"pairs"`: the `(primal, dual)` names of the shape, as `xty` takes them.
+/// - `"generalized_mass"`: `φᵀbφ` of the scaled shape.
+///
+/// # Raises
+///
+/// `RuntimeError` if `a` or `b` has no assembled values or is not symmetric, if
+/// `a` carries a unilateral relation, if `a − shift·b` is singular, or if a mode
+/// does not converge. `ValueError` for an unknown `normalization`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (a, b, count, shift = 0.0, normalization = Normalization::Mass))]
+pub fn eigen<'py>(
+    py: Python<'py>,
+    a: PyRef<PyMatrix>,
+    b: PyRef<PyMatrix>,
+    count: usize,
+    shift: f64,
+    normalization: Normalization,
+) -> PyResult<Vec<Bound<'py, PyDict>>> {
+    let (a, b) = (&a.inner, &b.inner);
+    let modes = py.detach(|| crate::ops::solver::eigen(a, b, count, shift, normalization))?;
+    modes
+        .into_iter()
+        .map(|mode| mode_to_dict(py, mode))
+        .collect()
+}
+
+/// A mode as Python sees it: a `dict` holding the mode's handles.
+pub(crate) fn mode_to_dict(py: Python<'_>, mode: Mode) -> PyResult<Bound<'_, PyDict>> {
+    let dict = PyDict::new(py);
+    dict.set_item("node", Py::new(py, PyNode::from_node(mode.node))?)?;
+    dict.set_item(
+        "support",
+        Py::new(
+            py,
+            PyMesh {
+                inner: mode.support,
+            },
+        )?,
+    )?;
+    dict.set_item("eigenvalue", mode.eigenvalue)?;
+    if let Some(value) = mode.eigenvalue_imag {
+        dict.set_item("eigenvalue_imag", value)?;
+    }
+    dict.set_item("shape", Py::new(py, PyNodeField { inner: mode.shape })?)?;
+    if let Some(shape) = mode.shape_imag {
+        dict.set_item("shape_imag", Py::new(py, PyNodeField { inner: shape })?)?;
+    }
+    dict.set_item("pairs", mode.pairs)?;
+    dict.set_item("generalized_mass", mode.generalized_mass)?;
+    Ok(dict)
 }

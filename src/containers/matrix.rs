@@ -4699,7 +4699,7 @@ impl Matrix {
 
     /// `y = A · x` on the assembled values, `x` and `y` in the assembled column
     /// and row orders — the arithmetic behind [`mul_field`](Self::mul_field).
-    fn mul_values(&self, x: &[f64]) -> Result<Vec<f64>> {
+    pub(crate) fn mul_values(&self, x: &[f64]) -> Result<Vec<f64>> {
         let a = self.assembled_or_err()?;
         // Row-wise SpMV straight on the CSR arrays: each row's dot product is
         // written once, so the result is independent of the thread count.

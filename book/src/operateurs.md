@@ -185,6 +185,10 @@ matrix.stiffness matrix.mass matrix.geometric matrix.tangent matrix.lump}}
 
 {{#pysummary solver.solve}}
 
+### Modes propres
+
+{{#pysummary solver.eigen}}
+
 ## Échanges avec l'extérieur
 
 ### Lire un maillage
