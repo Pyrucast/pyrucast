@@ -4,7 +4,6 @@ castem_element = "POUT"
 castem_version = "97' customer version"
 source = "Analytical solution : Timoshenko."
 dgibi = "dyna6.dgibi"
-gap = ["eigenvalue solver"]
 tolerance = 0.01
 tolerance_note = "criterion of the `.dgibi` file, each frequency within 1 % for the four eigenvalue methods."
 
@@ -22,7 +21,19 @@ Cantilever beam of length L = 2 m, section A = 0.01 m², POUT elements.
 - Reference: f₁ = 17.71 Hz, f₂ = 110.98 Hz (Timoshenko).
 """
 
-notes = "The values compared here are those of the first method (intervals)."
+
+notes = """
+pyrucast meshes the `.dgibi` file's line — 16 cells on the first 1.566 m and 4
+on the last 0.434 m, through the node at 0.783·L where the second mode has its
+node — in Bernoulli cells (`bernoulli`) with their consistent mass, rotary
+inertia included, the root clamped on its six unknowns. `solver.eigen` gives
+the two lowest modes, those of the weak bending plane: 17.70358 Hz and
+110.70686 Hz, Cast3M 2026's values to nine digits. Both codes sit below the
+analytical values by the same −0.036 % and −0.246 %.
+
+The values compared here are those of the `.dgibi` file's first method
+(intervals).
+"""
 
 [[quantity]]
 key = "f1"

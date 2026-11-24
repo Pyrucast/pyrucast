@@ -4,7 +4,6 @@ castem_element = "QUA8"
 castem_version = "97' customer version"
 source = "Test NAFEMS number fv42."
 dgibi = "vibr2.dgibi"
-gap = ["eigenvalue solver"]
 tolerance = 0.02
 tolerance_note = "criterion of the `.dgibi` file, each frequency within 2 %."
 
@@ -19,6 +18,37 @@ goal = "Find the first five eigenfrequencies of the radial modes."
 model = """
 Hollow sphere of inner radius 1.8 m and outer radius 6 m, QUA8 elements.
 """
+
+notes = """
+pyrucast meshes the `.dgibi` file's sector: the side P2-P3 in 5 SEG3 cells,
+turned by 10° about the origin in one layer of QUA8, its points those of the
+file (P2 = (1.8, −1.8·sin 5°)). The file's linear relations are written with
+`mpc`: no displacement normal to either side, the two sides alike at a given
+radius, the middle of the sector alike with its side. `solver.eigen` gives the
+five lowest modes, the radial ones, all within the tolerance.
+
+pyrucast is 0.002 point behind Cast3M on f₄ and 0.008 on f₅. The gap, mode by
+mode (+0.00001 %, +0.00002 %, +0.00047 %, +0.00248 %, +0.00710 % from Cast3M),
+is measured to come from the integration of the mass:
+
+- not the eigenvalue solver: Cast3M's four methods (near values, simultaneous
+  iterations, intervals, Lanczos) agree with each other to 1e-12;
+- not the mesh: the 28 nodes are Cast3M's to 1.8e-15;
+- not the relations: the gap is the same, mode by mode, with only the sides
+  held;
+- the mass: pyrucast integrates it on the 9 points of the space, as the
+  stiffness; on these cells, with curved sides and the axisymmetric factor r,
+  9 points are not exact (1.4e-4 on the matrix). Integrated on 16 points, as
+  Cast3M does for the mass of an axisymmetric QUA8, it gives Cast3M's five
+  frequencies to 1e-5 %. The rule of the stiffness changes nothing at that
+  precision.
+
+The way to an integration rule of its own for the mass is issue #28.
+"""
+
+improvements = [
+    "an integration rule of its own for the mass, richer in axisymmetry (issue #28)",
+]
 
 [[quantity]]
 key = "f1"

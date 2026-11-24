@@ -4,7 +4,6 @@ castem_element = ""
 castem_version = "97' customer version"
 source = "Analytical solution."
 dgibi = "vibr10.dgibi"
-gap = ["harmonic response with rotating unbalance"]
 tolerance = 0.001
 tolerance_note = "criterion of the `.dgibi` file, both semi-axes within 0.1 %."
 
@@ -25,6 +24,20 @@ model = """
 | Ω | 19.0985 rad/s |
 
 - Reference: A = m·d·Ω² / (K1 − Ω²·M1), on y and −A on z.
+"""
+
+notes = """
+pyrucast writes the modal basis by hand, as the `.dgibi` file does: two modes,
+the shapes u_y = 1 and u_z = 1 of eigenvalue K1/M1 and generalized mass M1,
+each on a node of its own, sharing their support. `matrix.project_on_basis`
+projects the mass and the stiffness, `node_field.project_on_basis` the
+unbalance force, `solver.solve` solves K* − Ω²·M* against it, and
+`node_field.recombine` brings the coordinates back to the point.
+
+Without damping, the parts of the rotating force in phase with the sine and
+with the cosine do not couple: the first gives the semi-axes compared here, on
+its own, where the `.dgibi` file solves both at once on the complex impedance
+(`IMPE`). Both semi-axes are the reference to round-off, as Cast3M's.
 """
 
 [[quantity]]

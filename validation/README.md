@@ -32,7 +32,7 @@ python validation/make_document.py    # this document
 
 ## Summary
 
-86 cases: 21 computed by pyrucast, 65 not computable yet, 0 pending.
+86 cases: 24 computed by pyrucast, 62 not computable yet, 0 pending.
 
 | Chapter | Case | Status | Largest gap to the reference | Largest gap pyrucast / Cast3M 2026 |
 |---|---|---|---|---|
@@ -98,12 +98,12 @@ python validation/make_document.py    # this document
 | Joint | [joi41](#joi41) | run, within tolerance | 0.00125 % | 1.3e-11 |
 | Joint | [joi44](#joi44) | gap | missing: joint elements with thermal expansion | |
 | Joint | [joi45](#joi45) | gap | missing: orthotropic joint with material axes | |
-| Dynamics | [dyna6](#dyna6) | gap | missing: eigenvalue solver | |
+| Dynamics | [dyna6](#dyna6) | run, within tolerance | 0.246 % | 5.2e-12 |
 | Dynamics | [dyna7](#dyna7) | gap | missing: Fourier harmonic analysis; acoustic fluid elements with free surface; eigenvalue solver | |
 | Dynamics | [fsi4](#fsi4) | gap | missing: fluid-structure interaction; Fourier harmonic analysis; eigenvalue solver; axisymmetric shell element (COQ2) | |
 | Dynamics | [dyna5](#dyna5) | gap | missing: eigenvalue solver; modal sub-structuring | |
 | Dynamics | [vibr6](#vibr6) | gap | missing: complex eigenmodes under axial flow; pipe element (TUYA) | |
-| Dynamics | [vibr10](#vibr10) | gap | missing: harmonic response with rotating unbalance | |
+| Dynamics | [vibr10](#vibr10) | run, within tolerance | 1.4e-13 % | 1.3e-15 |
 | Dynamics | [dyna12](#dyna12) | run, within tolerance | 3.78 % | 3.1e-13 |
 | Dynamics | [dyna11](#dyna11) | run, within tolerance | 3.46 % | 2.5e-13 |
 | Dynamics | [dy_devo5](#dy_devo5) | gap | missing: eigenvalue solver; modal-basis transient dynamics with linkages (DYNE) | |
@@ -112,7 +112,7 @@ python validation/make_document.py    # this document
 | Dynamics | [dy_devo4](#dy_devo4) | gap | missing: modal-basis transient dynamics with linkages (DYNE) | |
 | Dynamics | [dy_devo8](#dy_devo8) | gap | missing: modal-basis transient dynamics with linkages (DYNE) | |
 | Dynamics | [dyne01](#dyne01) | gap | missing: modal-basis transient dynamics with linkages (DYNE) | |
-| Dynamics | [vibr2](#vibr2) | gap | missing: eigenvalue solver | |
+| Dynamics | [vibr2](#vibr2) | run, within tolerance | 1.65 % | 7.1e-05 |
 | Non linear dynamics | [dyna_nl1](#dyna_nl1) | gap | missing: constant added mass in `step_by_step` (Cast3M `MASSE_CONSTANTE`) | |
 | Non linear dynamics | [dyna_nl3](#dyna_nl3) | gap | missing: large-displacement beam and shell dynamics | |
 | Thermal analysis | [ther2](#ther2) | run, within tolerance | 0.267 % | 1.1e-03 |
@@ -130,8 +130,8 @@ Features pyrucast lacks for the cases it cannot compute yet, by number of cases 
 | Point | Cases | Count |
 |---|---|---|
 | stress intensity factors (G-theta) | [rupt1](#rupt1), [rupt2](#rupt2), [rupt3](#rupt3), [rupt4](#rupt4), [rupt5](#rupt5), [rupt6](#rupt6), [rupt7](#rupt7), [rupt8](#rupt8), [rupt9](#rupt9) | 9 |
-| eigenvalue solver | [flam1](#flam1), [four1](#four1), [dyna6](#dyna6), [dyna7](#dyna7), [fsi4](#fsi4), [dyna5](#dyna5), [dy_devo5](#dy_devo5), [vibr2](#vibr2) | 8 |
 | axisymmetric shell element (COQ2) | [elas1](#elas1), [elas7](#elas7), [vsur1](#vsur1), [flam1](#flam1), [four1](#four1), [plas11](#plas11), [fsi4](#fsi4) | 7 |
+| eigenvalue solver | [flam1](#flam1), [four1](#four1), [dyna7](#dyna7), [fsi4](#fsi4), [dyna5](#dyna5), [dy_devo5](#dy_devo5) | 6 |
 | modal-basis transient dynamics with linkages (DYNE) | [dy_devo5](#dy_devo5), [dy_devo6](#dy_devo6), [dy_devo3](#dy_devo3), [dy_devo4](#dy_devo4), [dy_devo8](#dy_devo8), [dyne01](#dyne01) | 6 |
 | elastoplastic damage law (ENDOMMAGEABLE) | [endocp1](#endocp1), [endoaxi1](#endoaxi1), [endoaxi2](#endoaxi2), [endoaxi3](#endoaxi3) | 4 |
 | pipe element (TUYA) | [stru4](#stru4), [elas20](#elas20), [plas12](#plas12), [vibr6](#vibr6) | 4 |
@@ -154,7 +154,6 @@ Features pyrucast lacks for the cases it cannot compute yet, by number of cases 
 | constant added mass in `step_by_step` (Cast3M `MASSE_CONSTANTE`) | [dyna_nl1](#dyna_nl1) | 1 |
 | fluid-structure interaction | [fsi4](#fsi4) | 1 |
 | generalized plane strain | [plas11](#plas11) | 1 |
-| harmonic response with rotating unbalance | [vibr10](#vibr10) | 1 |
 | incompatible-mode element (ICQ4) | [testICQ4](#testicq4) | 1 |
 | joint element on its own, with normal and shear stiffnesses in its own frame (JOI2, JOI4) | [joi22](#joi22) | 1 |
 | joint elements with thermal expansion | [joi44](#joi44) | 1 |
@@ -183,6 +182,7 @@ What writing the computed cases showed: an operator or an option pyrucast lacks 
 | Kirchhoff quadrangle shell (DKQ): 4 % stiffer than Cast3M's COQ4 on elas4, to look into (GitHub issue #26) | [elas4](#elas4) | 1 |
 | `mpc`: one coefficient per term for every relation; relations whose coefficients differ need one `mpc` each | [plas1](#plas1) | 1 |
 | an ellipse, or the projection of a line onto a plane (Cast3M `PROJ`) | [elas8](#elas8) | 1 |
+| an integration rule of its own for the mass, richer in axisymmetry (issue #28) | [vibr2](#vibr2) | 1 |
 | local sub-stepping of rate-dependent laws at the Gauss points (stiff Norton exponents) | [chaboche2](#chaboche2) | 1 |
 | nodal stresses at a node of a single QUA8 cell: Cast3M's extrapolation (`CHAN NOEUD`) and pyrucast's least-squares fit (`to_nodes`) differ, to look into | [elas8](#elas8) | 1 |
 | σ_xx at the corner A, a node of a single cell: the `.dgibi` file's `CHAN 'CHPO'` on the Gauss stresses gives 547.2 MPa, which neither pyrucast's fit (`to_nodes`, 996.7) nor the cell mean (557.7) reproduces, to look into | [plas7](#plas7) | 1 |
@@ -5018,7 +5018,7 @@ Acceptance: criterion of the `.dgibi` file, both relative gaps ≤ 1e-3.
 | Test name | dyna6 |
 | Calculation type | MECHANICS DYNAMICS 3D |
 | Finite element type (Cast3M) | POUT |
-| pyrucast model | not available — missing: eigenvalue solver |
+| pyrucast model |  |
 | Reference | Analytical solution : Timoshenko. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 `.dgibi` file | `dgibi/dyna6.dgibi` |
@@ -5036,16 +5036,96 @@ Cantilever beam of length L = 2 m, section A = 0.01 m², POUT elements.
 
 - Reference: f₁ = 17.71 Hz, f₂ = 110.98 Hz (Timoshenko).
 
-**Notes.** The values compared here are those of the first method (intervals).
+**Notes.** pyrucast meshes the `.dgibi` file's line — 16 cells on the first 1.566 m and 4
+on the last 0.434 m, through the node at 0.783·L where the second mode has its
+node — in Bernoulli cells (`bernoulli`) with their consistent mass, rotary
+inertia included, the root clamped on its six unknowns. `solver.eigen` gives
+the two lowest modes, those of the weak bending plane: 17.70358 Hz and
+110.70686 Hz, Cast3M 2026's values to nine digits. Both codes sit below the
+analytical values by the same −0.036 % and −0.246 %.
+
+The values compared here are those of the `.dgibi` file's first method
+(intervals).
 
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| first frequency (Hz) | 17.71 | — | 17.7036 (-0.0363 %) | not available |  |
-| second frequency (Hz) | 110.98 | — | 110.707 (-0.246 %) | not available |  |
+| first frequency (Hz) | 17.71 | — | 17.7036 (-0.0363 %) | 17.7036 | -0.0363 % |
+| second frequency (Hz) | 110.98 | — | 110.707 (-0.246 %) | 110.707 | -0.246 % |
 
 Acceptance: criterion of the `.dgibi` file, each frequency within 1 % for the four eigenvalue methods.
+
+pyrucast: the 2 checked quantities are within tolerance.
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""dyna6 — bending modes of a cantilever beam (Timoshenko's analytical values).
+
+Problem: a steel beam of length 2 m, section 0.01 m², clamped at one end. Its
+weak plane (I = 6.25e-6 m⁴) gives the two lowest modes, f₁ = 17.71 Hz and
+f₂ = 110.98 Hz; the strong plane (I = 1e-3 m⁴), the extension and the torsion
+come far above.
+
+Mesh: the `.dgibi` file's line, through the node at 0.783·L where the second
+mode has its node — 16 cells on the first 1.566 m and 4 on the last 0.434 m,
+as its density of 0.1 places them. Bernoulli cells with their consistent mass,
+rotary inertia included; the root clamped on its six unknowns.
+
+Running::
+
+    python validation/12_dynamics/dyna6/run.py
+"""
+
+import math
+
+import pyrucast as pc
+
+E, NU, RHO = 2e11, 0.3, 7800.0
+LENGTH = 2.0
+SECTION, I_Y, I_Z, TORSION = 0.01, 6.25e-6, 1e-3, 1e-2
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    coords = pc.Coords(3)
+    q1 = coords.add_node([0.0, 0.0, 0.0])
+    q2 = coords.add_node([0.783 * LENGTH, 0.0, 0.0])
+    q3 = coords.add_node([LENGTH, 0.0, 0.0])
+    line = pc.mesh.line(q1, q2, 16) | pc.mesh.line(q2, q3, 4)
+
+    beam = pc.model.bernoulli(pc.FiniteElementSpace(line, interpolation="HERMITE3"))
+    clamp = pc.mesh.poi1_from_nodes([q1])
+    model = beam
+    for variable in beam.primal_vars():
+        model = model | pc.model.dirichlet(clamp, beam, variable)
+    materials = pc.element_field.material_field(
+        model,
+        [
+            ("E", E),
+            ("A", SECTION),
+            ("I_y", I_Y),
+            ("I_z", I_Z),
+            ("J", TORSION),
+            ("G", E / (2.0 * (1.0 + NU))),
+            ("rho", RHO),
+        ],
+    )
+    stiffness = pc.matrix.stiffness(model, materials)
+    mass = pc.matrix.mass(beam, materials)
+
+    modes = pc.solver.eigen(stiffness, mass, 2)
+    f1, f2 = (math.sqrt(m["eigenvalue"]) / (2.0 * math.pi) for m in modes)
+    return {"f1": f1, "f2": f2}
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ### dyna7
 
@@ -5218,7 +5298,7 @@ Acceptance: criterion of the `.dgibi` file, critical velocity within 5 % of 25 m
 | Test name | vibr10 |
 | Calculation type | MECHANICS DYNAMICS, MASS UNBALANCE RESPONSE |
 | Finite element type (Cast3M) |  |
-| pyrucast model | not available — missing: harmonic response with rotating unbalance |
+| pyrucast model |  |
 | Reference | Analytical solution. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 `.dgibi` file | `dgibi/vibr10.dgibi` |
@@ -5241,16 +5321,113 @@ ellipse.
 
 - Reference: A = m·d·Ω² / (K1 − Ω²·M1), on y and −A on z.
 
+**Notes.** pyrucast writes the modal basis by hand, as the `.dgibi` file does: two modes,
+the shapes u_y = 1 and u_z = 1 of eigenvalue K1/M1 and generalized mass M1,
+each on a node of its own, sharing their support. `matrix.project_on_basis`
+projects the mass and the stiffness, `node_field.project_on_basis` the
+unbalance force, `solver.solve` solves K* − Ω²·M* against it, and
+`node_field.recombine` brings the coordinates back to the point.
+
+Without damping, the parts of the rotating force in phase with the sine and
+with the cosine do not couple: the first gives the semi-axes compared here, on
+its own, where the `.dgibi` file solves both at once on the complex impedance
+(`IMPE`). Both semi-axes are the reference to round-off, as Cast3M's.
+
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| response along y (m) ¹ | 9.46402e-08 | — | 9.46402e-08 (-1.4e-14 %) | not available |  |
-| response along z (m) ¹ | -9.46402e-08 | — | -9.46402e-08 (+1.4e-14 %) | not available |  |
+| response along y (m) ¹ | 9.46402e-08 | — | 9.46402e-08 (-1.4e-14 %) | 9.46402e-08 | -1.4e-13 % |
+| response along z (m) ¹ | -9.46402e-08 | — | -9.46402e-08 (+1.4e-14 %) | -9.46402e-08 | +1.4e-13 % |
 
 ¹ Reference computed by the Cast3M 2026 `.dgibi` file from its analytical formula.
 
 Acceptance: criterion of the `.dgibi` file, both semi-axes within 0.1 %.
+
+pyrucast: the 2 checked quantities are within tolerance.
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""vibr10 — response of a point mass to a rotating unbalance, on a modal basis.
+
+Problem: a point of mass M1 = 40 kg held by a stiffness K1 = 4e5 N/m along y
+and along z is excited by an unbalance m·d = 1e-4 kg·m turning at
+Ω = 19.0985 rad/s. The point describes an ellipse — a circle here, the system
+being isotropic — of semi-axis A = m·d·Ω² / (K1 − Ω²·M1) on y and −A on z.
+
+Modal basis: two modes written by hand, as the `.dgibi` file does: the shapes
+u_y = 1 and u_z = 1, of eigenvalue K1/M1 and generalized mass M1, each on a
+node of its own. The mass, the stiffness and the unbalance force are projected
+on them, the projected system is solved at Ω, and the response recombined.
+Without damping, the two parts of the rotating force do not couple: the part in
+phase with the sine gives the response the quantities read, the other one its
+imaginary part.
+
+Running::
+
+    python validation/12_dynamics/vibr10/run.py
+"""
+
+import pyrucast as pc
+
+M1, K1 = 40.0, 4e5
+UNBALANCE = 1e-4  # m·d, kg·m
+OMEGA = 19.0985  # rad/s
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    coords = pc.Coords(3)
+    p1 = coords.add_node([1.0, 0.0, 0.0])
+    point = pc.mesh.poi1_from_nodes([p1])
+
+    def diagonal(value: float) -> pc.Matrix:
+        matrix = pc.Matrix.block(
+            point, point, ["f_y", "f_z"], ["u_y", "u_z"], symmetry="full"
+        )
+        for dual, primal in (("f_y", "u_y"), ("f_z", "u_z")):
+            matrix[0].add_entry(p1, dual, p1, primal, value)
+        matrix.assemble()
+        return matrix
+
+    mass, stiffness = diagonal(M1), diagonal(K1)
+
+    # The two modes, each on a node of its own, sharing their support.
+    nodes = [coords.add_node([0.0, 0.0, 0.0]) for _ in range(2)]
+    support = pc.mesh.poi1_from_nodes(nodes)
+    shapes = [
+        pc.NodeField(point, [("u_y", 1.0), ("u_z", 0.0)]),
+        pc.NodeField(point, [("u_y", 0.0), ("u_z", 1.0)]),
+    ]
+    modes = [
+        {
+            "node": node,
+            "support": support,
+            "eigenvalue": K1 / M1,
+            "shape": shape,
+            "pairs": [("u_y", "f_y"), ("u_z", "f_z")],
+            "generalized_mass": M1,
+        }
+        for node, shape in zip(nodes, shapes)
+    ]
+
+    force = UNBALANCE * OMEGA**2
+    unbalance = pc.NodeField(point, [("f_y", force), ("f_z", -force)])
+    k_star = pc.matrix.project_on_basis(stiffness, modes)
+    m_star = pc.matrix.project_on_basis(mass, modes)
+    f_star = pc.node_field.project_on_basis(unbalance, modes)
+    q = pc.solver.solve(k_star - m_star * OMEGA**2, f_star)
+    u = pc.node_field.recombine(q, modes)
+    return {"y_axis": u.value(p1, "u_y"), "z_axis": u.value(p1, "u_z")}
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ### dyna12
 
@@ -5771,7 +5948,7 @@ No compared quantity.
 | Test name | vibr2 |
 | Calculation type | MECHANICS DYNAMICS 2D AXISYMMETRICAL |
 | Finite element type (Cast3M) | QUA8 |
-| pyrucast model | not available — missing: eigenvalue solver |
+| pyrucast model |  |
 | Reference | Test NAFEMS number fv42. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 `.dgibi` file | `dgibi/vibr2.dgibi` |
@@ -5787,17 +5964,146 @@ radial displacement.
 
 Hollow sphere of inner radius 1.8 m and outer radius 6 m, QUA8 elements.
 
+**Notes.** pyrucast meshes the `.dgibi` file's sector: the side P2-P3 in 5 SEG3 cells,
+turned by 10° about the origin in one layer of QUA8, its points those of the
+file (P2 = (1.8, −1.8·sin 5°)). The file's linear relations are written with
+`mpc`: no displacement normal to either side, the two sides alike at a given
+radius, the middle of the sector alike with its side. `solver.eigen` gives the
+five lowest modes, the radial ones, all within the tolerance.
+
+pyrucast is 0.002 point behind Cast3M on f₄ and 0.008 on f₅. The gap, mode by
+mode (+0.00001 %, +0.00002 %, +0.00047 %, +0.00248 %, +0.00710 % from Cast3M),
+is measured to come from the integration of the mass:
+
+- not the eigenvalue solver: Cast3M's four methods (near values, simultaneous
+  iterations, intervals, Lanczos) agree with each other to 1e-12;
+- not the mesh: the 28 nodes are Cast3M's to 1.8e-15;
+- not the relations: the gap is the same, mode by mode, with only the sides
+  held;
+- the mass: pyrucast integrates it on the 9 points of the space, as the
+  stiffness; on these cells, with curved sides and the axisymmetric factor r,
+  9 points are not exact (1.4e-4 on the matrix). Integrated on 16 points, as
+  Cast3M does for the mass of an axisymmetric QUA8, it gives Cast3M's five
+  frequencies to 1e-5 %. The rule of the stiffness changes nothing at that
+  precision.
+
+The way to an integration rule of its own for the mass is issue #28.
+
+**Improvement points.**
+
+- an integration rule of its own for the mass, richer in axisymmetry (issue #28)
+
 #### Results
 
 | Quantity | Reference | Cast3M 2011 | Cast3M 2026 | pyrucast | pyrucast / reference |
 |---|---|---|---|---|---|
-| frequency 1 (Hz) | 369.91 | — | 368.617 (-0.35 %) | not available |  |
-| frequency 2 (Hz) | 838.03 | — | 834.919 (-0.371 %) | not available |  |
-| frequency 3 (Hz) | 1451.2 | — | 1447.54 (-0.252 %) | not available |  |
-| frequency 4 (Hz) | 2117 | — | 2123.64 (+0.314 %) | not available |  |
-| frequency 5 (Hz) | 2795.8 | — | 2841.78 (+1.64 %) | not available |  |
+| frequency 1 (Hz) | 369.91 | — | 368.617 (-0.35 %) | 368.617 | -0.35 % |
+| frequency 2 (Hz) | 838.03 | — | 834.919 (-0.371 %) | 834.919 | -0.371 % |
+| frequency 3 (Hz) | 1451.2 | — | 1447.54 (-0.252 %) | 1447.55 | -0.252 % |
+| frequency 4 (Hz) | 2117 | — | 2123.64 (+0.314 %) | 2123.69 | +0.316 % |
+| frequency 5 (Hz) | 2795.8 | — | 2841.78 (+1.64 %) | 2841.98 | +1.65 % |
 
 Acceptance: criterion of the `.dgibi` file, each frequency within 2 %.
+
+pyrucast: the 5 checked quantities are within tolerance.
+
+#### pyrucast listing
+
+<details><summary><code>run.py</code></summary>
+
+```python
+"""vibr2 — radial vibration of a thick hollow sphere (NAFEMS FV42), axisymmetric.
+
+Problem: a steel sphere of inner radius 1.8 m and outer radius 6 m vibrates
+radially. A sector of 10° is meshed in axisymmetry, and linear relations keep
+the motion radial: no displacement normal to the two sides of the sector, the
+same radial displacement on both sides at a given radius, and on the middle of
+the sector. The first five eigenfrequencies are the radial ones.
+
+Mesh: the `.dgibi` file's — the side P2-P3 in 5 SEG3 cells, turned by 10° about
+the origin in one layer of QUA8. Its points are those of the file:
+P2 = (1.8, −1.8·sin 5°), not (1.8·cos 5°, −1.8·sin 5°), so the sides sit at
+∓4.98° and the middle at 0.019°; the relations keep the file's directions.
+
+Running::
+
+    python validation/12_dynamics/vibr2/run.py
+"""
+
+import math
+
+import pyrucast as pc
+
+E, NU, RHO = 2e11, 0.3, 8e3
+R_IN, R_OUT = 1.8, 6.0
+ALPHA = math.radians(5.0)
+N_CELLS = 5
+
+
+def main(out: str | None = None) -> dict[str, float]:
+    ca, sa = math.cos(ALPHA), math.sin(ALPHA)
+    coords = pc.Coords.axisymmetric()
+    p2 = coords.add_node([R_IN, -R_IN * sa])
+    p3 = coords.add_node([R_OUT, -R_OUT * sa])
+    sector = pc.mesh.revolve(
+        pc.mesh.line(p2, p3, N_CELLS, "SEG3"), 2.0 * ALPHA, 1, [0.0, 0.0]
+    )
+    elasticity = pc.model.elasticity(pc.FiniteElementSpace(sector), "axisymmetric")
+    u_r, u_z = elasticity.primal_vars()
+
+    # The nodes of each ray, from the inside out: the two sides, and the
+    # middle of the sector (the mid-nodes of the arcs).
+    side = math.atan2(-sa, 1.0)
+    nodes = {node.id: node for zone in sector for cell in zone for node in cell}
+
+    def ray(angle: float) -> list:
+        on_ray = [
+            n
+            for n in nodes.values()
+            if abs(math.atan2(*n.position()[::-1]) - angle) < 1e-9
+        ]
+        return sorted(on_ray, key=lambda n: math.hypot(*n.position()))
+
+    d23, d41, middle = ray(side), ray(side + 2.0 * ALPHA), ray(side + ALPHA)
+    on = pc.mesh.poi1_from_nodes
+
+    # BLOQ DEPL DIRECTION on each side: no displacement along its normal.
+    model = elasticity
+    model = model | pc.model.mpc([(on(d23), u_r, -sa), (on(d23), u_z, -ca)], elasticity)
+    model = model | pc.model.mpc([(on(d41), u_r, -sa), (on(d41), u_z, ca)], elasticity)
+    # The two sides, node for node at the same radius.
+    model = model | pc.model.mpc(
+        [
+            (on(d23), u_r, ca),
+            (on(d23), u_z, sa),
+            (on(d41), u_r, -ca),
+            (on(d41), u_z, sa),
+        ],
+        elasticity,
+    )
+    # The corners of a side and the middle of the sector at the same radius.
+    corners = on(d41[0::2])
+    model = model | pc.model.mpc(
+        [(corners, u_r, ca), (corners, u_z, sa), (on(middle), u_r, -1.0)], elasticity
+    )
+
+    materials = pc.element_field.material_field(
+        model, [("E", E), ("nu", NU), ("rho", RHO)]
+    )
+    stiffness = pc.matrix.stiffness(model, materials)
+    mass = pc.matrix.mass(elasticity, materials)
+    modes = pc.solver.eigen(stiffness, mass, 5)
+    return {
+        f"f{i + 1}": math.sqrt(m["eigenvalue"]) / (2.0 * math.pi)
+        for i, m in enumerate(modes)
+    }
+
+
+if __name__ == "__main__":
+    print(main("."))
+```
+
+</details>
 
 ## Non linear dynamics
 
