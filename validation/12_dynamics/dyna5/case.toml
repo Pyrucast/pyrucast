@@ -4,7 +4,7 @@ castem_element = "POUT"
 castem_version = "97' customer version"
 source = "Analytical solution."
 dgibi = "dyna5.dgibi"
-gap = ["eigenvalue solver", "modal sub-structuring"]
+gap = ["modal sub-structuring"]
 tolerance = 0.05
 tolerance_note = "criterion of the `.dgibi` file, each of the three frequencies within 5 %."
 

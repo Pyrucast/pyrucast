@@ -4,7 +4,7 @@ castem_element = "COQ2"
 castem_version = "97' customer version"
 source = "Analytical solution."
 dgibi = "flam1.dgibi"
-gap = ["eigenvalue solver", "axisymmetric shell element (COQ2)"]
+gap = ["axisymmetric shell element (COQ2)"]
 tolerance = 1e-5
 tolerance_note = "criterion of the `.dgibi` file, |λ − 41.123| / 41.123 < 1e-3 %."
 

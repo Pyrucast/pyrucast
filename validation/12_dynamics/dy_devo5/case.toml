@@ -4,7 +4,7 @@ castem_element = "POUT"
 castem_version = "97' customer version"
 source = "Walter C. Hury and Moshe F. Rubinstein : Dynamics of structures (Englewood Cliffs : Prentice-Hall, Inc., 1964) p.294."
 dgibi = "dy_devo5.dgibi"
-gap = ["eigenvalue solver", "modal-basis transient dynamics with linkages (DYNE)"]
+gap = ["modal-basis transient dynamics with linkages (DYNE)"]
 
 topic = """
 A beam on elastic supports carries a triangular distributed load whose

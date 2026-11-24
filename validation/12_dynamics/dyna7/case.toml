@@ -4,7 +4,7 @@ castem_element = "LQUA4, LSU2"
 castem_version = "97' customer version"
 source = "Analytical solution."
 dgibi = "dyna7.dgibi"
-gap = ["Fourier harmonic analysis", "acoustic fluid elements with free surface", "eigenvalue solver"]
+gap = ["Fourier harmonic analysis", "acoustic fluid elements with free surface"]
 tolerance = 0.01
 tolerance_note = "criterion of the `.dgibi` file, each of its 32 values within 1 %."
 

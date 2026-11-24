@@ -4,7 +4,7 @@ castem_element = "COQ2, LQUA4, RACO"
 castem_version = "97' customer version"
 source = "Report CEA 91/479 : Validation of CASTEM 2000 for fluid structure interaction problems."
 dgibi = "fsi4.dgibi"
-gap = ["fluid-structure interaction", "Fourier harmonic analysis", "eigenvalue solver", "axisymmetric shell element (COQ2)"]
+gap = ["fluid-structure interaction", "Fourier harmonic analysis", "axisymmetric shell element (COQ2)"]
 tolerance = 0.05
 tolerance_note = "criterion of the `.dgibi` file, each frequency within 5 %."
 

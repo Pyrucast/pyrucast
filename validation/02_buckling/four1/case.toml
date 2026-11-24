@@ -4,7 +4,7 @@ castem_element = "COQ2"
 castem_version = "97' customer release"
 source = "Analytic solution."
 dgibi = "four1.dgibi"
-gap = ["Fourier harmonic analysis", "eigenvalue solver", "axisymmetric shell element (COQ2)"]
+gap = ["Fourier harmonic analysis", "axisymmetric shell element (COQ2)"]
 tolerance = 2e-7
 tolerance_note = "criterion of the `.dgibi` file, largest relative gap of the two multipliers < 2e-5 %."
 

@@ -49,8 +49,8 @@ python validation/make_document.py    # this document
 | Elasticity | [elas20](#elas20) | gap | missing: pipe element (TUYA) | |
 | Elasticity | [testICQ4](#testicq4) | gap | missing: incompatible-mode element (ICQ4) | |
 | Elasticity | [vsur1](#vsur1) | gap | missing: axisymmetric shell element (COQ2); surface vector operator (VSUR) | |
-| Buckling | [flam1](#flam1) | gap | missing: eigenvalue solver; axisymmetric shell element (COQ2) | |
-| Buckling | [four1](#four1) | gap | missing: Fourier harmonic analysis; eigenvalue solver; axisymmetric shell element (COQ2) | |
+| Buckling | [flam1](#flam1) | gap | missing: axisymmetric shell element (COQ2) | |
+| Buckling | [four1](#four1) | gap | missing: Fourier harmonic analysis; axisymmetric shell element (COQ2) | |
 | Plasticity | [plas1](#plas1) | run, within tolerance | 1.03 % | 4.7e-10 |
 | Plasticity | [plas2](#plas2) | run, within tolerance | 3.16 % | 9.7e-16 |
 | Plasticity | [plas4](#plas4) | run, within tolerance | 0.402 % | 2.0e-15 |
@@ -99,14 +99,14 @@ python validation/make_document.py    # this document
 | Joint | [joi44](#joi44) | gap | missing: joint elements with thermal expansion | |
 | Joint | [joi45](#joi45) | gap | missing: orthotropic joint with material axes | |
 | Dynamics | [dyna6](#dyna6) | run, within tolerance | 0.246 % | 5.2e-12 |
-| Dynamics | [dyna7](#dyna7) | gap | missing: Fourier harmonic analysis; acoustic fluid elements with free surface; eigenvalue solver | |
-| Dynamics | [fsi4](#fsi4) | gap | missing: fluid-structure interaction; Fourier harmonic analysis; eigenvalue solver; axisymmetric shell element (COQ2) | |
-| Dynamics | [dyna5](#dyna5) | gap | missing: eigenvalue solver; modal sub-structuring | |
+| Dynamics | [dyna7](#dyna7) | gap | missing: Fourier harmonic analysis; acoustic fluid elements with free surface | |
+| Dynamics | [fsi4](#fsi4) | gap | missing: fluid-structure interaction; Fourier harmonic analysis; axisymmetric shell element (COQ2) | |
+| Dynamics | [dyna5](#dyna5) | gap | missing: modal sub-structuring | |
 | Dynamics | [vibr6](#vibr6) | gap | missing: complex eigenmodes under axial flow; pipe element (TUYA) | |
 | Dynamics | [vibr10](#vibr10) | run, within tolerance | 1.4e-13 % | 1.3e-15 |
 | Dynamics | [dyna12](#dyna12) | run, within tolerance | 3.78 % | 3.1e-13 |
 | Dynamics | [dyna11](#dyna11) | run, within tolerance | 3.46 % | 2.5e-13 |
-| Dynamics | [dy_devo5](#dy_devo5) | gap | missing: eigenvalue solver; modal-basis transient dynamics with linkages (DYNE) | |
+| Dynamics | [dy_devo5](#dy_devo5) | gap | missing: modal-basis transient dynamics with linkages (DYNE) | |
 | Dynamics | [dy_devo6](#dy_devo6) | gap | missing: modal-basis transient dynamics with linkages (DYNE) | |
 | Dynamics | [dy_devo3](#dy_devo3) | gap | missing: modal-basis transient dynamics with linkages (DYNE) | |
 | Dynamics | [dy_devo4](#dy_devo4) | gap | missing: modal-basis transient dynamics with linkages (DYNE) | |
@@ -131,7 +131,6 @@ Features pyrucast lacks for the cases it cannot compute yet, by number of cases 
 |---|---|---|
 | stress intensity factors (G-theta) | [rupt1](#rupt1), [rupt2](#rupt2), [rupt3](#rupt3), [rupt4](#rupt4), [rupt5](#rupt5), [rupt6](#rupt6), [rupt7](#rupt7), [rupt8](#rupt8), [rupt9](#rupt9) | 9 |
 | axisymmetric shell element (COQ2) | [elas1](#elas1), [elas7](#elas7), [vsur1](#vsur1), [flam1](#flam1), [four1](#four1), [plas11](#plas11), [fsi4](#fsi4) | 7 |
-| eigenvalue solver | [flam1](#flam1), [four1](#four1), [dyna7](#dyna7), [fsi4](#fsi4), [dyna5](#dyna5), [dy_devo5](#dy_devo5) | 6 |
 | modal-basis transient dynamics with linkages (DYNE) | [dy_devo5](#dy_devo5), [dy_devo6](#dy_devo6), [dy_devo3](#dy_devo3), [dy_devo4](#dy_devo4), [dy_devo8](#dy_devo8), [dyne01](#dyne01) | 6 |
 | elastoplastic damage law (ENDOMMAGEABLE) | [endocp1](#endocp1), [endoaxi1](#endoaxi1), [endoaxi2](#endoaxi2), [endoaxi3](#endoaxi3) | 4 |
 | pipe element (TUYA) | [stru4](#stru4), [elas20](#elas20), [plas12](#plas12), [vibr6](#vibr6) | 4 |
@@ -1657,7 +1656,7 @@ Axisymmetric, meridian plane: the arc of centre (0, 10) from (0, 0) to
 | Test name | flam1 |
 | Calculation type | MECHANICS BUCKLING. 2D PLANE STRESS |
 | Finite element type (Cast3M) | COQ2 |
-| pyrucast model | not available — missing: eigenvalue solver; axisymmetric shell element (COQ2) |
+| pyrucast model | not available — missing: axisymmetric shell element (COQ2) |
 | Reference | Analytical solution. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 `.dgibi` file | `dgibi/flam1.dgibi` |
@@ -1704,7 +1703,7 @@ Acceptance: criterion of the `.dgibi` file, |λ − 41.123| / 41.123 < 1e-3 %.
 | Test name | four1 |
 | Calculation type | MECHANICS BUCKLING. 2D FOURIER |
 | Finite element type (Cast3M) | COQ2 |
-| pyrucast model | not available — missing: Fourier harmonic analysis; eigenvalue solver; axisymmetric shell element (COQ2) |
+| pyrucast model | not available — missing: Fourier harmonic analysis; axisymmetric shell element (COQ2) |
 | Reference | Analytic solution. |
 | Cast3M version of the 2011 document | 97' customer release |
 | Cast3M 2026 `.dgibi` file | `dgibi/four1.dgibi` |
@@ -5136,7 +5135,7 @@ if __name__ == "__main__":
 | Test name | dyna7 |
 | Calculation type | MECHANICS DYNAMICS 2D FOURIER |
 | Finite element type (Cast3M) | LQUA4, LSU2 |
-| pyrucast model | not available — missing: Fourier harmonic analysis; acoustic fluid elements with free surface; eigenvalue solver |
+| pyrucast model | not available — missing: Fourier harmonic analysis; acoustic fluid elements with free surface |
 | Reference | Analytical solution. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 `.dgibi` file | `dgibi/dyna7.dgibi` |
@@ -5176,7 +5175,7 @@ Acceptance: criterion of the `.dgibi` file, each of its 32 values within 1 %.
 | Test name | fsi4 |
 | Calculation type | MECHANICS DYNAMICS 2D FOURIER, FLUID-STRUCTURE INTERACTION |
 | Finite element type (Cast3M) | COQ2, LQUA4, RACO |
-| pyrucast model | not available — missing: fluid-structure interaction; Fourier harmonic analysis; eigenvalue solver; axisymmetric shell element (COQ2) |
+| pyrucast model | not available — missing: fluid-structure interaction; Fourier harmonic analysis; axisymmetric shell element (COQ2) |
 | Reference | Report CEA 91/479 : Validation of CASTEM 2000 for fluid structure interaction problems. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 `.dgibi` file | `dgibi/fsi4.dgibi` |
@@ -5216,7 +5215,7 @@ Acceptance: criterion of the `.dgibi` file, each frequency within 5 %.
 | Test name | dyna5 |
 | Calculation type | MECHANICS DYNAMICS 3D, SUB-STRUCTURATION |
 | Finite element type (Cast3M) | POUT |
-| pyrucast model | not available — missing: eigenvalue solver; modal sub-structuring |
+| pyrucast model | not available — missing: modal sub-structuring |
 | Reference | Analytical solution. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 `.dgibi` file | `dgibi/dyna5.dgibi` |
@@ -5714,7 +5713,7 @@ if __name__ == "__main__":
 | Test name | dy_devo5 |
 | Calculation type | MECHANICS DYNAMICS 3D, TRANSIENT RESPONSE |
 | Finite element type (Cast3M) | POUT |
-| pyrucast model | not available — missing: eigenvalue solver; modal-basis transient dynamics with linkages (DYNE) |
+| pyrucast model | not available — missing: modal-basis transient dynamics with linkages (DYNE) |
 | Reference | Walter C. Hury and Moshe F. Rubinstein : Dynamics of structures (Englewood Cliffs : Prentice-Hall, Inc., 1964) p.294. |
 | Cast3M version of the 2011 document | 97' customer version |
 | Cast3M 2026 `.dgibi` file | `dgibi/dy_devo5.dgibi` |
