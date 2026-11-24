@@ -282,6 +282,8 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::node_field::restrict_like, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::select, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::mask, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::node_field::project_on_basis, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::node_field::recombine, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::mask, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::merge, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::gradient, m)?)?;
@@ -332,6 +334,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::matrix::stiffness, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::matrix::mass, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::matrix::lump, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::matrix::project_on_basis, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::matrix::geometric, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::matrix::tangent, m)?)?;
     m.add_function(wrap_pyfunction!(models::flux::flux_py::flux, m)?)?;

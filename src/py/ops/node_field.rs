@@ -643,3 +643,81 @@ pub fn mask_sub_node_field(
         handle: Handle::new(out),
     })
 }
+
+/// `field`, a field of forces, projected on `modes`: `F*ᵢ = φᵢᵀ F`.
+///
+/// The product is that of `pyrucast.measure.xty`: each component of a shape
+/// multiplies the component of `field` its pair names (`u_x` by `f_x`), zone by
+/// zone on the same support. The components of `field` no pair names (`imposed`…)
+/// do not count.
+///
+/// # Parameters
+///
+/// - `field`: the forces, on the supports of the shapes.
+/// - `modes`: the modes, as `pyrucast.solver.eigen` returns them or written by
+///   hand; they share one support whose nodes are exactly theirs.
+///
+/// # Returns
+///
+/// A `NodeField` on the support of the modes, component `f_alpha` at the node of
+/// each mode — the right-hand side `pyrucast.solver.solve` takes with a matrix
+/// projected on the same modes. An empty list gives an empty field.
+///
+/// # Raises
+///
+/// `ValueError` if a mode lacks a key. `RuntimeError` if the modes do not share
+/// one support whose nodes are exactly theirs — a slice or a union of lists needs
+/// its own: `s = pyrucast.mesh.poi1_from_nodes([m["node"] for m in modes])`, then
+/// `[{**m, "support": s} for m in modes]` — or if a mode is complex, or if
+/// `field` carries none of the modes' duals on the supports of their shapes (a
+/// displacement given for a force, or a field on other supports:
+/// `pyrucast.node_field.restrict_like` brings it onto theirs).
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(name = "project_on_basis_node")]
+pub fn project_on_basis(
+    field: PyRef<PyNodeField>,
+    modes: Vec<Bound<'_, pyo3::types::PyDict>>,
+) -> PyResult<PyNodeField> {
+    let modes = crate::py::ops::solver::modes_from_dicts(&modes)?;
+    Ok(PyNodeField {
+        inner: crate::ops::node_field::project_on_basis(&field.inner, &modes)?,
+    })
+}
+
+/// The physical field of the modal coordinates: `u = Σ qᵢ φᵢ`.
+///
+/// `qᵢ` is read at the node of mode `i`, component `alpha`, as `pyrucast.solver.solve`
+/// returns it on the modes' support; a node that does not carry it reads `0`.
+///
+/// # Parameters
+///
+/// - `coordinates`: the modal coordinates, component `alpha`.
+/// - `modes`: the modes, as `pyrucast.solver.eigen` returns them or written by
+///   hand; they share one support whose nodes are exactly theirs.
+///
+/// # Returns
+///
+/// A `NodeField` on the supports of the shapes — those of the matrix the modes
+/// come from, so that a static solution and a recombined field combine. An empty
+/// list gives an empty field.
+///
+/// # Raises
+///
+/// `ValueError` if a mode lacks a key. `RuntimeError` if the modes do not share
+/// one support whose nodes are exactly theirs — a slice or a union of lists needs
+/// its own: `s = pyrucast.mesh.poi1_from_nodes([m["node"] for m in modes])`, then
+/// `[{**m, "support": s} for m in modes]` — or if a mode is complex, if
+/// `coordinates` carries no `alpha`, or if two shapes lie on supports their sum
+/// cannot combine.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn recombine(
+    coordinates: PyRef<PyNodeField>,
+    modes: Vec<Bound<'_, pyo3::types::PyDict>>,
+) -> PyResult<PyNodeField> {
+    let modes = crate::py::ops::solver::modes_from_dicts(&modes)?;
+    Ok(PyNodeField {
+        inner: crate::ops::node_field::recombine(&coordinates.inner, &modes)?,
+    })
+}

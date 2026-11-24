@@ -124,12 +124,15 @@ __all__ = [
     "points_on_torus",
     "positions",
     "project",
+    "project_on_basis_matrix",
+    "project_on_basis_node",
     "project_on_sphere",
     "psca",
     "quadratic_eigen",
     "radiation",
     "read_gmsh",
     "read_gmsh_str",
+    "recombine",
     "regularize",
     "restrict_element",
     "restrict_fespace",
@@ -9103,6 +9106,69 @@ def project(field: typing.Any, mesh: Mesh, target: Mesh, tol: builtins.float = 1
       `mesh` carries no zone of a field at the Gauss points.
     """
 
+def project_on_basis_matrix(matrix: Matrix, modes: typing.Sequence[dict]) -> Matrix:
+    r"""
+    `matrix` projected on `modes`: `K*ᵢⱼ = φᵢᵀ K φⱼ`, on the modes' support.
+    
+    Each row of `matrix` meets a shape through the primal its dual is paired with
+    (the mode's `"pairs"`): a row `f_x` reads `u_x`. The relations' rows and the
+    multipliers' columns pair nothing, so a stiffness projects the same with or
+    without them. A symmetric `matrix` gives a symmetric one, exactly.
+    
+    # Parameters
+    
+    - `matrix`: an assembled matrix on the modes' unknowns.
+    - `modes`: the modes, as `pyrucast.solver.eigen` returns them or written by
+      hand; they share one support whose nodes are exactly theirs.
+    
+    # Returns
+    
+    A `Matrix` on the support of the modes, rows `f_alpha` and columns `alpha`, one
+    of each per mode, at its node. It adds to any other projection on the same
+    modes, and `pyrucast.solver.solve` returns its coordinates there. An empty
+    list gives an empty matrix.
+    
+    # Raises
+    
+    `ValueError` if a mode lacks a key. `RuntimeError` if the modes do not share
+    one support whose nodes are exactly theirs — a slice or a union of lists needs
+    its own: `s = pyrucast.mesh.poi1_from_nodes([m["node"] for m in modes])`, then
+    `[{**m, "support": s} for m in modes]` — or if a mode is complex, or if
+    `matrix` has no assembled values or carries none of the modes' unknowns.
+    """
+
+def project_on_basis_node(field: NodeField, modes: typing.Sequence[dict]) -> NodeField:
+    r"""
+    `field`, a field of forces, projected on `modes`: `F*ᵢ = φᵢᵀ F`.
+    
+    The product is that of `pyrucast.measure.xty`: each component of a shape
+    multiplies the component of `field` its pair names (`u_x` by `f_x`), zone by
+    zone on the same support. The components of `field` no pair names (`imposed`…)
+    do not count.
+    
+    # Parameters
+    
+    - `field`: the forces, on the supports of the shapes.
+    - `modes`: the modes, as `pyrucast.solver.eigen` returns them or written by
+      hand; they share one support whose nodes are exactly theirs.
+    
+    # Returns
+    
+    A `NodeField` on the support of the modes, component `f_alpha` at the node of
+    each mode — the right-hand side `pyrucast.solver.solve` takes with a matrix
+    projected on the same modes. An empty list gives an empty field.
+    
+    # Raises
+    
+    `ValueError` if a mode lacks a key. `RuntimeError` if the modes do not share
+    one support whose nodes are exactly theirs — a slice or a union of lists needs
+    its own: `s = pyrucast.mesh.poi1_from_nodes([m["node"] for m in modes])`, then
+    `[{**m, "support": s} for m in modes]` — or if a mode is complex, or if
+    `field` carries none of the modes' duals on the supports of their shapes (a
+    displacement given for a force, or a field on other supports:
+    `pyrucast.node_field.restrict_like` brings it onto theirs).
+    """
+
 def project_on_sphere(mesh: Mesh, center: typing.Sequence[builtins.float], radius: builtins.float) -> Mesh:
     r"""
     Push every node of `mesh` radially onto the sphere of centre `center`.
@@ -9277,6 +9343,35 @@ def read_gmsh_str(coords: Coords, text: builtins.str) -> dict:
     
     `RuntimeError` if the text cannot be parsed, or for a gmsh element type
     pyrucast does not know.
+    """
+
+def recombine(coordinates: NodeField, modes: typing.Sequence[dict]) -> NodeField:
+    r"""
+    The physical field of the modal coordinates: `u = Σ qᵢ φᵢ`.
+    
+    `qᵢ` is read at the node of mode `i`, component `alpha`, as `pyrucast.solver.solve`
+    returns it on the modes' support; a node that does not carry it reads `0`.
+    
+    # Parameters
+    
+    - `coordinates`: the modal coordinates, component `alpha`.
+    - `modes`: the modes, as `pyrucast.solver.eigen` returns them or written by
+      hand; they share one support whose nodes are exactly theirs.
+    
+    # Returns
+    
+    A `NodeField` on the supports of the shapes — those of the matrix the modes
+    come from, so that a static solution and a recombined field combine. An empty
+    list gives an empty field.
+    
+    # Raises
+    
+    `ValueError` if a mode lacks a key. `RuntimeError` if the modes do not share
+    one support whose nodes are exactly theirs — a slice or a union of lists needs
+    its own: `s = pyrucast.mesh.poi1_from_nodes([m["node"] for m in modes])`, then
+    `[{**m, "support": s} for m in modes]` — or if a mode is complex, if
+    `coordinates` carries no `alpha`, or if two shapes lie on supports their sum
+    cannot combine.
     """
 
 def regularize(mesh: Mesh, sweeps: builtins.int = 20, angular: builtins.bool = True, in_place: builtins.bool = False) -> Mesh:

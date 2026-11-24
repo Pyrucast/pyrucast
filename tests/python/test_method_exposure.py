@@ -105,6 +105,9 @@ NO_METHOD = {
     "psca": "symmetric — order does not matter",
     "tensor_dot": "two tensors, neither the subject of the other — like xty",
     "tensor_ddot": "symmetric — order does not matter",
+    "project_on_basis_matrix": "requires the unknowns the modes' pairs name (u_x, f_x…)",
+    "project_on_basis_node": "requires the duals the modes' pairs name (f_x…)",
+    "recombine": "requires the modal coordinate alpha",
 }
 
 PYI = pathlib.Path(pyrucast.__file__).parent / "_pyrucast" / "__init__.pyi"

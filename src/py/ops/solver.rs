@@ -277,3 +277,53 @@ pub(crate) fn mode_to_dict(py: Python<'_>, mode: Mode) -> PyResult<Bound<'_, PyD
     dict.set_item("generalized_mass", mode.generalized_mass)?;
     Ok(dict)
 }
+
+/// The modes of a Python list, each a `dict` with the keys `eigen` returns:
+/// `"node"`, `"support"`, `"eigenvalue"`, `"shape"`, `"pairs"`,
+/// `"generalized_mass"`, and optionally `"eigenvalue_imag"`, `"shape_imag"`.
+/// The handles pass as they are: two calls on the same list see the same
+/// support.
+pub(crate) fn modes_from_dicts(modes: &[Bound<'_, PyDict>]) -> PyResult<Vec<Mode>> {
+    use crate::aggregate::Aggregate;
+    use crate::containers::mesh::Mesh;
+    use crate::containers::node_field::NodeField;
+    use pyo3::exceptions::PyValueError;
+    modes
+        .iter()
+        .enumerate()
+        .map(|(rank, dict)| {
+            let item = |key: &str| -> PyResult<Bound<'_, PyAny>> {
+                dict.get_item(key)?.ok_or_else(|| {
+                    PyValueError::new_err(format!("mode {rank}: missing key `{key}`"))
+                })
+            };
+            let field = |value: Bound<'_, PyAny>| -> PyResult<NodeField> {
+                Ok(value
+                    .extract::<PyRef<PyNodeField>>()?
+                    .inner
+                    .union(&NodeField::default())?)
+            };
+            let shape_imag = match dict.get_item("shape_imag")? {
+                Some(value) => Some(field(value)?),
+                None => None,
+            };
+            let eigenvalue_imag = match dict.get_item("eigenvalue_imag")? {
+                Some(value) => Some(value.extract()?),
+                None => None,
+            };
+            Ok(Mode {
+                node: item("node")?.extract::<PyRef<PyNode>>()?.as_node().clone(),
+                support: item("support")?
+                    .extract::<PyRef<PyMesh>>()?
+                    .inner
+                    .union(&Mesh::default())?,
+                eigenvalue: item("eigenvalue")?.extract()?,
+                eigenvalue_imag,
+                shape: field(item("shape")?)?,
+                shape_imag,
+                pairs: item("pairs")?.extract()?,
+                generalized_mass: item("generalized_mass")?.extract()?,
+            })
+        })
+        .collect()
+}

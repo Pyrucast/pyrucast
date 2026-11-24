@@ -28,13 +28,18 @@
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::finite_element_space::SubFiniteElementSpace;
-use crate::containers::matrix::{ComputedRecipe, KernelInputs, Matrix, SubMatrix};
+use crate::containers::matrix::{
+    ComputedRecipe, DofOrdering, KernelInputs, Matrix, SubMatrix, Symmetry,
+};
 use crate::containers::model::{Model, SubModel};
 use crate::error::PyrucastError;
 use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::{Contribution, MatrixKind};
 use crate::ops::element_field::behavior::previous_state_names;
+use crate::ops::solver::{real_support_zone, Mode, MODAL_COORDINATE, MODAL_FORCE};
+use crate::parallel::*;
+use nalgebra_sparse::CooMatrix;
 
 /// Assemble the stiffness matrix `K` for `model`.
 ///
@@ -849,6 +854,132 @@ impl Matrix {
     pub fn lump(&self) -> Result<Matrix> {
         lump(self)
     }
+}
+
+/// `matrix` projected on `modes`: `K*ᵢⱼ = φᵢᵀ K φⱼ`, on the support of the
+/// modes, rows [`MODAL_FORCE`] and columns [`MODAL_COORDINATE`].
+///
+/// Each row of `matrix` meets a shape through the primal its dual is paired
+/// with (the mode's `pairs`): a row `f_x` reads `φ(u_x)`. The relations' rows
+/// and the multipliers' columns pair nothing, so a stiffness projects the same
+/// with or without them. The projected matrix lives on the modes' own support:
+/// it adds to any other projection on the same modes, and `solve` returns its
+/// coordinates there. A symmetric `matrix` gives a symmetric one, exactly.
+///
+/// An empty list gives an empty matrix.
+///
+/// # Errors
+///
+/// - `matrix` has no assembled values, or carries none of the modes' unknowns;
+/// - the modes do not share one support whose nodes are exactly theirs, or
+///   one is complex ([`crate::ops::solver::Mode`]).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
+/// # use pyrucast::containers::mesh::SubMesh;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{matrix, solver};
+/// # use pyrucast::ops::solver::Normalization;
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let n: Vec<Node> = (0..2).map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap()).collect();
+/// # let support = {
+/// #     let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+/// #     for x in &n { sm.add_cell(&[x.id()]).unwrap(); }
+/// #     Handle::new(sm)
+/// # };
+/// # let dense = |entries: &[(usize, usize, f64)]| -> pyrucast::Result<Matrix> {
+/// #     let mut z = SubMatrix::new(support.clone(), support.clone(), vec!["f".into()],
+/// #         vec!["u".into()], DofOrdering::NodesThenVars, Symmetry::Full)?;
+/// #     for &(i, j, v) in entries { z.add_entry(n[i].id(), "f", n[j].id(), "u", v)?; }
+/// #     let mut m = Matrix::empty();
+/// #     m.add_sub(Handle::new(z))?;
+/// #     m.assemble()?;
+/// #     Ok(m)
+/// # };
+/// let k = dense(&[(0, 0, 3.0), (0, 1, -1.0), (1, 0, -1.0), (1, 1, 3.0)])?;
+/// let m = dense(&[(0, 0, 1.0), (1, 1, 1.0)])?;
+/// let modes = solver::eigen(&k, &m, 2, 0.0, Normalization::Mass)?;
+/// // On modes normalized by the mass, the stiffness becomes diag(λ).
+/// let k_star = matrix::project_on_basis(&k, &modes)?;
+/// let (a, b) = (modes[0].node.id(), modes[1].node.id());
+/// assert!((k_star.get(a, "f_alpha", a, "alpha")? - 2.0).abs() < 1e-9);
+/// assert!(k_star.get(a, "f_alpha", b, "alpha")?.abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn project_on_basis(matrix: &Matrix, modes: &[Mode]) -> Result<Matrix> {
+    if modes.is_empty() {
+        return Ok(Matrix::default());
+    }
+    let (zone, ranks) = real_support_zone(modes, "project_on_basis")?;
+    let (rows, cols) = matrix.dof_key_orders()?;
+    let vars = matrix.dof_vars();
+    if !modes
+        .iter()
+        .any(|mode| mode.pairs.iter().any(|(primal, _)| vars.contains(primal)))
+    {
+        return Err(PyrucastError::Message(
+            "project_on_basis: the matrix carries none of the modes' unknowns".into(),
+        ));
+    }
+    // Per mode, the product K φ on the rows, and φ read at each row through
+    // the primal its dual is paired with — a name no shape carries otherwise.
+    let products: Vec<(Vec<f64>, Vec<f64>)> = modes
+        .par_iter()
+        .with_min_len(1)
+        .map(|mode| -> Result<(Vec<f64>, Vec<f64>)> {
+            let kphi = matrix.mul_values(&mode.shape.gather_keys(&cols, &vars))?;
+            let paired: Vec<String> = vars
+                .iter()
+                .map(|v| {
+                    mode.pairs
+                        .iter()
+                        .find(|(_, dual)| dual == v)
+                        .map_or_else(String::new, |(primal, _)| primal.clone())
+                })
+                .collect();
+            Ok((kphi, mode.shape.gather_keys(&rows, &paired)))
+        })
+        .collect::<Result<_>>()?;
+    let symmetric = matrix.symmetric();
+    let n = modes.len();
+    let mut coo = CooMatrix::new(n, n);
+    for i in 0..n {
+        for j in 0..n {
+            if symmetric && j < i {
+                continue;
+            }
+            let value: f64 = products[i]
+                .1
+                .iter()
+                .zip(&products[j].0)
+                .map(|(r, y)| r * y)
+                .sum();
+            coo.push(ranks[i], ranks[j], value);
+            if symmetric && j != i {
+                coo.push(ranks[j], ranks[i], value);
+            }
+        }
+    }
+    let block = SubMatrix::from_coo(
+        zone.clone(),
+        zone,
+        vec![MODAL_FORCE.into()],
+        vec![MODAL_COORDINATE.into()],
+        DofOrdering::NodesThenVars,
+        if symmetric {
+            Symmetry::Full
+        } else {
+            Symmetry::None
+        },
+        coo,
+    )?;
+    let mut out = Matrix::default();
+    out.add_sub(Handle::new(block))?;
+    out.assemble()?;
+    Ok(out)
 }
 
 #[cfg(test)]

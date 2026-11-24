@@ -73,6 +73,7 @@ mod relations;
 mod scaling;
 mod unilateral;
 
+pub(crate) use eigen::real_support_zone;
 pub use eigen::{eigen, quadratic_eigen, Mode, Normalization, MODAL_COORDINATE, MODAL_FORCE};
 pub use lu::{SolveMethod, Verbosity};
 pub use unilateral::ActiveSetMethod;

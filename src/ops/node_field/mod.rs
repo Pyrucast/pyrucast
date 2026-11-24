@@ -10,7 +10,9 @@
 //!   at the Gauss points brought to the nodes, by average or sum),
 //!   [`project_node`](fn@project_node) / [`project_element`](fn@project_element)
 //!   (a field read at the nodes of another mesh: interpolated, or fitted cell
-//!   by cell from the Gauss points);
+//!   by cell from the Gauss points), [`project_on_basis`](fn@project_on_basis)
+//!   / [`recombine`](fn@recombine) (forces brought onto a list of modes, modal
+//!   coordinates brought back to the physical unknowns);
 //! - *nodal assembly* — [`internal_forces`](fn@internal_forces) and
 //!   [`external_forces`](fn@external_forces), the two sides of the balance
 //!   `Σ f_int = Σ f_ext` whose gap is the residual. They are assemblies like
@@ -30,6 +32,7 @@ pub mod internal_forces;
 pub mod mask;
 pub mod merge;
 pub mod methods;
+pub mod modal;
 pub mod positions;
 pub mod project;
 pub mod restrict;
@@ -41,6 +44,7 @@ pub use external_forces::external_forces;
 pub use internal_forces::internal_forces;
 pub use mask::{mask, mask_sub};
 pub use merge::merge;
+pub use modal::{project_on_basis, recombine};
 pub use positions::positions;
 pub use project::{project_element, project_node};
 pub use restrict::{restrict, restrict_like};

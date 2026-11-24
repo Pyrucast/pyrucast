@@ -185,3 +185,43 @@ pub fn tangent(
     )?;
     Ok(PyMatrix { inner: m })
 }
+
+/// `matrix` projected on `modes`: `K*ᵢⱼ = φᵢᵀ K φⱼ`, on the modes' support.
+///
+/// Each row of `matrix` meets a shape through the primal its dual is paired with
+/// (the mode's `"pairs"`): a row `f_x` reads `u_x`. The relations' rows and the
+/// multipliers' columns pair nothing, so a stiffness projects the same with or
+/// without them. A symmetric `matrix` gives a symmetric one, exactly.
+///
+/// # Parameters
+///
+/// - `matrix`: an assembled matrix on the modes' unknowns.
+/// - `modes`: the modes, as `pyrucast.solver.eigen` returns them or written by
+///   hand; they share one support whose nodes are exactly theirs.
+///
+/// # Returns
+///
+/// A `Matrix` on the support of the modes, rows `f_alpha` and columns `alpha`, one
+/// of each per mode, at its node. It adds to any other projection on the same
+/// modes, and `pyrucast.solver.solve` returns its coordinates there. An empty
+/// list gives an empty matrix.
+///
+/// # Raises
+///
+/// `ValueError` if a mode lacks a key. `RuntimeError` if the modes do not share
+/// one support whose nodes are exactly theirs — a slice or a union of lists needs
+/// its own: `s = pyrucast.mesh.poi1_from_nodes([m["node"] for m in modes])`, then
+/// `[{**m, "support": s} for m in modes]` — or if a mode is complex, or if
+/// `matrix` has no assembled values or carries none of the modes' unknowns.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(name = "project_on_basis_matrix")]
+pub fn project_on_basis(
+    matrix: PyRef<PyMatrix>,
+    modes: Vec<Bound<'_, pyo3::types::PyDict>>,
+) -> PyResult<PyMatrix> {
+    let modes = crate::py::ops::solver::modes_from_dicts(&modes)?;
+    Ok(PyMatrix {
+        inner: crate::ops::matrix::project_on_basis(&matrix.inner, &modes)?,
+    })
+}

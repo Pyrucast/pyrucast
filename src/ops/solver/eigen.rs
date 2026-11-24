@@ -60,7 +60,7 @@ use faer::{c64, ColRef, Mat, MatMut, MatRef, Par, Side};
 use super::lu::Factorization;
 use super::SolveOptions;
 use crate::aggregate::Aggregate;
-use crate::atoms::Node;
+use crate::atoms::{ElementType, Node};
 use crate::containers::field::Field;
 use crate::containers::matrix::{dof_key, dof_node, dof_var, DofKey, Matrix};
 use crate::containers::mesh::{Mesh, SubMesh};
@@ -683,6 +683,75 @@ fn dense_product(m: &Mat<f64>, x: &[f64]) -> Vec<f64> {
     (0..m.nrows())
         .map(|r| (0..m.ncols()).map(|c| m[(r, c)] * x[c]).sum())
         .collect()
+}
+
+/// The POI1 zone shared by `modes`, and the rank in it of each mode's node,
+/// once the list is checked: what the operators that project on modes, or
+/// recombine them, rely on. `modes` is not empty.
+///
+/// # Errors
+///
+/// - the support is not one POI1 zone;
+/// - two modes carry different supports, or the support's nodes are not
+///   exactly the modes' — a slice or a union of lists that kept its old
+///   support: the message gives the way to give it its own;
+/// - a mode is complex, or has no pairs.
+pub(crate) fn real_support_zone(modes: &[Mode], op: &str) -> Result<(Handle<SubMesh>, Vec<usize>)> {
+    const RECIPE: &str = "give the list its own support, on the modes' nodes: \
+        `s = mesh.poi1_from_nodes([m[\"node\"] for m in modes])`, then \
+        `[{**m, \"support\": s} for m in modes]`";
+    let zone = modes[0].support.unit()?;
+    let guard = zone.read();
+    if guard.element_type() != ElementType::POI1 {
+        return Err(PyrucastError::Message(format!(
+            "{op}: the support of the modes is a {} mesh, not a POI1 one",
+            guard.element_type()
+        )));
+    }
+    let index = guard.node_index();
+    let coords = guard.coords();
+    let mut taken = vec![false; index.len()];
+    let mut ranks = Vec::with_capacity(modes.len());
+    for (i, mode) in modes.iter().enumerate() {
+        if mode.eigenvalue_imag.is_some() || mode.shape_imag.is_some() {
+            return Err(PyrucastError::Message(format!(
+                "{op}: mode {i} is complex; only real modes are projected on and recombined"
+            )));
+        }
+        if mode.pairs.is_empty() {
+            return Err(PyrucastError::Message(format!(
+                "{op}: mode {i} has no pairs"
+            )));
+        }
+        let same = mode.support.len() == 1 && mode.support[0].same_object(&zone);
+        let rank = mode
+            .node
+            .coords()
+            .same_object(&coords)
+            .then(|| index.get(&mode.node.id()).copied())
+            .flatten();
+        match rank {
+            Some(r) if same && !taken[r] => {
+                taken[r] = true;
+                ranks.push(r);
+            }
+            _ => {
+                return Err(PyrucastError::Message(format!(
+                    "{op}: the modes do not share one support whose nodes are exactly theirs \
+                     (mode {i}); {RECIPE}"
+                )))
+            }
+        }
+    }
+    if ranks.len() != index.len() {
+        return Err(PyrucastError::Message(format!(
+            "{op}: the support of the modes holds {} nodes for {} modes; {RECIPE}",
+            index.len(),
+            ranks.len()
+        )));
+    }
+    drop(guard);
+    Ok((zone, ranks))
 }
 
 /// The shift-inverted operator `v ↦ ((a − σb)⁻¹ b v)` restricted to the

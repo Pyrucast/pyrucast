@@ -81,3 +81,71 @@ damping_ratio = omega.imag / abs(omega)  # 0.05
 # ANCHOR_END: solver-quadratic_eigen
 assert abs(omega - complex(math.sqrt(6.4e7 - 1.6e5) / 80.0, 5.0)) < 1e-9
 assert abs(damping_ratio - 0.05) < 1e-12
+
+
+# ── Projection et recombinaison ─────────────────────────────────────────────
+
+coords = pyrucast.Coords(3)
+p1 = coords.add_node([1.0, 0.0, 0.0])
+point = pyrucast.mesh.poi1_from_nodes([p1])
+
+
+def _diagonal(value):
+    """`value` on u_y and on u_z of the point, rows f_y and f_z."""
+    matrix = pyrucast.Matrix.block(
+        point, point, ["f_y", "f_z"], ["u_y", "u_z"], symmetry="full"
+    )
+    for dual, primal in (("f_y", "u_y"), ("f_z", "u_z")):
+        matrix[0].add_entry(p1, dual, p1, primal, value)
+    matrix.assemble()
+    return matrix
+
+
+mass, stiffness = _diagonal(40.0), _diagonal(4e5)
+omega = 19.0985
+# ANCHOR: base_a_la_main
+reperes = [coords.add_node([0.0, 0.0, 0.0]) for _ in range(2)]
+support = pyrucast.mesh.poi1_from_nodes(reperes)
+shapes = [
+    pyrucast.NodeField(point, [("u_y", 1.0), ("u_z", 0.0)]),
+    pyrucast.NodeField(point, [("u_y", 0.0), ("u_z", 1.0)]),
+]
+modes = [
+    {
+        "node": node,
+        "support": support,
+        "eigenvalue": 4e5 / 40.0,
+        "shape": shape,
+        "pairs": [("u_y", "f_y"), ("u_z", "f_z")],
+        "generalized_mass": 40.0,
+    }
+    for node, shape in zip(reperes, shapes)
+]
+# ANCHOR_END: base_a_la_main
+force = 1e-4 * omega**2
+unbalance = pyrucast.NodeField(point, [("f_y", force), ("f_z", -force)])
+# ANCHOR: matrix-project_on_basis
+k_star = pyrucast.matrix.project_on_basis(stiffness, modes)
+m_star = pyrucast.matrix.project_on_basis(mass, modes)
+# ANCHOR_END: matrix-project_on_basis
+# ANCHOR: node_field-project_on_basis
+f_star = pyrucast.node_field.project_on_basis(unbalance, modes)
+q = pyrucast.solver.solve(k_star - m_star * omega**2, f_star)
+# ANCHOR_END: node_field-project_on_basis
+# ANCHOR: node_field-recombine
+u = pyrucast.node_field.recombine(q, modes)
+radius = u.value(p1, "u_y")  # m·d·Ω² / (k − Ω²·m)
+# ANCHOR_END: node_field-recombine
+expected = force / (4e5 - omega**2 * 40.0)
+assert abs(radius - expected) < 1e-20
+assert abs(u.value(p1, "u_z") + expected) < 1e-20
+
+# ── Une tranche reçoit son support ─────────────────────────────────────────
+
+# ANCHOR: tranche
+part = modes[1:]
+own = pyrucast.mesh.poi1_from_nodes([m["node"] for m in part])
+part = [{**m, "support": own} for m in part]
+k_part = pyrucast.matrix.project_on_basis(stiffness, part)
+# ANCHOR_END: tranche
+assert k_part.get(part[0]["node"], "f_alpha", part[0]["node"], "alpha") == 4e5
