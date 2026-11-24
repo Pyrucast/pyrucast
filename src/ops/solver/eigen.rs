@@ -924,7 +924,7 @@ fn norm(v: &[f64]) -> f64 {
 
 /// The rank in `onto` of each row and of each column of `from`, in `from`'s
 /// order. `onto` is a sum that contains `from`, so every key is found.
-pub(super) fn reindex(from: &Matrix, onto: &Matrix) -> Result<(Vec<usize>, Vec<usize>)> {
+fn reindex(from: &Matrix, onto: &Matrix) -> Result<(Vec<usize>, Vec<usize>)> {
     let (from_rows, from_cols) = from.dof_key_orders()?;
     let (onto_rows, onto_cols) = onto.dof_key_orders()?;
     let onto_vars = onto.dof_vars();
@@ -948,7 +948,7 @@ pub(super) fn reindex(from: &Matrix, onto: &Matrix) -> Result<(Vec<usize>, Vec<u
 /// The `(primal, dual)` pairs of the blocks of `matrices`: each block whose
 /// dual and primal names are as many pairs them in order, as the models
 /// declare them. The relations' multiplier and imposed value pair nothing.
-pub(super) fn pairs_of(matrices: &[&Matrix]) -> Vec<(String, String)> {
+fn pairs_of(matrices: &[&Matrix]) -> Vec<(String, String)> {
     let mut pairs: Vec<(String, String)> = Vec::new();
     for m in matrices {
         for h in m.iter() {
@@ -969,7 +969,7 @@ pub(super) fn pairs_of(matrices: &[&Matrix]) -> Vec<(String, String)> {
 
 /// The `(row, column)` partners of `m`: for each row whose dual `pairs` names,
 /// the column of its primal at the same node.
-pub(super) fn row_partners(m: &Matrix, pairs: &[(String, String)]) -> Result<Vec<(usize, usize)>> {
+fn row_partners(m: &Matrix, pairs: &[(String, String)]) -> Result<Vec<(usize, usize)>> {
     let (rows, cols) = m.dof_key_orders()?;
     let vars = m.dof_vars();
     let slot: HashMap<&str, u32> = vars
@@ -1006,7 +1006,7 @@ fn multiplier_columns(m: &Matrix) -> Result<Vec<bool>> {
 
 /// `count` new nodes at the origin of `matrix`'s `Coords`, and the POI1 zone
 /// that holds them, in order: the nodes and the support of a list of modes.
-pub(super) fn new_support(matrix: &Matrix, count: usize) -> Result<(Vec<Node>, Handle<SubMesh>)> {
+fn new_support(matrix: &Matrix, count: usize) -> Result<(Vec<Node>, Handle<SubMesh>)> {
     let coords = matrix
         .iter()
         .next()
@@ -1023,7 +1023,7 @@ pub(super) fn new_support(matrix: &Matrix, count: usize) -> Result<(Vec<Node>, H
 
 /// A mesh of the one zone `zone`: what each mode of a list holds, the zone's
 /// handle shared.
-pub(super) fn support_mesh(zone: &Handle<SubMesh>) -> Result<Mesh> {
+fn support_mesh(zone: &Handle<SubMesh>) -> Result<Mesh> {
     let mut mesh = Mesh::default();
     mesh.add_sub(zone.clone())?;
     Ok(mesh)
