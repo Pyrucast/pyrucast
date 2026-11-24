@@ -95,6 +95,7 @@
     - [Intégration du comportement](algorithmes/comportement.md)
     - [Localisation et projection](algorithmes/geometrie.md)
     - [Résolution d'un système linéaire](algorithmes/solveur.md)
+    - [Modes propres et base modale](algorithmes/modes.md)
   - [Sauvegarde et relecture](sauvegarde.md)
   - [Visualisation](visualization.md)
   - [Mailler une géométrie](mailler.md)

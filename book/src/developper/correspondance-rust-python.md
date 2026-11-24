@@ -207,6 +207,8 @@ Les mailleurs longs (`triangulate_surface`, `pave_surface`, `grid_surface`,
 | `internal_forces(model: &Model, state: &ElementField, solution: &NodeField, materials: &ElementField) -> NodeField` | `internal_forces(model, state, solution, materials) -> NodeField`, aussi `model.internal_forces(state, solution, materials)` |
 | `external_forces(model: &Model, materials: &ElementField) -> NodeField` | `external_forces(model, materials) -> NodeField` |
 | `to_nodes(field: &ElementField, reduction: Reduction) -> NodeField` | `to_nodes(field, reduction="average") -> NodeField`, aussi `field.to_nodes(reduction="average")` (chaque maille ajuste ses valeurs de Gauss sur ses propres nœuds ; chaque nœud reçoit la moyenne, ou la somme, des mailles qui le touchent) |
+| `project_on_basis(field: &NodeField, modes: &[Mode]) -> NodeField` | `project_on_basis(field, modes) -> NodeField` (`modes` : une liste de `dict`, voir `ops::solver`) |
+| `recombine(coordinates: &NodeField, modes: &[Mode]) -> NodeField` | `recombine(coordinates, modes) -> NodeField` |
 
 `internal_forces` (`∫ Bᵀ σ`) et `external_forces` sont des **assemblages**,
 mais leur résultat est un vecteur nodal et non un opérateur : on se range
@@ -351,6 +353,7 @@ leur raison, dans `tests/python/test_mirror_completeness.py`.
 | `lump(m: &Matrix) -> Matrix` | `lump(matrix) -> Matrix` |
 | `geometric(model: &Model, materials: &ElementField, stress: &ElementField) -> Matrix` | `geometric(model, materials, stress) -> Matrix` |
 | `tangent(model, materials, deformation, prev: &ElementField, dt: Option<f64>) -> Matrix` | `tangent(model, materials, deformation, prev, dt=None) -> Matrix` |
+| `project_on_basis(matrix: &Matrix, modes: &[Mode]) -> Matrix` | `project_on_basis(matrix, modes) -> Matrix` |
 
 Les quatre assembleurs (`stiffness`, `mass`, `geometric`, `tangent`) reposent
 sur `assemble_kind(model, materials, kind: MatrixKind, inputs)`, le moteur
@@ -364,11 +367,22 @@ assemblée.
 | `solve(matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve(matrix, rhs, method="lu", relations="lagrange", active_set="schur", cache=True, max_iter=100, tol=1e-10, verbosity="silent") -> NodeField` |
 | `solve_with_options(matrix: &Matrix, rhs: &NodeField, options: &SolveOptions) -> NodeField` | les options sont les arguments nommés de `solve` |
 | `solve_cancellable` / `solve_cancellable_with_options` (jeton d'interruption en plus) | l'interruption (Ctrl+C) est câblée dans `solve` |
+| `eigen(a: &Matrix, b: &Matrix, count: usize, shift: f64, normalization: Normalization) -> Vec<Mode>` | `eigen(a, b, count, shift=0.0, normalization="mass") -> list[dict]` |
+| `quadratic_eigen(mass: &Matrix, stiffness: &Matrix, damping: &Matrix, normalization: Normalization) -> Vec<Mode>` | `quadratic_eigen(mass, stiffness, damping=None, normalization="mass") -> list[dict]` (`None` : `Matrix::default()`, la matrice vide) |
 
 La matrice se suffit : ses lignes de relation portent leur sens (`SubMatrix::row_sense`),
 aucun modèle n'est passé à la résolution. L'élimination est une option
 (`relations="eliminate"`), et l'ensemble actif s'enclenche de lui-même sur une
 matrice qui porte des inégalités.
+
+Un mode est une `struct` à membres publics en Rust (`Mode`) et un `dict` en
+Python, aux mêmes noms : `node`, `support`, `eigenvalue`, `shape`, `pairs`,
+`generalized_mass`, et pour un mode complexe `eigenvalue_imag` et
+`shape_imag` (des `Option` en Rust, des clés absentes en Python pour un mode
+réel). Comme pour `export.to_arrays`, il n'y a pas de classe : un mode écrit à
+la main est un `dict` comme les autres, et ses poignées passent telles
+quelles d'un langage à l'autre. Voir
+[Modes propres et base modale](../algorithmes/modes.md).
 
 ### `ops::export` — export vers des formats externes
 

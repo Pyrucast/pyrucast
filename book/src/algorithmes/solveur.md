@@ -437,3 +437,6 @@ solution analytique :
   `u(0)=0`, `u(1)=1` ;
 - [Conduction thermique](../thermique.md) — ligne chauffée et carré ;
 - [Mécanique](../mecanique.md) — treillis, élasticité, poutres.
+
+Les modes propres reposent sur la même factorisation, celle de la matrice
+décalée `a − shift·b` : voir [Modes propres et base modale](modes.md).

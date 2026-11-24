@@ -79,7 +79,8 @@ Conditions limites / chargement;CONV;Échange par convection (Robin / film);mode
 Conditions limites / chargement;CHAR;Définit un chargement (évolution temporelle);NodeField
 Résolution;RESO;Résout un système linéaire K.u = f;solve
 Résolution;PASAPAS;Procédure pas à pas (transitoire / non-linéaire);stepping.step_by_step (Python ; une fonction par procédure : resolve_options, describe_problem, initial_state, materials_at, heat_step, mechanical_step, store_step, adjust_time_step) · grands déplacements lus sur la mesure des lois (strain_measure, plutôt que GRANDS_DEPLACEMENTS), en lagrangien total : opérateur K_e + K_σ sur la configuration courante (K_SIGMA ↔ geometric_stiffness), pression suiveuse et échanges thermiques sur la pièce déformée, conduction sur la référence (conductivité lagrangienne K₀, axes tournant avec la pièce) ; barres en Green–Lagrange · AUTOPILO redéfini ↔ crochet automatic_measure (taille signée, franchit les points limites) ; contact et poutres/coques refusés en grands déplacements
-Résolution;VIBR;Modes propres de vibration;—
+Résolution;VIBR;Modes propres de vibration;solver.eigen (a = raideur, b = masse ; les valeurs les plus proches d'un décalage, une liste de modes)
+Résolution;VIBC;Modes complexes de petits problèmes (matrices projetées);solver.quadratic_eigen
 Résolution;FLAM;Modes de flambage;—
 Résolution;INVE (mat.);Inverse d'une matrice;solve (résolution dense LU)
 Résolution;KRES;Résolution avec conditions (rigidité + blocages);solve
@@ -140,7 +141,8 @@ Non-linéaire / transitoire;KTAN;Matrice de rigidité tangente (Newton non-liné
 Non-linéaire / transitoire;PERT;Perturbation pour matrice tangente par différences finies;—
 Non-linéaire / transitoire;ADVE;Matrice d'advection (transport convectif);—
 Non-linéaire / transitoire;KEQU;Matrice équivalente (combinaison pondérée pour le transitoire);—
-Non-linéaire / transitoire;PJBA;Projette un champ sur une base de modes;—
+Non-linéaire / transitoire;PJBA;Projette un champ sur une base de modes;matrix.project_on_basis (une matrice) · node_field.project_on_basis (un champ de forces)
+Non-linéaire / transitoire;RECO;Recombine les coordonnées modales en champ physique;node_field.recombine
 Non-linéaire / transitoire;LUMP;Concentration (lumping) d'une matrice masse/capacité;lump
 Non-linéaire / transitoire;PHAJ;Changement de phase / chaleur latente (thermique);—
 Non-linéaire / transitoire;EPTH;Déformation thermique (dilatation libre);thermal_strain (le modèle donne la mesure et la cinématique de chaque loi : la dilatation exacte en linéaire, Green–Lagrange ou Hencky ; `eps_zz` dilaté en déformations planes et en axisymétrie, nul en contraintes planes) · `alpha` accepté par l'élasticité, la plasticité et l'endommagement — sauf Drucker-Prager, où `alpha` désigne déjà la sensibilité à la pression
