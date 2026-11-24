@@ -1,5 +1,5 @@
 use crate::aggregate::Aggregate;
-use crate::atoms::NodeId;
+use crate::containers::field::SubField;
 use crate::containers::mesh::Mesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
@@ -107,18 +107,17 @@ pub fn positions(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeFie
     let mut out = NodeField::default();
     for sm in mesh {
         let mut sub = SubNodeField::from_support(sm, components.clone())?;
-        // Read this zone's coordinates under a single Coords lock.
-        let nodes: Vec<NodeId> = sub.node_ids();
-        let coords: Vec<Vec<f64>> = {
+        {
+            // Support before Coords: the lock order. The zone is not shared yet, so its
+            // rows are written in place, straight from the active configuration.
+            let support = sub.support().read();
+            let nodes = support.connectivity();
             let c = coords.read();
-            nodes
-                .iter()
-                .map(|&nid| c.position(nid).map(|s| s.to_vec()))
-                .collect::<Result<_>>()?
-        };
-        for (ni, coord) in coords.iter().enumerate() {
-            for (ci, &axis) in axes.iter().enumerate() {
-                sub.set(ni, ci, coord[axis])?;
+            for (row, &nid) in sub.values_mut().chunks_exact_mut(axes.len()).zip(nodes) {
+                let x = c.position_alive(nid);
+                for (v, &axis) in row.iter_mut().zip(&axes) {
+                    *v = x[axis];
+                }
             }
         }
         out.add_sub(Handle::new(sub))?;
