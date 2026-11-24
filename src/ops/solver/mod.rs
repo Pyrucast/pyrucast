@@ -1,7 +1,13 @@
-//! Linear solvers for an assembled [`Matrix`] and a right-hand side.
+//! Linear solvers for an assembled [`Matrix`] and a right-hand side, and the
+//! eigenmodes of assembled matrices.
 //!
-//! One entry, [`solve`]: the matrix carries everything the solve needs. A
-//! constraint relation is a row named [`IMPOSED`](crate::models::IMPOSED), its
+//! [`eigen`] finds the modes of `a x = λ b x` nearest a shift, on the
+//! factorization [`solve`] uses; [`quadratic_eigen`] the complex modes of a
+//! small dense `[K + iωC − ω²M] X = 0`. Both return lists of [`Mode`]s.
+//!
+//! A linear system has one entry, [`solve`]: the matrix carries everything
+//! the solve needs. A constraint relation is a row named
+//! [`IMPOSED`](crate::models::IMPOSED), its
 //! coefficients are that row, its multiplier is the column
 //! [`MULTIPLIER`](crate::models::MULTIPLIER) of the same node, and its sense
 //! (`=`, `≥`, `≤`) is declared by the block that built it

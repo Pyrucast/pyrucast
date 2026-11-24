@@ -291,9 +291,12 @@ pub fn eigen(
     let (a_rows, a_cols) = reindex(a, &c)?;
     let n_c = c.n_rows()?;
     let fact = Factorization::new(&c, &SolveOptions::default())?;
+    let (b_offsets, b_indices, b_values) = b.csr_arrays()?;
     let op = ShiftInvert {
         fact: &fact,
-        b,
+        b_offsets,
+        b_indices,
+        b_values,
         b_rows: &b_rows,
         b_cols: &b_cols,
         n_c,
@@ -620,6 +623,10 @@ pub fn quadratic_eigen(
         }
         i += if pair { 2 } else { 1 };
     }
+    if found.is_empty() {
+        // No finite eigenvalue (no mass and no damping): no mode.
+        return Ok(Vec::new());
+    }
     found.sort_by(|a, b| {
         a.0.hypot(a.1)
             .total_cmp(&b.0.hypot(b.1))
@@ -761,7 +768,10 @@ pub(crate) fn real_support_zone(modes: &[Mode], op: &str) -> Result<(Handle<SubM
 struct ShiftInvert<'a> {
     /// The factorization of `c = a − σb`.
     fact: &'a Factorization,
-    b: &'a Matrix,
+    /// The CSR arrays of `b`, borrowed once: a product allocates nothing.
+    b_offsets: &'a [usize],
+    b_indices: &'a [usize],
+    b_values: &'a [f64],
     /// The rank in `c` of each row of `b`.
     b_rows: &'a [usize],
     /// The rank in `c` of each column of `b`.
@@ -771,15 +781,14 @@ struct ShiftInvert<'a> {
 }
 
 impl ShiftInvert<'_> {
-    /// `x = c⁻¹ (b v)`, on the columns of `c`, written into `x`.
+    /// `x = c⁻¹ (b v)`, on the columns of `c`, written into `x`: each row of
+    /// `b v` lands on its rank in `c`, the rows `b` does not have stay 0.
     fn solve_from(&self, v: &[f64], x: &mut [f64]) {
-        let y = self
-            .b
-            .mul_values(v)
-            .expect("b is assembled: checked before the iteration");
         x.fill(0.0);
-        for (&row, value) in self.b_rows.iter().zip(y) {
-            x[row] = value;
+        for (r, &row) in self.b_rows.iter().enumerate() {
+            x[row] = (self.b_offsets[r]..self.b_offsets[r + 1])
+                .map(|k| self.b_values[k] * v[self.b_indices[k]])
+                .sum();
         }
         self.fact.solve_in_place(x);
     }
@@ -1317,13 +1326,20 @@ mod tests {
     }
 
     #[test]
-    fn quadratic_eigen_refuses_relations() {
+    fn quadratic_eigen_refusals_and_counts() {
         let (k, n) = chain_stiffness(3, RelationSense::Equality);
         let m = lumped(&n[1..], &[1.0; 3], Symmetry::Full);
         let err = quadratic_eigen(&m, &k, &Matrix::empty(), Normalization::Mass)
             .unwrap_err()
             .to_string();
         assert!(err.contains("`stiffness` carries relations"), "{err}");
+        // No mass and no damping: every eigenvalue is infinite, no mode.
+        let (_, p) = line(1, 1);
+        let spring = lumped(&p[..1], &[4e5], Symmetry::Full);
+        let no_mass = lumped(&p[..1], &[0.0], Symmetry::Full);
+        let modes =
+            quadratic_eigen(&no_mass, &spring, &Matrix::empty(), Normalization::Mass).unwrap();
+        assert!(modes.is_empty(), "{} modes", modes.len());
     }
 
     /// A unit mass on every row node of `k`.

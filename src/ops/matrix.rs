@@ -1,5 +1,6 @@
 //! Operators that **produce** a
-//! [`Matrix`] — the assemblers proper.
+//! [`Matrix`] — the assemblers proper, and [`project_on_basis`], a matrix
+//! projected on a list of modes.
 //!
 //! The nodal assemblies (`flux`, `internal_forces`) share this module's
 //! machinery ([`crate::ops::scatter`], [`crate::ops::coloring`]) but end on
@@ -926,6 +927,8 @@ pub fn project_on_basis(matrix: &Matrix, modes: &[Mode]) -> Result<Matrix> {
     }
     // Per mode, the product K φ on the rows, and φ read at each row through
     // the primal its dual is paired with — a name no shape carries otherwise.
+    // One mode per task, below the usual grain: a mode costs a whole sparse
+    // product and two reads of its shape, enough to be worth a thread.
     let products: Vec<(Vec<f64>, Vec<f64>)> = modes
         .par_iter()
         .with_min_len(1)

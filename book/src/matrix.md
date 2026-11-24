@@ -3,8 +3,11 @@
 Une matrice est ce que rend un assemblage : `pyrucast.matrix.stiffness(modele,
 materiaux)` rend **une seule** matrice pour tout le [modèle](model.md),
 physiques et contraintes comprises, et `mass`, `geometric` et `tangent` font de
-même (voir [`pyrucast.matrix`](reference/matrix.md)). Elle est **creuse** : seuls
-ses termes non nuls sont gardés. C'est un [agrégat](aggregate.md) :
+même (voir [`pyrucast.matrix`](reference/matrix.md)). Une matrice projetée sur
+une liste de modes en est une aussi, petite, posée sur les nœuds des modes
+(`matrix.project_on_basis`, voir [Modes propres et base
+modale](algorithmes/modes.md)). Elle est **creuse** : seuls ses termes non nuls
+sont gardés. C'est un [agrégat](aggregate.md) :
 
 - un **bloc** (`SubMatrix`) est la part d'un sous-modèle : la conduction d'une
   zone, ou l'une des deux moitiés d'une contrainte ;

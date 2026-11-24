@@ -174,6 +174,7 @@ champs](algorithmes/champs.md) et [`pyrucast.node_field`](reference/node_field.m
 | d'un champ aux points de Gauss | `divergence`, `to_nodes` |
 | assemblage | `internal_forces`, `external_forces` |
 | d'un champ aux nœuds | `restrict`, `restrict_like`, `project`, `merge`, `consolidate`, `mask` |
+| d'une liste de modes | `project_on_basis` (des forces ramenées sur les modes), `recombine` (des coordonnées modales ramenées aux nœuds) ; voir [Modes propres et base modale](algorithmes/modes.md) |
 
 La résolution en produit un aussi : `pyrucast.solver.solve(K, f)` pose sa
 solution sur les supports des blocs de la matrice, ceux que
