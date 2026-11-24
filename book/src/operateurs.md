@@ -187,7 +187,7 @@ matrix.stiffness matrix.mass matrix.geometric matrix.tangent matrix.lump}}
 
 ### Modes propres
 
-{{#pysummary solver.eigen}}
+{{#pysummary solver.eigen solver.quadratic_eigen}}
 
 ## Échanges avec l'extérieur
 

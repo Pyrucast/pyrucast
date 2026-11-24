@@ -5,6 +5,7 @@
 //! per the `py/ops/` convention (their identity is the *operation*, not their
 //! result).
 
+use crate::containers::matrix::Matrix;
 use crate::ops::solver::{
     ActiveSetMethod, Mode, Normalization, RelationMethod, SolveMethod, SolveOptions, Verbosity,
 };
@@ -191,6 +192,60 @@ pub fn eigen<'py>(
 ) -> PyResult<Vec<Bound<'py, PyDict>>> {
     let (a, b) = (&a.inner, &b.inner);
     let modes = py.detach(|| crate::ops::solver::eigen(a, b, count, shift, normalization))?;
+    modes
+        .into_iter()
+        .map(|mode| mode_to_dict(py, mode))
+        .collect()
+}
+
+/// The complex modes of `[K + iωC − ω²M] X = 0` for small dense problems.
+///
+/// `q(t) = X·exp(iωt)`: `Re ω` is the damped angular frequency and `Im ω` the
+/// decay rate, positive for a damped mode. The problem is written in first order
+/// and solved by a dense QZ on `2n × 2n` matrices, `n` the unknowns of the three
+/// matrices together. Every finite eigenvalue comes out: an oscillating mode
+/// together with its mirror `−ω̄`, of conjugate shape.
+///
+/// It is meant for matrices projected on real modes (`project_on_basis`): the
+/// shapes then hold modal coordinates `alpha`, which `recombine` brings back to
+/// the physical unknowns, part by part, with the real modes.
+///
+/// # Parameters
+///
+/// - `mass`, `stiffness`: assembled matrices without relations.
+/// - `damping`: the damping matrix; `None` for none.
+/// - `normalization`: `"mass"` scales each shape to `XᴴMX = 1`, `"max"` its value
+///   of largest modulus to `1`. Either way, that value is real and positive.
+///
+/// # Returns
+///
+/// The modes, sorted by `|ω|`, then by `Re ω`, each a `dict` with the keys of
+/// `eigen` (`"node"`, `"support"`, `"eigenvalue"`, `"shape"`, `"pairs"`,
+/// `"generalized_mass"`) and two more: `"eigenvalue"` holds `Re ω` and
+/// `"eigenvalue_imag"` `Im ω`; `"shape"` holds `Re X` and `"shape_imag"` `Im X`.
+/// The generalized mass is `XᴴMX`.
+///
+/// # Raises
+///
+/// `RuntimeError` if a matrix carries relations (project it on real modes
+/// first) or has no assembled values, if the three together are not square, or
+/// if the QZ iteration does not converge. `ValueError` for an unknown
+/// `normalization`.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mass, stiffness, damping = None, normalization = Normalization::Mass))]
+pub fn quadratic_eigen<'py>(
+    py: Python<'py>,
+    mass: PyRef<PyMatrix>,
+    stiffness: PyRef<PyMatrix>,
+    damping: Option<PyRef<PyMatrix>>,
+    normalization: Normalization,
+) -> PyResult<Vec<Bound<'py, PyDict>>> {
+    let none = Matrix::default();
+    let (mass, stiffness) = (&mass.inner, &stiffness.inner);
+    let damping = damping.as_ref().map_or(&none, |d| &d.inner);
+    let modes =
+        py.detach(|| crate::ops::solver::quadratic_eigen(mass, stiffness, damping, normalization))?;
     modes
         .into_iter()
         .map(|mode| mode_to_dict(py, mode))

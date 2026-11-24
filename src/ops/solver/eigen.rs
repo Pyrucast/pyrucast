@@ -1,5 +1,6 @@
 //! Eigenmodes, as lists of [`Mode`]s: [`eigen`] for `A x = λ B x` on sparse
-//! matrices.
+//! matrices, [`quadratic_eigen`] for the complex modes of a small dense
+//! `[K + iωC − ω²M] X = 0`.
 //!
 //! A mode carries everything its consumers need: its own node, the POI1
 //! support shared by the modes of its list, its eigenvalue, its shape, the
@@ -44,7 +45,10 @@
 
 use std::collections::HashMap;
 
+use faer::diag::Diag;
 use faer::dyn_stack::{MemBuffer, MemStack, StackReq};
+use faer::linalg::evd::ComputeEigenvectors;
+use faer::linalg::gevd::{gevd_real, gevd_scratch};
 use faer::linalg::triangular_solve::{
     solve_lower_triangular_in_place, solve_upper_triangular_in_place,
 };
@@ -417,6 +421,268 @@ pub fn eigen(
         });
     }
     Ok(modes)
+}
+
+/// The complex modes of `[K + iωC − ω²M] X = 0`, for small dense problems,
+/// sorted by `|ω|`, then by `Re ω`.
+///
+/// `q(t) = X e^{iωt}`: `Re ω` is the damped angular frequency and `Im ω` the
+/// decay rate, positive for a damped mode. The problem is written in first
+/// order, `z = [x ; iωx]`, and solved by faer's QZ on dense `2n × 2n`
+/// matrices — `n` the unknowns of the three matrices together. Every finite
+/// eigenvalue comes out: an oscillating mode with its mirror `−ω̄`, of
+/// conjugate shape.
+///
+/// It is meant for matrices projected on real modes (`project_on_basis`): the
+/// shapes then hold modal coordinates, which `recombine` brings back to the
+/// physical unknowns, part by part, with the real modes.
+///
+/// # Parameters
+///
+/// - `mass`, `stiffness`, `damping`: assembled matrices without relations. No
+///   damping is the empty matrix, `Matrix::default()` (`None` in Python).
+/// - `normalization`: `"mass"` scales each shape to `XᴴMX = 1`, `"max"` its
+///   value of largest modulus to `1` ([`Normalization`]; `"mass"` in Python).
+///   Either way, that value is real and positive.
+///
+/// # Errors
+///
+/// - a matrix carries relations (multipliers have no mass, and would give
+///   infinite eigenvalues): project it first;
+/// - a matrix has no assembled values;
+/// - the three matrices together are not square;
+/// - the QZ iteration does not converge.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
+/// # use pyrucast::containers::mesh::SubMesh;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::solver::{self, Normalization};
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let p = Node::create_in(coords.clone(), &[0.0]).unwrap();
+/// # let support = {
+/// #     let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+/// #     sm.add_cell(&[p.id()]).unwrap();
+/// #     Handle::new(sm)
+/// # };
+/// # let point = |value: f64| -> pyrucast::Result<Matrix> {
+/// #     let mut z = SubMatrix::new(support.clone(), support.clone(), vec!["f".into()],
+/// #         vec!["u".into()], DofOrdering::NodesThenVars, Symmetry::Full)?;
+/// #     z.add_entry(p.id(), "f", p.id(), "u", value)?;
+/// #     let mut m = Matrix::empty();
+/// #     m.add_sub(Handle::new(z))?;
+/// #     m.assemble()?;
+/// #     Ok(m)
+/// # };
+/// // m = 40, k = 4e5, c = 400 (5 % of the critical damping):
+/// // ω = ±√(4km − c²)/2m + i·c/2m = ±99.8749 + 5i.
+/// let modes = solver::quadratic_eigen(&point(40.0)?, &point(4e5)?, &point(400.0)?,
+///                                     Normalization::Mass)?;
+/// let damped = (6.4e7f64 - 1.6e5).sqrt() / 80.0;
+/// assert!((modes[1].eigenvalue - damped).abs() < 1e-9);
+/// assert!((modes[1].eigenvalue_imag.unwrap() - 5.0).abs() < 1e-9);
+/// assert!((modes[0].eigenvalue + damped).abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn quadratic_eigen(
+    mass: &Matrix,
+    stiffness: &Matrix,
+    damping: &Matrix,
+    normalization: Normalization,
+) -> Result<Vec<Mode>> {
+    for (m, name) in [
+        (mass, "mass"),
+        (stiffness, "stiffness"),
+        (damping, "damping"),
+    ] {
+        if m.dof_vars().iter().any(|v| v == MULTIPLIER) {
+            return Err(PyrucastError::Message(format!(
+                "quadratic_eigen: `{name}` carries relations, whose multipliers have no mass; \
+                 project it on real modes first"
+            )));
+        }
+        if !m.is_empty() && !m.is_assembled() {
+            return Err(PyrucastError::Message(format!(
+                "quadratic_eigen: `{name}` has no assembled values; call assemble() first"
+            )));
+        }
+    }
+    let mut d = (stiffness + mass)?;
+    if !damping.is_empty() {
+        d = (&d + damping)?;
+    }
+    let n = d.n_cols()?;
+    if d.n_rows()? != n {
+        return Err(PyrucastError::Message(format!(
+            "quadratic_eigen: the matrices make a {}×{n} system, not a square one",
+            d.n_rows()?
+        )));
+    }
+    let dense = |m: &Matrix| -> Result<Mat<f64>> {
+        let mut out = Mat::<f64>::zeros(n, n);
+        if m.is_empty() {
+            return Ok(out);
+        }
+        let (rows, cols) = reindex(m, &d)?;
+        let (offsets, columns, values) = m.csr_arrays()?;
+        for (r, &row) in rows.iter().enumerate() {
+            for k in offsets[r]..offsets[r + 1] {
+                out[(row, cols[columns[k]])] += values[k];
+            }
+        }
+        Ok(out)
+    };
+    let (m_d, k_d, c_d) = (dense(mass)?, dense(stiffness)?, dense(damping)?);
+
+    // P z = s Q z with z = [x ; s x] and s = iω.
+    let mut p = Mat::<f64>::from_fn(2 * n, 2 * n, |i, j| match (i < n, j < n) {
+        (true, true) => 0.0,
+        (true, false) => f64::from(u8::from(j - n == i)),
+        (false, true) => -k_d[(i - n, j)],
+        (false, false) => -c_d[(i - n, j - n)],
+    });
+    let mut q = Mat::<f64>::from_fn(2 * n, 2 * n, |i, j| match (i < n, j < n) {
+        (true, true) => f64::from(u8::from(i == j)),
+        (false, false) => m_d[(i - n, j - n)],
+        _ => 0.0,
+    });
+    let par = Par::Seq;
+    let mut alpha_re = Diag::<f64>::zeros(2 * n);
+    let mut alpha_im = Diag::<f64>::zeros(2 * n);
+    let mut beta = Diag::<f64>::zeros(2 * n);
+    let mut right = Mat::<f64>::zeros(2 * n, 2 * n);
+    // faer 0.24.4's `gevd_scratch` leaves out what the right eigenvectors take
+    // — two norms of `2n` and two `2n × 2` work matrices, held together — which
+    // only the smallest problems notice: it is reserved here.
+    let norms = faer::linalg::temp_mat_scratch::<f64>(2 * n, 1);
+    let vectors = faer::linalg::temp_mat_scratch::<f64>(2 * n, 2);
+    let mut buffer = MemBuffer::new(
+        gevd_scratch::<f64>(
+            2 * n,
+            ComputeEigenvectors::No,
+            ComputeEigenvectors::Yes,
+            par,
+            Default::default(),
+        )
+        .or(StackReq::all_of(&[norms, norms, vectors, vectors])),
+    );
+    gevd_real(
+        p.as_mut(),
+        q.as_mut(),
+        alpha_re.as_mut(),
+        alpha_im.as_mut(),
+        beta.as_mut(),
+        None,
+        Some(right.as_mut()),
+        par,
+        MemStack::new(&mut buffer),
+        Default::default(),
+    )
+    .map_err(|e| {
+        PyrucastError::Message(format!("quadratic_eigen: the QZ iteration failed: {e:?}"))
+    })?;
+
+    // Each finite eigenvalue with its x = the first n components of z, as
+    // (Re ω, Im ω, Re x, Im x). A complex pair occupies two columns of
+    // `right`, the real and the imaginary part of the first eigenvalue's
+    // vector; the second eigenvalue and vector are their conjugates, written
+    // from the first (faer 0.24.4 does not scale the second `α` by its `β`).
+    let mut found: Vec<(f64, f64, Vec<f64>, Vec<f64>)> = Vec::with_capacity(2 * n);
+    let mut i = 0;
+    while i < 2 * n {
+        let pair = alpha_im[i] != 0.0;
+        if beta[i] != 0.0 {
+            let column = |j: usize| -> Vec<f64> { (0..n).map(|r| right[(r, j)]).collect() };
+            let (x_re, x_im) = if pair {
+                (column(i), column(i + 1))
+            } else {
+                (column(i), vec![0.0; n])
+            };
+            // ω = −i·s, s = (α_re + i α_im)/β.
+            found.push((
+                alpha_im[i] / beta[i],
+                -alpha_re[i] / beta[i],
+                x_re.clone(),
+                x_im.clone(),
+            ));
+            if pair {
+                let conjugate = x_im.iter().map(|v| -v).collect();
+                found.push((
+                    -alpha_im[i] / beta[i],
+                    -alpha_re[i] / beta[i],
+                    x_re,
+                    conjugate,
+                ));
+            }
+        }
+        i += if pair { 2 } else { 1 };
+    }
+    found.sort_by(|a, b| {
+        a.0.hypot(a.1)
+            .total_cmp(&b.0.hypot(b.1))
+            .then(a.0.total_cmp(&b.0))
+    });
+
+    let pairs = pairs_of(&[stiffness, mass, damping]);
+    let partners = row_partners(&d, &pairs)?;
+    let (nodes, zone) = new_support(&d, found.len())?;
+    let mut modes = Vec::with_capacity(found.len());
+    for (rank, (omega_re, omega_im, mut x_re, mut x_im)) in found.into_iter().enumerate() {
+        // XᴴMX, the rows paired with the columns of their primals.
+        let m_re = dense_product(&m_d, &x_re);
+        let m_im = dense_product(&m_d, &x_im);
+        let h: f64 = partners
+            .iter()
+            .map(|&(r, c)| x_re[c] * m_re[r] + x_im[c] * m_im[r])
+            .sum();
+        let (re, im) = x_re
+            .iter()
+            .zip(&x_im)
+            .fold((0.0f64, 0.0f64), |(a, b), (&u, &v)| {
+                if u.hypot(v) > a.hypot(b) {
+                    (u, v)
+                } else {
+                    (a, b)
+                }
+            });
+        let modulus = re.hypot(im);
+        // The factor that makes the largest component real and positive,
+        // then scales: conj(z)/|z|/√h for "mass", 1/z for "max".
+        let (f_re, f_im) = match normalization {
+            Normalization::Mass => {
+                let s = modulus * h.abs().sqrt();
+                (re / s, -im / s)
+            }
+            Normalization::Max => {
+                let s = modulus * modulus;
+                (re / s, -im / s)
+            }
+        };
+        for (u, v) in x_re.iter_mut().zip(x_im.iter_mut()) {
+            (*u, *v) = (*u * f_re - *v * f_im, *u * f_im + *v * f_re);
+        }
+        modes.push(Mode {
+            node: nodes[rank].clone(),
+            support: support_mesh(&zone)?,
+            eigenvalue: omega_re,
+            eigenvalue_imag: Some(omega_im),
+            shape: d.field_from_col_values(&x_re)?,
+            shape_imag: Some(d.field_from_col_values(&x_im)?),
+            pairs: pairs.clone(),
+            generalized_mass: h * (f_re * f_re + f_im * f_im),
+        });
+    }
+    Ok(modes)
+}
+
+/// `m · x` for a dense square `m`.
+fn dense_product(m: &Mat<f64>, x: &[f64]) -> Vec<f64> {
+    (0..m.nrows())
+        .map(|r| (0..m.ncols()).map(|c| m[(r, c)] * x[c]).sum())
+        .collect()
 }
 
 /// The shift-inverted operator `v ↦ ((a − σb)⁻¹ b v)` restricted to the
@@ -890,6 +1156,105 @@ mod tests {
             .unwrap()
             .is_empty());
         assert_eq!(eigen(&k, &m, 5, 0.0, Normalization::Mass).unwrap().len(), 3);
+    }
+
+    /// The point of vibr10, k and m on the unknown `T`, `c` the damping.
+    fn oscillator(c: f64) -> (Matrix, Matrix, Matrix) {
+        let (_, n) = line(1, 1);
+        let k = lumped(&n[..1], &[4e5], Symmetry::Full);
+        let m = lumped(&n[..1], &[40.0], Symmetry::Full);
+        let damping = if c == 0.0 {
+            Matrix::empty()
+        } else {
+            lumped(&n[..1], &[c], Symmetry::Full)
+        };
+        (m, k, damping)
+    }
+
+    #[test]
+    fn quadratic_eigen_damped_oscillator() {
+        // c = 2ζ√(km) with ζ = 0.05: ω = ±99.8749 + 5i, of modulus √(k/m) = 100.
+        let (m, k, c) = oscillator(400.0);
+        let modes = quadratic_eigen(&m, &k, &c, Normalization::Mass).unwrap();
+        assert_eq!(modes.len(), 2);
+        let damped = (6.4e7f64 - 1.6e5).sqrt() / 80.0;
+        for (mode, re) in modes.iter().zip([-damped, damped]) {
+            assert!((mode.eigenvalue - re).abs() < 1e-9, "{}", mode.eigenvalue);
+            assert!((mode.eigenvalue_imag.unwrap() - 5.0).abs() < 1e-9);
+            assert!((mode.generalized_mass - 1.0).abs() < 1e-12);
+            let node = mode
+                .shape
+                .iter()
+                .next()
+                .unwrap()
+                .read()
+                .support()
+                .read()
+                .connectivity()[0];
+            let x = mode.shape.value(node, "T").unwrap();
+            let y = mode.shape_imag.as_ref().unwrap().value(node, "T").unwrap();
+            assert!(
+                (x - 40f64.sqrt().recip()).abs() < 1e-12 && y == 0.0,
+                "{x} {y}"
+            );
+        }
+    }
+
+    #[test]
+    fn quadratic_eigen_without_damping_matches_eigen() {
+        // Two unit masses on springs of 2, coupled by 1: λ = 2 and 4, so
+        // ω = ±√2 and ±2, the shapes real.
+        let (_, n) = line(1, 1);
+        let support = mesh::poi1_from_nodes(&n).unwrap().unit().unwrap();
+        let mut z = SubMatrix::new(
+            support.clone(),
+            support,
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            Symmetry::Full,
+        )
+        .unwrap();
+        for (i, j, v) in [(0, 0, 3.0), (0, 1, -1.0), (1, 0, -1.0), (1, 1, 3.0)] {
+            z.add_entry(n[i].id(), "q", n[j].id(), "T", v).unwrap();
+        }
+        let mut k = Matrix::empty();
+        k.add_sub(Handle::new(z)).unwrap();
+        k.assemble().unwrap();
+        let m = lumped(&n, &[1.0, 1.0], Symmetry::Full);
+        let complex = quadratic_eigen(&m, &k, &Matrix::empty(), Normalization::Mass).unwrap();
+        let real = eigen(&k, &m, 2, 0.0, Normalization::Mass).unwrap();
+        let omegas: Vec<f64> = complex.iter().map(|mode| mode.eigenvalue).collect();
+        let s2 = 2f64.sqrt();
+        for (w, expected) in omegas.iter().zip([-s2, s2, -2.0, 2.0]) {
+            assert!((w - expected).abs() < 1e-12, "{omegas:?}");
+        }
+        for (mode, same) in complex.iter().zip([&real[0], &real[0], &real[1], &real[1]]) {
+            assert!(mode.eigenvalue_imag.unwrap().abs() < 1e-12);
+            for node in &n {
+                let x = mode.shape.value(node.id(), "T").unwrap();
+                let y = mode
+                    .shape_imag
+                    .as_ref()
+                    .unwrap()
+                    .value(node.id(), "T")
+                    .unwrap();
+                assert!(
+                    (x - same.shape.value(node.id(), "T").unwrap()).abs() < 1e-12
+                        && y.abs() < 1e-12
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn quadratic_eigen_refuses_relations() {
+        let (k, n) = chain_stiffness(3, RelationSense::Equality);
+        let m = lumped(&n[1..], &[1.0; 3], Symmetry::Full);
+        let err = quadratic_eigen(&m, &k, &Matrix::empty(), Normalization::Mass)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("`stiffness` carries relations"), "{err}");
     }
 
     /// A unit mass on every row node of `k`.

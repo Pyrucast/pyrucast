@@ -73,7 +73,7 @@ mod relations;
 mod scaling;
 mod unilateral;
 
-pub use eigen::{eigen, Mode, Normalization, MODAL_COORDINATE, MODAL_FORCE};
+pub use eigen::{eigen, quadratic_eigen, Mode, Normalization, MODAL_COORDINATE, MODAL_FORCE};
 pub use lu::{SolveMethod, Verbosity};
 pub use unilateral::ActiveSetMethod;
 

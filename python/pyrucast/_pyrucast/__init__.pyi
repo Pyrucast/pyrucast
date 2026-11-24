@@ -126,6 +126,7 @@ __all__ = [
     "project",
     "project_on_sphere",
     "psca",
+    "quadratic_eigen",
     "radiation",
     "read_gmsh",
     "read_gmsh_str",
@@ -9158,6 +9159,43 @@ def psca(x: typing.Any, y: typing.Any) -> typing.Any:
     
     `pyrucast.measure.xty`, the global scalar product: a single number over
     the whole field.
+    """
+
+def quadratic_eigen(mass: Matrix, stiffness: Matrix, damping: typing.Optional[Matrix] = None, normalization: builtins.str = 'mass') -> builtins.list[dict]:
+    r"""
+    The complex modes of `[K + iωC − ω²M] X = 0` for small dense problems.
+    
+    `q(t) = X·exp(iωt)`: `Re ω` is the damped angular frequency and `Im ω` the
+    decay rate, positive for a damped mode. The problem is written in first order
+    and solved by a dense QZ on `2n × 2n` matrices, `n` the unknowns of the three
+    matrices together. Every finite eigenvalue comes out: an oscillating mode
+    together with its mirror `−ω̄`, of conjugate shape.
+    
+    It is meant for matrices projected on real modes (`project_on_basis`): the
+    shapes then hold modal coordinates `alpha`, which `recombine` brings back to
+    the physical unknowns, part by part, with the real modes.
+    
+    # Parameters
+    
+    - `mass`, `stiffness`: assembled matrices without relations.
+    - `damping`: the damping matrix; `None` for none.
+    - `normalization`: `"mass"` scales each shape to `XᴴMX = 1`, `"max"` its value
+      of largest modulus to `1`. Either way, that value is real and positive.
+    
+    # Returns
+    
+    The modes, sorted by `|ω|`, then by `Re ω`, each a `dict` with the keys of
+    `eigen` (`"node"`, `"support"`, `"eigenvalue"`, `"shape"`, `"pairs"`,
+    `"generalized_mass"`) and two more: `"eigenvalue"` holds `Re ω` and
+    `"eigenvalue_imag"` `Im ω`; `"shape"` holds `Re X` and `"shape_imag"` `Im X`.
+    The generalized mass is `XᴴMX`.
+    
+    # Raises
+    
+    `RuntimeError` if a matrix carries relations (project it on real modes
+    first) or has no assembled values, if the three together are not square, or
+    if the QZ iteration does not converge. `ValueError` for an unknown
+    `normalization`.
     """
 
 def radiation(fespace: FiniteElementSpace, target: Model) -> Model:

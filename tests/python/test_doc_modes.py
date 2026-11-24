@@ -57,3 +57,27 @@ deflection = modes[0]["shape"].value(tip, "u_z")  # a NodeField, u_x … r_z
 assert abs(frequencies[0] - 17.7036) < 1e-3
 assert abs(frequencies[1] - 110.7069) < 1e-3
 assert all(abs(m["generalized_mass"] - 1.0) < 1e-12 for m in modes)
+
+
+# ── Modes complexes ────────────────────────────────────────────────────────
+
+
+def _point_matrix(point, node, value):
+    """A 1 × 1 matrix on the unknown u of `node`."""
+    matrix = pyrucast.Matrix.block(point, point, ["f"], ["u"], symmetry="full")
+    matrix[0].add_entry(node, "f", node, "u", value)
+    matrix.assemble()
+    return matrix
+
+
+coords = pyrucast.Coords(1)
+p = coords.add_node([0.0])
+point = pyrucast.mesh.poi1_from_nodes([p])
+mass, stiffness, damping = (_point_matrix(point, p, v) for v in (40.0, 4e5, 400.0))
+# ANCHOR: solver-quadratic_eigen
+modes = pyrucast.solver.quadratic_eigen(mass, stiffness, damping)
+omega = complex(modes[1]["eigenvalue"], modes[1]["eigenvalue_imag"])  # 99.87 + 5j
+damping_ratio = omega.imag / abs(omega)  # 0.05
+# ANCHOR_END: solver-quadratic_eigen
+assert abs(omega - complex(math.sqrt(6.4e7 - 1.6e5) / 80.0, 5.0)) < 1e-9
+assert abs(damping_ratio - 0.05) < 1e-12

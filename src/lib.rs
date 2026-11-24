@@ -124,6 +124,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::archive::load, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::solver::solve, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::solver::eigen, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::solver::quadratic_eigen, m)?)?;
     m.add_function(wrap_pyfunction!(
         models::heat_conduction::heat_conduction_py::heat_conduction,
         m

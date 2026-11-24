@@ -7,9 +7,11 @@ one is an inequality) or by elimination (``"eliminate"``).
 
 ``eigen`` finds the modes of ``A x = λ B x`` nearest a shift, each mode a
 ``dict`` holding its node, the support shared by the modes, its eigenvalue, its
-shape, the pairs of the shape and its generalized mass.
+shape, the pairs of the shape and its generalized mass. ``quadratic_eigen``
+finds the complex modes of a small dense ``[K + iωC − ω²M] X = 0``, in the
+same form, with the imaginary parts beside.
 """
 
-from ._pyrucast import eigen, solve
+from ._pyrucast import eigen, quadratic_eigen, solve
 
-__all__ = ["eigen", "solve"]
+__all__ = ["eigen", "quadratic_eigen", "solve"]
