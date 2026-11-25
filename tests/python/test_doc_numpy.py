@@ -1,4 +1,4 @@
-"""Book example: reading field zones with numpy.
+"""Book example: reading field zones with numpy, and building them from arrays.
 
 Put at module level so the excerpts the book includes show up at column 0.
 Requires numpy, hence skipped at import when it is missing.
@@ -51,3 +51,26 @@ del a  # le dernier tableau sur la zone disparaît
 zone.set_uniform("UX", 1.0)  # l'écriture passe
 # ANCHOR_END: numpy_pret
 assert zone.max("UX") == 1.0
+
+# ANCHOR: numpy_construire_noeuds
+x = np.asarray(pyrucast.node_field.positions(maillage)[0])[:, 0]  # l'abscisse des nœuds
+T = pyrucast.NodeField(maillage, ["T"], values=20.0 + 5.0 * x)  # une composante : (4,)
+print(T.values(_nodes, "T"))  # [20.0, 25.0, 30.0, 35.0]
+deux_fois = pyrucast.NodeField(
+    zone.support(), zone.components(), values=2.0 * np.asarray(zone)
+)
+print(deux_fois.max("UX"))  # 2.0
+# ANCHOR_END: numpy_construire_noeuds
+assert T.values(_nodes, "T") == [20.0, 25.0, 30.0, 35.0]
+assert deux_fois.max("UX") == 2.0
+
+# ANCHOR: numpy_construire_gauss
+points = fes[0].gauss_count
+e = np.empty((2, points, 2))  # (mailles, points de Gauss, composantes)
+# E : acier dans la première maille, aluminium dans la seconde ; NU partout.
+e[:, :, 0] = [[210e3], [70e3]]
+e[:, :, 1] = 0.3
+bimateriau = pyrucast.ElementField(fes, ["E", "NU"], values=e)
+print(bimateriau[0].value(1, 0, "E"))  # 70000.0
+# ANCHOR_END: numpy_construire_gauss
+assert bimateriau[0].value(0, 0, "E") == 210e3

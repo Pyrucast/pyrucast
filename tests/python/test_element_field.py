@@ -111,6 +111,44 @@ def test_uniform_per_component_via_set_uniform():
         assert f.get(0, g, 2) == 7800.0
 
 
+def test_a_subspace_gives_a_field_of_that_one_zone():
+    fes, other = _two_spaces()
+    both = fes | other
+    ef = pyrucast.ElementField(both[1], [("k", 2.0)])
+    assert len(ef) == 1
+    assert ef.max("k") == 2.0
+    # Zones add up on one support only: the zone stands on `both[1]`.
+    on_second = pyrucast.ElementField(both, [("k", 1.0)])[1]
+    assert (ef[0] + on_second).max("k") == 3.0
+    with pytest.raises(RuntimeError, match="same support"):
+        ef[0] + pyrucast.ElementField(both, ["k"])[0]
+
+
+def test_values_fill_a_zone_and_read_back_through_numpy():
+    np = pytest.importorskip("numpy")
+    _, _, fes = _tri3_subspace(n_cells=2)
+    z = pyrucast.ElementField(fes, [("E", 1.0), ("NU", 0.3)])[0]
+    z.set_value(1, 2, "E", 7.0)
+    again = pyrucast.ElementField(fes[0], z.components(), values=np.asarray(z))
+    assert np.asarray(again[0]).tolist() == np.asarray(z).tolist()
+    # One component: the last dimension may be left out.
+    k = pyrucast.ElementField(
+        fes, ["k"], values=np.arange(2.0 * z.gauss_count).reshape(2, -1)
+    )
+    assert k[0].value(1, 0, "k") == z.gauss_count
+
+
+def test_values_refusals():
+    np = pytest.importorskip("numpy")
+    fes, other = _two_spaces()
+    with pytest.raises(ValueError, match="2 subspaces"):
+        pyrucast.ElementField(fes | other, ["E"], values=np.zeros((1, 3)))
+    with pytest.raises(ValueError, match=r"shape \(3, 1\)"):
+        pyrucast.ElementField(fes, ["E"], values=np.zeros((3, 1)))
+    with pytest.raises(TypeError, match="names its columns"):
+        pyrucast.ElementField(fes, [("E", 1.0)], values=np.zeros((1, 3)))
+
+
 # ─── Get / set ──────────────────────────────────────────────────────────────
 
 

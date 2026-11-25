@@ -31,8 +31,11 @@ champs (composantes, statistiques, arithmétique) sont décrites dans
 
 `pyrucast.ElementField(fes, [("E", 210e9), "nu"])` crée une zone par
 sous-espace de `fes`, avec ces composantes. Un couple `(nom, valeur)` donne à la
-composante cette valeur en tout point de Gauss, un nom seul la met à zéro.
+composante cette valeur en tout point de Gauss, un nom seul la met à zéro. Sur
+un seul sous-espace (`fes[i]`), le champ a une zone.
 `pyrucast.ElementField.empty()` est un champ vide, que `|` complète.
+`ElementField(fes[i], noms, values=a)` remplit une zone à partir d'un tableau
+(voir [Échanger avec numpy](#échanger-avec-numpy)).
 `ElementField.with_components_per_subspace(fes, [["E", "nu"], ["k"]])` donne
 une liste de composantes **par** sous-espace. Une liste vide, un nom en double
 ou un nombre de listes qui ne correspond pas aux sous-espaces sont refusés.
@@ -95,6 +98,25 @@ Tant que le tableau existe, la zone refuse toute écriture (`BufferError`), comm
 une zone aux nœuds (voir [Modèle mémoire](memory-model.md#prêter-la-mémoire-à-numpy)).
 `numpy.array(zone)` en fait une copie, `memoryview(zone)` donne le même bloc sans
 numpy. Le champ entier n'est pas un tableau : on lit zone par zone.
+
+Dans l'autre sens, `ElementField(fes, noms, values=a)` construit une zone à
+partir d'un tableau :
+
+- `fes` donne **un** sous-espace : `fes[i]`, ou un espace d'un seul
+  sous-espace ;
+- `noms` sont des noms seuls, ceux du dernier indice de `a`, dans l'ordre ;
+- `a` a la forme que rend `numpy.asarray` : `(mailles, points de Gauss,
+  len(noms))`, ou `(mailles, points de Gauss)` pour une seule composante.
+
+```python
+{{#include ../../tests/python/test_doc_numpy.py:numpy_construire_gauss}}
+```
+
+Les valeurs sont copiées une fois, dans la mémoire du champ. Les refus sont
+ceux d'une zone aux nœuds (voir [Échanger avec
+numpy](node-field.md#échanger-avec-numpy)) : une forme qui ne correspond pas, un
+tableau qui n'est pas en float64 C-contigu, un couple `(nom, valeur)`, un espace
+de plusieurs sous-espaces.
 
 ## Composantes
 

@@ -128,6 +128,42 @@ def test_components_per_submesh():
         raise AssertionError("expected RuntimeError for (n3, T)")
 
 
+def test_values_fill_a_zone_and_read_back_through_numpy():
+    np = pytest.importorskip("numpy")
+    _c, _nodes, mesh = _two_zone_mesh()
+    z = pyrucast.NodeField(mesh, [("UX", 1.0), ("UY", -2.0)])[1]
+    z.set(0, 1, 5.0)
+    again = pyrucast.NodeField(z.support(), z.components(), values=np.asarray(z))
+    assert len(again) == 1
+    assert np.asarray(again[0]).tolist() == np.asarray(z).tolist()
+    # Zones add up on one support only: the copy stands on `z.support()`.
+    assert np.asarray(again[0] + z).tolist() == (2 * np.asarray(z)).tolist()
+
+
+def test_values_of_one_component_may_be_a_flat_list():
+    _c, nodes, sm = _poi1_with(3)
+    t = pyrucast.NodeField(sm, ["T"], values=[1.0, 2.0, 3.0])
+    assert t.values(nodes, "T") == [1.0, 2.0, 3.0]
+
+
+def test_values_refusals():
+    np = pytest.importorskip("numpy")
+    _c, _nodes, mesh = _two_zone_mesh()
+    zone = mesh[0]  # 3 nodes
+    with pytest.raises(ValueError, match=r"shape \(2, 3\)"):
+        pyrucast.NodeField(zone, ["A", "B"], values=np.zeros((2, 3)))
+    with pytest.raises(ValueError, match=r"shape \(5,\)"):
+        pyrucast.NodeField(zone, ["A"], values=np.zeros(5))
+    with pytest.raises(ValueError, match="2 submeshes"):
+        pyrucast.NodeField(mesh, ["A"], values=np.zeros(3))
+    with pytest.raises(TypeError, match="names its columns"):
+        pyrucast.NodeField(zone, [("A", 1.0)], values=np.zeros(3))
+    with pytest.raises(TypeError, match="ascontiguousarray"):
+        pyrucast.NodeField(zone, ["A", "B"], values=np.zeros((2, 3)).T)
+    with pytest.raises(TypeError, match="ascontiguousarray"):
+        pyrucast.NodeField(zone, ["A"], values=np.zeros(3, dtype=np.float32))
+
+
 # ─── Zone view (SubNodeField) ────────────────────────────────────────────────
 
 

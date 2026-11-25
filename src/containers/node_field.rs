@@ -150,6 +150,17 @@ impl SubNodeField {
     /// assert_eq!(u.node_count(), 2);
     /// ```
     pub fn from_poi1(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
+        Self::on_poi1(submesh, components, |len| Ok(vec![0.0; len]))
+    }
+
+    /// The zone on POI1 `submesh`, holding the `values` that `fill` gives for
+    /// a row-major buffer of `len` entries. The support is sealed only once
+    /// every check — components, support, `fill` — has passed.
+    fn on_poi1(
+        submesh: &Handle<SubMesh>,
+        components: Vec<String>,
+        fill: impl FnOnce(usize) -> Result<Vec<f64>>,
+    ) -> Result<Self> {
         crate::containers::field::check_components("SubNodeField", &components)?;
 
         let n_nodes = {
@@ -159,16 +170,65 @@ impl SubNodeField {
             sm.check_node_support("SubNodeField")?;
             sm.cell_count()
         };
+        let values = fill(n_nodes * components.len())?;
 
         // The field indexes its rows by position in this support; freeze it so
         // the row order can never move under the values.
         let support = SubMesh::seal(submesh);
 
-        let n_comp = components.len();
         Ok(SubNodeField {
             support,
             components,
-            values: vec![0.0; n_nodes * n_comp],
+            values,
+        })
+    }
+
+    /// A zone on the distinct nodes of `submesh` — its POI1 companion, as
+    /// [`from_support`](Self::from_support) — holding `values`, row-major:
+    /// `values[i * components.len() + c]` is component `c` at row `i`, the
+    /// `i`-th node of the support. The buffer is moved in, not copied.
+    ///
+    /// # Errors
+    ///
+    /// Those of [`from_poi1`](Self::from_poi1), and a `values` whose length is
+    /// not `node_count × components.len()`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::SubNodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let points = mesh::poi1_from_nodes(&[a.clone(), b.clone()])?.get(0)?;
+    /// // Two nodes, two components: row 0 is node a, row 1 node b.
+    /// let u = SubNodeField::from_values(&points, vec!["UX".into(), "UY".into()],
+    ///                                   vec![1.0, 2.0, 3.0, 4.0])?;
+    /// assert_eq!(u.value(b.id(), "UX")?, 3.0);
+    /// // Three values do not fill two rows of two.
+    /// let short = SubNodeField::from_values(&points, vec!["UX".into(), "UY".into()], vec![0.0; 3]);
+    /// assert!(short.is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn from_values(
+        submesh: &Handle<SubMesh>,
+        components: Vec<String>,
+        values: Vec<f64>,
+    ) -> Result<Self> {
+        Self::on_poi1(&SubMesh::to_poi1(submesh), components, |len| {
+            if values.len() == len {
+                Ok(values)
+            } else {
+                Err(PyrucastError::Message(format!(
+                    "SubNodeField::from_values: {} values where the zone holds {len} \
+                     (nodes × components)",
+                    values.len()
+                )))
+            }
         })
     }
 
@@ -1255,8 +1315,7 @@ impl NodeField {
         for id in &nodes {
             support.add_cell(&[*id])?;
         }
-        let mut zone = SubNodeField::from_poi1(&Handle::new(support), components)?;
-        zone.values_mut().copy_from_slice(&values);
+        let zone = SubNodeField::from_values(&Handle::new(support), components, values)?;
         let mut out = NodeField::empty();
         out.add_sub(Handle::new(zone))?;
         Ok(out)

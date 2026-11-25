@@ -86,6 +86,20 @@ Une classe Python n'a pas d'homologue Rust : `pyrucast.Array`, le tableau 1-D
 en lecture seule que rendent les fonctions d'échange (`export.to_arrays`…),
 lisible sans copie par `numpy.asarray`.
 
+Une zone de champ se lit de même par `numpy.asarray(zone)`, sans copie : c'est
+le protocole tampon de `SubNodeField` et `SubElementField`, qui prend un prêt
+(`Handle::lend`) le temps de la vue. Dans l'autre sens, les constructeurs à
+tableau correspondent à une zone construite puis élevée en agrégat :
+
+| Rust | Python |
+|---|---|
+| `NodeField::from_sub(SubNodeField::from_values(&zone, noms, valeurs)?)` | `NodeField(zone, noms, values=a)` |
+| `ElementField::from_sub(SubElementField::from_values(sous_espace, noms, valeurs)?)` | `ElementField(sous_espace, noms, values=a)` |
+| `ElementField::from_sub(SubElementField::new(sous_espace, noms)?)` | `ElementField(sous_espace, noms)` (`fes[i]` : un champ d'une zone) |
+
+En Rust, les valeurs sont **déplacées** dans la zone (`Vec<f64>`) ; en Python,
+le tableau est lu par le protocole tampon puis copié une fois.
+
 Quelques types Rust **ne sont pas** exposés en classes Python : ce sont des
 détails d'implémentation (`SubModelKind`, le trait que chaque physique
 implémente derrière `SubModel` ;

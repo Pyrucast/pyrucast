@@ -47,6 +47,22 @@ impl InitialComponent {
             .collect()
     }
 
+    /// The names of `components` when they name the columns of a `values`
+    /// array: bare names only. A `(name, value)` pair is refused, since the
+    /// array gives the values and the pair would leave its column unknown.
+    pub(crate) fn column_names(components: &[Self]) -> PyResult<Vec<String>> {
+        components
+            .iter()
+            .map(|c| match c {
+                Self::Named(name) => Ok(name.clone()),
+                Self::Valued(name, _) => Err(PyTypeError::new_err(format!(
+                    "components: ('{name}', value) given with values=; the array gives the \
+                     values, and components only names its columns"
+                ))),
+            })
+            .collect()
+    }
+
     /// Give each `(name, value)` entry of `components` its value on every zone
     /// of `field`, just built on them — a bare name keeps the zero it was
     /// built with.

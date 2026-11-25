@@ -25,27 +25,39 @@ use std::ffi::{c_int, c_void, CStr};
 /// A slice that is either borrowed straight from a Python buffer or owned
 /// because the object had no buffer to lend.
 ///
-/// [`Borrowed::as_slice`] is the only thing callers need; which arm they got
-/// is a performance detail, not a semantic one.
+/// [`Borrowed::as_slice`] is what most callers need, and [`Borrowed::shape`]
+/// the dimensions of the block; which arm they got is a performance detail,
+/// not a semantic one.
 pub enum Borrowed<'a, T: Element> {
     /// A view on the exporter's memory. Nothing was copied.
     View {
-        /// Held, never read: while this lives, the exporter has promised not
-        /// to move or free the block. Releasing it early would leave `view`
-        /// resting on nothing but the argument that no Python code can run in
-        /// between — true today, and one future edit away from being false.
-        _guard: PyBuffer<T>,
+        /// Read for its shape only: while this lives, the exporter has
+        /// promised not to move or free the block. Releasing it early would
+        /// leave `view` resting on nothing but the argument that no Python code
+        /// can run in between — true today, and one future edit away from
+        /// being false.
+        guard: PyBuffer<T>,
         view: &'a [T],
     },
-    /// A copy, because the object exposes no buffer (a `list`, a generator…).
-    Owned(Vec<T>),
+    /// A copy, because the object exposes no buffer (a `list`, a generator…):
+    /// one dimension, of the copy's length.
+    Owned { values: Vec<T>, shape: [usize; 1] },
 }
 
 impl<T: Element> Borrowed<'_, T> {
     pub fn as_slice(&self) -> &[T] {
         match self {
             Self::View { view, .. } => view,
-            Self::Owned(v) => v,
+            Self::Owned { values, .. } => values,
+        }
+    }
+
+    /// The sizes of the block's dimensions, the last one varying fastest: the
+    /// exporter's shape for a view, `[len]` for a copy.
+    pub fn shape(&self) -> &[usize] {
+        match self {
+            Self::View { guard, .. } => guard.shape(),
+            Self::Owned { shape, .. } => shape,
         }
     }
 }
@@ -53,11 +65,13 @@ impl<T: Element> Borrowed<'_, T> {
 /// Borrow `obj`'s contents as a contiguous `&[T]`, copying only if it exposes
 /// no buffer.
 ///
-/// The buffer path is taken when the object exports a **C-contiguous,
-/// one-dimensional** block whose item format matches `T` — which is what numpy
-/// gives for a plain 1-D array of the matching dtype. Anything else (a list, a
-/// strided view, a mismatched dtype) falls back to `extract()`, so a caller
-/// never has to care which it got.
+/// The buffer path is taken when the object exports a **C-contiguous** block
+/// of at least one dimension whose item format matches `T` — which is what
+/// numpy gives for a plain array of the matching dtype, of any shape. The
+/// slice runs through it in memory order, the last dimension fastest; a
+/// caller that reads the block flat reads `a` as it would read `a.ravel()`.
+/// Anything else (a list, a strided view, a mismatched dtype) falls back to
+/// `extract()`, so a caller never has to care which it got.
 ///
 /// The returned slice borrows from `obj`, so it cannot outlive the reference
 /// the caller holds.
@@ -66,7 +80,7 @@ where
     T: Element + Copy + for<'b, 'py> FromPyObject<'b, 'py>,
 {
     if let Ok(guard) = PyBuffer::<T>::get(obj)
-        && guard.dimensions() == 1
+        && guard.dimensions() >= 1
         && guard.is_c_contiguous()
         && let Some(cells) = guard.as_slice(obj.py())
     {
@@ -78,12 +92,61 @@ where
         // pointer valid — and `guard` living exactly as long as the view is
         // what keeps the exporter from moving it. Read only, never written.
         let view = unsafe { std::slice::from_raw_parts(ptr.cast::<T>(), len) };
-        return Ok(Borrowed::View {
-            _guard: guard,
-            view,
-        });
+        return Ok(Borrowed::View { guard, view });
     }
-    Ok(Borrowed::Owned(obj.extract::<Vec<T>>()?))
+    let values = obj.extract::<Vec<T>>()?;
+    let shape = [values.len()];
+    Ok(Borrowed::Owned { values, shape })
+}
+
+/// Borrow the values a field constructor is given: a C-contiguous float64
+/// array of any shape, without a copy, or a flat sequence of numbers (a
+/// `list`), copied.
+///
+/// An array of another type or layout is **refused** rather than read element
+/// by element: the message says how to convert it.
+pub(crate) fn borrow_values<'a>(obj: &'a Bound<'_, PyAny>) -> PyResult<Borrowed<'a, f64>> {
+    if let Ok(untyped) = pyo3::buffer::PyUntypedBuffer::get(obj) {
+        let usable = untyped
+            .as_typed::<f64>()
+            .is_ok_and(|b| b.dimensions() >= 1 && b.is_c_contiguous());
+        drop(untyped);
+        if !usable {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "values: expected a C-contiguous float64 array; \
+                 numpy.ascontiguousarray(values, dtype=float) gives one",
+            ));
+        }
+    }
+    borrow::<f64>(obj)
+}
+
+/// Check the shape of a field constructor's `values` against its zone: `rows`
+/// (the nodes, or the cells and their Gauss points), then one entry per
+/// component — that last dimension omitted when there is one component.
+pub(crate) fn check_values_shape(shape: &[usize], rows: &[usize], n_comp: usize) -> PyResult<()> {
+    let full: Vec<usize> = rows.iter().copied().chain([n_comp]).collect();
+    if shape == full.as_slice() || (n_comp == 1 && shape == rows) {
+        return Ok(());
+    }
+    let show = |s: &[usize]| {
+        let parts: Vec<String> = s.iter().map(usize::to_string).collect();
+        if s.len() == 1 {
+            format!("({},)", parts[0])
+        } else {
+            format!("({})", parts.join(", "))
+        }
+    };
+    Err(pyo3::exceptions::PyValueError::new_err(format!(
+        "values: shape {} does not match the zone, which takes {}{}",
+        show(shape),
+        show(&full),
+        if n_comp == 1 {
+            format!(" or {}", show(rows))
+        } else {
+            String::new()
+        }
+    )))
 }
 
 // ─── Arrays out ──────────────────────────────────────────────────────────────

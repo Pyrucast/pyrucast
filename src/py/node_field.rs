@@ -1,6 +1,7 @@
 //! Python wrappers for [`crate::containers::node_field::SubNodeField`] and
 //! [`crate::containers::node_field::NodeField`].
 
+use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::field::SubField;
 use crate::containers::mesh::SubMesh;
@@ -10,7 +11,7 @@ use crate::error::PyrucastError;
 use crate::handle::Handle;
 use crate::py::mesh::{PyMesh, PySubMesh};
 use crate::py::node::PyNode;
-use pyo3::exceptions::PyTypeError;
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 
 /// Resolve a node list from the several shapes a caller may pass to a
@@ -356,12 +357,55 @@ impl PyNodeField {
     /// Each entry of `components` is a `(name, value)` pair, the component
     /// holding `value` at every node, or a bare name, holding zero:
     /// `[("T", 20.0), "u_x"]`.
+    ///
+    /// `NodeField(support, names, values=a)` fills one zone from an array:
+    /// `support` gives one zone (a `SubMesh`, or a `Mesh` of one submesh),
+    /// `names` are bare names, the columns of `a` in order, and `a` has the
+    /// shape `numpy.asarray` gives — `(node_count, len(names))`, one row per
+    /// node of the zone's support in the order of its cells, or `(node_count,)`
+    /// for one component. The values are copied once into the field.
+    ///
+    /// # Raises
+    ///
+    /// - `TypeError` if `support` is neither a `Mesh` nor a `SubMesh`, if
+    ///   `values` comes with a `(name, value)` pair, or if `values` is an array
+    ///   that is not C-contiguous float64
+    ///   (`numpy.ascontiguousarray(a, dtype=float)` gives one).
+    /// - `ValueError` if `values` comes with a support of several zones, or
+    ///   does not have the zone's shape.
+    /// - `RuntimeError` for an empty or repeated component name.
     #[new]
+    #[pyo3(signature = (support, components, values = None))]
     fn py_new(
         support: &Bound<'_, PyAny>,
         components: Vec<crate::py::ops::field::InitialComponent>,
+        values: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         use crate::py::ops::field::InitialComponent;
+        if let Some(values) = values {
+            let names = InitialComponent::column_names(&components)?;
+            let zone = if let Ok(sm) = support.extract::<PyRef<PySubMesh>>() {
+                sm.handle.clone()
+            } else if let Ok(mesh) = support.extract::<PyRef<PyMesh>>() {
+                if mesh.inner.len() != 1 {
+                    return Err(PyValueError::new_err(format!(
+                        "NodeField(..., values=): the Mesh has {} submeshes, and values fill \
+                         one zone; build one field per submesh, then compose them with |",
+                        mesh.inner.len()
+                    )));
+                }
+                mesh.inner.get(0)?
+            } else {
+                return Err(PyTypeError::new_err("expected a Mesh or a SubMesh"));
+            };
+            let block = crate::py::arrays::borrow_values(values)?;
+            let rows = SubMesh::to_poi1(&zone).read().cell_count();
+            crate::py::arrays::check_values_shape(block.shape(), &[rows], names.len())?;
+            let sub = SubNodeField::from_values(&zone, names, block.as_slice().to_vec())?;
+            return Ok(Self {
+                inner: NodeField::from_sub(sub),
+            });
+        }
         let names = InitialComponent::names(&components);
         let inner = if let Ok(mesh) = support.extract::<PyRef<PyMesh>>() {
             NodeField::new(&mesh.inner, names)?

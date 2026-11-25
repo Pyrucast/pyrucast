@@ -1,11 +1,13 @@
 //! Python wrappers for [`crate::containers::element_field::SubElementField`] and
 //! [`crate::containers::element_field::ElementField`].
 
+use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
+use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::handle::Handle;
 use crate::py::finite_element_space::{PyFiniteElementSpace, PySubFiniteElementSpace};
-use pyo3::exceptions::PyTypeError;
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 
 /// One zone of an `ElementField`: the values at the Gauss points of one
@@ -301,14 +303,72 @@ impl PyElementField {
     ///
     /// Each entry of `components` is a `(name, value)` pair, the component
     /// holding `value` at every Gauss point, or a bare name, holding zero:
-    /// `[("T", 20.0), "p"]`.
+    /// `[("T", 20.0), "p"]`. With a `SubFiniteElementSpace` (`fes[i]`), the
+    /// field has that single zone.
+    ///
+    /// `ElementField(fespace, names, values=a)` fills one zone from an array:
+    /// `fespace` gives one zone (a `SubFiniteElementSpace`, or a
+    /// `FiniteElementSpace` of one subspace), `names` are bare names, the last
+    /// index of `a` in order, and `a` has the shape `numpy.asarray` gives —
+    /// `(cell_count, gauss_count, len(names))`, or `(cell_count, gauss_count)`
+    /// for one component. The values are copied once into the field.
+    ///
+    /// # Raises
+    ///
+    /// - `TypeError` if `fespace` is neither a `FiniteElementSpace` nor a
+    ///   `SubFiniteElementSpace`, if `values` comes with a `(name, value)` pair,
+    ///   or if `values` is an array that is not C-contiguous float64
+    ///   (`numpy.ascontiguousarray(a, dtype=float)` gives one).
+    /// - `ValueError` if `values` comes with a space of several subspaces, or
+    ///   does not have the zone's shape.
+    /// - `RuntimeError` for an empty or repeated component name.
     #[new]
+    #[pyo3(signature = (fespace, components, values = None))]
     fn py_new(
-        fespace: PyRef<PyFiniteElementSpace>,
+        fespace: &Bound<'_, PyAny>,
         components: Vec<crate::py::ops::field::InitialComponent>,
+        values: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         use crate::py::ops::field::InitialComponent;
-        let ef = ElementField::new(&fespace.inner, InitialComponent::names(&components))?;
+        let one_zone = || -> PyResult<Handle<SubFiniteElementSpace>> {
+            if let Ok(sub) = fespace.extract::<PyRef<PySubFiniteElementSpace>>() {
+                return Ok(sub.handle.clone());
+            }
+            let fes = fespace.extract::<PyRef<PyFiniteElementSpace>>()?;
+            if fes.inner.len() != 1 {
+                return Err(PyValueError::new_err(format!(
+                    "ElementField(..., values=): the FiniteElementSpace has {} subspaces, and \
+                     values fill one zone; build one field per subspace, then compose them \
+                     with |",
+                    fes.inner.len()
+                )));
+            }
+            Ok(fes.inner.get(0)?)
+        };
+        if let Some(values) = values {
+            let names = InitialComponent::column_names(&components)?;
+            let zone = one_zone()?;
+            let block = crate::py::arrays::borrow_values(values)?;
+            let rows = {
+                let space = zone.read();
+                [space.cell_count(), space.gauss_count()]
+            };
+            crate::py::arrays::check_values_shape(block.shape(), &rows, names.len())?;
+            let sub = SubElementField::from_values(zone, names, block.as_slice().to_vec())?;
+            return Ok(Self {
+                inner: ElementField::from_sub(sub),
+            });
+        }
+        let names = InitialComponent::names(&components);
+        let ef = if let Ok(sub) = fespace.extract::<PyRef<PySubFiniteElementSpace>>() {
+            ElementField::from_sub(SubElementField::new(sub.handle.clone(), names)?)
+        } else if let Ok(fes) = fespace.extract::<PyRef<PyFiniteElementSpace>>() {
+            ElementField::new(&fes.inner, names)?
+        } else {
+            return Err(PyTypeError::new_err(
+                "expected a FiniteElementSpace or a SubFiniteElementSpace",
+            ));
+        };
         InitialComponent::fill(&ef, &components);
         Ok(Self { inner: ef })
     }

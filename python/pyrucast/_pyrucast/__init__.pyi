@@ -475,14 +475,32 @@ class ElementField:
     index it (`field[i]`) to reach a `SubElementField`, compose zones
     with `|`.
     """
-    def __new__(cls, fespace: FiniteElementSpace, components: typing.Sequence[builtins.str | tuple[builtins.str, builtins.float]]) -> ElementField:
+    def __new__(cls, fespace: typing.Any, components: typing.Sequence[builtins.str | tuple[builtins.str, builtins.float]], values: typing.Optional[typing.Any] = None) -> ElementField:
         r"""
         `ElementField(fespace, components)` — one sub-field per subspace
         of `fespace`, sharing the same `components` list, with uniform values.
         
         Each entry of `components` is a `(name, value)` pair, the component
         holding `value` at every Gauss point, or a bare name, holding zero:
-        `[("T", 20.0), "p"]`.
+        `[("T", 20.0), "p"]`. With a `SubFiniteElementSpace` (`fes[i]`), the
+        field has that single zone.
+        
+        `ElementField(fespace, names, values=a)` fills one zone from an array:
+        `fespace` gives one zone (a `SubFiniteElementSpace`, or a
+        `FiniteElementSpace` of one subspace), `names` are bare names, the last
+        index of `a` in order, and `a` has the shape `numpy.asarray` gives —
+        `(cell_count, gauss_count, len(names))`, or `(cell_count, gauss_count)`
+        for one component. The values are copied once into the field.
+        
+        # Raises
+        
+        - `TypeError` if `fespace` is neither a `FiniteElementSpace` nor a
+          `SubFiniteElementSpace`, if `values` comes with a `(name, value)` pair,
+          or if `values` is an array that is not C-contiguous float64
+          (`numpy.ascontiguousarray(a, dtype=float)` gives one).
+        - `ValueError` if `values` comes with a space of several subspaces, or
+          does not have the zone's shape.
+        - `RuntimeError` for an empty or repeated component name.
         """
     @classmethod
     def with_components_per_subspace(cls, fespace: FiniteElementSpace, components_per_subspace: typing.Sequence[typing.Sequence[builtins.str]]) -> ElementField:
@@ -3854,7 +3872,7 @@ class NodeField:
         r"""
         Divide `component` by `scalar` on every zone that defines it.
         """
-    def __new__(cls, support: typing.Any, components: typing.Sequence[builtins.str | tuple[builtins.str, builtins.float]]) -> NodeField:
+    def __new__(cls, support: typing.Any, components: typing.Sequence[builtins.str | tuple[builtins.str, builtins.float]], values: typing.Optional[typing.Any] = None) -> NodeField:
         r"""
         `NodeField(support, components)` — a field with uniform values. With a
         `Mesh` support: one `SubNodeField` per submesh, each on the
@@ -3865,6 +3883,23 @@ class NodeField:
         Each entry of `components` is a `(name, value)` pair, the component
         holding `value` at every node, or a bare name, holding zero:
         `[("T", 20.0), "u_x"]`.
+        
+        `NodeField(support, names, values=a)` fills one zone from an array:
+        `support` gives one zone (a `SubMesh`, or a `Mesh` of one submesh),
+        `names` are bare names, the columns of `a` in order, and `a` has the
+        shape `numpy.asarray` gives — `(node_count, len(names))`, one row per
+        node of the zone's support in the order of its cells, or `(node_count,)`
+        for one component. The values are copied once into the field.
+        
+        # Raises
+        
+        - `TypeError` if `support` is neither a `Mesh` nor a `SubMesh`, if
+          `values` comes with a `(name, value)` pair, or if `values` is an array
+          that is not C-contiguous float64
+          (`numpy.ascontiguousarray(a, dtype=float)` gives one).
+        - `ValueError` if `values` comes with a support of several zones, or
+          does not have the zone's shape.
+        - `RuntimeError` for an empty or repeated component name.
         """
     @classmethod
     def with_components_per_submesh(cls, mesh: Mesh, components_per_submesh: typing.Sequence[typing.Sequence[builtins.str]]) -> NodeField:
