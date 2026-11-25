@@ -7196,6 +7196,14 @@ def eigen(a: Matrix, b: Matrix, count: builtins.int, shift: builtins.float = 0.0
     `RuntimeError` if `a` or `b` has no assembled values or is not symmetric, if
     `a` carries a unilateral relation, if `a − shift·b` is singular, or if a mode
     does not converge. `ValueError` for an unknown `normalization`.
+    `KeyboardInterrupt` on `Ctrl+C`.
+    
+    # Notes
+    
+    `Ctrl+C` is honoured between the steps: after the factorization of
+    `a − shift·b`, after the Krylov-Schur iteration and before the solve of each
+    mode. The factorization and the iteration are single library calls and are
+    not interrupted mid-way.
     """
 
 def elastic_strain(model: Model, stress: ElementField, materials: ElementField) -> ElementField:
@@ -9261,7 +9269,12 @@ def quadratic_eigen(mass: Matrix, stiffness: Matrix, damping: typing.Optional[Ma
     `RuntimeError` if a matrix carries relations (project it on real modes
     first) or has no assembled values, if the three together are not square, or
     if the QZ iteration does not converge. `ValueError` for an unknown
-    `normalization`.
+    `normalization`. `KeyboardInterrupt` on `Ctrl+C`.
+    
+    # Notes
+    
+    `Ctrl+C` is honoured once the dense matrices are built and after the QZ
+    iteration, which is a single library call and is not interrupted mid-way.
     """
 
 def radiation(fespace: FiniteElementSpace, target: Model) -> Model:

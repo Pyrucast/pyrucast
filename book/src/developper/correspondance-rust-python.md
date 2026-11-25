@@ -369,6 +369,7 @@ assemblée.
 | `solve_cancellable` / `solve_cancellable_with_options` (jeton d'interruption en plus) | l'interruption (Ctrl+C) est câblée dans `solve` |
 | `eigen(a: &Matrix, b: &Matrix, count: usize, shift: f64, normalization: Normalization) -> Vec<Mode>` | `eigen(a, b, count, shift=0.0, normalization="mass") -> list[dict]` |
 | `quadratic_eigen(mass: &Matrix, stiffness: &Matrix, damping: &Matrix, normalization: Normalization) -> Vec<Mode>` | `quadratic_eigen(mass, stiffness, damping=None, normalization="mass") -> list[dict]` (`None` : `Matrix::default()`, la matrice vide) |
+| `eigen_cancellable` / `quadratic_eigen_cancellable` (jeton d'interruption en plus) | l'interruption (Ctrl+C) est câblée dans `eigen` et `quadratic_eigen` |
 
 La matrice se suffit : ses lignes de relation portent leur sens (`SubMatrix::row_sense`),
 aucun modèle n'est passé à la résolution. L'élimination est une option

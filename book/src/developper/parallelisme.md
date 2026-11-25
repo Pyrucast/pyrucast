@@ -177,7 +177,8 @@ primitives     →    stockage CSR/CSC + serde    →  factorise & résout (para
 ## Côté Python
 
 Le parallélisme tourne **à l'intérieur** de chaque appel pyrucast (les threads
-rayon ne dépendent pas du GIL). Le GIL n'est relâché que par
-`pyrucast.export.to_arrays` : deux autres appels pyrucast *concurrents* depuis
-des threads Python se sérialisent, mais un seul appel lourd profite pleinement
-de tous les cœurs.
+rayon ne dépendent pas du GIL). pyrucast ne relâche jamais le GIL : deux appels
+pyrucast *concurrents* depuis des threads Python se sérialisent, mais un seul
+appel lourd profite pleinement de tous les cœurs. Deux appels ne lisent ni
+n'écrivent donc jamais le même objet en même temps, et `Ctrl+C` reste écouté
+pendant les opérateurs interruptibles (voir « Interrompre une fonction »).

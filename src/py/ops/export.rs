@@ -151,7 +151,7 @@ pub fn to_arrays<'py>(
     };
     let node_refs: Vec<_> = nodes.iter().map(|f| &f.inner).collect();
     let elem_refs: Vec<_> = elems.iter().map(|f| (&f.inner, layout)).collect();
-    let out = py.detach(|| to_arrays(&meshes, &node_refs, &elem_refs, order, first_tag))?;
+    let out = to_arrays(&meshes, &node_refs, &elem_refs, order, first_tag)?;
 
     let dict = PyDict::new(py);
     let node_tags = Py::new(py, PyArray::i64(out.node_tags))?;
