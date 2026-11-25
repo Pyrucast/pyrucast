@@ -15,8 +15,12 @@
 //! falls back to lists when numpy is absent. Those go through pyo3's ordinary
 //! sequence conversion instead, which copies. Callers see a `&[T]` either way.
 
+use crate::handle::{Handle, Loan};
 use pyo3::buffer::{Element, PyBuffer};
+use pyo3::exceptions::PyBufferError;
+use pyo3::ffi;
 use pyo3::prelude::*;
+use std::ffi::{c_int, c_void, CStr};
 
 /// A slice that is either borrowed straight from a Python buffer or owned
 /// because the object had no buffer to lend.
@@ -200,50 +204,207 @@ impl PyArray {
     /// so neither the vector nor `len` can move or change meanwhile.
     unsafe fn __getbuffer__(
         slf: Bound<'_, Self>,
-        view: *mut pyo3::ffi::Py_buffer,
-        flags: std::ffi::c_int,
+        view: *mut ffi::Py_buffer,
+        flags: c_int,
     ) -> PyResult<()> {
-        use pyo3::exceptions::PyBufferError;
-        use pyo3::ffi;
-        if view.is_null() {
-            return Err(PyBufferError::new_err("View is null"));
-        }
-        if (flags & ffi::PyBUF_WRITABLE) == ffi::PyBUF_WRITABLE {
-            return Err(PyBufferError::new_err("pyrucast arrays are read-only"));
-        }
         let this = slf.get();
-        let (ptr, itemsize, format): (*const std::ffi::c_void, isize, &'static std::ffi::CStr) =
-            match &this.data {
-                ArrayData::F64(v) => (v.as_ptr().cast(), 8, c"d"),
-                ArrayData::I64(v) => (v.as_ptr().cast(), 8, INT64_FORMAT),
-            };
-        let shape = std::ptr::addr_of!(this.len).cast_mut();
-        // SAFETY: see the method's contract above.
+        check_request(view, flags, &[this.len], "pyrucast arrays")?;
+        let (buf, format): (*const c_void, &'static CStr) = match &this.data {
+            ArrayData::F64(v) => (v.as_ptr().cast(), c"d"),
+            ArrayData::I64(v) => (v.as_ptr().cast(), INT64_FORMAT),
+        };
+        // SAFETY: see the method's contract above. In one dimension the step is
+        // the item size, so `strides` points at `view.itemsize` itself.
         unsafe {
-            (*view).buf = ptr.cast_mut();
-            (*view).len = this.len * itemsize;
-            (*view).readonly = 1;
-            (*view).itemsize = itemsize;
-            (*view).format = if (flags & ffi::PyBUF_FORMAT) == ffi::PyBUF_FORMAT {
-                format.as_ptr().cast_mut()
-            } else {
-                std::ptr::null_mut()
-            };
-            (*view).ndim = 1;
-            (*view).shape = if (flags & ffi::PyBUF_ND) == ffi::PyBUF_ND {
-                shape
-            } else {
-                std::ptr::null_mut()
-            };
-            (*view).strides = if (flags & ffi::PyBUF_STRIDES) == ffi::PyBUF_STRIDES {
-                &mut (*view).itemsize
-            } else {
-                std::ptr::null_mut()
-            };
-            (*view).suboffsets = std::ptr::null_mut();
-            (*view).internal = std::ptr::null_mut();
-            (*view).obj = slf.into_any().into_ptr();
+            fill_view(
+                view,
+                flags,
+                Block {
+                    buf,
+                    format,
+                    ndim: 1,
+                    shape: std::ptr::addr_of!(this.len).cast_mut(),
+                    strides: std::ptr::addr_of_mut!((*view).itemsize),
+                },
+                std::ptr::null_mut(),
+                slf.into_any(),
+            );
         }
         Ok(())
+    }
+}
+
+// ─── Lending a zone's values ─────────────────────────────────────────────────
+
+/// Refuse what a lent block cannot give: a null view, a **writable** view
+/// (everything pyrucast lends is read-only), or a Fortran-ordered one of a
+/// block that is C-ordered in more than one non-trivial dimension.
+fn check_request(
+    view: *mut ffi::Py_buffer,
+    flags: c_int,
+    shape: &[isize],
+    what: &str,
+) -> PyResult<()> {
+    if view.is_null() {
+        return Err(PyBufferError::new_err("View is null"));
+    }
+    if (flags & ffi::PyBUF_WRITABLE) == ffi::PyBUF_WRITABLE {
+        return Err(PyBufferError::new_err(format!("{what} are read-only")));
+    }
+    if (flags & ffi::PyBUF_F_CONTIGUOUS) == ffi::PyBUF_F_CONTIGUOUS
+        && shape.iter().filter(|&&n| n > 1).count() > 1
+    {
+        return Err(PyBufferError::new_err(format!(
+            "{what} are C-contiguous, not Fortran-contiguous"
+        )));
+    }
+    Ok(())
+}
+
+/// A read-only, C-contiguous block of 8-byte items, as a view describes it.
+struct Block {
+    buf: *const c_void,
+    format: &'static CStr,
+    ndim: c_int,
+    /// `ndim` sizes and `ndim` steps in bytes; both stay valid until the
+    /// view is released.
+    shape: *mut isize,
+    strides: *mut isize,
+}
+
+/// Fill `view` with `block`, giving the reader what its `flags` ask for: the
+/// format with `PyBUF_FORMAT`, the shape with `PyBUF_ND`, the steps with
+/// `PyBUF_STRIDES`. A reader asking for none sees the block as flat bytes.
+///
+/// # Safety
+///
+/// `view` is the valid `Py_buffer` CPython hands to `__getbuffer__`, already
+/// checked by [`check_request`]. What `block` points at stays valid until the
+/// view is released, `internal` is what `__releasebuffer__` will find in
+/// `view.internal`, and `owner` — stored in `view.obj` — keeps the exporter
+/// alive until then.
+unsafe fn fill_view(
+    view: *mut ffi::Py_buffer,
+    flags: c_int,
+    block: Block,
+    internal: *mut c_void,
+    owner: Bound<'_, PyAny>,
+) {
+    const ITEMSIZE: isize = 8;
+    let wants = |flag: c_int| (flags & flag) == flag;
+    // SAFETY: the caller's contract.
+    unsafe {
+        let count: isize = (0..block.ndim as usize)
+            .map(|k| *block.shape.add(k))
+            .product();
+        (*view).buf = block.buf.cast_mut();
+        (*view).len = count * ITEMSIZE;
+        (*view).readonly = 1;
+        (*view).itemsize = ITEMSIZE;
+        (*view).format = if wants(ffi::PyBUF_FORMAT) {
+            block.format.as_ptr().cast_mut()
+        } else {
+            std::ptr::null_mut()
+        };
+        let nd = wants(ffi::PyBUF_ND);
+        (*view).ndim = if nd { block.ndim } else { 1 };
+        (*view).shape = if nd {
+            block.shape
+        } else {
+            std::ptr::null_mut()
+        };
+        (*view).strides = if wants(ffi::PyBUF_STRIDES) {
+            block.strides
+        } else {
+            std::ptr::null_mut()
+        };
+        (*view).suboffsets = std::ptr::null_mut();
+        (*view).internal = internal;
+        (*view).obj = owner.into_ptr();
+    }
+}
+
+/// What one buffer view on a zone keeps until CPython releases it: its
+/// [`Loan`], and the arrays `view.shape` and `view.strides` point into (the
+/// first `ndim` entries of each are used). It lives boxed in `view.internal`,
+/// the one member of the view CPython leaves to the exporter.
+///
+/// `Loan` stays in [`crate::handle`], pure Rust; this box is what the C
+/// protocol adds to it.
+struct KeptByView<T> {
+    _loan: Loan<T>,
+    shape: [isize; 3],
+    strides: [isize; 3],
+}
+
+/// Lend the `f64` values of the object behind `handle` to `view`, read-only
+/// and without a copy, until CPython calls [`release_values`].
+///
+/// `layout` reads, under the read lock, where the values start and the sizes
+/// of their first `ndim` dimensions (at most 3), the last one varying fastest.
+/// The lock is released at once: from then on, the [`Loan`] is what keeps a
+/// [`write_checked`](crate::handle::Handle::write_checked) from writing under
+/// the view.
+///
+/// # Safety
+///
+/// `view` is the valid `Py_buffer` CPython hands to `__getbuffer__`, and
+/// `owner` the Python object it is asked of, which holds `handle`. The values
+/// must not move while nothing writes the object: their buffer is never
+/// reallocated after construction.
+pub(crate) unsafe fn lend_values<T>(
+    view: *mut ffi::Py_buffer,
+    flags: c_int,
+    owner: Bound<'_, PyAny>,
+    handle: &Handle<T>,
+    what: &str,
+    layout: impl FnOnce(&T) -> (*const f64, [usize; 3], usize),
+) -> PyResult<()> {
+    let loan = handle.lend();
+    let (buf, dims, ndim) = layout(&handle.read());
+    let mut shape = [0isize; 3];
+    let mut strides = [0isize; 3];
+    let mut step = 8isize;
+    for k in (0..ndim).rev() {
+        shape[k] = dims[k] as isize;
+        strides[k] = step;
+        step *= shape[k];
+    }
+    check_request(view, flags, &shape[..ndim], what)?;
+    let kept = Box::into_raw(Box::new(KeptByView {
+        _loan: loan,
+        shape,
+        strides,
+    }));
+    // SAFETY: the box lives until `release_values`, so the shape and steps the
+    // view points into do too; the caller's contract covers the rest.
+    unsafe {
+        fill_view(
+            view,
+            flags,
+            Block {
+                buf: buf.cast(),
+                format: c"d",
+                ndim: ndim as c_int,
+                shape: (*kept).shape.as_mut_ptr(),
+                strides: (*kept).strides.as_mut_ptr(),
+            },
+            kept.cast(),
+            owner,
+        );
+    }
+    Ok(())
+}
+
+/// End a view opened by [`lend_values`]: free its box, and with it the
+/// [`Loan`], so the object's count of views goes down by one.
+///
+/// # Safety
+///
+/// `view` is a view [`lend_values`] filled for a `Handle<T>`, released once.
+pub(crate) unsafe fn release_values<T>(view: *mut ffi::Py_buffer) {
+    // SAFETY: the caller's contract — `internal` is the box `lend_values` made.
+    unsafe {
+        drop(Box::from_raw((*view).internal.cast::<KeptByView<T>>()));
     }
 }

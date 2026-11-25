@@ -72,11 +72,29 @@ bornes ou une composante inconnue lèvent une erreur.
 | `set_uniform("c", v)` | la composante `c` à `v` en tout point |
 | `set_cell_uniform(maille, "c", v)` | la composante `c` à `v` en tout point d'une maille |
 | `components()`, `component_index("c")` | les composantes, le rang de l'une |
+| `numpy.asarray(zone)`, `memoryview(zone)` | ses valeurs, lues sans copie (voir [Échanger avec numpy](#échanger-avec-numpy)) |
 
 Les **positions** des points de Gauss ne sont pas dans le champ : leurs
 coordonnées dans l'élément de référence et leurs poids sont sur l'espace
 (`fes[i].gauss_xi(g)`, `fes[i].gauss_weight(g)`), et leur position réelle se
 calcule à partir des nœuds.
+
+## Échanger avec numpy
+
+Une zone se lit comme un tableau : `numpy.asarray(zone)` rend ses valeurs
+**sans les copier**, en lecture seule, sous la forme `(mailles, points de
+Gauss, composantes)`, dans l'ordre des trois indices de `zone.get(maille, g,
+rang)` : les mailles de la zone de maillage, les points de Gauss de la
+quadrature, les composantes de `zone.components()`.
+
+```python
+{{#include ../../tests/python/test_doc_numpy.py:numpy_lire_gauss}}
+```
+
+Tant que le tableau existe, la zone refuse toute écriture (`BufferError`), comme
+une zone aux nœuds (voir [Modèle mémoire](memory-model.md#prêter-la-mémoire-à-numpy)).
+`numpy.array(zone)` en fait une copie, `memoryview(zone)` donne le même bloc sans
+numpy. Le champ entier n'est pas un tableau : on lit zone par zone.
 
 ## Composantes
 

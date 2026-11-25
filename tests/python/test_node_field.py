@@ -179,6 +179,75 @@ def test_subfield_getitem_setitem():
     assert f[0][nodes[0], "UY"] == 0.0
 
 
+# ─── Lending the values (buffer protocol) ────────────────────────────────────
+
+
+def test_a_zone_lends_its_values_as_a_read_only_block():
+    """`memoryview` needs no numpy: one row per node, one column per component."""
+    _c, _nodes, sm = _poi1_with(3)
+    z = pyrucast.NodeField(sm, [("UX", 1.0), ("UY", 2.0)])[0]
+    z.set(1, 0, -4.0)
+    m = memoryview(z)
+    assert (m.ndim, m.shape, m.format, m.readonly) == (2, (3, 2), "d", True)
+    assert m.tolist() == [[z.get(i, c) for c in range(2)] for i in range(3)]
+
+
+def test_numpy_reads_a_zone_in_place_rows_in_the_order_of_its_support():
+    np = pytest.importorskip("numpy")
+    _c, _nodes, mesh = _two_zone_mesh()
+    z = pyrucast.NodeField(mesh, ["T", "Q"])[1]
+    support = z.support()
+    rows = [support[i].nodes()[0] for i in range(len(support))]
+    for i, node in enumerate(rows):
+        z.set_value(node, "T", 10.0 * i)
+        z.set_value(node, "Q", -float(i))
+    a = np.asarray(z)
+    assert a.tolist() == [[z.value(n, c) for c in z.components()] for n in rows]
+    assert np.shares_memory(a, np.asarray(z))
+    with pytest.raises(ValueError):
+        a[0, 0] = 1.0
+
+
+_ZONE_WRITES = {
+    "set": lambda z, n: z.set(0, 0, 1.0),
+    "set_by_node": lambda z, n: z.set_by_node(n, 0, 1.0),
+    "set_value": lambda z, n: z.set_value(n, "T", 1.0),
+    "set_uniform": lambda z, n: z.set_uniform("T", 1.0),
+    "setitem": lambda z, n: z.__setitem__((n, "T"), 1.0),
+    "add_to_component": lambda z, n: z.add_to_component("T", 1.0),
+    "sub_to_component": lambda z, n: z.sub_to_component("T", 1.0),
+    "mul_to_component": lambda z, n: z.mul_to_component("T", 3.0),
+    "div_to_component": lambda z, n: z.div_to_component("T", 4.0),
+}
+
+
+@pytest.mark.parametrize("write", _ZONE_WRITES.values(), ids=_ZONE_WRITES.keys())
+def test_a_zone_refuses_every_write_while_a_view_reads_it(write):
+    _c, nodes, sm = _poi1_with(2)
+    z = pyrucast.NodeField(sm, [("T", 2.0)])[0]
+    view = memoryview(z)
+    with pytest.raises(BufferError, match="1 buffer view"):
+        write(z, nodes[0])
+    assert view.tolist() == [[2.0], [2.0]]
+    view.release()
+    write(z, nodes[0])
+    assert z.get(0, 0) != 2.0
+
+
+def test_the_loan_follows_the_zone_and_a_refused_write_changes_no_zone():
+    """`f[1]` is a new wrapper each time, on the same zone: the view on one is
+    seen from the field, which then writes none of its zones."""
+    _c, _nodes, mesh = _two_zone_mesh()
+    f = pyrucast.NodeField(mesh, [("T", 1.0)])
+    view = memoryview(f[1])
+    with pytest.raises(BufferError):
+        f.add_to_component("T", 1.0)
+    assert f[0].max("T") == 1.0
+    view.release()
+    f.add_to_component("T", 1.0)
+    assert f[0].max("T") == f[1].max("T") == 2.0
+
+
 # ─── Aggregate reads, coherence ──────────────────────────────────────────────
 
 

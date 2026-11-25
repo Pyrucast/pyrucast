@@ -251,6 +251,54 @@ def test_dunder_get_set_item():
     assert f[0, 1, "sigma"] == 5.0
 
 
+# ─── Lending the values (buffer protocol) ───────────────────────────────────
+
+
+def test_numpy_reads_a_zone_in_place_cells_then_gauss_points_then_components():
+    np = pytest.importorskip("numpy")
+    _, _, fes = _tri3_subspace(n_cells=2)
+    z = _subfield(fes, ["E", "NU"])
+    for cell in range(z.cell_count):
+        for gp in range(z.gauss_count):
+            z.set_value(cell, gp, "E", 100.0 * cell + gp)
+            z.set_value(cell, gp, "NU", -1.0 - gp)
+    a = np.asarray(z)
+    assert a.shape == (2, z.gauss_count, 2)
+    assert a.tolist() == [
+        [[z.value(cell, gp, c) for c in z.components()] for gp in range(z.gauss_count)]
+        for cell in range(z.cell_count)
+    ]
+    assert np.shares_memory(a, np.asarray(z))
+    assert not a.flags.writeable
+
+
+_ZONE_WRITES = {
+    "set": lambda z: z.set(0, 0, 0, 1.0),
+    "set_value": lambda z: z.set_value(0, 0, "E", 1.0),
+    "set_uniform": lambda z: z.set_uniform("E", 1.0),
+    "set_cell_uniform": lambda z: z.set_cell_uniform(0, "E", 1.0),
+    "setitem": lambda z: z.__setitem__((0, 0, "E"), 1.0),
+    "add_to_component": lambda z: z.add_to_component("E", 1.0),
+    "sub_to_component": lambda z: z.sub_to_component("E", 1.0),
+    "mul_to_component": lambda z: z.mul_to_component("E", 3.0),
+    "div_to_component": lambda z: z.div_to_component("E", 4.0),
+}
+
+
+@pytest.mark.parametrize("write", _ZONE_WRITES.values(), ids=_ZONE_WRITES.keys())
+def test_a_zone_refuses_every_write_while_a_view_reads_it(write):
+    _, _, fes = _tri3_subspace()
+    z = pyrucast.ElementField(fes, [("E", 2.0)])[0]
+    view = memoryview(z)
+    assert view.shape == (1, z.gauss_count, 1)
+    with pytest.raises(BufferError, match="1 buffer view"):
+        write(z)
+    assert view.tolist() == [[[2.0]] * z.gauss_count]
+    view.release()
+    write(z)
+    assert z.get(0, 0, 0) != 2.0
+
+
 # ─── repr / str ─────────────────────────────────────────────────────────────
 
 

@@ -74,6 +74,12 @@ celle de droite seulement.
 
 Une composante qu'aucune zone ne porte lève une erreur.
 
+Une **zone** se lit aussi comme un tableau numpy, sans copie :
+`numpy.asarray(champ[i])` rend `(nœuds, composantes)` pour un champ aux nœuds,
+`(mailles, points de Gauss, composantes)` pour un champ aux points de Gauss.
+Tant que ce tableau existe, la zone refuse les écritures (`BufferError`). Voir
+[Échanger avec numpy](node-field.md#échanger-avec-numpy).
+
 `champ["c"]` laisse de côté une zone qui ne porte aucune des composantes
 demandées. Une zone qui n'en porte pas d'autres est **partagée** avec le champ
 d'origine, sans copie : écrire dans l'une modifie l'autre. Une zone dont il faut

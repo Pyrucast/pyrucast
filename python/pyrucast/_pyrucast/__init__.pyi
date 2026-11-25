@@ -4574,6 +4574,15 @@ class SubElementField:
     `sub_material_field`) give a fresh one. There is no constructor: build at
     the parent level, `ElementField(fes, components)` or
     `material_field(model, ...)`, composed with `|`.
+    
+    `numpy.asarray(zone)` reads the values **without a copy**, read-only, as
+    an array of shape `(cell_count, gauss_count, component_count)`: the cells
+    of the zone in their order, then the Gauss points in the order of the
+    integration rule, then one entry per name of `components()`, in that order.
+    `memoryview(zone)` gives the same block without numpy. While such an array
+    is alive, writing the zone (`set_value`, `zone[cell, gauss, "E"] = …`,
+    `add_to_component`…) raises `BufferError`; the writes work again once the
+    last array is gone.
     """
     @property
     def cell_count(self) -> builtins.int:
@@ -5672,6 +5681,14 @@ class SubNodeField:
     A **view** into one zone of a `NodeField`, obtained by indexing
     (`node_field[i]`) — never constructed directly. Build at the parent
     level instead: `NodeField(support, components)`, composed with `|`.
+    
+    `numpy.asarray(zone)` reads the values **without a copy**, read-only, as
+    an array of shape `(node_count, component_count)`: one row per node of
+    `support()`, in the order of its cells, one column per name of
+    `components()`, in that order. `memoryview(zone)` gives the same block
+    without numpy. While such an array is alive, writing the zone (`set_value`,
+    `zone[node, "T"] = …`, `add_to_component`…) raises `BufferError`; the
+    writes work again once the last array is gone.
     """
     @property
     def node_count(self) -> builtins.int:

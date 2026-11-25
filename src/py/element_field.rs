@@ -14,10 +14,70 @@ use pyo3::prelude::*;
 /// `sub_material_field`) give a fresh one. There is no constructor: build at
 /// the parent level, `ElementField(fes, components)` or
 /// `material_field(model, ...)`, composed with `|`.
+///
+/// `numpy.asarray(zone)` reads the values **without a copy**, read-only, as
+/// an array of shape `(cell_count, gauss_count, component_count)`: the cells
+/// of the zone in their order, then the Gauss points in the order of the
+/// integration rule, then one entry per name of `components()`, in that order.
+/// `memoryview(zone)` gives the same block without numpy. While such an array
+/// is alive, writing the zone (`set_value`, `zone[cell, gauss, "E"] = …`,
+/// `add_to_component`…) raises `BufferError`; the writes work again once the
+/// last array is gone.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SubElementField")]
 pub struct PySubElementField {
     pub(crate) handle: Handle<SubElementField>,
+}
+
+// The buffer protocol, kept out of the stub like `pyrucast.Array`'s.
+#[pymethods]
+impl PySubElementField {
+    /// Lend the values, read-only: `(cell_count, gauss_count,
+    /// component_count)` float64, C-contiguous.
+    ///
+    /// # Safety
+    ///
+    /// Called by CPython with a valid `view`. The zone's values are never
+    /// reallocated, and the loan the view keeps refuses every write until
+    /// CPython calls `__releasebuffer__`.
+    unsafe fn __getbuffer__(
+        slf: Bound<'_, Self>,
+        view: *mut pyo3::ffi::Py_buffer,
+        flags: std::ffi::c_int,
+    ) -> PyResult<()> {
+        let handle = slf.borrow().handle.clone();
+        // SAFETY: see the method's contract above.
+        unsafe {
+            crate::py::arrays::lend_values(
+                view,
+                flags,
+                slf.into_any(),
+                &handle,
+                "pyrucast fields",
+                |zone: &SubElementField| {
+                    (
+                        zone.values().as_ptr(),
+                        [
+                            zone.cell_count(),
+                            zone.gauss_count(),
+                            zone.components().len(),
+                        ],
+                        3,
+                    )
+                },
+            )
+        }
+    }
+
+    /// End a view: the zone's count of views goes down by one.
+    ///
+    /// # Safety
+    ///
+    /// Called once by CPython, with a view `__getbuffer__` filled.
+    unsafe fn __releasebuffer__(_slf: Bound<'_, Self>, view: *mut pyo3::ffi::Py_buffer) {
+        // SAFETY: see the method's contract above.
+        unsafe { crate::py::arrays::release_values::<SubElementField>(view) }
+    }
 }
 
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]

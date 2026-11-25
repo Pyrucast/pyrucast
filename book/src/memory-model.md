@@ -12,6 +12,8 @@ verrouille rien. Quatre comportements sont à connaître :
 - **Un nœud reste dans son `Coords`** tant que le `Coords` existe.
 - **Certains résultats sont gardés en cache** par l'objet dont ils sont tirés,
   et resservent aux calculs suivants.
+- **Une zone de champ lue par numpy refuse d'être écrite** tant que le tableau
+  existe.
 
 ## Partager plutôt que copier
 
@@ -45,6 +47,29 @@ maille qui le contient (voir
 [Coordonnées](coords.md#identité-et-durée-de-vie-des-nœuds)). Un nœud n'est
 jamais retiré de son `Coords` : sa place et ses positions y restent même quand
 plus rien ne l'utilise, et leur mémoire n'est rendue qu'avec le `Coords`.
+
+## Prêter la mémoire à numpy
+
+`numpy.asarray(zone)` lit les valeurs d'une zone de champ **dans la mémoire du
+champ**, sans copie (voir [Échanger avec numpy](node-field.md#échanger-avec-numpy)).
+Le tableau et la zone partagent alors leurs valeurs : pour que le tableau ne
+change pas sous les calculs numpy, la zone refuse toute écriture tant qu'il
+existe.
+
+```python
+{{#include ../../tests/python/test_doc_numpy.py:numpy_pret}}
+```
+
+- Le refus vaut pour toutes les écritures dans la zone : `set_value`, `set`,
+  `set_uniform`, `zone[…] = v`, `add_to_component`… Sur le champ entier,
+  `add_to_component` refuse dès qu'une des zones concernées est lue, et n'en
+  modifie alors aucune.
+- Les **lectures** et les **opérateurs** restent permis : ils ne modifient pas
+  la zone, et un opérateur rend un objet neuf.
+- Le refus cesse quand **le dernier** tableau sur la zone disparaît (`del`, fin
+  de fonction). Un tableau tiré d'un autre (`a[1:]`, `a.T`) compte tant qu'il
+  existe.
+- `numpy.array(zone)`, une copie, ne bloque rien.
 
 ## Ce qui est mis en cache
 

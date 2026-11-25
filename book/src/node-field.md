@@ -74,6 +74,30 @@ composante.
 | `node_values(ligne)` | toutes les composantes d'une ligne, dans l'ordre |
 | `set_uniform("c", v)` | la composante `c` à `v` en tout nœud |
 | `components()`, `component_index("c")` | les composantes, le rang de l'une |
+| `numpy.asarray(zone)`, `memoryview(zone)` | ses valeurs, lues sans copie (voir [Échanger avec numpy](#échanger-avec-numpy)) |
+
+## Échanger avec numpy
+
+Une zone se lit comme un tableau : `numpy.asarray(zone)` rend ses valeurs
+**sans les copier**, en lecture seule, sous la forme `(nœuds, composantes)`.
+
+- Les **lignes** sont les nœuds du support, `zone.support()`, dans l'ordre de
+  ses mailles : la ligne `i` est le nœud de rang `i`, celui que lit
+  `zone.get(i, …)`.
+- Les **colonnes** sont les composantes, dans l'ordre de `zone.components()`.
+
+```python
+{{#include ../../tests/python/test_doc_numpy.py:numpy_lire_noeuds}}
+```
+
+Le tableau lit la mémoire même du champ : tant qu'il existe, la zone refuse
+toute écriture (`BufferError`), et l'accepte de nouveau quand le dernier
+tableau a disparu (voir [Modèle mémoire](memory-model.md#prêter-la-mémoire-à-numpy)).
+`numpy.array(zone)` en fait une copie, que l'on peut garder et modifier sans
+bloquer la zone. `memoryview(zone)` donne le même bloc sans numpy.
+
+Le champ entier n'est pas un tableau : ses zones peuvent porter des
+composantes différentes et partager des nœuds. On lit donc zone par zone.
 
 ## Le support : une zone POI1
 
