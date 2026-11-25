@@ -14,6 +14,7 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::ops::mesh::triangulate_surface_cancellable;
+use pyrucast::PyrucastError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -42,6 +43,22 @@ fn un_guard_par_objet() {
     handle.write().add_node(&[0.0, 0.0]).unwrap(); // verrou écriture, le temps de l'appel
 }
 // ANCHOR_END: guards
+
+/// A buffer view counts as a reader: writing does not wait for it, it refuses.
+// ANCHOR: pret
+#[test]
+fn une_vue_fait_refuser_l_ecriture() {
+    let handle = Handle::new(Coords::new(2).unwrap());
+
+    let vue = handle.lend(); // un tableau numpy commence à lire l'objet
+    let refus = handle.write_checked(); // écrire est refusé…
+    assert!(matches!(refus, Err(PyrucastError::Lent(1)))); // …tant qu'une vue le lit
+    drop(vue); // le tableau disparaît
+
+    let mut coords = handle.write_checked().unwrap(); // écrire passe
+    coords.add_node(&[0.0, 0.0]).unwrap();
+}
+// ANCHOR_END: pret
 
 /// A shared cancellation token, armed by whoever you like.
 // ANCHOR: annulation

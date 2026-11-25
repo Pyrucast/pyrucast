@@ -81,7 +81,9 @@ impl PySubNodeField {
 
     /// Set the value at node index `node_idx`, component index `comp_idx`.
     fn set(&self, node_idx: usize, comp_idx: usize, value: f64) -> PyResult<()> {
-        self.handle.write().set(node_idx, comp_idx, value)?;
+        self.handle
+            .write_checked()?
+            .set(node_idx, comp_idx, value)?;
         Ok(())
     }
 
@@ -94,7 +96,9 @@ impl PySubNodeField {
     /// Set the value at `node`, component index `comp_idx`.
     fn set_by_node(&self, node: PyRef<'_, PyNode>, comp_idx: usize, value: f64) -> PyResult<()> {
         let nid = node.id_in(Some(&self.handle.read().coords()))?;
-        self.handle.write().set_by_node(nid, comp_idx, value)?;
+        self.handle
+            .write_checked()?
+            .set_by_node(nid, comp_idx, value)?;
         Ok(())
     }
 
@@ -120,14 +124,16 @@ impl PySubNodeField {
     /// Set the value at `node` for the named `component`.
     fn set_value(&self, node: PyRef<'_, PyNode>, component: &str, value: f64) -> PyResult<()> {
         let nid = node.id_in(Some(&self.handle.read().coords()))?;
-        self.handle.write().set_value(nid, component, value)?;
+        self.handle
+            .write_checked()?
+            .set_value(nid, component, value)?;
         Ok(())
     }
 
     /// Set `component` to `value` at every node of the zone.
     fn set_uniform(&self, component: &str, value: f64) -> PyResult<()> {
         use crate::containers::field::SubField;
-        self.handle.write().set_uniform(component, value)?;
+        self.handle.write_checked()?.set_uniform(component, value)?;
         Ok(())
     }
 
@@ -141,7 +147,7 @@ impl PySubNodeField {
     fn __setitem__(&self, key: (PyRef<'_, PyNode>, String), value: f64) -> PyResult<()> {
         let (node, comp) = key;
         let nid = node.id_in(Some(&self.handle.read().coords()))?;
-        self.handle.write().set_value(nid, &comp, value)?;
+        self.handle.write_checked()?.set_value(nid, &comp, value)?;
         Ok(())
     }
 

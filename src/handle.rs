@@ -51,6 +51,19 @@
 //!
 //! Apart from that, distinct objects are independent.
 //!
+//! # Lending to an outside reader
+//!
+//! A numpy array or a `memoryview` reads an object's memory through a raw
+//! pointer and holds no guard: it lives as long as its Python variable, and no
+//! call bounds that. [`Handle::lend`] counts such a reader, one [`Loan`] per
+//! open view, and [`Handle::write_checked`] refuses to write while one is open
+//! ([`PyrucastError::Lent`]). The two levels answer a conflict differently: the
+//! lock **waits** for a Rust guard, which ends with its call; the count
+//! **refuses**, since a view may never end.
+//!
+//! [`Handle::write`] stays infallible, for the objects no view can hold: an
+//! object its function has just built, a type that is never lent.
+//!
 //! # Example
 //!
 //! ```
@@ -68,9 +81,11 @@
 //! assert!(g.same_object(&h));
 //! ```
 
+use crate::error::{PyrucastError, Result};
 use parking_lot::lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard};
 use parking_lot::{RawRwLock, RwLock};
 use std::fmt;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 /// Shared (read) access to an object, returned by [`Handle::read`].
@@ -128,6 +143,10 @@ pub type WriteGuard<T> = ArcRwLockWriteGuard<RawRwLock, T>;
 /// ```
 pub struct Handle<T> {
     cell: Arc<RwLock<T>>,
+    /// Open buffer views on the object (numpy arrays, memoryviews): see
+    /// [`Handle::lend`]. A second allocation, because `read_arc` and
+    /// `write_arc` want the `Arc<RwLock<T>>` alone.
+    loans: Arc<AtomicUsize>,
 }
 // ANCHOR_END: declaration
 
@@ -148,6 +167,7 @@ impl<T> Handle<T> {
     pub fn new(value: T) -> Self {
         Self {
             cell: Arc::new(RwLock::new(value)),
+            loans: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -170,7 +190,11 @@ impl<T> Handle<T> {
 
     /// Exclusive access. Blocks while any other guard holds the object.
     ///
-    /// Infallible, for the same reason as [`read`](Self::read).
+    /// Infallible, for the same reason as [`read`](Self::read). It is meant for
+    /// the objects no buffer view can hold — an object its function has just
+    /// built, a type that is never lent; an object a view may be reading is
+    /// written through [`write_checked`](Self::write_checked). A debug build
+    /// asserts the object is not lent.
     ///
     /// ```
     /// # use pyrucast::handle::Handle;
@@ -181,7 +205,76 @@ impl<T> Handle<T> {
     /// # let _ = id;
     /// ```
     pub fn write(&self) -> WriteGuard<T> {
+        debug_assert!(
+            self.loans.load(Ordering::Acquire) == 0,
+            "write() on a lent object: an object a buffer view may read is written \
+             through write_checked()"
+        );
         self.cell.write_arc()
+    }
+
+    /// Exclusive access that **refuses while a buffer view is open** on the
+    /// object.
+    ///
+    /// Blocks like [`write`](Self::write) while a Rust guard holds the object,
+    /// then reads the count of open views under the write lock: with no view,
+    /// the guard is returned; with `n` views, the guard is dropped and the call
+    /// fails. Reading the count under the lock is what keeps a view from
+    /// opening between the check and the write: [`lend`](Self::lend) takes the
+    /// read lock to count.
+    ///
+    /// # Errors
+    ///
+    /// [`PyrucastError::Lent`]`(n)` while `n` views read the object.
+    ///
+    /// ```
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::PyrucastError;
+    /// let h = Handle::new(Coords::new(2).unwrap());
+    /// let view = h.lend(); // a numpy array starts reading the object
+    /// assert!(matches!(h.write_checked(), Err(PyrucastError::Lent(1))));
+    /// drop(view); // the array is gone
+    /// h.write_checked()?.add_node(&[0.0, 0.0])?;
+    /// # Ok::<(), PyrucastError>(())
+    /// ```
+    pub fn write_checked(&self) -> Result<WriteGuard<T>> {
+        let guard = self.cell.write_arc();
+        match self.loans.load(Ordering::Acquire) {
+            0 => Ok(guard),
+            n => Err(PyrucastError::Lent(n)),
+        }
+    }
+
+    /// Open one loan: an outside reader (a buffer view) starts reading the
+    /// object's memory. The count goes up by one, and down by one when the
+    /// returned [`Loan`] is dropped; [`write_checked`](Self::write_checked)
+    /// refuses in between.
+    ///
+    /// This is the only way to raise the count, and a [`Loan`] the only way to
+    /// lower it, so every decrement has had its increment. It takes the read
+    /// lock to count, which orders it with `write_checked`: a view opens before
+    /// a write starts, or after it ends. Like [`read`](Self::read), it must not
+    /// be called while the same thread holds a guard on the object.
+    ///
+    /// ```
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::coords::Coords;
+    /// let h = Handle::new(Coords::new(2).unwrap());
+    /// let a = h.lend();
+    /// let b = h.clone().lend(); // a clone names the same object, hence the same loans
+    /// assert!(h.write_checked().is_err());
+    /// drop(a);
+    /// assert!(h.write_checked().is_err()); // `b` still reads
+    /// drop(b);
+    /// assert!(h.write_checked().is_ok());
+    /// ```
+    pub fn lend(&self) -> Loan<T> {
+        let _ordered = self.cell.read();
+        self.loans.fetch_add(1, Ordering::AcqRel);
+        Loan {
+            handle: self.clone(),
+        }
     }
 
     /// Whether two handles name the **same object**.
@@ -284,7 +377,36 @@ impl<T> Clone for Handle<T> {
     fn clone(&self) -> Self {
         Self {
             cell: self.cell.clone(),
+            loans: self.loans.clone(),
         }
+    }
+}
+
+/// One open loan of an object to an outside reader, returned by
+/// [`Handle::lend`]; dropping it ends the loan.
+///
+/// It holds a handle on the object, so the object outlives every reader it
+/// was lent to. It is not `Clone`: its `Drop` runs once, so each decrement of
+/// the count has had its increment. The Python buffer views keep one until
+/// CPython releases them.
+///
+/// ```
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::coords::Coords;
+/// let h = Handle::new(Coords::new(2).unwrap());
+/// let loan = h.lend();
+/// drop(h); // the loan alone keeps the object alive
+/// drop(loan); // and the object goes with it
+/// ```
+pub struct Loan<T> {
+    handle: Handle<T>,
+}
+
+impl<T> Drop for Loan<T> {
+    /// The count goes down without a lock: a reader that leaves never races a
+    /// write, at worst a `write_checked` running at that instant still sees it.
+    fn drop(&mut self) {
+        self.handle.loans.fetch_sub(1, Ordering::Release);
     }
 }
 
@@ -343,6 +465,17 @@ mod tests {
         assert!(a.same_object(&b));
         b.write().0.push(2.0);
         assert_eq!(a.read().0.len(), 2);
+    }
+
+    /// The infallible `write` is for objects no view holds; a debug build says
+    /// so when one is written while lent.
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "write() on a lent object")]
+    fn write_on_a_lent_object_is_caught_in_debug() {
+        let h = Handle::new(P(vec![]));
+        let _view = h.lend();
+        h.write().0.push(1.0);
     }
 
     #[test]

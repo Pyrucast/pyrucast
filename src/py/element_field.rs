@@ -50,7 +50,7 @@ impl PySubElementField {
 
     /// Set the value at `(cell, gauss)` for component index `comp`.
     fn set(&self, cell: usize, gauss: usize, comp: usize, value: f64) -> PyResult<()> {
-        self.handle.write().set(cell, gauss, comp, value)?;
+        self.handle.write_checked()?.set(cell, gauss, comp, value)?;
         Ok(())
     }
 
@@ -62,7 +62,7 @@ impl PySubElementField {
     /// Set the value at `(cell, gauss)` for the named `component`.
     fn set_value(&self, cell: usize, gauss: usize, component: &str, value: f64) -> PyResult<()> {
         self.handle
-            .write()
+            .write_checked()?
             .set_value(cell, gauss, component, value)?;
         Ok(())
     }
@@ -74,14 +74,14 @@ impl PySubElementField {
 
     /// Set `component` to `value` at every point.
     fn set_uniform(&self, component: &str, value: f64) -> PyResult<()> {
-        self.handle.write().set_uniform(component, value)?;
+        self.handle.write_checked()?.set_uniform(component, value)?;
         Ok(())
     }
 
     /// Set `component` to `value` at every point of `cell`.
     fn set_cell_uniform(&self, cell: usize, component: &str, value: f64) -> PyResult<()> {
         self.handle
-            .write()
+            .write_checked()?
             .set_cell_uniform(cell, component, value)?;
         Ok(())
     }
@@ -95,7 +95,9 @@ impl PySubElementField {
     /// `field[cell, gauss, "name"] = value`.
     fn __setitem__(&self, key: (usize, usize, String), value: f64) -> PyResult<()> {
         let (cell, gauss, comp) = key;
-        self.handle.write().set_value(cell, gauss, &comp, value)?;
+        self.handle
+            .write_checked()?
+            .set_value(cell, gauss, &comp, value)?;
         Ok(())
     }
 

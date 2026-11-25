@@ -242,7 +242,7 @@ macro_rules! impl_subfield_mutator_pymethod {
             $(#[doc = $doc])*
             fn $nom(&self, component: &str, scalar: f64) -> ::pyo3::PyResult<()> {
                 use $crate::containers::field::SubField;
-                self.handle.write().$nom(component, scalar)?;
+                self.handle.write_checked()?.$nom(component, scalar)?;
                 Ok(())
             }
         });
