@@ -4,7 +4,9 @@
 
 > 📂 **Sources.** pyrucast est libre, sous licence MPL-2.0 : ses sources, ce
 > book compris, sont disponibles sur GitHub,
-> <https://github.com/Pyrucast/pyrucast>.
+> <https://github.com/Pyrucast/pyrucast>. Toute contribution ou tout retour
+> est le bienvenu : une issue pour signaler un problème ou proposer une
+> évolution, une pull request pour proposer une modification.
 
 > 📖 **Référence API Rust (rustdoc).** Cette documentation couvre les principes,
 > l'architecture et les exemples ; la référence par item (signatures, types,
