@@ -14,6 +14,11 @@
 //! Not everything implements the protocol: a plain `list` does not, and gmsh
 //! falls back to lists when numpy is absent. Those go through pyo3's ordinary
 //! sequence conversion instead, which copies. Callers see a `&[T]` either way.
+//!
+//! The same protocol works the other way: pyrucast lends its own memory,
+//! read-only. A [`PyArray`] lends the buffer an export built; a field zone
+//! lends its values through `lend_values`, and the [`Loan`] its view keeps
+//! refuses every write to the zone until the view is released.
 
 use crate::handle::{Handle, Loan};
 use pyo3::buffer::{Element, PyBuffer};

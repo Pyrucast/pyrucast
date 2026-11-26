@@ -6,7 +6,8 @@
 //! object dies with the last handle that names it.
 //!
 //! ```text
-//! Handle<T>  =  Arc<RwLock<T>>  +  the API we want on it
+//! Handle<T>  =  Arc<RwLock<T>>  +  Arc<AtomicUsize>  +  the API we want on it
+//!               the object         its open views
 //! ```
 //!
 //! # Guarantees

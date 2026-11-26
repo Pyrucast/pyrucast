@@ -113,6 +113,7 @@ partir d'un tableau :
 ```
 
 Les valeurs sont copiées une fois, dans la mémoire du champ. Sont refusés :
+
 - une forme qui ne correspond pas, même de bonne longueur (un tableau
   transposé n'est pas lu de travers) ;
 - un tableau qui n'est pas en float64 C-contigu (le message renvoie à

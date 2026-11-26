@@ -221,7 +221,22 @@ const KRYLOV_TOLERANCE: f64 = 1e-12;
 /// - `a` or `b` not assembled, or not symmetric;
 /// - `a` carries a unilateral relation;
 /// - `a − shift·b` is singular;
-/// - a mode does not converge.
+/// - a mode does not converge, or the modes found are not independent
+///   (« neither a nor b is positive definite on the modes found »).
+///
+/// # Limitations
+///
+/// Three known cases fail although the modes exist (GitHub issue #31):
+///
+/// - **a double eigenvalue** (a beam of square section, a square plate) may
+///   come out of the iteration as a complex pair; its two modes then get the
+///   same vector, and the call fails;
+/// - **many modes**: beyond some 36, the last vectors may be inaccurate
+///   although the iteration reports them converged (a 50 × 50 QUA4 plate in
+///   heat conduction: 36 modes pass, 38 fail at mode 28);
+/// - **ill-conditioned matrices** (a Bernoulli beam of 500 HERMITE3 cells or
+///   more): the residual check is out of reach and refuses modes as accurate
+///   as the matrices allow.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
