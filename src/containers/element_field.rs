@@ -177,19 +177,81 @@ impl SubElementField {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, components: Vec<String>) -> Result<Self> {
+        Self::on_subspace(fespace, components, |len| Ok(vec![0.0; len]))
+    }
+
+    /// The zone on `fespace`, holding the `values` that `fill` gives for a
+    /// row-major buffer of `len` entries.
+    fn on_subspace(
+        fespace: Handle<SubFiniteElementSpace>,
+        components: Vec<String>,
+        fill: impl FnOnce(usize) -> Result<Vec<f64>>,
+    ) -> Result<Self> {
         crate::containers::field::check_components("SubElementField", &components)?;
         let (n_cells, n_gauss) = {
             let s = fespace.read();
             (s.cell_count(), s.gauss_count())
         };
-        let n_comp = components.len();
-        let values = vec![0.0; n_cells * n_gauss * n_comp];
+        let values = fill(n_cells * n_gauss * components.len())?;
         Ok(Self {
             support: fespace,
             components,
             n_cells,
             n_gauss,
             values,
+        })
+    }
+
+    /// A zone on `fespace` holding `values`, row-major (cell, Gauss point,
+    /// component): `values[(cell * gauss_count + g) * components.len() + c]`.
+    /// The cells are those of the subspace in their order, the Gauss points
+    /// those of its rule. The buffer is moved in, not copied.
+    ///
+    /// # Errors
+    ///
+    /// Those of [`new`](Self::new), and a `values` whose length is not
+    /// `cell_count × gauss_count × components.len()`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// let zone = fes.get(0)?;
+    /// let points = zone.read().gauss_count(); // one cell, its Gauss points
+    /// // E rising from one point to the next, NU constant.
+    /// let values: Vec<f64> = (0..points).flat_map(|g| [100.0 * g as f64, 0.3]).collect();
+    /// let f = SubElementField::from_values(zone.clone(), vec!["E".into(), "NU".into()], values)?;
+    /// assert_eq!(f.value(0, 1, "E")?, 100.0);
+    /// // One value too many for one component at each point.
+    /// assert!(SubElementField::from_values(zone, vec!["E".into()], vec![0.0; points + 1]).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn from_values(
+        fespace: Handle<SubFiniteElementSpace>,
+        components: Vec<String>,
+        values: Vec<f64>,
+    ) -> Result<Self> {
+        Self::on_subspace(fespace, components, |len| {
+            if values.len() == len {
+                Ok(values)
+            } else {
+                Err(PyrucastError::Message(format!(
+                    "SubElementField::from_values: {} values where the zone holds {len} \
+                     (cells × Gauss points × components)",
+                    values.len()
+                )))
+            }
         })
     }
 
@@ -801,6 +863,34 @@ impl ElementField {
             subs.push(Handle::new(sf));
         }
         Ok(Self { subs })
+    }
+
+    /// Wrap a single [`SubElementField`] into a unitary aggregate — the twin
+    /// of [`NodeField::from_sub`](crate::containers::node_field::NodeField::from_sub).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// // Lifting a zone into an aggregate — what the operators expect.
+    /// let zone = SubElementField::new(fes.get(0)?, vec!["E".into()])?;
+    /// assert_eq!(ElementField::from_sub(zone).len(), 1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn from_sub(sub: SubElementField) -> Self {
+        Self {
+            subs: vec![Handle::new(sub)],
+        }
     }
 
     /// Every [`SubElementField`] living on `subfespace`, in aggregate order.

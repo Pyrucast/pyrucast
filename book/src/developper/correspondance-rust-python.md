@@ -86,6 +86,20 @@ Une classe Python n'a pas d'homologue Rust : `pyrucast.Array`, le tableau 1-D
 en lecture seule que rendent les fonctions d'échange (`export.to_arrays`…),
 lisible sans copie par `numpy.asarray`.
 
+Une zone de champ se lit de même par `numpy.asarray(zone)`, sans copie : c'est
+le protocole tampon de `SubNodeField` et `SubElementField`, qui prend un prêt
+(`Handle::lend`) le temps de la vue. Dans l'autre sens, les constructeurs à
+tableau correspondent à une zone construite puis élevée en agrégat :
+
+| Rust | Python |
+|---|---|
+| `NodeField::from_sub(SubNodeField::from_values(&zone, noms, valeurs)?)` | `NodeField(zone, noms, values=a)` |
+| `ElementField::from_sub(SubElementField::from_values(sous_espace, noms, valeurs)?)` | `ElementField(sous_espace, noms, values=a)` |
+| `ElementField::from_sub(SubElementField::new(sous_espace, noms)?)` | `ElementField(sous_espace, noms)` (`fes[i]` : un champ d'une zone) |
+
+En Rust, les valeurs sont **déplacées** dans la zone (`Vec<f64>`) ; en Python,
+le tableau est lu par le protocole tampon puis copié une fois.
+
 Quelques types Rust **ne sont pas** exposés en classes Python : ce sont des
 détails d'implémentation (`SubModelKind`, le trait que chaque physique
 implémente derrière `SubModel` ;
@@ -369,6 +383,7 @@ assemblée.
 | `solve_cancellable` / `solve_cancellable_with_options` (jeton d'interruption en plus) | l'interruption (Ctrl+C) est câblée dans `solve` |
 | `eigen(a: &Matrix, b: &Matrix, count: usize, shift: f64, normalization: Normalization) -> Vec<Mode>` | `eigen(a, b, count, shift=0.0, normalization="mass") -> list[dict]` |
 | `quadratic_eigen(mass: &Matrix, stiffness: &Matrix, damping: &Matrix, normalization: Normalization) -> Vec<Mode>` | `quadratic_eigen(mass, stiffness, damping=None, normalization="mass") -> list[dict]` (`None` : `Matrix::default()`, la matrice vide) |
+| `eigen_cancellable` / `quadratic_eigen_cancellable` (jeton d'interruption en plus) | l'interruption (Ctrl+C) est câblée dans `eigen` et `quadratic_eigen` |
 
 La matrice se suffit : ses lignes de relation portent leur sens (`SubMatrix::row_sense`),
 aucun modèle n'est passé à la résolution. L'élimination est une option

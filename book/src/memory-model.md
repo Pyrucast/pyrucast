@@ -12,6 +12,8 @@ verrouille rien. Quatre comportements sont à connaître :
 - **Un nœud reste dans son `Coords`** tant que le `Coords` existe.
 - **Certains résultats sont gardés en cache** par l'objet dont ils sont tirés,
   et resservent aux calculs suivants.
+- **Une zone de champ lue par numpy refuse d'être écrite** tant que le tableau
+  existe.
 
 ## Partager plutôt que copier
 
@@ -45,6 +47,29 @@ maille qui le contient (voir
 [Coordonnées](coords.md#identité-et-durée-de-vie-des-nœuds)). Un nœud n'est
 jamais retiré de son `Coords` : sa place et ses positions y restent même quand
 plus rien ne l'utilise, et leur mémoire n'est rendue qu'avec le `Coords`.
+
+## Prêter la mémoire à numpy
+
+`numpy.asarray(zone)` lit les valeurs d'une zone de champ **dans la mémoire du
+champ**, sans copie (voir [Échanger avec numpy](node-field.md#échanger-avec-numpy)).
+Le tableau et la zone partagent alors leurs valeurs : pour que le tableau ne
+change pas sous les calculs numpy, la zone refuse toute écriture tant qu'il
+existe.
+
+```python
+{{#include ../../tests/python/test_doc_numpy.py:numpy_pret}}
+```
+
+- Le refus vaut pour toutes les écritures dans la zone : `set_value`, `set`,
+  `set_uniform`, `zone[…] = v`, `add_to_component`… Sur le champ entier,
+  `add_to_component` refuse dès qu'une des zones concernées est lue, et n'en
+  modifie alors aucune.
+- Les **lectures** et les **opérateurs** restent permis : ils ne modifient pas
+  la zone, et un opérateur rend un objet neuf.
+- Le refus cesse quand **le dernier** tableau sur la zone disparaît (`del`, fin
+  de fonction). Un tableau tiré d'un autre (`a[1:]`, `a.T`) compte tant qu'il
+  existe.
+- `numpy.array(zone)`, une copie, ne bloque rien.
 
 ## Ce qui est mis en cache
 
@@ -96,13 +121,15 @@ outil explicite : `Handle<T>`.
 {{#include ../../src/handle.rs:declaration}}
 ```
 
-Un `Handle` assemble deux briques :
+Un `Handle` assemble trois briques :
 
 - **`Arc`** tient un compteur de propriétaires. Cloner un `Arc` ne copie pas
   l'objet, cela augmente le compteur ; quand le dernier `Arc` disparaît,
   l'objet est détruit.
 - **`RwLock`** (de la bibliothèque `parking_lot`) est un verrou
   lecture/écriture : plusieurs lecteurs à la fois, ou un seul écrivain.
+- **`loans`** compte les vues qui lisent l'objet hors de Rust, les tableaux
+  numpy (voir [Prêter un objet](#prêter-un-objet--lend-et-write_checked)).
 
 Chaque objet Python enveloppe un `Handle`, ou pour un agrégat la liste des
 handles de ses zones : une variable Python est un propriétaire comme un autre.
@@ -159,6 +186,39 @@ maillage pendant un assemblage. Deux règles, que le compilateur ne vérifie pas
 
 Python n'est pas concerné : chaque appel prend et rend ses verrous avant de
 revenir.
+
+### Prêter un objet : `lend` et `write_checked`
+
+Un tableau numpy lit la mémoire d'une zone par un pointeur, sans tenir de
+guard : il vit aussi longtemps que sa variable Python, et aucun appel ne borne
+cette durée. Le verrou ne peut donc pas le suivre. `Handle` tient pour cela un
+second compteur, celui des **vues** ouvertes sur l'objet, dans un second `Arc`
+à côté du verrou.
+
+```rust,ignore
+{{#include ../../tests/doc_memoire.rs:pret}}
+```
+
+- `lend()` ouvre un prêt : le compteur augmente, et le `Loan` rendu le diminue
+  quand il disparaît. C'est la seule façon de l'augmenter, et un `Loan` la seule
+  de le diminuer : chaque diminution a eu son augmentation.
+- `write_checked()` prend le verrou en écriture, puis lit le compteur : à zéro,
+  il rend le guard ; sinon, il refuse (`PyrucastError::Lent`, `BufferError` en
+  Python).
+- Les deux niveaux répondent différemment à un conflit. Le verrou **attend** un
+  guard Rust, qui finit avec son appel. Le compteur **refuse**, parce qu'une vue
+  peut ne jamais finir : l'attendre figerait l'interpréteur.
+- `lend()` compte sous le verrou en lecture, `write_checked()` lit le compteur
+  sous le verrou en écriture : une vue s'ouvre avant qu'une écriture commence,
+  ou après qu'elle finit, jamais entre la vérification et l'écriture.
+- `write()` reste infaillible. Il sert aux objets qu'aucune vue ne peut tenir :
+  celui qu'une fonction vient de construire, un type qu'on ne prête pas. Un
+  build de débogage vérifie que l'objet n'est pas prêté.
+
+Les écritures que Python fait dans une zone existante (`set_value`,
+`set_uniform`, `zone[nœud, "T"] = …`, `add_to_component`…) passent par
+`write_checked`. Sur un agrégat, `add_to_component` interroge toutes les zones
+concernées avant d'en écrire une : un refus laisse le champ tel qu'il était.
 
 ### Afficher un handle
 

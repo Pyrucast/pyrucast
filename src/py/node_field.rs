@@ -1,6 +1,7 @@
 //! Python wrappers for [`crate::containers::node_field::SubNodeField`] and
 //! [`crate::containers::node_field::NodeField`].
 
+use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::field::SubField;
 use crate::containers::mesh::SubMesh;
@@ -10,7 +11,7 @@ use crate::error::PyrucastError;
 use crate::handle::Handle;
 use crate::py::mesh::{PyMesh, PySubMesh};
 use crate::py::node::PyNode;
-use pyo3::exceptions::PyTypeError;
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 
 /// Resolve a node list from the several shapes a caller may pass to a
@@ -59,10 +60,65 @@ fn extract_node_ids(
 /// A **view** into one zone of a `NodeField`, obtained by indexing
 /// (`node_field[i]`) — never constructed directly. Build at the parent
 /// level instead: `NodeField(support, components)`, composed with `|`.
+///
+/// `numpy.asarray(zone)` reads the values **without a copy**, read-only, as
+/// an array of shape `(node_count, component_count)`: one row per node of
+/// `support()`, in the order of its cells, one column per name of
+/// `components()`, in that order. `memoryview(zone)` gives the same block
+/// without numpy. While such an array is alive, writing the zone (`set_value`,
+/// `zone[node, "T"] = …`, `add_to_component`…) raises `BufferError`; the
+/// writes work again once the last array is gone.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SubNodeField")]
 pub struct PySubNodeField {
     pub(crate) handle: Handle<SubNodeField>,
+}
+
+// The buffer protocol, kept out of the stub like `pyrucast.Array`'s.
+#[pymethods]
+impl PySubNodeField {
+    /// Lend the values, read-only: `(node_count, component_count)` float64,
+    /// C-contiguous.
+    ///
+    /// # Safety
+    ///
+    /// Called by CPython with a valid `view`. The zone's values are never
+    /// reallocated, and the loan the view keeps refuses every write until
+    /// CPython calls `__releasebuffer__`.
+    unsafe fn __getbuffer__(
+        slf: Bound<'_, Self>,
+        view: *mut pyo3::ffi::Py_buffer,
+        flags: std::ffi::c_int,
+    ) -> PyResult<()> {
+        let handle = slf.borrow().handle.clone();
+        // SAFETY: see the method's contract above.
+        unsafe {
+            crate::py::arrays::lend_values(
+                view,
+                flags,
+                slf.into_any(),
+                &handle,
+                "pyrucast fields",
+                |zone: &SubNodeField| {
+                    (
+                        zone.values().as_ptr(),
+                        [zone.node_count(), zone.components().len(), 0],
+                        2,
+                    )
+                },
+            )
+        }
+    }
+
+    /// End a view: the zone's count of views goes down by one.
+    ///
+    /// # Safety
+    ///
+    /// Called once by CPython, with a view `__getbuffer__` filled.
+    unsafe fn __releasebuffer__(_slf: Bound<'_, Self>, view: *mut pyo3::ffi::Py_buffer) {
+        // SAFETY: see the method's contract above.
+        unsafe { crate::py::arrays::release_values::<SubNodeField>(view) }
+    }
 }
 
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
@@ -81,7 +137,9 @@ impl PySubNodeField {
 
     /// Set the value at node index `node_idx`, component index `comp_idx`.
     fn set(&self, node_idx: usize, comp_idx: usize, value: f64) -> PyResult<()> {
-        self.handle.write().set(node_idx, comp_idx, value)?;
+        self.handle
+            .write_checked()?
+            .set(node_idx, comp_idx, value)?;
         Ok(())
     }
 
@@ -94,7 +152,9 @@ impl PySubNodeField {
     /// Set the value at `node`, component index `comp_idx`.
     fn set_by_node(&self, node: PyRef<'_, PyNode>, comp_idx: usize, value: f64) -> PyResult<()> {
         let nid = node.id_in(Some(&self.handle.read().coords()))?;
-        self.handle.write().set_by_node(nid, comp_idx, value)?;
+        self.handle
+            .write_checked()?
+            .set_by_node(nid, comp_idx, value)?;
         Ok(())
     }
 
@@ -120,14 +180,16 @@ impl PySubNodeField {
     /// Set the value at `node` for the named `component`.
     fn set_value(&self, node: PyRef<'_, PyNode>, component: &str, value: f64) -> PyResult<()> {
         let nid = node.id_in(Some(&self.handle.read().coords()))?;
-        self.handle.write().set_value(nid, component, value)?;
+        self.handle
+            .write_checked()?
+            .set_value(nid, component, value)?;
         Ok(())
     }
 
     /// Set `component` to `value` at every node of the zone.
     fn set_uniform(&self, component: &str, value: f64) -> PyResult<()> {
         use crate::containers::field::SubField;
-        self.handle.write().set_uniform(component, value)?;
+        self.handle.write_checked()?.set_uniform(component, value)?;
         Ok(())
     }
 
@@ -141,7 +203,7 @@ impl PySubNodeField {
     fn __setitem__(&self, key: (PyRef<'_, PyNode>, String), value: f64) -> PyResult<()> {
         let (node, comp) = key;
         let nid = node.id_in(Some(&self.handle.read().coords()))?;
-        self.handle.write().set_value(nid, &comp, value)?;
+        self.handle.write_checked()?.set_value(nid, &comp, value)?;
         Ok(())
     }
 
@@ -295,12 +357,55 @@ impl PyNodeField {
     /// Each entry of `components` is a `(name, value)` pair, the component
     /// holding `value` at every node, or a bare name, holding zero:
     /// `[("T", 20.0), "u_x"]`.
+    ///
+    /// `NodeField(support, names, values=a)` fills one zone from an array:
+    /// `support` gives one zone (a `SubMesh`, or a `Mesh` of one submesh),
+    /// `names` are bare names, the columns of `a` in order, and `a` has the
+    /// shape `numpy.asarray` gives — `(node_count, len(names))`, one row per
+    /// node of the zone's support in the order of its cells, or `(node_count,)`
+    /// for one component. The values are copied once into the field.
+    ///
+    /// # Raises
+    ///
+    /// - `TypeError` if `support` is neither a `Mesh` nor a `SubMesh`, if
+    ///   `values` comes with a `(name, value)` pair, or if `values` is an array
+    ///   that is not C-contiguous float64
+    ///   (`numpy.ascontiguousarray(a, dtype=float)` gives one).
+    /// - `ValueError` if `values` comes with a support of several zones, or
+    ///   does not have the zone's shape.
+    /// - `RuntimeError` for an empty or repeated component name.
     #[new]
+    #[pyo3(signature = (support, components, values = None))]
     fn py_new(
         support: &Bound<'_, PyAny>,
         components: Vec<crate::py::ops::field::InitialComponent>,
+        values: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         use crate::py::ops::field::InitialComponent;
+        if let Some(values) = values {
+            let names = InitialComponent::column_names(&components)?;
+            let zone = if let Ok(sm) = support.extract::<PyRef<PySubMesh>>() {
+                sm.handle.clone()
+            } else if let Ok(mesh) = support.extract::<PyRef<PyMesh>>() {
+                if mesh.inner.len() != 1 {
+                    return Err(PyValueError::new_err(format!(
+                        "NodeField(..., values=): the Mesh has {} submeshes, and values fill \
+                         one zone; build one field per submesh, then compose them with |",
+                        mesh.inner.len()
+                    )));
+                }
+                mesh.inner.get(0)?
+            } else {
+                return Err(PyTypeError::new_err("expected a Mesh or a SubMesh"));
+            };
+            let block = crate::py::arrays::borrow_values(values)?;
+            let rows = SubMesh::to_poi1(&zone).read().cell_count();
+            crate::py::arrays::check_values_shape(block.shape(), &[rows], names.len())?;
+            let sub = SubNodeField::from_values(&zone, names, block.as_slice().to_vec())?;
+            return Ok(Self {
+                inner: NodeField::from_sub(sub),
+            });
+        }
         let names = InitialComponent::names(&components);
         let inner = if let Ok(mesh) = support.extract::<PyRef<PyMesh>>() {
             NodeField::new(&mesh.inner, names)?

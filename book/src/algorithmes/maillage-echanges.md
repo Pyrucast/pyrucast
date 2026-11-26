@@ -145,6 +145,10 @@ rendu, pyrucast possède ses données — `gmsh.finalize()` ne les emporte pas.
 > pas installé — est lu par la conversion ordinaire. Le résultat est le même,
 > au prix d'une copie de plus.
 
+Un tableau contigu se lit sans copie quelle que soit sa forme, à plat, dans
+l'ordre de sa mémoire : une table `(nœuds, 3)` donne le même import que son
+`ravel()`, une connectivité `(mailles, nœuds par maille)` aussi.
+
 ### Restreindre l'import
 
 `dim` limite l'import à une dimension, `tag` à une seule entité de cette

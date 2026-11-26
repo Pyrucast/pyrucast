@@ -31,8 +31,11 @@ champs (composantes, statistiques, arithmétique) sont décrites dans
 
 `pyrucast.ElementField(fes, [("E", 210e9), "nu"])` crée une zone par
 sous-espace de `fes`, avec ces composantes. Un couple `(nom, valeur)` donne à la
-composante cette valeur en tout point de Gauss, un nom seul la met à zéro.
+composante cette valeur en tout point de Gauss, un nom seul la met à zéro. Sur
+un seul sous-espace (`fes[i]`), le champ a une zone.
 `pyrucast.ElementField.empty()` est un champ vide, que `|` complète.
+`ElementField(fes[i], noms, values=a)` remplit une zone à partir d'un tableau
+(voir [Échanger avec numpy](#échanger-avec-numpy)).
 `ElementField.with_components_per_subspace(fes, [["E", "nu"], ["k"]])` donne
 une liste de composantes **par** sous-espace. Une liste vide, un nom en double
 ou un nombre de listes qui ne correspond pas aux sous-espaces sont refusés.
@@ -72,11 +75,48 @@ bornes ou une composante inconnue lèvent une erreur.
 | `set_uniform("c", v)` | la composante `c` à `v` en tout point |
 | `set_cell_uniform(maille, "c", v)` | la composante `c` à `v` en tout point d'une maille |
 | `components()`, `component_index("c")` | les composantes, le rang de l'une |
+| `numpy.asarray(zone)`, `memoryview(zone)` | ses valeurs, lues sans copie (voir [Échanger avec numpy](#échanger-avec-numpy)) |
 
 Les **positions** des points de Gauss ne sont pas dans le champ : leurs
 coordonnées dans l'élément de référence et leurs poids sont sur l'espace
 (`fes[i].gauss_xi(g)`, `fes[i].gauss_weight(g)`), et leur position réelle se
 calcule à partir des nœuds.
+
+## Échanger avec numpy
+
+Une zone se lit comme un tableau : `numpy.asarray(zone)` rend ses valeurs
+**sans les copier**, en lecture seule, sous la forme `(mailles, points de
+Gauss, composantes)`, dans l'ordre des trois indices de `zone.get(maille, g,
+rang)` : les mailles de la zone de maillage, les points de Gauss de la
+quadrature, les composantes de `zone.components()`.
+
+```python
+{{#include ../../tests/python/test_doc_numpy.py:numpy_lire_gauss}}
+```
+
+Tant que le tableau existe, la zone refuse toute écriture (`BufferError`), comme
+une zone aux nœuds (voir [Modèle mémoire](memory-model.md#prêter-la-mémoire-à-numpy)).
+`numpy.array(zone)` en fait une copie, `memoryview(zone)` donne le même bloc sans
+numpy. Le champ entier n'est pas un tableau : on lit zone par zone.
+
+Dans l'autre sens, `ElementField(fes, noms, values=a)` construit une zone à
+partir d'un tableau :
+
+- `fes` donne **un** sous-espace : `fes[i]`, ou un espace d'un seul
+  sous-espace ;
+- `noms` sont des noms seuls, ceux du dernier indice de `a`, dans l'ordre ;
+- `a` a la forme que rend `numpy.asarray` : `(mailles, points de Gauss,
+  len(noms))`, ou `(mailles, points de Gauss)` pour une seule composante.
+
+```python
+{{#include ../../tests/python/test_doc_numpy.py:numpy_construire_gauss}}
+```
+
+Les valeurs sont copiées une fois, dans la mémoire du champ. Les refus sont
+ceux d'une zone aux nœuds (voir [Échanger avec
+numpy](node-field.md#échanger-avec-numpy)) : une forme qui ne correspond pas, un
+tableau qui n'est pas en float64 C-contigu, un couple `(nom, valeur)`, un espace
+de plusieurs sous-espaces.
 
 ## Composantes
 

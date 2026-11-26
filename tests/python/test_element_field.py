@@ -111,6 +111,44 @@ def test_uniform_per_component_via_set_uniform():
         assert f.get(0, g, 2) == 7800.0
 
 
+def test_a_subspace_gives_a_field_of_that_one_zone():
+    fes, other = _two_spaces()
+    both = fes | other
+    ef = pyrucast.ElementField(both[1], [("k", 2.0)])
+    assert len(ef) == 1
+    assert ef.max("k") == 2.0
+    # Zones add up on one support only: the zone stands on `both[1]`.
+    on_second = pyrucast.ElementField(both, [("k", 1.0)])[1]
+    assert (ef[0] + on_second).max("k") == 3.0
+    with pytest.raises(RuntimeError, match="same support"):
+        ef[0] + pyrucast.ElementField(both, ["k"])[0]
+
+
+def test_values_fill_a_zone_and_read_back_through_numpy():
+    np = pytest.importorskip("numpy")
+    _, _, fes = _tri3_subspace(n_cells=2)
+    z = pyrucast.ElementField(fes, [("E", 1.0), ("NU", 0.3)])[0]
+    z.set_value(1, 2, "E", 7.0)
+    again = pyrucast.ElementField(fes[0], z.components(), values=np.asarray(z))
+    assert np.asarray(again[0]).tolist() == np.asarray(z).tolist()
+    # One component: the last dimension may be left out.
+    k = pyrucast.ElementField(
+        fes, ["k"], values=np.arange(2.0 * z.gauss_count).reshape(2, -1)
+    )
+    assert k[0].value(1, 0, "k") == z.gauss_count
+
+
+def test_values_refusals():
+    np = pytest.importorskip("numpy")
+    fes, other = _two_spaces()
+    with pytest.raises(ValueError, match="2 subspaces"):
+        pyrucast.ElementField(fes | other, ["E"], values=np.zeros((1, 3)))
+    with pytest.raises(ValueError, match=r"shape \(3, 1\)"):
+        pyrucast.ElementField(fes, ["E"], values=np.zeros((3, 1)))
+    with pytest.raises(TypeError, match="names its columns"):
+        pyrucast.ElementField(fes, [("E", 1.0)], values=np.zeros((1, 3)))
+
+
 # ─── Get / set ──────────────────────────────────────────────────────────────
 
 
@@ -249,6 +287,54 @@ def test_dunder_get_set_item():
     f = _subfield(fes, ["sigma"])
     f[0, 1, "sigma"] = 5.0
     assert f[0, 1, "sigma"] == 5.0
+
+
+# ─── Lending the values (buffer protocol) ───────────────────────────────────
+
+
+def test_numpy_reads_a_zone_in_place_cells_then_gauss_points_then_components():
+    np = pytest.importorskip("numpy")
+    _, _, fes = _tri3_subspace(n_cells=2)
+    z = _subfield(fes, ["E", "NU"])
+    for cell in range(z.cell_count):
+        for gp in range(z.gauss_count):
+            z.set_value(cell, gp, "E", 100.0 * cell + gp)
+            z.set_value(cell, gp, "NU", -1.0 - gp)
+    a = np.asarray(z)
+    assert a.shape == (2, z.gauss_count, 2)
+    assert a.tolist() == [
+        [[z.value(cell, gp, c) for c in z.components()] for gp in range(z.gauss_count)]
+        for cell in range(z.cell_count)
+    ]
+    assert np.shares_memory(a, np.asarray(z))
+    assert not a.flags.writeable
+
+
+_ZONE_WRITES = {
+    "set": lambda z: z.set(0, 0, 0, 1.0),
+    "set_value": lambda z: z.set_value(0, 0, "E", 1.0),
+    "set_uniform": lambda z: z.set_uniform("E", 1.0),
+    "set_cell_uniform": lambda z: z.set_cell_uniform(0, "E", 1.0),
+    "setitem": lambda z: z.__setitem__((0, 0, "E"), 1.0),
+    "add_to_component": lambda z: z.add_to_component("E", 1.0),
+    "sub_to_component": lambda z: z.sub_to_component("E", 1.0),
+    "mul_to_component": lambda z: z.mul_to_component("E", 3.0),
+    "div_to_component": lambda z: z.div_to_component("E", 4.0),
+}
+
+
+@pytest.mark.parametrize("write", _ZONE_WRITES.values(), ids=_ZONE_WRITES.keys())
+def test_a_zone_refuses_every_write_while_a_view_reads_it(write):
+    _, _, fes = _tri3_subspace()
+    z = pyrucast.ElementField(fes, [("E", 2.0)])[0]
+    view = memoryview(z)
+    assert view.shape == (1, z.gauss_count, 1)
+    with pytest.raises(BufferError, match="1 buffer view"):
+        write(z)
+    assert view.tolist() == [[[2.0]] * z.gauss_count]
+    view.release()
+    write(z)
+    assert z.get(0, 0, 0) != 2.0
 
 
 # ─── repr / str ─────────────────────────────────────────────────────────────

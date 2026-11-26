@@ -1,8 +1,10 @@
 //! Unique error type of pyrucast.
 //!
 //! Every public function returns [`Result<T>`]. On the Python side,
-//! [`PyrucastError`] is converted automatically into an exception
-//! (`RuntimeError`).
+//! [`PyrucastError`] is converted automatically into an exception:
+//! `RuntimeError`, or the exception Python has for the case
+//! (`KeyboardInterrupt` for an interruption, `BufferError` for a write on an
+//! object a buffer view reads).
 
 use std::fmt;
 
@@ -48,6 +50,11 @@ pub enum PyrucastError {
     /// space, field, matrix, …) captures it, after which its connectivity is
     /// frozen so downstream objects cannot be left inconsistent.
     MeshSealed,
+    /// A write was refused because buffer views (numpy arrays, memoryviews)
+    /// read the object: the count of open views
+    /// ([`crate::handle::Handle::write_checked`]). On the Python side this
+    /// surfaces as `BufferError`, as for a `bytearray` resized while exported.
+    Lent(usize),
     /// Generic error with a message.
     Message(String),
 }
@@ -62,6 +69,11 @@ impl fmt::Display for PyrucastError {
                 f,
                 "submesh is sealed: it is already used by a finite-element space, \
                  field or matrix and can no longer be modified"
+            ),
+            PyrucastError::Lent(n) => write!(
+                f,
+                "object is read by {n} buffer view(s) (numpy array, memoryview): \
+                 release them before writing"
             ),
             PyrucastError::Message(m) => write!(f, "{m}"),
         }
@@ -85,6 +97,8 @@ impl From<PyrucastError> for pyo3::PyErr {
             PyrucastError::Interrupted => {
                 pyo3::exceptions::PyKeyboardInterrupt::new_err(e.to_string())
             }
+            // Python's own exception for a write on an exported buffer.
+            PyrucastError::Lent(_) => pyo3::exceptions::PyBufferError::new_err(e.to_string()),
             _ => pyo3::exceptions::PyRuntimeError::new_err(e.to_string()),
         }
     }

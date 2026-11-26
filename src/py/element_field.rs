@@ -1,11 +1,13 @@
 //! Python wrappers for [`crate::containers::element_field::SubElementField`] and
 //! [`crate::containers::element_field::ElementField`].
 
+use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
+use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::handle::Handle;
 use crate::py::finite_element_space::{PyFiniteElementSpace, PySubFiniteElementSpace};
-use pyo3::exceptions::PyTypeError;
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 
 /// One zone of an `ElementField`: the values at the Gauss points of one
@@ -14,10 +16,70 @@ use pyo3::prelude::*;
 /// `sub_material_field`) give a fresh one. There is no constructor: build at
 /// the parent level, `ElementField(fes, components)` or
 /// `material_field(model, ...)`, composed with `|`.
+///
+/// `numpy.asarray(zone)` reads the values **without a copy**, read-only, as
+/// an array of shape `(cell_count, gauss_count, component_count)`: the cells
+/// of the zone in their order, then the Gauss points in the order of the
+/// integration rule, then one entry per name of `components()`, in that order.
+/// `memoryview(zone)` gives the same block without numpy. While such an array
+/// is alive, writing the zone (`set_value`, `zone[cell, gauss, "E"] = …`,
+/// `add_to_component`…) raises `BufferError`; the writes work again once the
+/// last array is gone.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "SubElementField")]
 pub struct PySubElementField {
     pub(crate) handle: Handle<SubElementField>,
+}
+
+// The buffer protocol, kept out of the stub like `pyrucast.Array`'s.
+#[pymethods]
+impl PySubElementField {
+    /// Lend the values, read-only: `(cell_count, gauss_count,
+    /// component_count)` float64, C-contiguous.
+    ///
+    /// # Safety
+    ///
+    /// Called by CPython with a valid `view`. The zone's values are never
+    /// reallocated, and the loan the view keeps refuses every write until
+    /// CPython calls `__releasebuffer__`.
+    unsafe fn __getbuffer__(
+        slf: Bound<'_, Self>,
+        view: *mut pyo3::ffi::Py_buffer,
+        flags: std::ffi::c_int,
+    ) -> PyResult<()> {
+        let handle = slf.borrow().handle.clone();
+        // SAFETY: see the method's contract above.
+        unsafe {
+            crate::py::arrays::lend_values(
+                view,
+                flags,
+                slf.into_any(),
+                &handle,
+                "pyrucast fields",
+                |zone: &SubElementField| {
+                    (
+                        zone.values().as_ptr(),
+                        [
+                            zone.cell_count(),
+                            zone.gauss_count(),
+                            zone.components().len(),
+                        ],
+                        3,
+                    )
+                },
+            )
+        }
+    }
+
+    /// End a view: the zone's count of views goes down by one.
+    ///
+    /// # Safety
+    ///
+    /// Called once by CPython, with a view `__getbuffer__` filled.
+    unsafe fn __releasebuffer__(_slf: Bound<'_, Self>, view: *mut pyo3::ffi::Py_buffer) {
+        // SAFETY: see the method's contract above.
+        unsafe { crate::py::arrays::release_values::<SubElementField>(view) }
+    }
 }
 
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
@@ -50,7 +112,7 @@ impl PySubElementField {
 
     /// Set the value at `(cell, gauss)` for component index `comp`.
     fn set(&self, cell: usize, gauss: usize, comp: usize, value: f64) -> PyResult<()> {
-        self.handle.write().set(cell, gauss, comp, value)?;
+        self.handle.write_checked()?.set(cell, gauss, comp, value)?;
         Ok(())
     }
 
@@ -62,7 +124,7 @@ impl PySubElementField {
     /// Set the value at `(cell, gauss)` for the named `component`.
     fn set_value(&self, cell: usize, gauss: usize, component: &str, value: f64) -> PyResult<()> {
         self.handle
-            .write()
+            .write_checked()?
             .set_value(cell, gauss, component, value)?;
         Ok(())
     }
@@ -74,14 +136,14 @@ impl PySubElementField {
 
     /// Set `component` to `value` at every point.
     fn set_uniform(&self, component: &str, value: f64) -> PyResult<()> {
-        self.handle.write().set_uniform(component, value)?;
+        self.handle.write_checked()?.set_uniform(component, value)?;
         Ok(())
     }
 
     /// Set `component` to `value` at every point of `cell`.
     fn set_cell_uniform(&self, cell: usize, component: &str, value: f64) -> PyResult<()> {
         self.handle
-            .write()
+            .write_checked()?
             .set_cell_uniform(cell, component, value)?;
         Ok(())
     }
@@ -95,7 +157,9 @@ impl PySubElementField {
     /// `field[cell, gauss, "name"] = value`.
     fn __setitem__(&self, key: (usize, usize, String), value: f64) -> PyResult<()> {
         let (cell, gauss, comp) = key;
-        self.handle.write().set_value(cell, gauss, &comp, value)?;
+        self.handle
+            .write_checked()?
+            .set_value(cell, gauss, &comp, value)?;
         Ok(())
     }
 
@@ -239,14 +303,72 @@ impl PyElementField {
     ///
     /// Each entry of `components` is a `(name, value)` pair, the component
     /// holding `value` at every Gauss point, or a bare name, holding zero:
-    /// `[("T", 20.0), "p"]`.
+    /// `[("T", 20.0), "p"]`. With a `SubFiniteElementSpace` (`fes[i]`), the
+    /// field has that single zone.
+    ///
+    /// `ElementField(fespace, names, values=a)` fills one zone from an array:
+    /// `fespace` gives one zone (a `SubFiniteElementSpace`, or a
+    /// `FiniteElementSpace` of one subspace), `names` are bare names, the last
+    /// index of `a` in order, and `a` has the shape `numpy.asarray` gives —
+    /// `(cell_count, gauss_count, len(names))`, or `(cell_count, gauss_count)`
+    /// for one component. The values are copied once into the field.
+    ///
+    /// # Raises
+    ///
+    /// - `TypeError` if `fespace` is neither a `FiniteElementSpace` nor a
+    ///   `SubFiniteElementSpace`, if `values` comes with a `(name, value)` pair,
+    ///   or if `values` is an array that is not C-contiguous float64
+    ///   (`numpy.ascontiguousarray(a, dtype=float)` gives one).
+    /// - `ValueError` if `values` comes with a space of several subspaces, or
+    ///   does not have the zone's shape.
+    /// - `RuntimeError` for an empty or repeated component name.
     #[new]
+    #[pyo3(signature = (fespace, components, values = None))]
     fn py_new(
-        fespace: PyRef<PyFiniteElementSpace>,
+        fespace: &Bound<'_, PyAny>,
         components: Vec<crate::py::ops::field::InitialComponent>,
+        values: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         use crate::py::ops::field::InitialComponent;
-        let ef = ElementField::new(&fespace.inner, InitialComponent::names(&components))?;
+        let one_zone = || -> PyResult<Handle<SubFiniteElementSpace>> {
+            if let Ok(sub) = fespace.extract::<PyRef<PySubFiniteElementSpace>>() {
+                return Ok(sub.handle.clone());
+            }
+            let fes = fespace.extract::<PyRef<PyFiniteElementSpace>>()?;
+            if fes.inner.len() != 1 {
+                return Err(PyValueError::new_err(format!(
+                    "ElementField(..., values=): the FiniteElementSpace has {} subspaces, and \
+                     values fill one zone; build one field per subspace, then compose them \
+                     with |",
+                    fes.inner.len()
+                )));
+            }
+            Ok(fes.inner.get(0)?)
+        };
+        if let Some(values) = values {
+            let names = InitialComponent::column_names(&components)?;
+            let zone = one_zone()?;
+            let block = crate::py::arrays::borrow_values(values)?;
+            let rows = {
+                let space = zone.read();
+                [space.cell_count(), space.gauss_count()]
+            };
+            crate::py::arrays::check_values_shape(block.shape(), &rows, names.len())?;
+            let sub = SubElementField::from_values(zone, names, block.as_slice().to_vec())?;
+            return Ok(Self {
+                inner: ElementField::from_sub(sub),
+            });
+        }
+        let names = InitialComponent::names(&components);
+        let ef = if let Ok(sub) = fespace.extract::<PyRef<PySubFiniteElementSpace>>() {
+            ElementField::from_sub(SubElementField::new(sub.handle.clone(), names)?)
+        } else if let Ok(fes) = fespace.extract::<PyRef<PyFiniteElementSpace>>() {
+            ElementField::new(&fes.inner, names)?
+        } else {
+            return Err(PyTypeError::new_err(
+                "expected a FiniteElementSpace or a SubFiniteElementSpace",
+            ));
+        };
         InitialComponent::fill(&ef, &components);
         Ok(Self { inner: ef })
     }

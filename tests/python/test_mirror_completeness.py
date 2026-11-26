@@ -50,6 +50,8 @@ RUST_ONLY = {
     "triangulate_volume_cancellable": "interruption is wired into the nominal wrapper",
     "solve_cancellable": "interruption is wired into the nominal wrapper",
     "solve_cancellable_with_options": "interruption is wired into the nominal wrapper",
+    "eigen_cancellable": "interruption is wired into the nominal wrapper",
+    "quadratic_eigen_cancellable": "interruption is wired into the nominal wrapper",
     # Rust passes the options in a struct; Python passes them as keyword
     # arguments of the nominal function.
     "solve_with_options": "the options are the keyword arguments of `solve`",

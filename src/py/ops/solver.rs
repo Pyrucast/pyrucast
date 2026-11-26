@@ -177,8 +177,29 @@ pub fn solve(
 /// # Raises
 ///
 /// `RuntimeError` if `a` or `b` has no assembled values or is not symmetric, if
-/// `a` carries a unilateral relation, if `a − shift·b` is singular, or if a mode
-/// does not converge. `ValueError` for an unknown `normalization`.
+/// `a` carries a unilateral relation, if `a − shift·b` is singular, if a mode
+/// does not converge, or if the modes found are not independent ("neither a nor
+/// b is positive definite on the modes found"). `ValueError` for an unknown
+/// `normalization`. `KeyboardInterrupt` on `Ctrl+C`.
+///
+/// # Notes
+///
+/// Three known cases fail although the modes exist (GitHub issue #31):
+///
+/// - a double eigenvalue (a beam of square section, a square plate) may come out
+///   of the iteration as a complex pair; its two modes then get the same vector,
+///   and the call fails;
+/// - beyond some 36 modes, the last vectors may be inaccurate although the
+///   iteration reports them converged (a 50 × 50 QUA4 plate in heat conduction:
+///   36 modes pass, 38 fail at mode 28);
+/// - on ill-conditioned matrices (a Bernoulli beam of 500 HERMITE3 cells or
+///   more), the residual check is out of reach and refuses modes as accurate as
+///   the matrices allow.
+///
+/// `Ctrl+C` is honoured between the steps: after the factorization of
+/// `a − shift·b`, after the Krylov-Schur iteration and before the solve of each
+/// mode. The factorization and the iteration are single library calls and are
+/// not interrupted mid-way.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (a, b, count, shift = 0.0, normalization = Normalization::Mass))]
@@ -191,7 +212,8 @@ pub fn eigen<'py>(
     normalization: Normalization,
 ) -> PyResult<Vec<Bound<'py, PyDict>>> {
     let (a, b) = (&a.inner, &b.inner);
-    let modes = py.detach(|| crate::ops::solver::eigen(a, b, count, shift, normalization))?;
+    let modes =
+        crate::ops::solver::eigen_cancellable(a, b, count, shift, normalization, &PySignals(py))?;
     modes
         .into_iter()
         .map(|mode| mode_to_dict(py, mode))
@@ -230,7 +252,12 @@ pub fn eigen<'py>(
 /// `RuntimeError` if a matrix carries relations (project it on real modes
 /// first) or has no assembled values, if the three together are not square, or
 /// if the QZ iteration does not converge. `ValueError` for an unknown
-/// `normalization`.
+/// `normalization`. `KeyboardInterrupt` on `Ctrl+C`.
+///
+/// # Notes
+///
+/// `Ctrl+C` is honoured once the dense matrices are built and after the QZ
+/// iteration, which is a single library call and is not interrupted mid-way.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mass, stiffness, damping = None, normalization = Normalization::Mass))]
@@ -244,8 +271,13 @@ pub fn quadratic_eigen<'py>(
     let none = Matrix::default();
     let (mass, stiffness) = (&mass.inner, &stiffness.inner);
     let damping = damping.as_ref().map_or(&none, |d| &d.inner);
-    let modes =
-        py.detach(|| crate::ops::solver::quadratic_eigen(mass, stiffness, damping, normalization))?;
+    let modes = crate::ops::solver::quadratic_eigen_cancellable(
+        mass,
+        stiffness,
+        damping,
+        normalization,
+        &PySignals(py),
+    )?;
     modes
         .into_iter()
         .map(|mode| mode_to_dict(py, mode))

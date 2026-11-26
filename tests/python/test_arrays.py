@@ -88,6 +88,25 @@ def test_arrays_from_numpy_take_the_buffer_path(dtype):
     )
 
 
+def test_arrays_read_a_contiguous_table_as_its_flat_values():
+    """A `(nodes, 3)` table and a `(cells, 3)` connectivity are read as their
+    `ravel()`: the same nodes at the same places, the same cells."""
+    np = pytest.importorskip("numpy")
+    tags, coords, _ = square_arrays()
+    tags = np.array(tags, dtype=np.int64)
+    flat = pyrucast.Coords(dim=2)
+    table = pyrucast.Coords(dim=2)
+    conn = np.array([[1, 2, 3], [1, 3, 4]], dtype=np.int64)
+    a = meshes(flat, tags, coords, [("TRI3", conn.ravel(), ["plate"])])
+    b = meshes(table, tags, np.array(coords).reshape(4, 3), [("TRI3", conn, ["plate"])])
+    assert shape(a) == shape(b)
+
+    def xy(groups):
+        return np.asarray(pyrucast.node_field.positions(groups["plate"])[0]).tolist()
+
+    assert xy(a) == xy(b) == [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
+
+
 def test_arrays_accept_a_non_contiguous_view():
     """A strided view has no contiguous buffer to lend: the fallback must read it
     all the same, without mistaking the elements."""

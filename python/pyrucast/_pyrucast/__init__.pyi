@@ -475,14 +475,32 @@ class ElementField:
     index it (`field[i]`) to reach a `SubElementField`, compose zones
     with `|`.
     """
-    def __new__(cls, fespace: FiniteElementSpace, components: typing.Sequence[builtins.str | tuple[builtins.str, builtins.float]]) -> ElementField:
+    def __new__(cls, fespace: typing.Any, components: typing.Sequence[builtins.str | tuple[builtins.str, builtins.float]], values: typing.Optional[typing.Any] = None) -> ElementField:
         r"""
         `ElementField(fespace, components)` — one sub-field per subspace
         of `fespace`, sharing the same `components` list, with uniform values.
         
         Each entry of `components` is a `(name, value)` pair, the component
         holding `value` at every Gauss point, or a bare name, holding zero:
-        `[("T", 20.0), "p"]`.
+        `[("T", 20.0), "p"]`. With a `SubFiniteElementSpace` (`fes[i]`), the
+        field has that single zone.
+        
+        `ElementField(fespace, names, values=a)` fills one zone from an array:
+        `fespace` gives one zone (a `SubFiniteElementSpace`, or a
+        `FiniteElementSpace` of one subspace), `names` are bare names, the last
+        index of `a` in order, and `a` has the shape `numpy.asarray` gives —
+        `(cell_count, gauss_count, len(names))`, or `(cell_count, gauss_count)`
+        for one component. The values are copied once into the field.
+        
+        # Raises
+        
+        - `TypeError` if `fespace` is neither a `FiniteElementSpace` nor a
+          `SubFiniteElementSpace`, if `values` comes with a `(name, value)` pair,
+          or if `values` is an array that is not C-contiguous float64
+          (`numpy.ascontiguousarray(a, dtype=float)` gives one).
+        - `ValueError` if `values` comes with a space of several subspaces, or
+          does not have the zone's shape.
+        - `RuntimeError` for an empty or repeated component name.
         """
     @classmethod
     def with_components_per_subspace(cls, fespace: FiniteElementSpace, components_per_subspace: typing.Sequence[typing.Sequence[builtins.str]]) -> ElementField:
@@ -3854,7 +3872,7 @@ class NodeField:
         r"""
         Divide `component` by `scalar` on every zone that defines it.
         """
-    def __new__(cls, support: typing.Any, components: typing.Sequence[builtins.str | tuple[builtins.str, builtins.float]]) -> NodeField:
+    def __new__(cls, support: typing.Any, components: typing.Sequence[builtins.str | tuple[builtins.str, builtins.float]], values: typing.Optional[typing.Any] = None) -> NodeField:
         r"""
         `NodeField(support, components)` — a field with uniform values. With a
         `Mesh` support: one `SubNodeField` per submesh, each on the
@@ -3865,6 +3883,23 @@ class NodeField:
         Each entry of `components` is a `(name, value)` pair, the component
         holding `value` at every node, or a bare name, holding zero:
         `[("T", 20.0), "u_x"]`.
+        
+        `NodeField(support, names, values=a)` fills one zone from an array:
+        `support` gives one zone (a `SubMesh`, or a `Mesh` of one submesh),
+        `names` are bare names, the columns of `a` in order, and `a` has the
+        shape `numpy.asarray` gives — `(node_count, len(names))`, one row per
+        node of the zone's support in the order of its cells, or `(node_count,)`
+        for one component. The values are copied once into the field.
+        
+        # Raises
+        
+        - `TypeError` if `support` is neither a `Mesh` nor a `SubMesh`, if
+          `values` comes with a `(name, value)` pair, or if `values` is an array
+          that is not C-contiguous float64
+          (`numpy.ascontiguousarray(a, dtype=float)` gives one).
+        - `ValueError` if `values` comes with a support of several zones, or
+          does not have the zone's shape.
+        - `RuntimeError` for an empty or repeated component name.
         """
     @classmethod
     def with_components_per_submesh(cls, mesh: Mesh, components_per_submesh: typing.Sequence[typing.Sequence[builtins.str]]) -> NodeField:
@@ -4574,6 +4609,15 @@ class SubElementField:
     `sub_material_field`) give a fresh one. There is no constructor: build at
     the parent level, `ElementField(fes, components)` or
     `material_field(model, ...)`, composed with `|`.
+    
+    `numpy.asarray(zone)` reads the values **without a copy**, read-only, as
+    an array of shape `(cell_count, gauss_count, component_count)`: the cells
+    of the zone in their order, then the Gauss points in the order of the
+    integration rule, then one entry per name of `components()`, in that order.
+    `memoryview(zone)` gives the same block without numpy. While such an array
+    is alive, writing the zone (`set_value`, `zone[cell, gauss, "E"] = …`,
+    `add_to_component`…) raises `BufferError`; the writes work again once the
+    last array is gone.
     """
     @property
     def cell_count(self) -> builtins.int:
@@ -5672,6 +5716,14 @@ class SubNodeField:
     A **view** into one zone of a `NodeField`, obtained by indexing
     (`node_field[i]`) — never constructed directly. Build at the parent
     level instead: `NodeField(support, components)`, composed with `|`.
+    
+    `numpy.asarray(zone)` reads the values **without a copy**, read-only, as
+    an array of shape `(node_count, component_count)`: one row per node of
+    `support()`, in the order of its cells, one column per name of
+    `components()`, in that order. `memoryview(zone)` gives the same block
+    without numpy. While such an array is alive, writing the zone (`set_value`,
+    `zone[node, "T"] = …`, `add_to_component`…) raises `BufferError`; the
+    writes work again once the last array is gone.
     """
     @property
     def node_count(self) -> builtins.int:
@@ -7194,8 +7246,29 @@ def eigen(a: Matrix, b: Matrix, count: builtins.int, shift: builtins.float = 0.0
     # Raises
     
     `RuntimeError` if `a` or `b` has no assembled values or is not symmetric, if
-    `a` carries a unilateral relation, if `a − shift·b` is singular, or if a mode
-    does not converge. `ValueError` for an unknown `normalization`.
+    `a` carries a unilateral relation, if `a − shift·b` is singular, if a mode
+    does not converge, or if the modes found are not independent ("neither a nor
+    b is positive definite on the modes found"). `ValueError` for an unknown
+    `normalization`. `KeyboardInterrupt` on `Ctrl+C`.
+    
+    # Notes
+    
+    Three known cases fail although the modes exist (GitHub issue #31):
+    
+    - a double eigenvalue (a beam of square section, a square plate) may come out
+      of the iteration as a complex pair; its two modes then get the same vector,
+      and the call fails;
+    - beyond some 36 modes, the last vectors may be inaccurate although the
+      iteration reports them converged (a 50 × 50 QUA4 plate in heat conduction:
+      36 modes pass, 38 fail at mode 28);
+    - on ill-conditioned matrices (a Bernoulli beam of 500 HERMITE3 cells or
+      more), the residual check is out of reach and refuses modes as accurate as
+      the matrices allow.
+    
+    `Ctrl+C` is honoured between the steps: after the factorization of
+    `a − shift·b`, after the Krylov-Schur iteration and before the solve of each
+    mode. The factorization and the iteration are single library calls and are
+    not interrupted mid-way.
     """
 
 def elastic_strain(model: Model, stress: ElementField, materials: ElementField) -> ElementField:
@@ -9261,7 +9334,12 @@ def quadratic_eigen(mass: Matrix, stiffness: Matrix, damping: typing.Optional[Ma
     `RuntimeError` if a matrix carries relations (project it on real modes
     first) or has no assembled values, if the three together are not square, or
     if the QZ iteration does not converge. `ValueError` for an unknown
-    `normalization`.
+    `normalization`. `KeyboardInterrupt` on `Ctrl+C`.
+    
+    # Notes
+    
+    `Ctrl+C` is honoured once the dense matrices are built and after the QZ
+    iteration, which is a single library call and is not interrupted mid-way.
     """
 
 def radiation(fespace: FiniteElementSpace, target: Model) -> Model:

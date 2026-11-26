@@ -67,6 +67,7 @@ use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::interrupt::{Cancel, NoCancel};
 use crate::models::{IMPOSED, MULTIPLIER};
 
 /// The primal unknown a mode's node carries: the mode's coordinate in a
@@ -220,7 +221,22 @@ const KRYLOV_TOLERANCE: f64 = 1e-12;
 /// - `a` or `b` not assembled, or not symmetric;
 /// - `a` carries a unilateral relation;
 /// - `a − shift·b` is singular;
-/// - a mode does not converge.
+/// - a mode does not converge, or the modes found are not independent
+///   (« neither a nor b is positive definite on the modes found »).
+///
+/// # Limitations
+///
+/// Three known cases fail although the modes exist (GitHub issue #31):
+///
+/// - **a double eigenvalue** (a beam of square section, a square plate) may
+///   come out of the iteration as a complex pair; its two modes then get the
+///   same vector, and the call fails;
+/// - **many modes**: beyond some 36, the last vectors may be inaccurate
+///   although the iteration reports them converged (a 50 × 50 QUA4 plate in
+///   heat conduction: 36 modes pass, 38 fail at mode 28);
+/// - **ill-conditioned matrices** (a Bernoulli beam of 500 HERMITE3 cells or
+///   more): the residual check is out of reach and refuses modes as accurate
+///   as the matrices allow.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -264,6 +280,59 @@ pub fn eigen(
     shift: f64,
     normalization: Normalization,
 ) -> Result<Vec<Mode>> {
+    eigen_cancellable(a, b, count, shift, normalization, &NoCancel)
+}
+
+/// Like [`eigen`], but polls `cancel` between its steps so the call can be
+/// stopped early (returning [`PyrucastError::Interrupted`]).
+///
+/// **Granularity.** `cancel` is polled on entry, after the factorization of
+/// `a − shift·b`, after the Krylov-Schur iteration and before the solve of
+/// each mode. The factorization and the iteration are single library calls
+/// with no checkpoint: a `Ctrl+C` lands once the running one has returned.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
+/// # use pyrucast::containers::mesh::SubMesh;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::solver::{self, Normalization};
+/// # use std::sync::atomic::{AtomicBool, Ordering};
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let p = Node::create_in(coords.clone(), &[0.0]).unwrap();
+/// # let support = {
+/// #     let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+/// #     sm.add_cell(&[p.id()]).unwrap();
+/// #     Handle::new(sm)
+/// # };
+/// # let point = |value: f64| -> pyrucast::Result<Matrix> {
+/// #     let mut z = SubMatrix::new(support.clone(), support.clone(), vec!["f".into()],
+/// #         vec!["u".into()], DofOrdering::NodesThenVars, Symmetry::Full)?;
+/// #     z.add_entry(p.id(), "f", p.id(), "u", value)?;
+/// #     let mut m = Matrix::empty();
+/// #     m.add_sub(Handle::new(z))?;
+/// #     m.assemble()?;
+/// #     Ok(m)
+/// # };
+/// let (k, m) = (point(4e5)?, point(40.0)?);
+/// let stop = AtomicBool::new(false);
+/// assert!(solver::eigen_cancellable(&k, &m, 1, 0.0, Normalization::Mass, &stop).is_ok());
+/// // A token armed in advance: the stop lands on entry.
+/// stop.store(true, Ordering::Relaxed);
+/// assert!(solver::eigen_cancellable(&k, &m, 1, 0.0, Normalization::Mass, &stop).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn eigen_cancellable(
+    a: &Matrix,
+    b: &Matrix,
+    count: usize,
+    shift: f64,
+    normalization: Normalization,
+    cancel: &dyn Cancel,
+) -> Result<Vec<Mode>> {
+    cancel.check()?;
     for (m, name) in [(a, "a"), (b, "b")] {
         if !m.is_assembled() {
             return Err(PyrucastError::Message(format!(
@@ -291,6 +360,7 @@ pub fn eigen(
     let (a_rows, a_cols) = reindex(a, &c)?;
     let n_c = c.n_rows()?;
     let fact = Factorization::new(&c, &SolveOptions::default())?;
+    cancel.check()?;
     let (b_offsets, b_indices, b_values) = b.csr_arrays()?;
     let op = ShiftInvert {
         fact: &fact,
@@ -340,6 +410,7 @@ pub fn eigen(
     // The real eigenvalues of a symmetric pair come with real vectors.
     let mut xs: Vec<Vec<f64>> = Vec::with_capacity(count);
     for (i, theta) in thetas.iter().enumerate() {
+        cancel.check()?;
         let v: Vec<f64> = vectors.col(i).iter().map(|z| z.re).collect();
         let mut x = vec![0.0; n_c];
         op.solve_from(&v, &mut x);
@@ -496,6 +567,57 @@ pub fn quadratic_eigen(
     damping: &Matrix,
     normalization: Normalization,
 ) -> Result<Vec<Mode>> {
+    quadratic_eigen_cancellable(mass, stiffness, damping, normalization, &NoCancel)
+}
+
+/// Like [`quadratic_eigen`], but polls `cancel` between its steps so the call
+/// can be stopped early (returning [`PyrucastError::Interrupted`]).
+///
+/// **Granularity.** `cancel` is polled on entry, once the dense matrices are
+/// built and after the QZ iteration. The QZ iteration is a single library
+/// call with no checkpoint: a `Ctrl+C` lands once it has returned.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
+/// # use pyrucast::containers::mesh::SubMesh;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::solver::{self, Normalization};
+/// # use std::sync::atomic::{AtomicBool, Ordering};
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let p = Node::create_in(coords.clone(), &[0.0]).unwrap();
+/// # let support = {
+/// #     let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+/// #     sm.add_cell(&[p.id()]).unwrap();
+/// #     Handle::new(sm)
+/// # };
+/// # let point = |value: f64| -> pyrucast::Result<Matrix> {
+/// #     let mut z = SubMatrix::new(support.clone(), support.clone(), vec!["f".into()],
+/// #         vec!["u".into()], DofOrdering::NodesThenVars, Symmetry::Full)?;
+/// #     z.add_entry(p.id(), "f", p.id(), "u", value)?;
+/// #     let mut m = Matrix::empty();
+/// #     m.add_sub(Handle::new(z))?;
+/// #     m.assemble()?;
+/// #     Ok(m)
+/// # };
+/// let (m, k, c) = (point(40.0)?, point(4e5)?, point(400.0)?);
+/// let stop = AtomicBool::new(false);
+/// assert!(solver::quadratic_eigen_cancellable(&m, &k, &c, Normalization::Mass, &stop).is_ok());
+/// // A token armed in advance: the stop lands on entry.
+/// stop.store(true, Ordering::Relaxed);
+/// assert!(solver::quadratic_eigen_cancellable(&m, &k, &c, Normalization::Mass, &stop).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn quadratic_eigen_cancellable(
+    mass: &Matrix,
+    stiffness: &Matrix,
+    damping: &Matrix,
+    normalization: Normalization,
+    cancel: &dyn Cancel,
+) -> Result<Vec<Mode>> {
+    cancel.check()?;
     for (m, name) in [
         (mass, "mass"),
         (stiffness, "stiffness"),
@@ -539,6 +661,7 @@ pub fn quadratic_eigen(
         Ok(out)
     };
     let (m_d, k_d, c_d) = (dense(mass)?, dense(stiffness)?, dense(damping)?);
+    cancel.check()?;
 
     // P z = s Q z with z = [x ; s x] and s = iω.
     let mut p = Mat::<f64>::from_fn(2 * n, 2 * n, |i, j| match (i < n, j < n) {
@@ -587,6 +710,7 @@ pub fn quadratic_eigen(
     .map_err(|e| {
         PyrucastError::Message(format!("quadratic_eigen: the QZ iteration failed: {e:?}"))
     })?;
+    cancel.check()?;
 
     // Each finite eigenvalue with its x = the first n components of z, as
     // (Re ω, Im ω, Re x, Im x). A complex pair occupies two columns of
@@ -1234,6 +1358,67 @@ mod tests {
             .unwrap()
             .is_empty());
         assert_eq!(eigen(&k, &m, 5, 0.0, Normalization::Mass).unwrap().len(), 3);
+    }
+
+    /// A token that counts its polls and stops at poll `stop_at` (1-based).
+    struct StopAt {
+        polls: std::cell::Cell<usize>,
+        stop_at: usize,
+    }
+
+    impl StopAt {
+        fn new(stop_at: usize) -> Self {
+            Self {
+                polls: std::cell::Cell::new(0),
+                stop_at,
+            }
+        }
+    }
+
+    impl Cancel for StopAt {
+        fn check(&self) -> Result<()> {
+            let poll = self.polls.get() + 1;
+            self.polls.set(poll);
+            if poll == self.stop_at {
+                Err(PyrucastError::Interrupted)
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    #[test]
+    fn eigen_cancellable_polls_between_its_steps() {
+        // Two modes: on entry, after the factorization, before each mode's solve.
+        let (k, n) = chain_stiffness(3, RelationSense::Equality);
+        let m = lumped(&n[1..], &[1.0; 3], Symmetry::Full);
+        let run = StopAt::new(usize::MAX);
+        eigen_cancellable(&k, &m, 2, 0.0, Normalization::Mass, &run).unwrap();
+        assert_eq!(run.polls.get(), 4);
+        for stop_at in 1..=4 {
+            let err = eigen_cancellable(&k, &m, 2, 0.0, Normalization::Mass, &StopAt::new(stop_at));
+            assert!(
+                matches!(err, Err(PyrucastError::Interrupted)),
+                "poll {stop_at}"
+            );
+        }
+    }
+
+    #[test]
+    fn quadratic_eigen_cancellable_polls_between_its_steps() {
+        // On entry, once the dense matrices are built, after the QZ iteration.
+        let (m, k, c) = oscillator(400.0);
+        let run = StopAt::new(usize::MAX);
+        quadratic_eigen_cancellable(&m, &k, &c, Normalization::Mass, &run).unwrap();
+        assert_eq!(run.polls.get(), 3);
+        for stop_at in 1..=3 {
+            let err =
+                quadratic_eigen_cancellable(&m, &k, &c, Normalization::Mass, &StopAt::new(stop_at));
+            assert!(
+                matches!(err, Err(PyrucastError::Interrupted)),
+                "poll {stop_at}"
+            );
+        }
     }
 
     /// The point of vibr10, k and m on the unknown `T`, `c` the damping.

@@ -23,7 +23,8 @@ maillage, avec ces composantes, et refuse un maillage qui liste deux fois la
 même zone ; sur une seule zone de maillage (`SubMesh`), le champ a une zone. Un
 couple `(nom, valeur)` donne à la composante cette valeur en tout nœud, un nom
 seul la met à zéro. `pyrucast.NodeField.empty()` est un champ vide, que `|`
-complète.
+complète. `NodeField(zone, noms, values=a)` remplit une zone à partir d'un
+tableau (voir [Échanger avec numpy](#échanger-avec-numpy)).
 `NodeField.with_components_per_submesh(maillage, [["T", "ux"], ["T"]])` donne
 une liste de composantes **par** zone. Une liste vide, un nom en double, un
 nombre de listes qui ne correspond pas aux zones sont refusés, comme une même
@@ -74,6 +75,54 @@ composante.
 | `node_values(ligne)` | toutes les composantes d'une ligne, dans l'ordre |
 | `set_uniform("c", v)` | la composante `c` à `v` en tout nœud |
 | `components()`, `component_index("c")` | les composantes, le rang de l'une |
+| `numpy.asarray(zone)`, `memoryview(zone)` | ses valeurs, lues sans copie (voir [Échanger avec numpy](#échanger-avec-numpy)) |
+
+## Échanger avec numpy
+
+Une zone se lit comme un tableau : `numpy.asarray(zone)` rend ses valeurs
+**sans les copier**, en lecture seule, sous la forme `(nœuds, composantes)`.
+
+- Les **lignes** sont les nœuds du support, `zone.support()`, dans l'ordre de
+  ses mailles : la ligne `i` est le nœud de rang `i`, celui que lit
+  `zone.get(i, …)`.
+- Les **colonnes** sont les composantes, dans l'ordre de `zone.components()`.
+
+```python
+{{#include ../../tests/python/test_doc_numpy.py:numpy_lire_noeuds}}
+```
+
+Le tableau lit la mémoire même du champ : tant qu'il existe, la zone refuse
+toute écriture (`BufferError`), et l'accepte de nouveau quand le dernier
+tableau a disparu (voir [Modèle mémoire](memory-model.md#prêter-la-mémoire-à-numpy)).
+`numpy.array(zone)` en fait une copie, que l'on peut garder et modifier sans
+bloquer la zone. `memoryview(zone)` donne le même bloc sans numpy.
+
+Le champ entier n'est pas un tableau : ses zones peuvent porter des
+composantes différentes et partager des nœuds. On lit donc zone par zone.
+
+Dans l'autre sens, `NodeField(support, noms, values=a)` construit une zone à
+partir d'un tableau :
+
+- `support` donne **une** zone : un `SubMesh`, ou un maillage d'une seule zone ;
+- `noms` sont des noms seuls, ceux des colonnes de `a`, dans l'ordre ;
+- `a` a la forme que rend `numpy.asarray` : `(nœuds, len(noms))`, une ligne par
+  nœud du support de la zone, ou `(nœuds,)` pour une seule composante.
+
+```python
+{{#include ../../tests/python/test_doc_numpy.py:numpy_construire_noeuds}}
+```
+
+Les valeurs sont copiées une fois, dans la mémoire du champ. Sont refusés :
+
+- une forme qui ne correspond pas, même de bonne longueur (un tableau
+  transposé n'est pas lu de travers) ;
+- un tableau qui n'est pas en float64 C-contigu (le message renvoie à
+  `numpy.ascontiguousarray(a, dtype=float)`) ;
+- un couple `(nom, valeur)` dans `noms` ;
+- un support de plusieurs zones : on construit une zone par zone, puis on les
+  assemble avec `|`.
+
+Une liste Python plate convient pour une seule composante.
 
 ## Le support : une zone POI1
 

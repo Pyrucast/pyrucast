@@ -1622,25 +1622,34 @@ where
     }
 
     /// Apply `f` **in place** to the named component, on every zone that
-    /// defines it. Errors only if **no** zone defines the component.
+    /// defines it.
+    ///
+    /// # Errors
+    ///
+    /// - **no** zone defines the component;
+    /// - a zone defining it is read by a buffer view
+    ///   ([`PyrucastError::Lent`]): every such zone is asked before any is
+    ///   written, so the field is left as it was.
     fn map_component(
         &self,
         component: &str,
         f: impl Fn(f64) -> f64 + Copy + Sync + Send,
     ) -> Result<()> {
-        let mut found = false;
-        for h in self.iter() {
-            let mut s = h.write();
-            if s.component_index(component).is_some() {
-                s.map_component(component, f)?;
-                found = true;
-            }
-        }
-        if !found {
+        let defining: Vec<&Handle<Self::Sub>> = self
+            .iter()
+            .filter(|h| h.read().component_index(component).is_some())
+            .collect();
+        if defining.is_empty() {
             return Err(PyrucastError::Message(format!(
                 "no sub-field defines component {}",
                 component
             )));
+        }
+        for h in &defining {
+            drop(h.write_checked()?);
+        }
+        for h in defining {
+            h.write_checked()?.map_component(component, f)?;
         }
         Ok(())
     }
@@ -3616,6 +3625,18 @@ mod tests {
         ef.add_to_component("E", 1.0).unwrap(); // E only on zone 1
         assert_eq!(ef.get(1).unwrap().read().value(0, 0, "E").unwrap(), 101.0);
         assert!(ef.add_to_component("missing", 1.0).is_err());
+    }
+
+    #[test]
+    fn field_add_to_component_on_a_lent_zone_leaves_every_zone_as_it_was() {
+        let ef = make_two_zone_element_field(); // "k" on both zones
+        let view = ef.get(1).unwrap().lend();
+        let err = ef.add_to_component("k", 1.0).unwrap_err();
+        assert!(matches!(err, PyrucastError::Lent(1)), "{err}");
+        assert_eq!(ef.get(0).unwrap().read().value(0, 0, "k").unwrap(), 0.0);
+        drop(view);
+        ef.add_to_component("k", 1.0).unwrap();
+        assert_eq!(ef.get(0).unwrap().read().value(0, 0, "k").unwrap(), 1.0);
     }
 
     #[test]

@@ -45,7 +45,6 @@ use crate::aggregate::Aggregate;
 use crate::atoms::element_kind::identity_permutation;
 use crate::atoms::{ElementType, NodeId, QuadratureRule};
 use crate::containers::element_field::{ElementField, SubElementField};
-use crate::containers::field::SubField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::{NodeField, SubNodeField};
@@ -673,15 +672,14 @@ fn node_field<T: Tag>(
             h
         }
     };
-    let mut sub = SubNodeField::from_poi1(&support, nv.components.to_vec())?;
-    let dst = sub.values_mut();
-    if src.len() == nv.node_tags.len() {
-        dst.copy_from_slice(nv.values);
+    let values = if src.len() == nv.node_tags.len() {
+        nv.values.to_vec()
     } else {
-        for (row, &k) in dst.chunks_exact_mut(nc).zip(&src) {
-            row.copy_from_slice(&nv.values[k * nc..(k + 1) * nc]);
-        }
-    }
+        src.iter()
+            .flat_map(|&k| nv.values[k * nc..(k + 1) * nc].iter().copied())
+            .collect()
+    };
+    let sub = SubNodeField::from_values(&support, nv.components.to_vec(), values)?;
     Ok(NodeField::from_sub(sub))
 }
 
@@ -836,9 +834,12 @@ fn cell_field<T: Tag>(
             continue;
         }
         let fes = spaces.get(s, h, et, quad)?;
-        let mut zone = SubElementField::new(fes, cv.components.to_vec())?;
-        let ng = zone.gauss_count();
-        let dst = zone.values_mut();
+        let (n_cells, ng) = {
+            let space = fes.read();
+            (space.cell_count(), space.gauss_count())
+        };
+        let mut values = vec![0.0; n_cells * ng * nc];
+        let dst = values.as_mut_slice();
         let mut k = 0;
         match &cv.layout {
             CellLayout::Cell => {
@@ -866,6 +867,7 @@ fn cell_field<T: Tag>(
                 }
             }
         }
+        let zone = SubElementField::from_values(fes, cv.components.to_vec(), values)?;
         field.add_sub(Handle::new(zone))?;
     }
     if field.is_empty() {

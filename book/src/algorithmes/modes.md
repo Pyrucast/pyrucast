@@ -93,6 +93,26 @@ croissant.
 les inconnues que les relations laissent libres. Une relation unilatérale
 (`>=`, `<=`) est refusée : elle n'a pas de problème propre.
 
+Trois cas connus échouent alors que les modes existent
+([issue #31](https://github.com/Pyrucast/pyrucast/issues/31)) :
+
+- **Une valeur propre double**, celle des deux flexions d'une poutre de section
+  carrée ou d'une plaque carrée, peut sortir de l'itération comme une paire
+  complexe. Ses deux modes reçoivent alors le même vecteur, et le calcul
+  échoue : l'orthogonalisation de l'étape 4 ne s'applique qu'à deux modes
+  rendus réels.
+- **Beaucoup de modes** : au-delà d'environ 36, les derniers vecteurs peuvent
+  être faux alors que l'itération les dit convergés. Sur une plaque de
+  50 × 50 QUA4 en conduction, 36 modes passent et 38 échouent au mode 28.
+- **Des matrices mal conditionnées**, celles d'une poutre de Bernoulli de 500
+  mailles HERMITE3 ou plus : le contrôle du résidu (étape 5) est hors de portée
+  et refuse des modes aussi justes que les matrices le permettent.
+
+Un `Ctrl+C` arrête le calcul entre deux étapes : après la factorisation, après
+l'itération, avant la résolution de chaque mode. La factorisation et
+l'itération sont chacune un seul appel à faer : un `Ctrl+C` pendant l'une
+d'elles prend effet quand elle se termine.
+
 ## Projeter et recombiner
 
 **Une matrice** : `matrix.project_on_basis(k, modes)` rend `K*ᵢⱼ = φᵢᵀ K φⱼ`,
@@ -155,6 +175,8 @@ amortie, `Im ω` le taux de décroissance, positif pour un mode amorti.
   imaginaires. La normalisation `"mass"` ramène `XᴴMX` à 1.
 - Des matrices qui portent des relations sont refusées : leurs multiplicateurs
   n'ont pas de masse, et donneraient des valeurs propres infinies.
+- Un `Ctrl+C` arrête le calcul avant ou après l'algorithme QZ, qui est un seul
+  appel à faer et se termine avant que l'arrêt prenne effet.
 - Calculée sur des matrices projetées, une déformée complexe porte des
   coordonnées modales : `recombine` de chacune de ses deux parties, avec les
   modes réels de la projection, la ramène aux inconnues physiques.
